@@ -29,6 +29,8 @@ actor LoopbackListener {
     private var listener: NWListener?
     private var connection: NWConnection?
     private var startContinuation: CheckedContinuation<Void, Error>?
+    private var connectionReadyContinuations: [CheckedContinuation<Void, Never>] = []
+    private var isConnectionReady = false
     private(set) var port: UInt16 = 0
 
     init() {
@@ -92,6 +94,19 @@ actor LoopbackListener {
         }
     }
 
+    /// Wait until the listener has accepted an inbound connection and
+    /// that connection is `.ready`. Returns immediately if already ready.
+    /// Required for tests that push bytes *from* the listener
+    /// immediately after the client's `connect(to:)` returns — the
+    /// listener's accept callback runs asynchronously on its own queue
+    /// and may not have finished by then.
+    func waitForConnection() async {
+        if isConnectionReady { return }
+        await withCheckedContinuation { cont in
+            connectionReadyContinuations.append(cont)
+        }
+    }
+
     /// Shut down. Cancels the active connection (if any) and the
     /// listener; idempotent.
     func stop() async {
@@ -141,6 +156,12 @@ actor LoopbackListener {
     private func handleConnectionState(_ state: NWConnection.State) {
         switch state {
         case .ready:
+            isConnectionReady = true
+            let waiters = connectionReadyContinuations
+            connectionReadyContinuations.removeAll()
+            for cont in waiters {
+                cont.resume()
+            }
             startReceiveLoop()
         case .failed, .cancelled:
             receivedContinuation.finish()
