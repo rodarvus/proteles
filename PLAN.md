@@ -965,7 +965,7 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-01 | 2026-05-16 | Render-coalesce all inbound lines into a single per-frame UI update | Avoids per-line layout passes; key to streaming perf | adopted |
 | D-02 | 2026-05-16 | Start with TextKit 2 (NSTextView); custom Core Text as designed-in fallback | Native feel first; performance escape hatch retained | adopted (validation gate end of Phase 1) |
 | D-03 | 2026-05-16 | Vendor PUC-Rio Lua 5.1 for plugin compatibility | Aardwolf plugin ecosystem is 5.1; LuaJIT forbidden on iOS | adopted |
-| D-04 | TBD | TextKit 2 vs Core Text final call | After Phase-1 validation spike | pending |
+| D-04 | 2026-05-16 | Adopt TextKit 2 (`NSTextView` + stock `NSTextStorage`) for the output view; custom `NSTextStorage` subclass deferred to Phase 2 alongside SQLite-backed eviction | Phase-1 spike (`RenderingValidationSpikeTests.textKit2SustainedThroughput`): sustained 200 lines/sec yields P50 ~2.0 ms / P99 ~2.9 ms / max ~3.6 ms flush latency — **~5× headroom on the 16 ms budget**. Memory delta is ~57 MB at 2000 lines, which is higher than the linear projection to the 50k-line / 100 MB target and warrants investigation in Phase 2 (custom storage + eviction land together). Latency margin is decisive; memory is recoverable | adopted |
 | D-05 | TBD | Mac App Store vs direct download for v1 | Sandboxing + plugin code execution implications | pending |
 | D-06 | 2026-05-16 | Plugin migration strategy = compat shim + hand-ported core plugins | User-directed; best-of-both-worlds for community | adopted |
 | D-07 | 2026-05-16 | Swift 6 strict concurrency from day one | Avoid retrofitting actor isolation later | adopted |
