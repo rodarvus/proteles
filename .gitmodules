@@ -1,0 +1,12 @@
+[submodule "mushclient"]
+	path = mushclient
+	url = https://github.com/nickgammon/mushclient.git
+[submodule "aardwolfclientpackage"]
+	path = aardwolfclientpackage
+	url = https://github.com/fiendish/aardwolfclientpackage
+[submodule "mudlet"]
+	path = mudlet
+	url = https://github.com/mudlet/mudlet
+[submodule "iterm2"]
+	path = iterm2
+	url = https://github.com/gnachman/iterm2
