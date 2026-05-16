@@ -1,6 +1,11 @@
 disabled_rules:
   - todo
   - trailing_comma
+  # We deliberately use `String(decoding:as:UTF8.self)` for streaming
+  # byte → text decoding because it substitutes `U+FFFD` for invalid
+  # sequences. The failable `String(bytes:encoding:)` would return `nil`
+  # on malformed bytes, which we do not want.
+  - optional_data_string_conversion
 
 opt_in_rules:
   - empty_count
