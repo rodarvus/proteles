@@ -5,9 +5,14 @@ import SwiftUI
 
 @main
 struct ProtelesApp: App {
+    /// App-level scrollback store. Phase 1 places this here so the output
+    /// view has something to bind to; in later phases it migrates inside
+    /// `SessionController`.
+    private let scrollbackStore = ScrollbackStore()
+
     var body: some Scene {
         WindowGroup("Proteles") {
-            ContentView()
+            ContentView(store: scrollbackStore)
                 .frame(minWidth: 800, minHeight: 500)
                 .navigationTitle("Proteles")
         }

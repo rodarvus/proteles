@@ -1,21 +1,19 @@
 #if os(macOS)
     import AppKit
+    import MudCore
     @testable import MudOutputView_macOS
     import Testing
 
     @Suite("MudOutputView (macOS) smoke")
     @MainActor
     struct MudOutputViewSmokeTests {
-        @Test("View type initializes")
+        @Test("View type initializes against a ScrollbackStore")
         func viewTypeInitializes() {
-            // Phase 0 smoke: the type compiles, exports publicly, and constructs.
-            // We deliberately do not exercise `makeNSView(context:)` here because
-            // `NSViewRepresentable.Context` has no public initializer, so an
-            // out-of-SwiftUI unit test cannot synthesize one without UI host
-            // infrastructure. Phase 1 introduces a configuration-protocol seam
-            // that we can test directly; until then this guards against the
-            // target failing to compile or link.
-            _ = MudOutputView()
+            // Phase 1 smoke: the type compiles, exports publicly, and accepts
+            // a ScrollbackStore. `makeNSView` requires a SwiftUI Context that
+            // has no public initializer, so it is exercised by integration
+            // tests (see RenderingValidationSpikeTests) rather than here.
+            _ = MudOutputView(store: ScrollbackStore())
         }
     }
 #endif
