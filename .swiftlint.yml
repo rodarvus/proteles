@@ -6,6 +6,12 @@ disabled_rules:
   # sequences. The failable `String(bytes:encoding:)` would return `nil`
   # on malformed bytes, which we do not want.
   - optional_data_string_conversion
+  # Conflicts with SwiftFormat's `--wraparguments before-first` line
+  # wrapping. When a typed closure parameter (e.g.
+  # `(cont: CheckedContinuation<Void, Error>) in`) would push the
+  # opening brace line past our column budget, wrapping the parameter
+  # onto its own line is the right call.
+  - closure_parameter_position
 
 opt_in_rules:
   - empty_count
