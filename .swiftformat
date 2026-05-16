@@ -1,0 +1,16 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 110
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--commas inline
+--trimwhitespace always
+--self remove
+--importgrouping alpha
+--patternlet inline
+--ranges no-space
+--operatorfunc spaced
+
+# Ignore vendored submodules and build outputs
+--exclude .build,.swiftpm,DerivedData,mushclient,mudlet,iterm2,aardwolfclientpackage

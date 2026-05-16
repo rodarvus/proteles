@@ -1,0 +1,30 @@
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcuserstatedata
+
+# XcodeGen output (generated from project.yml — don't commit)
+apps/ProtelesApp_macOS/ProtelesApp_macOS.xcodeproj/
+apps/ProtelesApp_macOS/Info.plist
+apps/ProtelesApp_macOS/Proteles.entitlements
+apps/ProtelesApp_iOS/ProtelesApp_iOS.xcodeproj/
+apps/ProtelesApp_iOS/Info.plist
+apps/ProtelesApp_iOS/Proteles.entitlements
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+
+# Misc
+*.log
+*.swp
+*.swo
+.netrc
