@@ -1,0 +1,62 @@
+name: ProtelesApp_macOS
+options:
+  bundleIdPrefix: com.proteles
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+
+packages:
+  Proteles:
+    path: ../..
+
+targets:
+  ProtelesApp_macOS:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Proteles
+        CFBundleName: Proteles
+        CFBundleShortVersionString: "0.0.1"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: ""
+        NSPrincipalClass: NSApplication
+        NSSupportsAutomaticTermination: true
+        NSSupportsSuddenTermination: true
+    entitlements:
+      path: Proteles.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.network.client: true
+    dependencies:
+      - package: Proteles
+        product: MudCore
+      - package: Proteles
+        product: MudUI
+      - package: Proteles
+        product: MudOutputView_macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.proteles.ProtelesApp
+        PRODUCT_NAME: Proteles
+        MARKETING_VERSION: "0.0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        COMBINE_HIDPI_IMAGES: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
