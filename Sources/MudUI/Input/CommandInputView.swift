@@ -11,8 +11,15 @@ import SwiftUI
 /// prompts, page through long output ("Press <RETURN> to continue"),
 /// and confirm stateful sub-prompts. The wire result is a bare `\r\n`,
 /// matching MUSHclient and Mudlet behaviour.
+///
+/// Focus: the field auto-focuses on first appearance, and re-focuses
+/// every time the scene becomes active (⌘-tabbing back to the app, or
+/// reopening the window) — the typical MUD-client expectation that
+/// the input is always ready to type into.
 public struct CommandInputView: View {
     @State private var command: String = ""
+    @FocusState private var focused: Bool
+    @Environment(\.scenePhase) private var scenePhase
     private let onSubmit: (String) -> Void
 
     public init(onSubmit: @escaping (String) -> Void) {
@@ -30,6 +37,11 @@ public struct CommandInputView: View {
                 Rectangle()
                     .fill(.separator)
                     .frame(height: 1)
+            }
+            .focused($focused)
+            .onAppear { focused = true }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active { focused = true }
             }
             .onSubmit {
                 onSubmit(command)
