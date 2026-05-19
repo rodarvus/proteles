@@ -1,14 +1,34 @@
 import Collections
 import Foundation
 
+/// One thing that happens to the scrollback. Subscribed via
+/// ``ScrollbackStore/events()`` for callers that care about evictions
+/// (chiefly the render coordinator, which must keep `NSTextStorage` in
+/// sync with the in-memory line buffer).
+public enum ScrollbackEvent: Sendable, Equatable {
+    /// A new line was appended. Delivered in append order.
+    case appended(Line)
+    /// A previously-appended line was evicted because ``ScrollbackStore``
+    /// hit its `maxLines` budget. Delivered in eviction order (FIFO with
+    /// the original append order).
+    case evicted(LineID)
+}
+
 /// Append-only line buffer with bounded in-memory capacity and a
 /// monotonic ``LineID`` allocator (PLAN.md §6.2).
 ///
-/// Phase 1: in-memory only. Phase 2 will persist evicted lines to SQLite
-/// for full-session scrollback search (PLAN.md §8.3, §6.5).
+/// Phase 1: in-memory only. Phase 2 adds eviction-event propagation so
+/// the view layer's `NSTextStorage` stays bounded; SQLite-backed
+/// persistence of evicted lines (PLAN.md §8.3, §6.5) lands in a
+/// subsequent commit.
 ///
-/// Subscribers receive newly-appended lines via an unbounded
-/// `AsyncStream<Line>`; cancel the stream's iteration to unsubscribe.
+/// Subscribers:
+///   - ``subscribe()`` — `AsyncStream<Line>` of appended lines only.
+///     Existing callers that don't care about evictions stay simple.
+///   - ``events()`` — `AsyncStream<ScrollbackEvent>` of appends *and*
+///     evictions, both in their respective FIFO orders.
+///
+/// Cancel either stream's iteration to unsubscribe.
 public actor ScrollbackStore {
     /// Maximum number of lines retained in memory. Older lines are
     /// evicted on append.
@@ -16,7 +36,8 @@ public actor ScrollbackStore {
 
     private var lines: Deque<Line> = []
     private var nextLineRaw: UInt64 = 0
-    private var subscribers: [UUID: AsyncStream<Line>.Continuation] = [:]
+    private var lineSubscribers: [UUID: AsyncStream<Line>.Continuation] = [:]
+    private var eventSubscribers: [UUID: AsyncStream<ScrollbackEvent>.Continuation] = [:]
 
     public init(maxLines: Int = 50000) {
         precondition(maxLines > 0, "maxLines must be positive")
@@ -86,9 +107,25 @@ public actor ScrollbackStore {
         let (stream, continuation) = AsyncStream<Line>.makeStream(
             bufferingPolicy: .unbounded
         )
-        subscribers[id] = continuation
+        lineSubscribers[id] = continuation
         continuation.onTermination = { [weak self] _ in
-            Task { await self?.removeSubscriber(id) }
+            Task { await self?.removeLineSubscriber(id) }
+        }
+        return stream
+    }
+
+    /// Subscribe to ``ScrollbackEvent``s — both appends and evictions.
+    /// Use this when a downstream model needs to mirror the store's
+    /// life cycle (the render coordinator, eventually scrollback
+    /// persistence). Cancel iteration to unsubscribe.
+    public func events() -> AsyncStream<ScrollbackEvent> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<ScrollbackEvent>.makeStream(
+            bufferingPolicy: .unbounded
+        )
+        eventSubscribers[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeEventSubscriber(id) }
         }
         return stream
     }
@@ -97,15 +134,25 @@ public actor ScrollbackStore {
 
     private func appendLine(_ line: Line) {
         lines.append(line)
-        while lines.count > maxLines {
-            lines.removeFirst()
-        }
-        for continuation in subscribers.values {
+        for continuation in lineSubscribers.values {
             continuation.yield(line)
+        }
+        for continuation in eventSubscribers.values {
+            continuation.yield(.appended(line))
+        }
+        while lines.count > maxLines {
+            let evicted = lines.removeFirst()
+            for continuation in eventSubscribers.values {
+                continuation.yield(.evicted(evicted.id))
+            }
         }
     }
 
-    private func removeSubscriber(_ id: UUID) {
-        subscribers.removeValue(forKey: id)
+    private func removeLineSubscriber(_ id: UUID) {
+        lineSubscribers.removeValue(forKey: id)
+    }
+
+    private func removeEventSubscriber(_ id: UUID) {
+        eventSubscribers.removeValue(forKey: id)
     }
 }
