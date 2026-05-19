@@ -1,8 +1,7 @@
 import Foundation
 
-/// Owns one MUD session: a ``NetworkConnection`` plus the
-/// `bytes → TelnetProcessor → ANSIParser → LineBuilder → ScrollbackStore`
-/// pipeline that turns received bytes into stored ``Line`` records.
+/// Owns one MUD session: a ``NetworkConnection`` plus a ``LinePipeline``
+/// that turns received bytes into stored ``Line`` records.
 ///
 /// Phase 2 telnet-negotiation policy:
 ///   - `WILL MCCP2`  → `DO MCCP2`  (accept compression).
@@ -10,32 +9,26 @@ import Foundation
 ///   - `DO  <anything>`        → `WONT <option>`.
 ///   - `WONT` / `DONT` need no reply.
 ///
-/// MCCP2 (PLAN.md §5.3, §8.3): after the server emits
-/// `IAC SB COMPRESS2 IAC SE`, every subsequent inbound byte on the wire
-/// is zlib-compressed. The controller pipes wire bytes through an
-/// ``Inflater`` and feeds the inflated output through TelnetProcessor,
-/// ANSIParser, and LineBuilder as usual. Activation in the middle of a
-/// chunk is handled correctly: bytes before `IAC SE` are processed plain;
-/// bytes after are inflated and re-entered into the pipeline.
+/// All actual byte-parsing logic lives in ``LinePipeline`` — this actor
+/// is the I/O wrapper: it owns the connection, drives the pipeline
+/// from the byte stream, dispatches outbound bytes for negotiation
+/// replies and user commands, and appends the resulting lines to the
+/// scrollback store.
 ///
 /// Concurrency model:
 ///
 ///   - The controller is an actor.
-///   - ``scrollbackStore``, ``connection``, ``connectionStates``, and
-///     ``state`` are `nonisolated` so the SwiftUI view layer can read /
-///     observe them without `await`.
+///   - ``scrollbackStore``, ``connection``, ``connectionStates`` are
+///     `nonisolated` so the SwiftUI view layer can read / observe them
+///     without `await`.
 ///   - Inbound bytes are processed inside a single long-lived `Task`
-///     that iterates ``NetworkConnection/bytes``. Parser state and the
-///     inflater live on the actor and are therefore only mutated by
-///     that task.
+///     that iterates ``NetworkConnection/bytes``. Pipeline state lives
+///     on the actor and is therefore only mutated by that task.
 ///
-/// Reconnect: ``connect(to:)`` resets the parsers and the inflater, so
-/// a `disconnect` followed by a fresh `connect` on the same controller
-/// behaves like a clean start.
+/// Reconnect: ``connect(to:)`` resets the pipeline, so a `disconnect`
+/// followed by a fresh `connect` on the same controller behaves like
+/// a clean start.
 public actor SessionController {
-    /// External, app-level state. Mirrors ``NetworkConnection/State``
-    /// today; a later phase will add session-specific phases (e.g.
-    /// authenticating, idle, paged) on top.
     public typealias State = NetworkConnection.State
 
     /// Errors surfaced to callers.
@@ -54,10 +47,7 @@ public actor SessionController {
     /// actor.
     public nonisolated let connection: NetworkConnection
 
-    private var telnet = TelnetProcessor()
-    private var ansi = ANSIParser()
-    private var lineBuilder = LineBuilder()
-    private var inflater: Inflater?
+    private var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
 
     public init(scrollbackStore: ScrollbackStore = ScrollbackStore()) {
@@ -72,21 +62,18 @@ public actor SessionController {
     }
 
     /// True if MCCP2 has been negotiated and the inbound byte stream is
-    /// currently being decompressed. Exposed for diagnostics; the view
-    /// layer doesn't need it for any wiring.
+    /// currently being decompressed.
     public var isCompressionActive: Bool {
-        inflater != nil
+        pipeline.isCompressionActive
     }
 
     /// Open a connection and start the inbound processing pipeline.
-    /// Idempotent within an actor turn but rejects concurrent open
-    /// attempts.
     public func connect(to endpoint: NetworkConnection.Endpoint) async throws {
         let currentState = await connection.state
         guard currentState == .disconnected else {
             throw SessionError.alreadyConnected
         }
-        resetParsers()
+        pipeline.reset()
         try await connection.connect(to: endpoint)
         startProcessingLoop()
     }
@@ -105,9 +92,7 @@ public actor SessionController {
         try await sendRaw(Array(payload.utf8))
     }
 
-    /// Send raw bytes verbatim (no line terminator added). Used
-    /// internally for telnet negotiation responses, but also useful for
-    /// tests and any caller that needs precise wire control.
+    /// Send raw bytes verbatim (no line terminator added).
     public func sendRaw(_ bytes: [UInt8]) async throws {
         do {
             try await connection.send(bytes)
@@ -123,13 +108,6 @@ public actor SessionController {
 
     // MARK: - Private
 
-    private func resetParsers() {
-        telnet.reset()
-        ansi.reset()
-        lineBuilder.reset()
-        inflater = nil
-    }
-
     private func startProcessingLoop() {
         processTask?.cancel()
         let bytesStream = connection.bytes
@@ -142,136 +120,30 @@ public actor SessionController {
     }
 
     private func processChunk(_ wireBytes: [UInt8]) async {
-        var newLines: [Line] = []
-        var negotiationResponses: [[UInt8]] = []
-
-        // If compression is already active, inflate the whole chunk
-        // up-front. Any in-chunk MCCP2 *activation* would only happen
-        // when compression was NOT yet active; once active, the entire
-        // wire stream is compressed.
-        var buffer: [UInt8]
-        if let inflater {
-            do {
-                buffer = try inflater.inflate(wireBytes)
-            } catch {
-                // Corrupt MCCP stream — best response is to drop the
-                // session. Future phases may attempt a clean disconnect
-                // with a user-visible error; Phase 2 just bails.
-                await connection.disconnect()
-                return
-            }
-        } else {
-            buffer = wireBytes
+        let output: LinePipeline.Output
+        do {
+            output = try pipeline.consume(wireBytes)
+        } catch {
+            // Corrupt MCCP stream — drop the session. Future phases
+            // will surface a user-visible error rather than bail
+            // silently.
+            await connection.disconnect()
+            return
         }
 
-        var index = 0
-        while index < buffer.count {
-            var activatedCompression = false
-            let consumed = telnet.processInterruptible(buffer[index...]) { event in
-                self.handleEvent(
-                    event,
-                    lines: &newLines,
-                    responses: &negotiationResponses,
-                    activatedCompression: &activatedCompression
-                )
-                // If MCCP2 just turned on, halt now so we can inflate
-                // the rest of the buffer before continuing.
-                return !activatedCompression
-            }
-            index += consumed
-
-            if activatedCompression {
-                inflater = try? Inflater()
-                guard let inflater else {
-                    // Inflater init failed — disconnect.
-                    await connection.disconnect()
-                    return
-                }
-                if index < buffer.count {
-                    let compressedRemainder = Array(buffer[index...])
-                    do {
-                        buffer = try inflater.inflate(compressedRemainder)
-                    } catch {
-                        await connection.disconnect()
-                        return
-                    }
-                    index = 0
-                }
-            }
-        }
-
-        // Negotiation responses go out before line appends so the server
+        // Negotiation replies go out before line appends so the server
         // sees them promptly.
-        for response in negotiationResponses {
+        for response in output.responses {
             try? await connection.send(response)
         }
-        for line in newLines {
+        for line in output.lines {
             await scrollbackStore.append(line)
         }
     }
 
-    private func handleEvent(
-        _ event: TelnetEvent,
-        lines: inout [Line],
-        responses: inout [[UInt8]],
-        activatedCompression: inout Bool
-    ) {
-        switch event {
-        case .data(let byte):
-            feedANSI(byte: byte, lines: &lines)
-        case .negotiate(let verb, let option):
-            if let response = negotiationResponse(verb: verb, option: option) {
-                responses.append(response)
-            }
-        case .subnegotiation(let option, _) where option == TelnetOption.mccp2:
-            activatedCompression = true
-        case .command, .subnegotiation:
-            // Other standalone commands and subnegotiations (GMCP,
-            // MSDP, …) are ignored in Phase 2. They land in Phase 4.
-            break
-        }
-    }
-
-    private func feedANSI(byte: UInt8, lines: inout [Line]) {
-        ansi.process([byte]) { ansiEvent in
-            self.lineBuilder.consume(ansiEvent) { line in
-                lines.append(line)
-            }
-        }
-    }
-
-    /// Phase-2 policy: accept MCCP2 (WILL → DO), refuse everything else.
-    /// WONT and DONT are confirmations from the server and need no
-    /// reply.
-    private func negotiationResponse(
-        verb: TelnetVerb,
-        option: UInt8
-    ) -> [UInt8]? {
-        let responseVerb: UInt8
-        switch verb {
-        case .will:
-            responseVerb = option == TelnetOption.mccp2
-                ? TelnetCommand.do
-                : TelnetCommand.dont
-        case .do:
-            responseVerb = TelnetCommand.wont
-        case .wont, .dont:
-            return nil
-        }
-        return [TelnetCommand.iac, responseVerb, option]
-    }
-
     private func flushOnDisconnect() async {
-        var trailingLines: [Line] = []
-        ansi.flush { ansiEvent in
-            self.lineBuilder.consume(ansiEvent) { line in
-                trailingLines.append(line)
-            }
-        }
-        lineBuilder.flush { line in
-            trailingLines.append(line)
-        }
-        for line in trailingLines {
+        let trailing = pipeline.flush()
+        for line in trailing {
             await scrollbackStore.append(line)
         }
     }

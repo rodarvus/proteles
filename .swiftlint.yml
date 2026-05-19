@@ -69,6 +69,14 @@ function_body_length:
   warning: 60
   error: 120
 
+nesting:
+  type_level:
+    warning: 2
+    error: 3
+  function_level:
+    warning: 3
+    error: 5
+
 identifier_name:
   min_length:
     warning: 2
