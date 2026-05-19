@@ -6,7 +6,7 @@ import Foundation
 /// the active palette's default for that channel. ``reverse`` is a flag
 /// rather than a pre-swapped fg/bg pair so the renderer can swap at draw
 /// time and the value compares cleanly when SGR-27 unsets it.
-public struct StyleAttributes: Sendable, Equatable, Hashable {
+public struct StyleAttributes: Sendable, Equatable, Hashable, Codable {
     public var foreground: ANSIColor?
     public var background: ANSIColor?
     public var bold: Bool

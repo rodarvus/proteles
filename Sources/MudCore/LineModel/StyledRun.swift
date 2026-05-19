@@ -5,7 +5,7 @@ import Foundation
 /// ``utf16Range`` is in UTF-16 code units — the same index space used by
 /// `NSAttributedString`, `NSRegularExpression`, and AppKit's text view
 /// APIs. The renderer can use these ranges directly without conversion.
-public struct StyledRun: Sendable, Equatable, Hashable {
+public struct StyledRun: Sendable, Equatable, Hashable, Codable {
     public let utf16Range: Range<Int>
     public let style: StyleAttributes
 

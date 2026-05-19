@@ -7,7 +7,7 @@ import Foundation
 /// (PLAN.md §6.6). Treating ``palette(_:)`` indices 0…15 and ``named(_:)`` /
 /// ``brightNamed(_:)`` as distinct lets the renderer apply the palette
 /// consistently regardless of which SGR form arrived.
-public enum ANSIColor: Sendable, Equatable, Hashable {
+public enum ANSIColor: Sendable, Equatable, Hashable, Codable {
     /// One of the eight named colours (SGR 30–37, 40–47).
     case named(NamedColor)
     /// A bright variant of a named colour (SGR 90–97, 100–107).
@@ -21,7 +21,7 @@ public enum ANSIColor: Sendable, Equatable, Hashable {
 /// The eight named ANSI colours. Raw values match the SGR offset: SGR 30
 /// is ``black``, SGR 31 is ``red``, … SGR 37 is ``white``. The renderer
 /// resolves these to concrete RGB through the active palette.
-public enum NamedColor: UInt8, Sendable, Equatable, Hashable, CaseIterable {
+public enum NamedColor: UInt8, Sendable, Equatable, Hashable, CaseIterable, Codable {
     case black = 0
     case red = 1
     case green = 2
