@@ -18,9 +18,11 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.0")
     ],
     targets: [
+        .systemLibrary(name: "CZlib"),
         .target(
             name: "MudCore",
             dependencies: [
+                "CZlib",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Algorithms", package: "swift-algorithms")
