@@ -38,7 +38,10 @@
                 palette: palette
             )
             context.coordinator.renderCoordinator = coordinator
-            coordinator.attach(to: store)
+            let storeRef = store
+            Task { @MainActor in
+                await coordinator.attach(to: storeRef)
+            }
 
             return scrollView
         }

@@ -72,7 +72,7 @@
             coordinator.onFrameFlush = { duration in
                 collector.record(duration)
             }
-            coordinator.attach(to: store)
+            await coordinator.attach(to: store)
             defer { coordinator.detach() }
 
             let memoryBefore = currentRSSBytes()
@@ -141,6 +141,125 @@
             #expect(p99 < 16.0, "P99 flush latency \(p99) ms exceeds 16 ms budget")
             // Memory budget — regression catch at this scale (see suite
             // doc-comment for the full context).
+            #expect(
+                memoryDeltaMB < 100.0,
+                "RSS delta \(memoryDeltaMB) MB exceeds 100 MB regression budget"
+            )
+        }
+
+        /// Counterpart to the throughput spike that exercises **eviction**.
+        /// `maxLines` is small enough that the scrollback overflows
+        /// repeatedly; the coordinator must delete the corresponding bytes
+        /// from `NSTextStorage` so that resident memory stays bounded.
+        ///
+        /// Pass: P99 flush latency ≤ 16 ms (eviction adds work; budget
+        /// stays the same) and RSS delta within a generous regression
+        /// gate. The meaningful eviction-vs-no-eviction comparison runs
+        /// in **isolation** (e.g. `swift test --filter
+        /// evictionKeepsMemoryBounded`) where the no-eviction case
+        /// measured ~57 MB at 2000 lines and this one measures ~23 MB.
+        /// Under `--parallel` `mach_task_basic_info` is process-wide
+        /// and concurrent suites inflate the delta, so the in-test
+        /// budget is set permissively (100 MB) just to catch "bytes
+        /// not being freed at all" regressions.
+        @Test("200 lines/sec with maxLines=200 (eviction stays bounded)")
+        // swiftlint:disable:next function_body_length
+        func evictionKeepsMemoryBounded() async throws {
+            let targetLineRate = 200.0
+            let targetSeconds = 10.0
+            let burstSize = 10
+            let maxLines = 200
+            let burstInterval = Duration.milliseconds(
+                Int((Double(burstSize) / targetLineRate) * 1000)
+            )
+
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                styleMask: [.titled, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            let scrollView = NSTextView.scrollableTextView()
+            guard let textView = scrollView.documentView as? NSTextView else {
+                Issue.record("Could not obtain NSTextView from scrollableTextView")
+                return
+            }
+            textView.isEditable = false
+            textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            scrollView.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+            window.contentView = scrollView
+
+            let store = ScrollbackStore(maxLines: maxLines)
+            let coordinator = RenderCoordinator(
+                textView: textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(16)
+            )
+
+            let collector = FrameTimeCollector()
+            coordinator.onFrameFlush = { duration in
+                collector.record(duration)
+            }
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            let memoryBefore = currentRSSBytes()
+            let totalLines = Int(targetLineRate * targetSeconds)
+            let bursts = totalLines / burstSize
+
+            for burstIndex in 0..<bursts {
+                for inBurst in 0..<burstSize {
+                    let lineIndex = burstIndex * burstSize + inBurst
+                    await store.append(Self.syntheticLine(index: lineIndex))
+                }
+                try await Task.sleep(for: burstInterval)
+            }
+            try await Task.sleep(for: .milliseconds(100))
+
+            let memoryAfter = currentRSSBytes()
+            let memoryDeltaMB = Double(
+                Int64(memoryAfter) - Int64(memoryBefore)
+            ) / 1_048_576.0
+
+            let frameTimes = collector.snapshot().sorted()
+            let p50 = percentile(frameTimes, 0.50)
+            let p95 = percentile(frameTimes, 0.95)
+            let p99 = percentile(frameTimes, 0.99)
+            let max = frameTimes.last ?? 0
+
+            let totalAppended = await store.totalAppended
+            let storeCount = await store.count
+            let evictedCount = totalAppended - UInt64(storeCount)
+
+            print("\n=== Phase 2 / Eviction Spike ===")
+            print(
+                String(
+                    format: "  Target            : %.0f lines/sec for %.1fs",
+                    targetLineRate,
+                    targetSeconds
+                )
+            )
+            print("  maxLines          : \(maxLines)")
+            print("  Lines appended    : \(totalAppended)")
+            print("  Lines evicted     : \(evictedCount)")
+            print("  Lines resident    : \(storeCount)")
+            print("  Frames flushed    : \(frameTimes.count)")
+            print(String(format: "  P50 flush latency : %.3f ms", p50))
+            print(String(format: "  P95 flush latency : %.3f ms", p95))
+            print(String(format: "  P99 flush latency : %.3f ms", p99))
+            print(String(format: "  MAX flush latency : %.3f ms", max))
+            print(String(format: "  RSS delta         : %+.2f MB", memoryDeltaMB))
+            print("========================================\n")
+
+            #expect(!frameTimes.isEmpty)
+            #expect(p99 < 16.0, "P99 flush latency \(p99) ms exceeds 16 ms budget")
+            #expect(
+                evictedCount > UInt64(maxLines),
+                "test did not actually exercise eviction"
+            )
+            // Permissive regression gate; see the suite doc-comment.
+            // Isolated measurement (run with --filter
+            // evictionKeepsMemoryBounded) is ~23 MB.
             #expect(
                 memoryDeltaMB < 100.0,
                 "RSS delta \(memoryDeltaMB) MB exceeds 100 MB regression budget"
