@@ -7,8 +7,10 @@ import SwiftUI
 /// alongside aliases in Phase 5 (PLAN.md §8.6); a richer
 /// `NSTextField`-backed input arrives if/when keyboard macros need it.
 ///
-/// Whitespace-only input is swallowed (matches MUSHclient behaviour:
-/// hitting Enter on an empty line should not send `\r\n` to the server).
+/// Empty input (bare Enter) is sent through — MUDs use it to refresh
+/// prompts, page through long output ("Press <RETURN> to continue"),
+/// and confirm stateful sub-prompts. The wire result is a bare `\r\n`,
+/// matching MUSHclient and Mudlet behaviour.
 public struct CommandInputView: View {
     @State private var command: String = ""
     private let onSubmit: (String) -> Void
@@ -30,10 +32,7 @@ public struct CommandInputView: View {
                     .frame(height: 1)
             }
             .onSubmit {
-                let trimmed = command
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                onSubmit(trimmed)
+                onSubmit(command)
                 command = ""
             }
     }
