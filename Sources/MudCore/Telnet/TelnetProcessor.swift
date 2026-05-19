@@ -45,6 +45,32 @@ public struct TelnetProcessor: Sendable {
         }
     }
 
+    /// Process bytes one event at a time. The `emit` closure returns
+    /// `false` to halt processing immediately — useful when a single
+    /// event needs to switch the byte source mid-stream (the canonical
+    /// case: MCCP2 activation, where the next byte is the first
+    /// compressed octet).
+    ///
+    /// Returns the number of input bytes consumed before halting. The
+    /// caller can resume by feeding `bytes[consumed...]` through the
+    /// new byte source.
+    @discardableResult
+    public mutating func processInterruptible(
+        _ bytes: some Collection<UInt8>,
+        emit: (TelnetEvent) -> Bool
+    ) -> Int {
+        var consumed = 0
+        var halt = false
+        for byte in bytes {
+            if halt { break }
+            processSingle(byte) { event in
+                if !emit(event) { halt = true }
+            }
+            consumed += 1
+        }
+        return consumed
+    }
+
     /// Reset all internal state. Call between connections.
     public mutating func reset() {
         state = .ground
