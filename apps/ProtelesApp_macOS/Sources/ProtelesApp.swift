@@ -10,6 +10,32 @@ struct ProtelesApp: App {
     /// inside a per-window owner along with profile metadata.
     private let session = SessionController()
 
+    /// On-disk scrollback log. Lives at
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/scrollback.sqlite`
+    /// and is appended to as long as the app is running. Phase 3 will
+    /// likely partition by profile.
+    private let persistence: ScrollbackPersistence?
+
+    init() {
+        let persistence: ScrollbackPersistence?
+        do {
+            let location = try ScrollbackDatabase.defaultLocation()
+            let database = try ScrollbackDatabase(url: location)
+            persistence = ScrollbackPersistence(database: database)
+        } catch {
+            NSLog("[Proteles] persistence init failed: \(error)")
+            persistence = nil
+        }
+        self.persistence = persistence
+
+        if let persistence {
+            let store = session.scrollbackStore
+            Task {
+                await persistence.attach(to: store)
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup("Proteles") {
             ContentView(session: session)
