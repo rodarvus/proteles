@@ -13,13 +13,15 @@ import SwiftUI
 /// matching MUSHclient and Mudlet behaviour.
 ///
 /// Focus: the field auto-focuses on first appearance, and re-focuses
-/// every time the scene becomes active (⌘-tabbing back to the app, or
-/// reopening the window) — the typical MUD-client expectation that
-/// the input is always ready to type into.
+/// every time its window becomes **key** — ⌘-tabbing back to the app,
+/// closing the Worlds window, or switching between the app's windows.
+/// `controlActiveState` is per-window (unlike `scenePhase`, which is
+/// app-wide and misses window-to-window transitions), so it's the
+/// right signal for "the input should be ready to type into".
 public struct CommandInputView: View {
     @State private var command: String = ""
     @FocusState private var focused: Bool
-    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.controlActiveState) private var controlActiveState
     private let onSubmit: (String) -> Void
 
     public init(onSubmit: @escaping (String) -> Void) {
@@ -40,8 +42,8 @@ public struct CommandInputView: View {
             }
             .focused($focused)
             .onAppear { focused = true }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active { focused = true }
+            .onChange(of: controlActiveState) { _, newState in
+                if newState == .key { focused = true }
             }
             .onSubmit {
                 onSubmit(command)
