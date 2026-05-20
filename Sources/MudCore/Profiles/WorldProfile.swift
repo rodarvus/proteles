@@ -101,7 +101,7 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
         return issues
     }
 
-    public enum ValidationIssue: Equatable, Sendable {
+    public enum ValidationIssue: Equatable, Hashable, Sendable {
         case emptyName
         case emptyHost
         case invalidPort
