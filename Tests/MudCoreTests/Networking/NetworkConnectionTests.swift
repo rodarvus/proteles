@@ -48,6 +48,33 @@ struct NetworkConnectionValidationTests {
         let state = await connection.state
         #expect(state == .disconnected)
     }
+
+    @Test("Connecting to an unreachable host times out with .timedOut")
+    func connectTimesOut() async {
+        // 192.0.2.1 is TEST-NET-1 (RFC 5737) — reserved, never
+        // routed, so the SYN gets no response and NWConnection never
+        // reaches .ready. A short timeout should fire .timedOut
+        // rather than hang.
+        let connection = NetworkConnection()
+        let start = ContinuousClock.now
+        do {
+            try await connection.connect(
+                to: .init(host: "192.0.2.1", port: 9999),
+                timeout: .milliseconds(400)
+            )
+            Issue.record("connect should have timed out")
+        } catch let error as NetworkConnection.ConnectionError {
+            #expect(error == .timedOut)
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+        // Should fail close to the timeout, not hang for the default 10s.
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed < .seconds(5))
+
+        let state = await connection.state
+        #expect(state == .disconnected)
+    }
 }
 
 // MARK: - Loopback integration

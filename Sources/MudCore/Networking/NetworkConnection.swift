@@ -59,7 +59,18 @@ public actor NetworkConnection {
         case connectionFailed(String)
         case sendFailed(String)
         case cancelled
+        /// The connection did not reach `.ready` within the timeout.
+        /// The common cause is a TLS handshake against a plaintext
+        /// port (e.g. TLS on Aardwolf's 4000 instead of 4010), or an
+        /// unreachable host.
+        case timedOut
     }
+
+    /// Default time to wait for a connection to reach `.ready` before
+    /// failing with ``ConnectionError/timedOut``. Generous enough for
+    /// slow networks, bounded enough that a misconfigured TLS port
+    /// doesn't hang the UI in "Connecting…" forever.
+    public static let defaultConnectTimeout: Duration = .seconds(10)
 
     /// Async stream of inbound byte chunks. Each yielded element is one
     /// chunk delivered by `NWConnection`; chunking is not aligned with
@@ -100,10 +111,14 @@ public actor NetworkConnection {
         stateContinuation.finish()
     }
 
-    /// Open a TCP (or TLS) connection. Throws on invalid endpoint or
-    /// failure to establish the connection. The wrapper must be
-    /// ``State/disconnected`` on entry.
-    public func connect(to endpoint: Endpoint) async throws {
+    /// Open a TCP (or TLS) connection. Throws on invalid endpoint, on
+    /// failure to establish the connection, or on
+    /// ``ConnectionError/timedOut`` if `.ready` isn't reached within
+    /// `timeout`. The wrapper must be ``State/disconnected`` on entry.
+    public func connect(
+        to endpoint: Endpoint,
+        timeout: Duration = NetworkConnection.defaultConnectTimeout
+    ) async throws {
         guard state == .disconnected else {
             throw ConnectionError.alreadyActive
         }
@@ -126,6 +141,16 @@ public actor NetworkConnection {
 
         transition(to: .connecting)
 
+        // Fail fast if the handshake stalls (the classic case:
+        // TLS against a plaintext port, where TCP connects but the
+        // TLS negotiation never completes).
+        let timeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            await self?.failPendingConnect(.timedOut)
+        }
+        defer { timeoutTask.cancel() }
+
         do {
             try await withCheckedThrowingContinuation { cont in
                 pendingConnect = cont
@@ -137,14 +162,27 @@ public actor NetworkConnection {
                 conn.start(queue: queue)
             }
         } catch {
-            // Failure already cleaned up in handleNWStateUpdate, but
-            // ensure state reflects disconnected.
+            // Failure already cleaned up in handleNWStateUpdate / the
+            // timeout path, but ensure state reflects disconnected.
             transition(to: .disconnected)
             connection = nil
             throw error
         }
 
         startReceiveLoop(on: conn)
+    }
+
+    /// Resolve a still-pending connect with `error`, tearing down the
+    /// half-open connection. No-op if the connect already resolved
+    /// (the actor serialises this against `handleNWStateUpdate`, so
+    /// exactly one side wins).
+    private func failPendingConnect(_ error: ConnectionError) {
+        guard let cont = pendingConnect else { return }
+        pendingConnect = nil
+        connection?.cancel()
+        connection = nil
+        transition(to: .disconnected)
+        cont.resume(throwing: error)
     }
 
     /// Send raw bytes. Throws if not connected.
