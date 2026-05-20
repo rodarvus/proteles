@@ -8,7 +8,14 @@ struct ProtelesApp: App {
     /// App-level session. Phase 1 places this here so the chrome has a
     /// stable handle to bind to; in later phases the session lives
     /// inside a per-window owner along with profile metadata.
-    private let session = SessionController()
+    ///
+    /// `autoRecord: true` during development — every connect captures
+    /// a fully-replayable session to
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`.
+    /// Will become opt-in (off by default) ahead of 1.0; users will
+    /// enable it via Preferences when they want to capture for bug
+    /// reports.
+    private let session = SessionController(autoRecord: true)
 
     /// On-disk scrollback log. Lives at
     /// `~/Library/Application Support/com.proteles.ProtelesApp/scrollback.sqlite`

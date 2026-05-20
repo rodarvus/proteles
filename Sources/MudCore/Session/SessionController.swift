@@ -51,9 +51,33 @@ public actor SessionController {
     private var processTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
 
-    public init(scrollbackStore: ScrollbackStore = ScrollbackStore()) {
+    /// When true, ``connect(to:)`` opens a fresh recording at
+    /// ``autoRecordingURL`` so the capture includes every byte from
+    /// the first one — crucial for replayable recordings, because
+    /// Aardwolf completes the MCCP2 handshake within milliseconds of
+    /// TCP-up. The flag is mutable at runtime so a Debug menu can
+    /// expose it in a later iteration.
+    public var autoRecord: Bool
+
+    /// Where ``autoRecord`` writes. Defaults to
+    /// ``SessionRecorder/defaultRecordingURL(now:fileManager:)`` (which
+    /// places files under
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`).
+    /// Tests inject a temp-dir builder so they don't litter the
+    /// developer's real recordings directory.
+    public let autoRecordingURL: @Sendable () -> URL?
+
+    public init(
+        scrollbackStore: ScrollbackStore = ScrollbackStore(),
+        autoRecord: Bool = false,
+        autoRecordingURL: @escaping @Sendable () -> URL? = {
+            try? SessionRecorder.defaultRecordingURL()
+        }
+    ) {
         self.scrollbackStore = scrollbackStore
         connection = NetworkConnection()
+        self.autoRecord = autoRecord
+        self.autoRecordingURL = autoRecordingURL
     }
 
     /// Connection-state stream. Forwards from the underlying
@@ -96,6 +120,10 @@ public actor SessionController {
     }
 
     /// Open a connection and start the inbound processing pipeline.
+    /// If ``autoRecord`` is true and no manual recording is already in
+    /// progress, opens a fresh recording at ``autoRecordingURL`` so
+    /// the capture starts from byte one (covers the telnet + MCCP2
+    /// handshake, which is what makes the recording replayable).
     public func connect(to endpoint: NetworkConnection.Endpoint) async throws {
         let currentState = await connection.state
         guard currentState == .disconnected else {
@@ -103,6 +131,11 @@ public actor SessionController {
         }
         pipeline.reset()
         try await connection.connect(to: endpoint)
+
+        if autoRecord, recorder == nil, let url = autoRecordingURL() {
+            recorder = try? SessionRecorder(url: url)
+        }
+
         startProcessingLoop()
     }
 
@@ -110,6 +143,8 @@ public actor SessionController {
     public func disconnect() async {
         processTask?.cancel()
         processTask = nil
+        recorder?.close()
+        recorder = nil
         await connection.disconnect()
     }
 
