@@ -63,6 +63,14 @@
             to attributed: NSMutableAttributedString,
             range: NSRange
         ) {
+            // Stash the original StyleAttributes so "Copy with Colour
+            // Codes" can read it back without lossy NSColor inversion.
+            attributed.addAttribute(
+                .protelesStyle,
+                value: ProtelesStyleAttribute(style),
+                range: range
+            )
+
             let effectiveFont: NSFont = switch (style.bold, style.italic) {
             case (false, false): font
             case (true, false): boldFont
