@@ -104,4 +104,42 @@ public final class SessionRecorder: @unchecked Sendable {
             isClosed = true
         }
     }
+
+    /// Recommended location for a fresh recording:
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/session-YYYYMMDD-HHMMSS.jsonl`.
+    /// Creates the parent directory if needed. The timestamp is taken
+    /// from `now` so callers can substitute deterministic values in
+    /// tests.
+    public static func defaultRecordingURL(
+        now: Date = Date(),
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        guard
+            let support = fileManager.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first
+        else {
+            throw RecorderError.openFailed(
+                "no Application Support directory"
+            )
+        }
+        let folder = support
+            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
+            .appendingPathComponent("recordings", isDirectory: true)
+        do {
+            try fileManager.createDirectory(
+                at: folder,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            throw RecorderError.openFailed(error.localizedDescription)
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        let stamp = formatter.string(from: now)
+        return folder.appendingPathComponent("session-\(stamp).jsonl")
+    }
 }

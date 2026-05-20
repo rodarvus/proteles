@@ -89,6 +89,27 @@ struct ProtelesApp: App {
                 }
                 .keyboardShortcut("C", modifiers: [.command, .shift])
             }
+            CommandMenu("Debug") {
+                Button("Start Recording") {
+                    let session = session
+                    Task {
+                        do {
+                            let url = try SessionRecorder.defaultRecordingURL()
+                            try await session.startRecording(to: url)
+                            NSLog("[Proteles] recording to \(url.path)")
+                        } catch {
+                            NSLog("[Proteles] start recording failed: \(error)")
+                        }
+                    }
+                }
+                Button("Stop Recording") {
+                    let session = session
+                    Task {
+                        await session.stopRecording()
+                        NSLog("[Proteles] recording stopped")
+                    }
+                }
+            }
         }
     }
 }

@@ -49,6 +49,7 @@ public actor SessionController {
 
     private var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
+    private var recorder: SessionRecorder?
 
     public init(scrollbackStore: ScrollbackStore = ScrollbackStore()) {
         self.scrollbackStore = scrollbackStore
@@ -65,6 +66,33 @@ public actor SessionController {
     /// currently being decompressed.
     public var isCompressionActive: Bool {
         pipeline.isCompressionActive
+    }
+
+    /// True while a recording is being written. Surfaced for menu
+    /// state tracking; the view layer observes this via
+    /// ``recordingStarted`` notifications instead of polling.
+    public var isRecording: Bool {
+        recorder != nil
+    }
+
+    /// Start recording every inbound wire chunk to `url`. Any prior
+    /// recording is closed cleanly first. Recordings capture the raw
+    /// wire bytes (pre-decompression, pre-telnet-parse), so a replay
+    /// exercises the full protocol stack — including MCCP2.
+    ///
+    /// The recorder is **best-effort** — write failures silence
+    /// further recording rather than tear the session down, matching
+    /// the rest of MudCore's bias toward keeping the user's session
+    /// alive in the face of secondary failures.
+    public func startRecording(to url: URL) throws {
+        recorder?.close()
+        recorder = try SessionRecorder(url: url)
+    }
+
+    /// Stop the current recording. Idempotent.
+    public func stopRecording() {
+        recorder?.close()
+        recorder = nil
     }
 
     /// Open a connection and start the inbound processing pipeline.
@@ -120,6 +148,11 @@ public actor SessionController {
     }
 
     private func processChunk(_ wireBytes: [UInt8]) async {
+        // Tee to the recorder before doing any parser work — we want
+        // the *wire* bytes on disk so a replay re-runs the full
+        // protocol stack (MCCP2 included) deterministically.
+        try? recorder?.record(wireBytes)
+
         let output: LinePipeline.Output
         do {
             output = try pipeline.consume(wireBytes)
