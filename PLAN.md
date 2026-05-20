@@ -584,18 +584,22 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 **Deliverable:** Connect to Aardwolf, play (with no profile management, no scripting).
 
-### 8.3 Phase 2 — Robust Output Pipeline (~2 weeks)
+### 8.3 Phase 2 — Robust Output Pipeline (~2 weeks) — **complete**
 
 **Goal:** MCCP2, full colour, scrollback persistence, search.
 
-- **MCCP2 inflate.** Streaming zlib wrapper. Telnet processor emits `compressionDidStart`; byte stream layer pipes through inflate after that point.
-- **Full ANSI:** xterm-256 and 24-bit colour; reset semantics; bold/italic/underline/reverse.
-- **Palette system:** named palettes; user-editable palette in Preferences.
-- **Selection refinements:** copy plain, copy with codes.
-- **Scrollback persistence:** GRDB-backed log of all lines; FTS5 search; "Open log" / "Search session" menu items.
-- **Replay harness:** record a real Aardwolf session to a file; replay deterministically into the pipeline for testing.
+- ✅ **MCCP2 inflate.** Streaming zlib wrapper via `CZlib` (libz). `LinePipeline` activates an `Inflater` on `IAC SB COMPRESS2 IAC SE` mid-chunk; subsequent bytes are inflated before the telnet/ANSI parsers see them. Aardwolf compresses inbound output ~5× on the wire — confirmed against a real session.
+- ✅ **Full ANSI** (covered in Phase 1: xterm-256, 24-bit RGB, bold/italic/underline/reverse/strikethrough, streaming UTF-8).
+- ✅ **Scrollback eviction → bounded `NSTextStorage`.** `ScrollbackStore.events()` emits `.appended(line)` / `.evicted(id)`; `RenderCoordinator` mirrors evictions onto `NSTextStorage` via `deleteCharacters(in:)`. Resolves the D-04 memory follow-up *without* needing a custom `NSTextStorage` subclass — stock storage stays bounded once it sees the eviction signal.
+- ✅ **Scrollback persistence:** GRDB-backed `scrollback.sqlite` under `~/Library/Application Support/com.proteles.ProtelesApp/`, every appended line mirrored (crash-safe, batched 250 ms flushes), FTS5 full-text search via `ScrollbackPersistence.search(_:limit:)`.
+- ✅ **Replay harness:** `SessionRecorder` writes JSONL of raw wire bytes; `SessionReplayer` reads them back; `LinePipeline` is the synchronous core that both the live `SessionController` and the replayer drive. `autoRecord: true` in dev builds captures every session from byte one (handshake included). First real-Aardwolf fixture lives at `Tests/MudCoreTests/Fixtures/aardwolf-welcome-banner.jsonl` with a regression test.
+- ✅ **Selection refinements / Copy with Colour Codes** (⇧⌘C in menu + right-click context menu). `SGREncoder` walks an `NSAttributedString` by a custom `.protelesStyle` attribute and emits text with ANSI SGR codes inlined. Plain ⌘C still gives plain text (NSTextView default). Variants for in-game `@`-codes and HTML are tracked as backlog issues #1, #2.
+- ❌ **Palette system with user-editable palette UI:** deferred to Phase 7 polish (PLAN.md §8.8). The `ColorPalette` data structure and the `xtermDefault` preset already exist; this item is the SwiftUI palette editor.
+- ❌ **"Open log" / "Search session" menu items:** deferred to Phase 7 polish — plumbing is done (FTS5 + `ScrollbackPersistence.search`), the menu surface lands with the rest of the Preferences UI.
 
-**Deliverable:** Identical visual fidelity to MUSHclient for Aardwolf output; scrollback search works.
+**Phase 2 final test counts:** 212 tests across 69 suites, all gates green. Real-Aardwolf replay regression test in place.
+
+**Deliverable shipped as v0.0.2.**
 
 ### 8.4 Phase 3 — Session Management (~1 week)
 
@@ -973,6 +977,9 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-09 | 2026-05-16 | iPad as plausible-first-class iOS target; iPhone as companion | Touch keyboard fundamentally changes serious-MUD UX | adopted |
 | D-10 | 2026-05-16 | Lua sandbox: replace `_G`, restrict `io`/`os`, instruction-count hook | Runaway plugins can't freeze sessions or escape | adopted |
 | D-11 | 2026-05-16 | v1.0 supports a single active session; architecture stays session-scoped | Aardwolf prohibits multi-play; the cost of "session-scoped state" is near-zero and avoids a future refactor | adopted |
+| D-12 | 2026-05-19 | Bound NSTextStorage growth via eviction-event propagation; **drop** the Phase-2 plan for a custom `NSTextStorage` subclass | Phase-2 spike with `ScrollbackEvent.evicted(id)` + `deleteCharacters(in:)` brings 2000-line RSS delta from 57 MB → 23 MB at the same P99 latency (~3 ms). The "memory recoverable" projection in D-04 was correct: the win came from telling stock NSTextStorage when to drop bytes, not from replacing it | adopted (supersedes the D-04 follow-up plan) |
+| D-13 | 2026-05-20 | `SessionController.autoRecord = true` by default in dev builds; opt-in (off) for v1.0 | Capture-by-default during development means every session is a potential bug repro / fixture; mid-session "Start Recording" can't catch the MCCP2 handshake because Aardwolf activates compression within ~250 ms of connect. Will become a Preferences toggle ahead of 1.0 — users won't want their entire play history on disk without consent | adopted |
+| D-14 | 2026-05-20 | Real-Aardwolf fixtures live under `Tests/MudCoreTests/Fixtures/` as trimmed JSONL; sanitised to PII-free public-banner content only | Synthetic tests miss real protocol idiosyncrasies (the exact 8-option handshake Aardwolf opens with, where MCCP2 activates relative to plain bytes). Trimmed fixtures (1-2 chunks, stops before any user input) commit cleanly and are stable across server upgrades | adopted |
 
 Append new decisions as the project evolves. Never edit history; supersede instead.
 

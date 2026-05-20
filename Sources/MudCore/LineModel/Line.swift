@@ -3,8 +3,10 @@ import Foundation
 /// Monotonically increasing identifier for a ``Line`` within a session.
 ///
 /// IDs are assigned by ``ScrollbackStore`` and never reused within a
-/// session. They survive eviction from the in-memory deque (Phase 2 will
-/// persist evicted lines to SQLite under the same ID).
+/// session. They survive eviction from the in-memory deque —
+/// ``ScrollbackPersistence`` mirrors every line to SQLite under the
+/// same ID, so the on-disk log is searchable by the same identifier
+/// after a line has fallen out of memory.
 public struct LineID: Sendable, Equatable, Hashable, Comparable {
     public let raw: UInt64
 

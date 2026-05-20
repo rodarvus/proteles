@@ -6,22 +6,58 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 
 ## Status
 
-Phase 0 (bootstrap). Skeleton builds and tests pass. No connection logic yet — see PLAN.md §8 for the phased roadmap.
+**Phase 2 complete (v0.0.2).** Phase 3 — session management, TLS, profile manager — is the active work area.
+
+### What works today
+
+- Connect to Aardwolf via the **Connect to Aardwolf** menu item (⌘K). Disconnect with ⇧⌘D.
+- Full ANSI rendering: 16 named colours, 256-colour palette, 24-bit RGB, bold/italic/underline/reverse/strikethrough, streaming UTF-8.
+- **MCCP2 zlib decompression** transparently inflates Aardwolf's compressed wire stream (~5× bandwidth reduction).
+- TextKit 2 / `NSTextView` output view with per-frame render coalescing; P99 flush latency ~3 ms at 200 lines/sec (the validation spike).
+- **Scrollback eviction** — bounded `NSTextStorage` growth; memory stays flat across long sessions.
+- **SQLite-backed scrollback persistence** with FTS5 search at `~/Library/Application Support/com.proteles.ProtelesApp/scrollback.sqlite`. Every received line is durable; search is wired but the UI surface for it lands in Phase 7.
+- **Replay harness:** every session is auto-recorded to a JSONL file under the same directory. Replays through `LinePipeline` end-to-end (handshake + MCCP2 + ANSI + line builder).
+- **Copy with Colour Codes** (⇧⌘C; also right-click menu): the selection lands on the pasteboard with ANSI SGR codes inlined, so coloured snippets paste cleanly into other terminals or forums.
+- Command input with auto-focus on launch and on window reactivation. Bare Enter sends a line terminator (for paginated output / prompt refresh).
+- 212 tests across 69 suites; CI builds + tests + lints on every push.
+
+### What's next (Phase 3)
+
+- `WorldProfile` Codable model + Connection Manager UI replacing the hardcoded `aardmud.org:4000`.
+- TLS connections via `NWParameters.tls`.
+- Keychain-stored credentials for autologin.
+- Autoreconnect with exponential backoff.
+
+See [PLAN.md §8.4](PLAN.md#84-phase-3--session-management-1-week) for the full Phase 3 plan.
+
+## Releases
+
+- [**v0.0.2**](https://github.com/rodarvus/proteles/releases/tag/v0.0.2) — Phase 2 complete: MCCP2, persistence, eviction, replay harness, copy-with-codes.
+- [v0.0.1](https://github.com/rodarvus/proteles/releases/tag/v0.0.1) — Phase 1 alpha: first runnable build; connect, display, send.
 
 ## Layout
 
 ```
-Package.swift                 SwiftPM manifest (one package, three libraries)
+Package.swift                 SwiftPM manifest (libraries: MudCore, MudUI, MudOutputView_macOS)
 Sources/
-  MudCore/                    platform-agnostic core (networking, parsers, state, ...)
-  MudUI/                      shared SwiftUI chrome
-  MudOutputView_macOS/        AppKit-backed text view host
-Tests/                        XCTest / swift-testing suites per library
-apps/
-  ProtelesApp_macOS/          XcodeGen-generated app bundle
-fixtures/                     recorded sessions, golden files (populated later)
-tools/                        CLIs (plugin migrator, etc.) — populated later
-docs/                         API & user docs (populated later)
+  CZlib/                      libz wrapper for MCCP2
+  MudCore/                    platform-agnostic core
+    Networking/               NWConnection wrapper, TLS, state machine
+    Telnet/                   IAC parser + option-negotiation state
+    ANSI/                     SGR parser + UTF-8 streaming
+    Compression/              streaming zlib Inflater / Deflater
+    LineModel/                Line, StyledRun, StyleAttributes, ANSIColor, LineID
+    Pipeline/                 LinePipeline (bytes → Lines), LineBuilder
+    Scrollback/               ScrollbackStore actor, ScrollbackEvent
+    Session/                  SessionController (NetworkConnection + LinePipeline + recorder)
+    Persistence/              GRDB-backed log + FTS5 search
+    Replay/                   SessionRecorder, SessionReplayer
+    Rendering/                ColorPalette, RGB (platform-agnostic)
+  MudUI/                      shared SwiftUI chrome (StatusBar, CommandInput)
+  MudOutputView_macOS/        AppKit text view + RenderCoordinator + Copy-with-Codes
+Tests/MudCoreTests/
+  Fixtures/                   real-Aardwolf JSONL fixtures
+apps/ProtelesApp_macOS/       XcodeGen-generated app bundle
 ```
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`, `mudlet`, `iterm2`) are reference-only — see PLAN.md §14.
@@ -33,11 +69,11 @@ Requires macOS 14+, Xcode 16+ (Swift 6).
 ```sh
 # Build & test the libraries
 swift build
-swift test
+swift test --parallel          # ~11 s, includes the rendering validation spike
 
 # Lint & format (install once: brew install swiftformat swiftlint xcodegen)
 swiftformat --lint .
-swiftlint
+swiftlint --strict
 
 # Install the pre-commit hook
 ./scripts/install-hooks.sh
