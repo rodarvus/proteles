@@ -605,9 +605,11 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 **Goal:** Profiles, multiple worlds, TLS, robust reconnect.
 
-- `WorldProfile` Codable model: hostname, port, TLS toggle, encoding, autoconnect, autologin (with Keychain-stored credentials), preferred palette, etc.
-- Connection Manager SwiftUI view.
-- TLS via `NWParameters.tls`, certificate trust UI.
+- ✅ `WorldProfile` Codable model: hostname, port, encoding, autoconnect, autologin descriptor (Keychain accounts + prompt patterns), palette override.
+- ✅ `ProfileStore` actor: JSON persistence, CRUD, active-profile selection, seeding.
+- ✅ Connection Manager SwiftUI view (dedicated Worlds window, master-detail), wired into the app; ⌘K connects the active profile; autoconnect honored on launch.
+- ✅ Connect timeout (`NetworkConnection.connect(to:timeout:)`, default 10s) — a stalled handshake fails with `.timedOut` instead of hanging.
+- ❌ **TLS — deferred to post-1.0.** Originally planned here via `NWParameters.tls` + a certificate-trust UI, but Aardwolf's TLS endpoint couldn't be made to work reliably and it's off the critical path. The `useTLS` field and toggle were removed pre-1.0 (**D-15**); tracked as a GitHub issue for after 1.0 ships.
 - Single active session per app instance — see [§3.5](#35-session-model). Window restoration reconnects to the last-used profile on launch (configurable).
 - Autoreconnect with exponential backoff.
 - Keychain integration for credentials.
@@ -980,6 +982,7 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-12 | 2026-05-19 | Bound NSTextStorage growth via eviction-event propagation; **drop** the Phase-2 plan for a custom `NSTextStorage` subclass | Phase-2 spike with `ScrollbackEvent.evicted(id)` + `deleteCharacters(in:)` brings 2000-line RSS delta from 57 MB → 23 MB at the same P99 latency (~3 ms). The "memory recoverable" projection in D-04 was correct: the win came from telling stock NSTextStorage when to drop bytes, not from replacing it | adopted (supersedes the D-04 follow-up plan) |
 | D-13 | 2026-05-20 | `SessionController.autoRecord = true` by default in dev builds; opt-in (off) for v1.0 | Capture-by-default during development means every session is a potential bug repro / fixture; mid-session "Start Recording" can't catch the MCCP2 handshake because Aardwolf activates compression within ~250 ms of connect. Will become a Preferences toggle ahead of 1.0 — users won't want their entire play history on disk without consent | adopted |
 | D-14 | 2026-05-20 | Real-Aardwolf fixtures live under `Tests/MudCoreTests/Fixtures/` as trimmed JSONL; sanitised to PII-free public-banner content only | Synthetic tests miss real protocol idiosyncrasies (the exact 8-option handshake Aardwolf opens with, where MCCP2 activates relative to plain bytes). Trimmed fixtures (1-2 chunks, stops before any user input) commit cleanly and are stable across server upgrades | adopted |
+| D-15 | 2026-05-20 | Remove TLS (the `useTLS` flag, editor toggle, and `NWParameters.tls` path) pre-1.0; ship plain telnet only | Aardwolf's TLS endpoint couldn't be made to work reliably in testing, and TLS is off the critical path for a working v1.0. A dormant-but-broken toggle is worse than no toggle. Tracked as a GitHub issue to revisit post-1.0 with proper certificate-trust handling. The connect *timeout* stays — it's useful regardless | adopted |
 
 Append new decisions as the project evolves. Never edit history; supersede instead.
 

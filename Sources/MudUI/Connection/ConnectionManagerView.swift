@@ -92,11 +92,6 @@ private struct WorldRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if profile.useTLS {
-                Image(systemName: "lock.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(.vertical, 2)
     }

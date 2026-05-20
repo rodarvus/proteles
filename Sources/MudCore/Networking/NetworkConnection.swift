@@ -30,15 +30,18 @@ import Network
 ///     designed for parallel connections.
 public actor NetworkConnection {
     /// Where to connect.
+    ///
+    /// TLS support was removed pre-1.0 (see issue tracker) — Aardwolf's
+    /// TLS endpoint couldn't be made to work reliably and it's not on
+    /// the critical path. Connections are plain TCP for now; a `useTLS`
+    /// flag (plus certificate-trust handling) returns post-1.0.
     public struct Endpoint: Sendable, Equatable {
         public let host: String
         public let port: UInt16
-        public let useTLS: Bool
 
-        public init(host: String, port: UInt16, useTLS: Bool = false) {
+        public init(host: String, port: UInt16) {
             self.host = host
             self.port = port
-            self.useTLS = useTLS
         }
     }
 
@@ -60,15 +63,14 @@ public actor NetworkConnection {
         case sendFailed(String)
         case cancelled
         /// The connection did not reach `.ready` within the timeout.
-        /// The common cause is a TLS handshake against a plaintext
-        /// port (e.g. TLS on Aardwolf's 4000 instead of 4010), or an
-        /// unreachable host.
+        /// The connection did not reach `.ready` within the timeout —
+        /// usually an unreachable host or a wrong port.
         case timedOut
     }
 
     /// Default time to wait for a connection to reach `.ready` before
     /// failing with ``ConnectionError/timedOut``. Generous enough for
-    /// slow networks, bounded enough that a misconfigured TLS port
+    /// slow networks, bounded enough that a dead host or wrong port
     /// doesn't hang the UI in "Connecting…" forever.
     public static let defaultConnectTimeout: Duration = .seconds(10)
 
@@ -111,10 +113,10 @@ public actor NetworkConnection {
         stateContinuation.finish()
     }
 
-    /// Open a TCP (or TLS) connection. Throws on invalid endpoint, on
-    /// failure to establish the connection, or on
-    /// ``ConnectionError/timedOut`` if `.ready` isn't reached within
-    /// `timeout`. The wrapper must be ``State/disconnected`` on entry.
+    /// Open a TCP connection. Throws on invalid endpoint, on failure
+    /// to establish the connection, or on ``ConnectionError/timedOut``
+    /// if `.ready` isn't reached within `timeout`. The wrapper must be
+    /// ``State/disconnected`` on entry.
     public func connect(
         to endpoint: Endpoint,
         timeout: Duration = NetworkConnection.defaultConnectTimeout
@@ -135,15 +137,13 @@ public actor NetworkConnection {
             host: NWEndpoint.Host(endpoint.host),
             port: port
         )
-        let parameters: NWParameters = endpoint.useTLS ? .tls : .tcp
-        let conn = NWConnection(to: nwEndpoint, using: parameters)
+        let conn = NWConnection(to: nwEndpoint, using: .tcp)
         connection = conn
 
         transition(to: .connecting)
 
-        // Fail fast if the handshake stalls (the classic case:
-        // TLS against a plaintext port, where TCP connects but the
-        // TLS negotiation never completes).
+        // Fail fast if the connection stalls (unreachable host, wrong
+        // port) instead of parking in `.preparing` / `.waiting`.
         let timeoutTask = Task { [weak self] in
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else { return }

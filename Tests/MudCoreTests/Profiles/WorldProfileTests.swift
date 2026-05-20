@@ -10,7 +10,6 @@ struct WorldProfileBasicsTests {
         #expect(profile.name == "Aardwolf")
         #expect(profile.host == "aardmud.org")
         #expect(profile.port == 4000)
-        #expect(!profile.useTLS)
         #expect(profile.encoding == .utf8)
         #expect(!profile.autoconnect)
         #expect(profile.autologin == nil)
@@ -29,12 +28,10 @@ struct WorldProfileBasicsTests {
         let profile = WorldProfile(
             name: "X",
             host: "example.com",
-            port: 4040,
-            useTLS: true
+            port: 4040
         )
         #expect(profile.endpoint.host == "example.com")
         #expect(profile.endpoint.port == 4040)
-        #expect(profile.endpoint.useTLS == true)
     }
 }
 
@@ -113,7 +110,6 @@ struct WorldProfileCodableTests {
             name: "Aardwolf",
             host: "aardmud.org",
             port: 4040,
-            useTLS: true,
             encoding: .utf8,
             autoconnect: true,
             paletteOverride: nil,

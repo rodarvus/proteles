@@ -72,14 +72,14 @@ struct ProfileStoreCRUDTests {
         try await store.load()
         var aardwolf = try #require(await store.profiles.first)
         aardwolf.port = 4010
-        aardwolf.useTLS = true
+        aardwolf.autoconnect = true
         try await store.update(aardwolf)
 
         let reopened = ProfileStore(url: url)
         try await reopened.load()
         let restored = try #require(await reopened.profiles.first)
         #expect(restored.port == 4010)
-        #expect(restored.useTLS)
+        #expect(restored.autoconnect)
     }
 
     @Test("update on unknown id throws notFound")

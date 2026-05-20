@@ -25,7 +25,6 @@ struct WorldEditorView: View {
                     value: $profile.port,
                     format: .number.grouping(.never)
                 )
-                Toggle("Use TLS", isOn: $profile.useTLS)
                 Picker("Encoding", selection: $profile.encoding) {
                     Text("UTF-8").tag(TextEncoding.utf8)
                     Text("Latin-1 (ISO-8859-1)").tag(TextEncoding.latin1)

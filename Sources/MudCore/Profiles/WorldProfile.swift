@@ -26,9 +26,6 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
     /// ``NetworkConnection``.
     public var port: UInt16
 
-    /// Open the connection over TLS (`NWParameters.tls`) when true.
-    public var useTLS: Bool
-
     /// Wire encoding for inbound bytes. ANSI / MUD output is almost
     /// always UTF-8 these days; legacy worlds may still ship Latin-1.
     public var encoding: TextEncoding
@@ -54,7 +51,6 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
         name: String,
         host: String,
         port: UInt16,
-        useTLS: Bool = false,
         encoding: TextEncoding = .utf8,
         autoconnect: Bool = false,
         paletteOverride: ColorPalette? = nil,
@@ -64,7 +60,6 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
         self.name = name
         self.host = host
         self.port = port
-        self.useTLS = useTLS
         self.encoding = encoding
         self.autoconnect = autoconnect
         self.paletteOverride = paletteOverride
@@ -75,11 +70,7 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
     /// profile resolves to. Used at connect time so the SessionController
     /// doesn't need to know about profile semantics.
     public var endpoint: NetworkConnection.Endpoint {
-        NetworkConnection.Endpoint(
-            host: host,
-            port: port,
-            useTLS: useTLS
-        )
+        NetworkConnection.Endpoint(host: host, port: port)
     }
 
     /// Validate fields a user could realistically get wrong in the
@@ -115,7 +106,6 @@ public extension WorldProfile {
         name: "Aardwolf",
         host: "aardmud.org",
         port: 4000,
-        useTLS: false,
         encoding: .utf8,
         autoconnect: false
     )

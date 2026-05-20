@@ -6,7 +6,7 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 
 ## Status
 
-**Phase 2 complete (v0.0.2).** Phase 3 — session management, TLS, profile manager — is the active work area.
+**Phase 2 complete (v0.0.2).** Phase 3 — session management and profile manager — is the active work area.
 
 ### What works today
 
@@ -19,14 +19,15 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 - **Replay harness:** every session is auto-recorded to a JSONL file under the same directory. Replays through `LinePipeline` end-to-end (handshake + MCCP2 + ANSI + line builder).
 - **Copy with Colour Codes** (⇧⌘C; also right-click menu): the selection lands on the pasteboard with ANSI SGR codes inlined, so coloured snippets paste cleanly into other terminals or forums.
 - Command input with auto-focus on launch and on window reactivation. Bare Enter sends a line terminator (for paginated output / prompt refresh).
-- 212 tests across 69 suites; CI builds + tests + lints on every push.
+- 242 tests across 77 suites; CI builds + tests + lints on every push.
 
 ### What's next (Phase 3)
 
 - `WorldProfile` Codable model + Connection Manager UI replacing the hardcoded `aardmud.org:4000`.
-- TLS connections via `NWParameters.tls`.
 - Keychain-stored credentials for autologin.
 - Autoreconnect with exponential backoff.
+
+(TLS is deferred until after 1.0 — see [#3](https://github.com/rodarvus/proteles/issues/3). The client ships plain telnet for now.)
 
 See [PLAN.md §8.4](PLAN.md#84-phase-3--session-management-1-week) for the full Phase 3 plan.
 
@@ -42,7 +43,7 @@ Package.swift                 SwiftPM manifest (libraries: MudCore, MudUI, MudOu
 Sources/
   CZlib/                      libz wrapper for MCCP2
   MudCore/                    platform-agnostic core
-    Networking/               NWConnection wrapper, TLS, state machine
+    Networking/               NWConnection wrapper, state machine
     Telnet/                   IAC parser + option-negotiation state
     ANSI/                     SGR parser + UTF-8 streaming
     Compression/              streaming zlib Inflater / Deflater
