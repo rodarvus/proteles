@@ -6,7 +6,7 @@ import Foundation
 /// ``ANSIColor`` does not depend on AppKit or UIKit. The
 /// platform-specific view layer converts to `NSColor` / `UIColor` at
 /// the rendering boundary.
-public struct RGB: Sendable, Equatable, Hashable {
+public struct RGB: Sendable, Equatable, Hashable, Codable {
     public let red: UInt8
     public let green: UInt8
     public let blue: UInt8

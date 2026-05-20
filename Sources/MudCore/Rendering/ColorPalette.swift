@@ -10,7 +10,7 @@ import Foundation
 ///
 /// PLAN.md §6.6 — additional palettes (Solarized, MUSHclient-default,
 /// user-edited) ship in Phase 7 alongside the theme picker.
-public struct ColorPalette: Sendable, Equatable {
+public struct ColorPalette: Sendable, Equatable, Codable {
     public let named: [NamedColor: RGB]
     public let brightNamed: [NamedColor: RGB]
     public let defaultForeground: RGB
