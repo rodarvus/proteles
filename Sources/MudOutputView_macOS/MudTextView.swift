@@ -39,5 +39,38 @@
             }
             return super.validateUserInterfaceItem(item)
         }
+
+        /// Inject the Copy-with-Colour-Codes item into the right-click
+        /// context menu, right after the standard Copy item. The menu
+        /// bar entry already exists (see `ProtelesApp.body.commands`);
+        /// this is the parity affordance so users who reach for the
+        /// right-click menu instead of the keyboard shortcut still get
+        /// to the feature.
+        override public func menu(for event: NSEvent) -> NSMenu? {
+            guard let menu = super.menu(for: event) else { return nil }
+
+            // Find the standard Copy item; fall back to inserting at
+            // the start of the menu if AppKit's default lineup ever
+            // changes shape.
+            let insertIndex: Int = {
+                if let copyIndex = menu.items.firstIndex(where: {
+                    $0.action == #selector(copy(_:))
+                }) {
+                    return copyIndex + 1
+                }
+                return 0
+            }()
+
+            let item = NSMenuItem(
+                title: "Copy with Colour Codes",
+                action: #selector(copyWithCodes(_:)),
+                keyEquivalent: "C"
+            )
+            item.keyEquivalentModifierMask = [.command, .shift]
+            item.target = self
+            menu.insertItem(item, at: insertIndex)
+
+            return menu
+        }
     }
 #endif
