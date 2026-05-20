@@ -40,7 +40,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MudCoreTests",
-            dependencies: ["MudCore"]
+            dependencies: ["MudCore"],
+            resources: [
+                .copy("Fixtures")
+            ]
         ),
         .testTarget(
             name: "MudUITests",
