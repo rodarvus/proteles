@@ -76,6 +76,19 @@ struct ProtelesApp: App {
                 }
                 .keyboardShortcut("D", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .pasteboard) {
+                Button("Copy with Colour Codes") {
+                    // The action is dispatched through the responder
+                    // chain so whichever MudTextView is first responder
+                    // gets the call. `to: nil` is the standard pattern.
+                    NSApp.sendAction(
+                        #selector(MudTextView.copyWithCodes(_:)),
+                        to: nil,
+                        from: nil
+                    )
+                }
+                .keyboardShortcut("C", modifiers: [.command, .shift])
+            }
         }
     }
 }

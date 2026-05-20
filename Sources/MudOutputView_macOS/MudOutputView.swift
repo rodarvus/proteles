@@ -22,16 +22,34 @@
         }
 
         public func makeNSView(context: Context) -> NSScrollView {
-            let scrollView = NSTextView.scrollableTextView()
+            // We hand-roll the NSScrollView + MudTextView pair rather
+            // than calling NSTextView.scrollableTextView(), because the
+            // latter returns a stock NSTextView and we need our
+            // ``MudTextView`` subclass for the `copyWithCodes(_:)`
+            // action.
+            let scrollView = NSScrollView()
             scrollView.hasVerticalScroller = true
             scrollView.hasHorizontalScroller = false
             scrollView.autohidesScrollers = false
             scrollView.borderType = .noBorder
+            scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-            guard let textView = scrollView.documentView as? NSTextView else {
-                return scrollView
-            }
+            let textView = MudTextView()
+            textView.minSize = NSSize(width: 0, height: 0)
+            textView.maxSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.isVerticallyResizable = true
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = [.width]
+            textView.textContainer?.containerSize = NSSize(
+                width: 0,
+                height: CGFloat.greatestFiniteMagnitude
+            )
             configure(textView)
+
+            scrollView.documentView = textView
 
             let coordinator = RenderCoordinator(
                 textView: textView,
