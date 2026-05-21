@@ -59,7 +59,10 @@ struct ProtelesApp: App {
                     // world is configured for it.
                     await worlds.load()
                     if let active = worlds.activeProfile, active.autoconnect {
-                        try? await session.connect(to: active.endpoint)
+                        try? await session.connect(
+                            to: active.endpoint,
+                            autologin: worlds.autologinPlan(for: active)
+                        )
                     }
                 }
         }
@@ -118,8 +121,9 @@ struct ProtelesApp: App {
                 let worlds = worlds
                 Task { @MainActor in
                     await worlds.setActive(profile.id)
+                    let plan = worlds.autologinPlan(for: profile)
                     await session.disconnect()
-                    try? await session.connect(to: profile.endpoint)
+                    try? await session.connect(to: profile.endpoint, autologin: plan)
                 }
             }
             .frame(minWidth: 560, minHeight: 360)
@@ -145,7 +149,10 @@ private struct ProtelesCommands: Commands {
                 let worlds = worlds
                 Task { @MainActor in
                     guard let active = worlds.activeProfile else { return }
-                    try? await session.connect(to: active.endpoint)
+                    try? await session.connect(
+                        to: active.endpoint,
+                        autologin: worlds.autologinPlan(for: active)
+                    )
                 }
             }
             .keyboardShortcut("K", modifiers: [.command])

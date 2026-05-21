@@ -62,7 +62,9 @@ public struct ConnectionManagerView: View {
                 profile: binding,
                 isActive: id == model.activeProfileID,
                 onMakeActive: { Task { await model.setActive(id) } },
-                onConnect: { onConnect(binding.wrappedValue) }
+                onConnect: { onConnect(binding.wrappedValue) },
+                loadPassword: { model.password(for: id) },
+                savePassword: { model.setPassword($0, for: id) }
             )
         } else {
             ContentUnavailableView(

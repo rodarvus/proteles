@@ -605,16 +605,17 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 **Goal:** Profiles, multiple worlds, TLS, robust reconnect.
 
-- ✅ `WorldProfile` Codable model: hostname, port, encoding, autoconnect, autologin descriptor (Keychain accounts + prompt patterns), palette override.
+- ✅ `WorldProfile` Codable model: hostname, port, encoding, autoconnect, autologin descriptor (username + prompt patterns), palette override.
 - ✅ `ProfileStore` actor: JSON persistence, CRUD, active-profile selection, seeding.
 - ✅ Connection Manager SwiftUI view (dedicated Worlds window, master-detail), wired into the app; ⌘K connects the active profile; autoconnect honored on launch.
 - ✅ Connect timeout (`NetworkConnection.connect(to:timeout:)`, default 10s) — a stalled handshake fails with `.timedOut` instead of hanging.
+- ✅ **Keychain integration for credentials.** `CredentialStore` protocol with a `KeychainStore` (Security generic-password) and an in-memory test double; the password lives in the Keychain keyed by `<profileID>.password`, never in `profiles.json`. The username + prompt patterns stay in the profile.
+- ✅ **Prompt-driven ("Diku-style") autologin.** `SessionController.connect(to:autologin:)` runs a state machine that watches the inbound stream (including the un-terminated pending line — see `LinePipeline.pendingLineText`) for the name/password prompts and sends the credentials. **D-16.**
 - ❌ **TLS — deferred to post-1.0.** Originally planned here via `NWParameters.tls` + a certificate-trust UI, but Aardwolf's TLS endpoint couldn't be made to work reliably and it's off the critical path. The `useTLS` field and toggle were removed pre-1.0 (**D-15**); tracked as a GitHub issue for after 1.0 ships.
 - Single active session per app instance — see [§3.5](#35-session-model). Window restoration reconnects to the last-used profile on launch (configurable).
 - Autoreconnect with exponential backoff.
-- Keychain integration for credentials.
 
-**Deliverable:** Profile-managed connections, including TLS Aardwolf.
+**Deliverable:** Profile-managed connections with Keychain-backed prompt-driven autologin.
 
 ### 8.5 Phase 4 — GMCP and Aardwolf Surface (~2 weeks)
 
@@ -983,6 +984,7 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-13 | 2026-05-20 | `SessionController.autoRecord = true` by default in dev builds; opt-in (off) for v1.0 | Capture-by-default during development means every session is a potential bug repro / fixture; mid-session "Start Recording" can't catch the MCCP2 handshake because Aardwolf activates compression within ~250 ms of connect. Will become a Preferences toggle ahead of 1.0 — users won't want their entire play history on disk without consent | adopted |
 | D-14 | 2026-05-20 | Real-Aardwolf fixtures live under `Tests/MudCoreTests/Fixtures/` as trimmed JSONL; sanitised to PII-free public-banner content only | Synthetic tests miss real protocol idiosyncrasies (the exact 8-option handshake Aardwolf opens with, where MCCP2 activates relative to plain bytes). Trimmed fixtures (1-2 chunks, stops before any user input) commit cleanly and are stable across server upgrades | adopted |
 | D-15 | 2026-05-20 | Remove TLS (the `useTLS` flag, editor toggle, and `NWParameters.tls` path) pre-1.0; ship plain telnet only | Aardwolf's TLS endpoint couldn't be made to work reliably in testing, and TLS is off the critical path for a working v1.0. A dormant-but-broken toggle is worse than no toggle. Tracked as a GitHub issue to revisit post-1.0 with proper certificate-trust handling. The connect *timeout* stays — it's useful regardless | adopted |
+| D-16 | 2026-05-21 | Autologin is prompt-driven ("Diku-style"), not send-on-connect; password in Keychain, username + prompts in the profile | The two reference clients both send on connect (MushClient immediately, Mudlet on 2 s/3 s timers), which is fragile to server timing. Watching the stream for the name/password prompts is robust. Prompts arrive un-terminated, so they sit in the ANSI parser / line-builder pending buffers, never as a `Line` — `LinePipeline.pendingLineText` surfaces that text so the matcher can react. Storing the password in the Keychain (not plaintext `profiles.json`) keeps secrets off disk; the `CredentialStore` protocol keeps MudCore free of a hard Security-framework dependency and makes the state machine testable with plain values | adopted |
 
 Append new decisions as the project evolves. Never edit history; supersede instead.
 

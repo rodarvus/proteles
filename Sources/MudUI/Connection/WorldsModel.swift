@@ -26,9 +26,14 @@ public final class WorldsModel {
     public var selectedID: UUID?
 
     private let store: ProfileStore
+    private let credentials: CredentialStore
 
-    public init(store: ProfileStore) {
+    public init(
+        store: ProfileStore,
+        credentials: CredentialStore = KeychainStore()
+    ) {
         self.store = store
+        self.credentials = credentials
     }
 
     /// The active profile resolved from ``activeProfileID``.
@@ -59,6 +64,7 @@ public final class WorldsModel {
     /// remaining profile.
     public func removeSelected() async {
         guard let selectedID else { return }
+        credentials.removePassword(forAccount: Autologin.passwordAccount(for: selectedID))
         try? await store.remove(id: selectedID)
         await refresh()
         self.selectedID = activeProfileID ?? profiles.first?.id
@@ -89,6 +95,27 @@ public final class WorldsModel {
                 Task { try? await self.store.update(newValue) }
             }
         )
+    }
+
+    // MARK: - Credentials
+
+    /// Read the stored autologin password for `id` (empty string if
+    /// none). Backed by the ``CredentialStore`` — the Keychain in the
+    /// app, an in-memory store in tests.
+    public func password(for id: UUID) -> String {
+        credentials.password(forAccount: Autologin.passwordAccount(for: id)) ?? ""
+    }
+
+    /// Store (or clear, when empty) the autologin password for `id`.
+    public func setPassword(_ password: String, for id: UUID) {
+        credentials.setPassword(password, forAccount: Autologin.passwordAccount(for: id))
+    }
+
+    /// Resolve the connect-time autologin instruction for `profile`,
+    /// folding in its password from the credential store. `nil` when
+    /// autologin is not configured.
+    public func autologinPlan(for profile: WorldProfile) -> AutologinPlan? {
+        profile.autologinPlan(using: credentials)
     }
 
     // MARK: - Private

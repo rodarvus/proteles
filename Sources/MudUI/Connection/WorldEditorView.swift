@@ -13,6 +13,16 @@ struct WorldEditorView: View {
     let onMakeActive: () -> Void
     let onConnect: () -> Void
 
+    /// Reads the stored autologin password for this profile (from the
+    /// Keychain, via ``WorldsModel``). The password is *not* part of
+    /// ``WorldProfile`` — it never touches `profiles.json`.
+    let loadPassword: () -> String
+
+    /// Persists the autologin password for this profile.
+    let savePassword: (String) -> Void
+
+    @State private var password: String = ""
+
     var body: some View {
         let issues = profile.validate()
 
@@ -35,6 +45,8 @@ struct WorldEditorView: View {
                 Toggle("Auto-connect on launch", isOn: $profile.autoconnect)
             }
 
+            autologinSection
+
             if !issues.isEmpty {
                 Section("Issues") {
                     ForEach(issues, id: \.self) { issue in
@@ -45,6 +57,8 @@ struct WorldEditorView: View {
             }
         }
         .formStyle(.grouped)
+        .task(id: profile.id) { password = loadPassword() }
+        .onChange(of: password) { _, newValue in savePassword(newValue) }
         .navigationTitle(profile.name.isEmpty ? "New World" : profile.name)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -61,6 +75,50 @@ struct WorldEditorView: View {
                     .disabled(!issues.isEmpty)
             }
         }
+    }
+
+    private var autologinSection: some View {
+        Section("Autologin") {
+            Toggle("Log in automatically", isOn: autologinEnabled)
+            if profile.autologin != nil {
+                TextField("Character name", text: usernameBinding)
+                    .textContentType(.username)
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+                Text("Sent at the login prompts. The password is stored in your Keychain.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Toggle binding: presence of ``WorldProfile/autologin`` is the
+    /// enabled state. Turning it off clears the descriptor and the
+    /// stored password.
+    private var autologinEnabled: Binding<Bool> {
+        Binding(
+            get: { profile.autologin != nil },
+            set: { isOn in
+                if isOn {
+                    if profile.autologin == nil {
+                        profile.autologin = Autologin(username: "")
+                    }
+                } else {
+                    profile.autologin = nil
+                    password = ""
+                }
+            }
+        )
+    }
+
+    /// Username binding into the optional ``Autologin`` (only shown while
+    /// the descriptor exists, so the optional-chained setter always
+    /// lands).
+    private var usernameBinding: Binding<String> {
+        Binding(
+            get: { profile.autologin?.username ?? "" },
+            set: { profile.autologin?.username = $0 }
+        )
     }
 
     private static func message(for issue: WorldProfile.ValidationIssue) -> String {
