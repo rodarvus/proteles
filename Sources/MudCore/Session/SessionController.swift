@@ -42,6 +42,10 @@ public actor SessionController {
     /// the view layer.
     public nonisolated let scrollbackStore: ScrollbackStore
 
+    /// Decoded Aardwolf GMCP state (vitals, status, …). Fed by the inbound
+    /// pipeline; observed by the status bar.
+    public nonisolated let gmcpState: GMCPStateStore
+
     /// Durable, controller-lifetime stream of connection-state
     /// transitions for the UI to observe.
     ///
@@ -91,6 +95,10 @@ public actor SessionController {
     /// autoreconnect.
     private var userInitiatedDisconnect = false
 
+    /// Whether the GMCP handshake has been sent for the current
+    /// connection (sent once, when the server enables GMCP).
+    private var gmcpHandshakeSent = false
+
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
     /// when autologin is not configured or has completed.
@@ -125,6 +133,7 @@ public actor SessionController {
 
     public init(
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
+        gmcpState: GMCPStateStore = GMCPStateStore(),
         autoRecord: Bool = false,
         reconnectPolicy: ReconnectPolicy = .disabled,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
@@ -132,6 +141,7 @@ public actor SessionController {
         }
     ) {
         self.scrollbackStore = scrollbackStore
+        self.gmcpState = gmcpState
         let (stream, continuation) = AsyncStream<State>.makeStream(
             bufferingPolicy: .unbounded
         )
@@ -212,6 +222,8 @@ public actor SessionController {
     ) async throws {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
+        gmcpHandshakeSent = false
+        await gmcpState.reset()
 
         let conn = NetworkConnection()
         connection = conn
@@ -423,7 +435,26 @@ public actor SessionController {
             await scrollbackStore.append(line)
         }
 
+        // The server enabled GMCP — send our handshake once so it starts
+        // streaming Char/Comm/Room modules.
+        if output.enabledGMCP {
+            await sendGMCPHandshake()
+        }
+        for message in output.gmcp {
+            await gmcpState.apply(message)
+        }
+
         await advanceAutologin(newLines: output.lines)
+    }
+
+    /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,
+    /// then the config/request batch). Sent at most once per connection.
+    private func sendGMCPHandshake() async {
+        guard !gmcpHandshakeSent else { return }
+        gmcpHandshakeSent = true
+        for packet in GMCPMessage.aardwolfHandshake(clientVersion: MudCore.version) {
+            try? await connection?.send(packet)
+        }
     }
 
     /// Drive the prompt-driven (Diku-style) autologin sequence. Called

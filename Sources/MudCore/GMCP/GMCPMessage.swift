@@ -58,3 +58,43 @@ public struct GMCPMessage: Sendable, Equatable {
         try JSONDecoder().decode(type, from: Data(json.utf8))
     }
 }
+
+public extension GMCPMessage {
+    /// Frame a GMCP payload string as a telnet subnegotiation:
+    /// `IAC SB 201 <payload> IAC SE`, doubling any `IAC` (0xFF) byte
+    /// inside the payload (the inverse of what ``TelnetProcessor`` undoes
+    /// on receive).
+    static func encode(payload: String) -> [UInt8] {
+        var bytes: [UInt8] = [TelnetCommand.iac, TelnetCommand.sb, TelnetOption.gmcp]
+        for byte in payload.utf8 {
+            bytes.append(byte)
+            if byte == TelnetCommand.iac {
+                bytes.append(TelnetCommand.iac)
+            }
+        }
+        bytes.append(contentsOf: [TelnetCommand.iac, TelnetCommand.se])
+        return bytes
+    }
+
+    /// The client→server GMCP handshake Proteles sends once the server
+    /// enables GMCP, mirroring `aard_GMCP_handler.xml`'s `fetch_all()`:
+    /// announce ourselves, declare supported modules, then request the
+    /// current character / room / area state and set a few display
+    /// configs. Each element is a fully framed subnegotiation.
+    static func aardwolfHandshake(clientVersion: String) -> [[UInt8]] {
+        let payloads = [
+            #"Core.Hello { "client": "Proteles", "version": "\#(clientVersion)" }"#,
+            #"Core.Supports.Set [ "Char 1", "Comm 1", "Room 1" ]"#,
+            "config compact",
+            "config prompt",
+            "config xterm yes",
+            "rawcolor on",
+            "request char",
+            "request room",
+            "request area",
+            "request quest",
+            "request group"
+        ]
+        return payloads.map { encode(payload: $0) }
+    }
+}

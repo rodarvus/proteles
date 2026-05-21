@@ -212,16 +212,14 @@ public struct LinePipeline {
             // Accepting the server's WILL GMCP (we reply DO) means the
             // server may now stream GMCP — signal the caller to send its
             // handshake.
-            if verb == .will,
-               option == TelnetOption.gmcp,
-               negotiationPolicy.acceptedWillOptions.contains(TelnetOption.gmcp)
-            {
+            let acceptedGMCP = verb == .will
+                && option == TelnetOption.gmcp
+                && negotiationPolicy.acceptedWillOptions.contains(TelnetOption.gmcp)
+            if acceptedGMCP {
                 output.enabledGMCP = true
             }
         case .subnegotiation(let option, let payload):
-            if option == TelnetOption.gmcp,
-               let message = GMCPMessage(subnegotiationPayload: payload)
-            {
+            if option == TelnetOption.gmcp, let message = GMCPMessage(subnegotiationPayload: payload) {
                 output.gmcp.append(message)
             }
         case .command:
