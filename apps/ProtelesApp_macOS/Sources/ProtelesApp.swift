@@ -13,7 +13,10 @@ struct ProtelesApp: App {
     /// a fully-replayable session to
     /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`.
     /// Will become opt-in (off by default) ahead of 1.0.
-    private let session = SessionController(autoRecord: true)
+    private let session = SessionController(
+        autoRecord: true,
+        reconnectPolicy: .standard
+    )
 
     /// On-disk scrollback log under
     /// `~/Library/Application Support/com.proteles.ProtelesApp/`.

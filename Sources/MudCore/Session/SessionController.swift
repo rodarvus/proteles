@@ -68,6 +68,29 @@ public actor SessionController {
     private var stateForwardTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
 
+    /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
+    /// so library/test callers opt in explicitly; the app sets
+    /// ``ReconnectPolicy/standard``.
+    public var reconnectPolicy: ReconnectPolicy
+
+    /// The endpoint / credentials of the most recent ``connect(to:autologin:)``,
+    /// retained so an autoreconnect can re-establish the same session.
+    private var lastEndpoint: NetworkConnection.Endpoint?
+    private var lastAutologinPlan: AutologinPlan?
+
+    /// The running backoff loop, if any.
+    private var reconnectTask: Task<Void, Never>?
+
+    /// True between an unexpected drop and either a successful reconnect
+    /// or giving up. While set, transient `.disconnected` transitions
+    /// from a failing attempt are suppressed so the UI stays on
+    /// `.connecting`.
+    private var isReconnecting = false
+
+    /// Set by ``disconnect()`` so the drop handler knows not to
+    /// autoreconnect.
+    private var userInitiatedDisconnect = false
+
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
     /// when autologin is not configured or has completed.
@@ -103,6 +126,7 @@ public actor SessionController {
     public init(
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
         autoRecord: Bool = false,
+        reconnectPolicy: ReconnectPolicy = .disabled,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
             try? SessionRecorder.defaultRecordingURL()
         }
@@ -115,6 +139,7 @@ public actor SessionController {
         connectionStatesContinuation = continuation
         continuation.yield(.disconnected)
         self.autoRecord = autoRecord
+        self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
     }
 
@@ -163,6 +188,28 @@ public actor SessionController {
         guard connection == nil else {
             throw SessionError.alreadyConnected
         }
+        // A fresh user-initiated connect cancels any in-flight backoff and
+        // clears the "user disconnected" latch.
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        isReconnecting = false
+        userInitiatedDisconnect = false
+        lastEndpoint = endpoint
+        lastAutologinPlan = plan
+
+        try await establish(to: endpoint, autologin: plan, surfaceFailureState: true)
+    }
+
+    /// Establish a connection and start the inbound pipeline. Shared by
+    /// the user-initiated ``connect(to:autologin:)`` and the autoreconnect
+    /// loop. When `surfaceFailureState` is true a failure emits
+    /// `.disconnected`; the reconnect loop passes false so the UI stays on
+    /// `.connecting` between attempts.
+    private func establish(
+        to endpoint: NetworkConnection.Endpoint,
+        autologin plan: AutologinPlan?,
+        surfaceFailureState: Bool
+    ) async throws {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
 
@@ -172,18 +219,15 @@ public actor SessionController {
         // stream so the UI keeps observing across reconnects.
         stateForwardTask = Task { [weak self] in
             for await newState in conn.states {
-                await self?.updateState(newState)
+                await self?.forwardConnectionState(newState)
             }
         }
 
         do {
             try await conn.connect(to: endpoint)
         } catch {
-            // Connect failed: tear the half-open session down so a retry
-            // can start cleanly, and make sure the UI lands on
-            // `.disconnected`.
             teardownSession()
-            updateState(.disconnected)
+            if surfaceFailureState { updateState(.disconnected) }
             throw error
         }
 
@@ -194,13 +238,19 @@ public actor SessionController {
         startProcessingLoop(on: conn)
     }
 
-    /// Close the connection. Idempotent — a no-op when already
-    /// disconnected.
+    /// Close the connection. Idempotent. A user-initiated disconnect — it
+    /// suppresses autoreconnect.
     public func disconnect() async {
-        guard let conn = connection else { return }
-        teardownSession()
-        await conn.disconnect()
-        await flushOnDisconnect()
+        userInitiatedDisconnect = true
+        isReconnecting = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+
+        if let conn = connection {
+            teardownSession()
+            await conn.disconnect()
+            await flushOnDisconnect()
+        }
         updateState(.disconnected)
     }
 
@@ -244,13 +294,84 @@ public actor SessionController {
     }
 
     /// React to the inbound byte stream ending on its own — a
-    /// remote-initiated close. Flushes any trailing line, tears the
-    /// session down so a reconnect can start, and surfaces
+    /// remote-initiated close. Flushes any trailing line and tears the
+    /// session down, then either begins autoreconnect (if the policy is
+    /// enabled and this wasn't a user disconnect) or surfaces
     /// `.disconnected`.
     private func handleByteStreamEnded() async {
         guard connection != nil else { return }
         await flushOnDisconnect()
         teardownSession()
+
+        if reconnectPolicy.isEnabled, !userInitiatedDisconnect, lastEndpoint != nil {
+            beginReconnect()
+        } else {
+            updateState(.disconnected)
+        }
+    }
+
+    /// Forward an underlying-connection transition onto the durable
+    /// stream, suppressing the transient `.disconnected` of a failed
+    /// attempt while a reconnect cycle is in progress.
+    private func forwardConnectionState(_ newState: State) {
+        if isReconnecting, newState == .disconnected { return }
+        updateState(newState)
+    }
+
+    /// Drive the exponential-backoff reconnect loop. Surfaces
+    /// `.connecting` for the duration; ends by either re-establishing the
+    /// session or, once ``ReconnectPolicy/maxAttempts`` is hit, emitting
+    /// `.disconnected`.
+    private func beginReconnect() {
+        guard let endpoint = lastEndpoint else {
+            updateState(.disconnected)
+            return
+        }
+        isReconnecting = true
+        updateState(.connecting)
+
+        let policy = reconnectPolicy
+        let plan = lastAutologinPlan
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var attempt = 1
+            while !Task.isCancelled {
+                if policy.maxAttempts > 0, attempt > policy.maxAttempts {
+                    await self?.reconnectExhausted()
+                    return
+                }
+                try? await Task.sleep(for: policy.delay(forAttempt: attempt))
+                if Task.isCancelled { return }
+                let reconnected = await self?.reconnectAttempt(
+                    to: endpoint,
+                    autologin: plan
+                ) ?? false
+                if reconnected { return }
+                attempt += 1
+            }
+        }
+    }
+
+    /// One reconnection attempt. Returns true on success (loop stops) or
+    /// if the user disconnected in the meantime (loop should bail).
+    private func reconnectAttempt(
+        to endpoint: NetworkConnection.Endpoint,
+        autologin plan: AutologinPlan?
+    ) async -> Bool {
+        guard !userInitiatedDisconnect else { return true }
+        do {
+            try await establish(to: endpoint, autologin: plan, surfaceFailureState: false)
+            isReconnecting = false
+            return true
+        } catch {
+            // Stay visibly "connecting" for the next attempt.
+            updateState(.connecting)
+            return false
+        }
+    }
+
+    private func reconnectExhausted() {
+        isReconnecting = false
         updateState(.disconnected)
     }
 

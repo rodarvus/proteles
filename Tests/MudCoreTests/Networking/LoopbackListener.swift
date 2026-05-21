@@ -117,6 +117,16 @@ actor LoopbackListener {
         receivedContinuation.finish()
     }
 
+    /// Cancel just the current client connection while keeping the
+    /// listener up, so the client's reconnect to the same port is
+    /// accepted. Simulates a server-side close (used by autoreconnect
+    /// tests). The ``received`` stream is left open across the drop.
+    func dropConnection() {
+        isConnectionReady = false
+        connection?.cancel()
+        connection = nil
+    }
+
     // MARK: - Private
 
     private func handleListenerState(_ state: NWListener.State) {
@@ -162,22 +172,27 @@ actor LoopbackListener {
             for cont in waiters {
                 cont.resume()
             }
-            startReceiveLoop()
+            if let connection {
+                startReceiveLoop(on: connection)
+            }
         case .failed, .cancelled:
-            receivedContinuation.finish()
+            // Don't finish `received` here — a single listener may serve
+            // several client connections across an autoreconnect. The
+            // stream is finished only by `stop()` / deinit.
+            break
         default:
             break
         }
     }
 
-    private func startReceiveLoop() {
-        guard let connection else { return }
+    private func startReceiveLoop(on connection: NWConnection) {
         connection.receive(
             minimumIncompleteLength: 1,
             maximumLength: 65536
         ) { [weak self] data, _, isComplete, error in
             Task { [weak self] in
                 await self?.handleReceived(
+                    on: connection,
                     data: data,
                     isComplete: isComplete,
                     error: error
@@ -187,17 +202,21 @@ actor LoopbackListener {
     }
 
     private func handleReceived(
+        on connection: NWConnection,
         data: Data?,
         isComplete: Bool,
         error: NWError?
     ) {
+        // Ignore late callbacks from a connection we've already replaced.
+        guard connection === self.connection else { return }
         if let data, !data.isEmpty {
             receivedContinuation.yield(Array(data))
         }
         if error != nil || isComplete {
-            receivedContinuation.finish()
+            // This connection is done; leave `received` open for any
+            // successor connection.
             return
         }
-        startReceiveLoop()
+        startReceiveLoop(on: connection)
     }
 }
