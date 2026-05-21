@@ -6,7 +6,7 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 
 ## Status
 
-**Phase 2 complete (v0.0.2).** Phase 3 — session management and profile manager — is the active work area.
+**Phase 3 complete (v0.0.3).** Phase 4 — GMCP and the Aardwolf surface — is the active work area.
 
 ### What works today
 
@@ -18,22 +18,26 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 - **SQLite-backed scrollback persistence** with FTS5 search at `~/Library/Application Support/com.proteles.ProtelesApp/scrollback.sqlite`. Every received line is durable; search is wired but the UI surface for it lands in Phase 7.
 - **Replay harness:** every session is auto-recorded to a JSONL file under the same directory. Replays through `LinePipeline` end-to-end (handshake + MCCP2 + ANSI + line builder).
 - **Copy with Colour Codes** (⇧⌘C; also right-click menu): the selection lands on the pasteboard with ANSI SGR codes inlined, so coloured snippets paste cleanly into other terminals or forums.
-- Command input with auto-focus on launch and on window reactivation. Bare Enter sends a line terminator (for paginated output / prompt refresh).
-- 242 tests across 77 suites; CI builds + tests + lints on every push.
+- **World profiles + Connection Manager** (Worlds window, ⇧⌘M): manage multiple worlds, mark one active, edit host/port/encoding. Opens automatically on first launch.
+- **Keychain-backed autologin** ("Diku-style"): the client watches for the name/password prompts and sends your stored credentials; the password lives in the Keychain, not the profile file.
+- **Resilient connection**: connect timeout, reliable remote-close detection, and autoreconnect with exponential backoff after an unexpected drop.
+- **Command input** with history recall (Up/Down), inline type-ahead autocompletion (Enter accepts; chat/comm commands excluded), auto-focus, and bare-Enter prompt nudges.
+- 287 tests across 88 suites; CI builds + tests + lints on every push.
 
-### What's next (Phase 3)
+### What's next (Phase 4)
 
-- `WorldProfile` Codable model + Connection Manager UI replacing the hardcoded `aardmud.org:4000`.
-- Keychain-stored credentials for autologin.
-- Autoreconnect with exponential backoff.
+- GMCP parser + module registry; observable per-session Aardwolf state.
+- HP/MP/MV gauges, level/class/align in the status bar.
+- Channel routing toward dedicated windows.
 
 (TLS is deferred until after 1.0 — see [#3](https://github.com/rodarvus/proteles/issues/3). The client ships plain telnet for now.)
 
-See [PLAN.md §8.4](PLAN.md#84-phase-3--session-management-1-week) for the full Phase 3 plan.
+See [PLAN.md §8.5](PLAN.md#85-phase-4--gmcp-and-aardwolf-surface-2-weeks) for the full Phase 4 plan.
 
 ## Releases
 
-- [**v0.0.2**](https://github.com/rodarvus/proteles/releases/tag/v0.0.2) — Phase 2 complete: MCCP2, persistence, eviction, replay harness, copy-with-codes.
+- [**v0.0.3**](https://github.com/rodarvus/proteles/releases/tag/v0.0.3) — Phase 3 complete: world profiles, Connection Manager, Keychain autologin, autoreconnect, input history + autocompletion.
+- [v0.0.2](https://github.com/rodarvus/proteles/releases/tag/v0.0.2) — Phase 2 complete: MCCP2, persistence, eviction, replay harness, copy-with-codes.
 - [v0.0.1](https://github.com/rodarvus/proteles/releases/tag/v0.0.1) — Phase 1 alpha: first runnable build; connect, display, send.
 
 ## Layout
