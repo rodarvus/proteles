@@ -37,6 +37,40 @@ struct GMCPStateStoreApplyTests {
         #expect(status?.align == 1000)
     }
 
+    @Test("Lowercase wire casing (real Aardwolf payloads) is accepted")
+    func realAardwolfCasingAndShapes() async {
+        let store = GMCPStateStore()
+        // Verbatim payloads captured from a live Aardwolf session.
+        _ = await store.apply(GMCPMessage(
+            package: "char.vitals",
+            json: #"{ "hp": 2226, "mana": 1861, "moves": 1021 }"#
+        ))
+        // Real payloads carry extra keys (hunger, thirst, state, pos,
+        // tier, …) which our structs ignore; trimmed here to fit the line
+        // limit while keeping the keys we decode.
+        _ = await store.apply(GMCPMessage(
+            package: "char.maxstats",
+            json: #"{ "maxhp": 2226, "maxmana": 1861, "maxmoves": 1021, "maxstr": 72 }"#
+        ))
+        _ = await store.apply(GMCPMessage(
+            package: "char.status",
+            json: #"{ "level": 51, "tnl": 2826, "align": 2500, "state": 3, "enemy": "" }"#
+        ))
+        _ = await store.apply(GMCPMessage(
+            package: "char.base",
+            json: #"{ "name": "Rodarvus", "class": "Psionicist", "race": "Eldar", "level": 51 }"#
+        ))
+
+        let state = await store.state
+        #expect(state.vitals == CharVitals(hp: 2226, mana: 1861, moves: 1021))
+        #expect(state.maxStats?.maxhp == 2226)
+        #expect(state.maxStats?.maxstr == 72)
+        #expect(state.status?.level == 51)
+        #expect(state.status?.align == 2500)
+        #expect(state.base?.class == "Psionicist")
+        #expect(state.base?.race == "Eldar")
+    }
+
     @Test("An unknown package is ignored")
     func ignoresUnknown() async {
         let store = GMCPStateStore()

@@ -31,12 +31,15 @@ public actor GMCPStateStore {
     /// are notified.
     @discardableResult
     public func apply(_ message: GMCPMessage) -> Bool {
-        let changed: Bool = switch message.package {
-        case "Char.Vitals": set(\.vitals, from: message, as: CharVitals.self)
-        case "Char.MaxStats": set(\.maxStats, from: message, as: CharMaxStats.self)
-        case "Char.Status": set(\.status, from: message, as: CharStatus.self)
-        case "Char.Worth": set(\.worth, from: message, as: CharWorth.self)
-        case "Char.Base": set(\.base, from: message, as: CharBase.self)
+        // Aardwolf sends package names lowercased on the wire
+        // (char.vitals, char.maxstats, …); match case-insensitively so we
+        // don't depend on the exact casing.
+        let changed: Bool = switch message.package.lowercased() {
+        case "char.vitals": set(\.vitals, from: message, as: CharVitals.self)
+        case "char.maxstats": set(\.maxStats, from: message, as: CharMaxStats.self)
+        case "char.status": set(\.status, from: message, as: CharStatus.self)
+        case "char.worth": set(\.worth, from: message, as: CharWorth.self)
+        case "char.base": set(\.base, from: message, as: CharBase.self)
         default: false
         }
         if changed { broadcast() }

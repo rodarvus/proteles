@@ -30,6 +30,11 @@ Useful anchors found so far:
   and `aard_chat_echo.xml`.
 - Command history + tab-completion: Mudlet `src/TCommandLine.cpp`;
   MUSHclient `sendvw.cpp`.
+- GMCP: Aardwolf sends package names **lowercased on the wire**
+  (`char.vitals`, `char.maxstats`, `char.status`, `char.base`,
+  `char.worth`, `comm.channel`, `room.info`) and values as JSON numbers.
+  Match package names case-insensitively. (Verified from a live capture —
+  not the capitalised form some docs imply.)
 - Auto-login ("Diku-style"): MUSHclient `doc.cpp` (`ConnectionEstablished`);
   Mudlet `src/ctelnet.cpp`.
 
