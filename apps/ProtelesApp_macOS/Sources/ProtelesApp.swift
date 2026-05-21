@@ -54,20 +54,9 @@ struct ProtelesApp: App {
 
     var body: some Scene {
         WindowGroup("Proteles") {
-            ContentView(session: session)
+            ContentView(session: session, worlds: worlds)
                 .frame(minWidth: 800, minHeight: 500)
                 .navigationTitle("Proteles")
-                .task {
-                    // Load profiles, then auto-connect if the active
-                    // world is configured for it.
-                    await worlds.load()
-                    if let active = worlds.activeProfile, active.autoconnect {
-                        try? await session.connect(
-                            to: active.endpoint,
-                            autologin: worlds.autologinPlan(for: active)
-                        )
-                    }
-                }
         }
         .windowResizability(.contentSize)
         .commands {
