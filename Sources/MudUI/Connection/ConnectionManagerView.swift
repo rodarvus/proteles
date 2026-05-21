@@ -12,6 +12,7 @@ import SwiftUI
 public struct ConnectionManagerView: View {
     @Bindable private var model: WorldsModel
     private let onConnect: (WorldProfile) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     public init(
         model: WorldsModel,
@@ -62,7 +63,12 @@ public struct ConnectionManagerView: View {
                 profile: binding,
                 isActive: id == model.activeProfileID,
                 onMakeActive: { Task { await model.setActive(id) } },
-                onConnect: { onConnect(binding.wrappedValue) },
+                onConnect: {
+                    onConnect(binding.wrappedValue)
+                    // Connecting hands focus back to the session window;
+                    // close the Worlds window so the user sees it happen.
+                    dismiss()
+                },
                 loadPassword: { model.password(for: id) },
                 savePassword: { model.setPassword($0, for: id) }
             )

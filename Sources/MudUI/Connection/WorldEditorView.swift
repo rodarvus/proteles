@@ -27,7 +27,7 @@ struct WorldEditorView: View {
         let issues = profile.validate()
 
         Form {
-            Section("Connection") {
+            Section {
                 TextField("Name", text: $profile.name)
                 TextField("Host", text: $profile.host)
                 TextField(
@@ -39,6 +39,10 @@ struct WorldEditorView: View {
                     Text("UTF-8").tag(TextEncoding.utf8)
                     Text("Latin-1 (ISO-8859-1)").tag(TextEncoding.latin1)
                 }
+            } header: {
+                Text("Connection")
+            } footer: {
+                Text("Changes are saved automatically.")
             }
 
             Section("Behaviour") {
