@@ -46,6 +46,10 @@ public actor SessionController {
     /// pipeline; observed by the status bar.
     public nonisolated let gmcpState: GMCPStateStore
 
+    /// Captured `comm.channel` chat lines. Fed by the inbound pipeline;
+    /// observed by the chat-capture window.
+    public nonisolated let chatStore: ChatStore
+
     /// Durable, controller-lifetime stream of connection-state
     /// transitions for the UI to observe.
     ///
@@ -134,6 +138,7 @@ public actor SessionController {
     public init(
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
         gmcpState: GMCPStateStore = GMCPStateStore(),
+        chatStore: ChatStore = ChatStore(),
         autoRecord: Bool = false,
         reconnectPolicy: ReconnectPolicy = .disabled,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
@@ -142,6 +147,7 @@ public actor SessionController {
     ) {
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
+        self.chatStore = chatStore
         let (stream, continuation) = AsyncStream<State>.makeStream(
             bufferingPolicy: .unbounded
         )
@@ -224,6 +230,7 @@ public actor SessionController {
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         gmcpHandshakeSent = false
         await gmcpState.reset()
+        await chatStore.reset()
 
         let conn = NetworkConnection()
         connection = conn
@@ -442,6 +449,7 @@ public actor SessionController {
         }
         for message in output.gmcp {
             await gmcpState.apply(message)
+            await chatStore.ingest(message)
         }
 
         await advanceAutologin(newLines: output.lines)
