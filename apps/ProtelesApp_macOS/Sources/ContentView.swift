@@ -8,6 +8,7 @@ struct ContentView: View {
     let worlds: WorldsModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
+    @State private var gmcp = GMCPState()
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -22,11 +23,16 @@ struct ContentView: View {
                     try? await session.send(command)
                 }
             }
-            StatusBarView(state: connectionState)
+            StatusBarView(state: connectionState, gmcp: gmcp)
         }
         .task {
             for await networkState in session.connectionStates {
                 connectionState = Self.map(networkState)
+            }
+        }
+        .task {
+            for await snapshot in await session.gmcpState.subscribe() {
+                gmcp = snapshot
             }
         }
         .task { await launch() }

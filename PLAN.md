@@ -624,9 +624,10 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 **Goal:** Full GMCP, status bars, channel windows, basic Aardwolf UI.
 
-- GMCP parser, module registry, observable per-session state.
-- `Char.Vitals`/`Maxstats` → HP/MP/MV gauges in status bar.
-- `Char.Status` → level/class/align display.
+- ✅ GMCP wire layer: option-201 negotiation (accept → DO), `IAC SB 201 … IAC SE` parsing (IAC-unescaped), `GMCPMessage` {package, json}.
+- ✅ Client handshake on enable: `Core.Hello`, `Core.Supports.Set ["Char 1","Comm 1","Room 1"]`, then the `config`/`request`/`rawcolor` batch (mirrors `aard_GMCP_handler` fetch_all).
+- ✅ Typed modules + `GMCPStateStore` (observable, subscribe-based): `Char.Vitals`, `Char.MaxStats`, `Char.Status`, `Char.Worth`, `Char.Base`.
+- ✅ `Char.Vitals`/`MaxStats` → HP/MP/MV gauges in status bar; `Char.Status`/`Char.Base` → level/class/align display.
 - `Comm.Channel` → tappable chat capture window with per-channel filtering and history.
 - `Room.Info`/`Room.Players` → room panel.
 - `Group.*` → group panel.

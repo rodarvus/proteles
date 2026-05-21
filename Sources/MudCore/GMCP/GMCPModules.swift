@@ -12,6 +12,12 @@ public struct CharVitals: Codable, Sendable, Equatable {
     public let hp: Int
     public let mana: Int
     public let moves: Int
+
+    public init(hp: Int, mana: Int, moves: Int) {
+        self.hp = hp
+        self.mana = mana
+        self.moves = moves
+    }
 }
 
 /// `Char.MaxStats` — maxima for the vitals (and the trainable stats,
@@ -26,6 +32,28 @@ public struct CharMaxStats: Codable, Sendable, Equatable {
     public let maxdex: Int?
     public let maxcon: Int?
     public let maxluck: Int?
+
+    public init(
+        maxhp: Int,
+        maxmana: Int,
+        maxmoves: Int,
+        maxstr: Int? = nil,
+        maxint: Int? = nil,
+        maxwis: Int? = nil,
+        maxdex: Int? = nil,
+        maxcon: Int? = nil,
+        maxluck: Int? = nil
+    ) {
+        self.maxhp = maxhp
+        self.maxmana = maxmana
+        self.maxmoves = maxmoves
+        self.maxstr = maxstr
+        self.maxint = maxint
+        self.maxwis = maxwis
+        self.maxdex = maxdex
+        self.maxcon = maxcon
+        self.maxluck = maxluck
+    }
 }
 
 /// `Char.Status` — level, experience-to-next-level, alignment, and the
@@ -36,6 +64,20 @@ public struct CharStatus: Codable, Sendable, Equatable {
     public let align: Int?
     public let enemy: String?
     public let enemypct: Int?
+
+    public init(
+        level: Int,
+        tnl: Int? = nil,
+        align: Int? = nil,
+        enemy: String? = nil,
+        enemypct: Int? = nil
+    ) {
+        self.level = level
+        self.tnl = tnl
+        self.align = align
+        self.enemy = enemy
+        self.enemypct = enemypct
+    }
 }
 
 /// `Char.Worth` — currencies and trainable resources.
@@ -45,6 +87,20 @@ public struct CharWorth: Codable, Sendable, Equatable {
     public let tp: Int?
     public let trains: Int?
     public let pracs: Int?
+
+    public init(
+        gold: Int? = nil,
+        qp: Int? = nil,
+        tp: Int? = nil,
+        trains: Int? = nil,
+        pracs: Int? = nil
+    ) {
+        self.gold = gold
+        self.qp = qp
+        self.tp = tp
+        self.trains = trains
+        self.pracs = pracs
+    }
 }
 
 /// `Char.Base` — identity sent once at login: name, class, race. Used for
@@ -55,4 +111,18 @@ public struct CharBase: Codable, Sendable, Equatable {
     public let subclass: String?
     public let race: String?
     public let sex: String?
+
+    public init(
+        name: String? = nil,
+        class: String? = nil,
+        subclass: String? = nil,
+        race: String? = nil,
+        sex: String? = nil
+    ) {
+        self.name = name
+        self.class = `class`
+        self.subclass = subclass
+        self.race = race
+        self.sex = sex
+    }
 }
