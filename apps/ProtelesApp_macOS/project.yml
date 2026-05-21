@@ -54,8 +54,16 @@ targets:
         PRODUCT_NAME: Proteles
         MARKETING_VERSION: "0.0.1"
         CURRENT_PROJECT_VERSION: "1"
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "-"
+        # Sign with a stable, self-signed dev identity so the Keychain
+        # remembers "Always Allow" across rebuilds (ad-hoc builds have no
+        # stable identity and re-prompt every time). Run
+        # scripts/create-dev-signing-cert.sh once to create it; releases
+        # will switch to a real Developer ID. CODE_SIGN_INJECT_BASE_ENTITLEMENTS
+        # is NO so the build isn't marked debuggable (get-task-allow), which
+        # also makes the Keychain trust the grant.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Proteles Dev"
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         COMBINE_HIDPI_IMAGES: YES

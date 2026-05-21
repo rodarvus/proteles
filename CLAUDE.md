@@ -47,6 +47,22 @@ The macOS app target lives in `apps/ProtelesApp_macOS/` and is generated
 with XcodeGen (`project.yml`). Regenerate with `xcodegen generate` from
 that directory after changing sources/resources.
 
+### Local code signing (one-time)
+
+The app is signed with a stable, self-signed dev identity named
+**`Proteles Dev`**. Run once on a new machine:
+
+```bash
+./scripts/create-dev-signing-cert.sh
+```
+
+Without it, `xcodebuild` falls back to ad-hoc signing, which has no stable
+code identity — so macOS re-prompts for Keychain access on every build even
+after "Always Allow". The stable identity gives the app a constant
+*designated requirement* so the grant persists. Releases will use a real
+Developer ID instead. (CI only runs `swift build`/`swift test`, so it never
+needs the cert.)
+
 ## Definition of done — the four gates
 
 Before committing, ALL must pass (run from repo root):
