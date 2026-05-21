@@ -59,16 +59,43 @@ struct LinePipelineNegotiationTests {
         ])
     }
 
-    @Test("WILL GMCP is refused: DONT GMCP in responses")
-    func willGMCPRefused() throws {
+    @Test("WILL GMCP is accepted: DO GMCP in responses and enabledGMCP set")
+    func willGMCPAccepted() throws {
         var pipeline = LinePipeline()
         let willGMCP: [UInt8] = [
             TelnetCommand.iac, TelnetCommand.will, TelnetOption.gmcp
         ]
         let output = try pipeline.consume(willGMCP)
         #expect(output.responses == [
-            [TelnetCommand.iac, TelnetCommand.dont, TelnetOption.gmcp]
+            [TelnetCommand.iac, TelnetCommand.do, TelnetOption.gmcp]
         ])
+        #expect(output.enabledGMCP)
+    }
+
+    @Test("WILL MXP is refused: DONT MXP in responses")
+    func willMXPRefused() throws {
+        var pipeline = LinePipeline()
+        let willMXP: [UInt8] = [
+            TelnetCommand.iac, TelnetCommand.will, TelnetOption.mxp
+        ]
+        let output = try pipeline.consume(willMXP)
+        #expect(output.responses == [
+            [TelnetCommand.iac, TelnetCommand.dont, TelnetOption.mxp]
+        ])
+        #expect(!output.enabledGMCP)
+    }
+
+    @Test("GMCP subnegotiation is decoded into output.gmcp")
+    func gmcpSubnegotiationDecoded() throws {
+        var pipeline = LinePipeline()
+        let payload = Array(#"Char.Vitals {"hp":1234,"mana":900,"moves":500}"#.utf8)
+        var bytes: [UInt8] = [TelnetCommand.iac, TelnetCommand.sb, TelnetOption.gmcp]
+        bytes += payload
+        bytes += [TelnetCommand.iac, TelnetCommand.se]
+        let output = try pipeline.consume(bytes)
+        #expect(output.gmcp.count == 1)
+        #expect(output.gmcp.first?.package == "Char.Vitals")
+        #expect(output.gmcp.first?.json == #"{"hp":1234,"mana":900,"moves":500}"#)
     }
 
     @Test("DO TTYPE is refused: WONT TTYPE in responses")

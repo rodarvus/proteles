@@ -34,40 +34,56 @@ public struct LinePipeline {
         public var lines: [Line]
         public var responses: [[UInt8]]
         public var activatedCompression: Bool
+        /// GMCP messages decoded from option-201 subnegotiations this call.
+        public var gmcp: [GMCPMessage]
+        /// True when this call replied `DO GMCP`, i.e. the server may now
+        /// start sending GMCP. The caller should send its GMCP handshake.
+        public var enabledGMCP: Bool
 
         public init(
             lines: [Line] = [],
             responses: [[UInt8]] = [],
-            activatedCompression: Bool = false
+            activatedCompression: Bool = false,
+            gmcp: [GMCPMessage] = [],
+            enabledGMCP: Bool = false
         ) {
             self.lines = lines
             self.responses = responses
             self.activatedCompression = activatedCompression
+            self.gmcp = gmcp
+            self.enabledGMCP = enabledGMCP
         }
     }
 
-    /// Policy for option-negotiation replies. Phase 2 accepts MCCP2
-    /// and refuses everything else (PLAN.md §5.2); other phases will
-    /// extend the table.
+    /// Policy for option-negotiation replies (PLAN.md §5.2).
     public enum NegotiationPolicy: Sendable {
+        /// Accept MCCP2, refuse everything else (the Phase 2 behaviour).
         case phase2Default
+        /// Accept MCCP2 **and** GMCP, refuse everything else. The default
+        /// from Phase 4 on — GMCP is critical for Aardwolf.
+        case aardwolf
+
+        /// Server-offered (`WILL`) options we agree to (reply `DO`).
+        var acceptedWillOptions: Set<UInt8> {
+            switch self {
+            case .phase2Default: [TelnetOption.mccp2]
+            case .aardwolf: [TelnetOption.mccp2, TelnetOption.gmcp]
+            }
+        }
 
         func reply(verb: TelnetVerb, option: UInt8) -> [UInt8]? {
-            switch self {
-            case .phase2Default:
-                let responseVerb: UInt8
-                switch verb {
-                case .will:
-                    responseVerb = option == TelnetOption.mccp2
-                        ? TelnetCommand.do
-                        : TelnetCommand.dont
-                case .do:
-                    responseVerb = TelnetCommand.wont
-                case .wont, .dont:
-                    return nil
-                }
-                return [TelnetCommand.iac, responseVerb, option]
+            let responseVerb: UInt8
+            switch verb {
+            case .will:
+                responseVerb = acceptedWillOptions.contains(option)
+                    ? TelnetCommand.do
+                    : TelnetCommand.dont
+            case .do:
+                responseVerb = TelnetCommand.wont
+            case .wont, .dont:
+                return nil
             }
+            return [TelnetCommand.iac, responseVerb, option]
         }
     }
 
@@ -78,7 +94,7 @@ public struct LinePipeline {
     private var lineBuilder = LineBuilder()
     private var inflater: Inflater?
 
-    public init(negotiationPolicy: NegotiationPolicy = .phase2Default) {
+    public init(negotiationPolicy: NegotiationPolicy = .aardwolf) {
         self.negotiationPolicy = negotiationPolicy
     }
 
@@ -193,7 +209,22 @@ public struct LinePipeline {
             if let reply = negotiationPolicy.reply(verb: verb, option: option) {
                 output.responses.append(reply)
             }
-        case .command, .subnegotiation:
+            // Accepting the server's WILL GMCP (we reply DO) means the
+            // server may now stream GMCP — signal the caller to send its
+            // handshake.
+            if verb == .will,
+               option == TelnetOption.gmcp,
+               negotiationPolicy.acceptedWillOptions.contains(TelnetOption.gmcp)
+            {
+                output.enabledGMCP = true
+            }
+        case .subnegotiation(let option, let payload):
+            if option == TelnetOption.gmcp,
+               let message = GMCPMessage(subnegotiationPayload: payload)
+            {
+                output.gmcp.append(message)
+            }
+        case .command:
             break
         }
     }

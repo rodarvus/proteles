@@ -36,8 +36,8 @@ struct AardwolfWelcomeBannerFixtureTests {
         #expect(pipeline.isCompressionActive)
         // Aardwolf opens with 8 option offers (WILL COMPRESS2, WILL 85,
         // WILL 102, WILL ATCP, WILL GMCP, DO 102, DO TTYPE, DO NAWS).
-        // We accept MCCP2 (DO) and refuse the rest (DONT / WONT), so
-        // 8 responses must be produced.
+        // We accept MCCP2 and GMCP (DO) and refuse the rest (DONT / WONT),
+        // so 8 responses must be produced — one per offer.
         #expect(output.responses.count == 8)
 
         // Content assertions — these strings appear verbatim in every

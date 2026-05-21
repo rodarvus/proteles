@@ -115,7 +115,7 @@ struct SessionControllerPipelineTests {
         await listener.stop()
     }
 
-    @Test("Telnet: WILL GMCP from server gets a DONT GMCP back")
+    @Test("Telnet: WILL MXP from server gets a DONT MXP back")
     func telnetWillIsRefused() async throws {
         let listener = LoopbackListener()
         let port = try await listener.start()
@@ -126,13 +126,13 @@ struct SessionControllerPipelineTests {
         )
         await listener.waitForConnection()
 
-        let serverWillGMCP: [UInt8] = [
-            TelnetCommand.iac, TelnetCommand.will, TelnetOption.gmcp
+        let serverWillMXP: [UInt8] = [
+            TelnetCommand.iac, TelnetCommand.will, TelnetOption.mxp
         ]
-        try await listener.send(serverWillGMCP)
+        try await listener.send(serverWillMXP)
 
         let expectedReply: [UInt8] = [
-            TelnetCommand.iac, TelnetCommand.dont, TelnetOption.gmcp
+            TelnetCommand.iac, TelnetCommand.dont, TelnetOption.mxp
         ]
         var received: [UInt8] = []
         for await chunk in listener.received {
