@@ -11,7 +11,7 @@ struct SessionControllerValidationTests {
     @Test("Initial state is disconnected")
     func initialStateIsDisconnected() async {
         let controller = SessionController()
-        let state = await controller.connection.state
+        let state = await controller.state
         #expect(state == .disconnected)
     }
 

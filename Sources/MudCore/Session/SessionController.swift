@@ -42,13 +42,30 @@ public actor SessionController {
     /// the view layer.
     public nonisolated let scrollbackStore: ScrollbackStore
 
-    /// Underlying network wrapper. Exposed so callers can observe
-    /// ``NetworkConnection/states`` directly without going through the
-    /// actor.
-    public nonisolated let connection: NetworkConnection
+    /// Durable, controller-lifetime stream of connection-state
+    /// transitions for the UI to observe.
+    ///
+    /// The underlying ``NetworkConnection`` is a *one-shot* object —
+    /// recreated for every ``connect(to:autologin:)`` — so its own state
+    /// stream can't be observed across reconnects. The controller
+    /// re-publishes each connection's transitions here, giving the view
+    /// layer one stable stream for the whole app session.
+    public nonisolated let connectionStates: AsyncStream<State>
+    private let connectionStatesContinuation: AsyncStream<State>.Continuation
+
+    /// The current network connection, or `nil` between sessions. A fresh
+    /// instance is created per ``connect(to:autologin:)`` because
+    /// ``NetworkConnection`` finishes its byte stream on disconnect and
+    /// can't be reused.
+    private var connection: NetworkConnection?
+
+    /// Mirror of the active connection's state, kept so callers (and the
+    /// reconnect guard) can read it synchronously.
+    public private(set) var state: State = .disconnected
 
     private var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
+    private var stateForwardTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
 
     /// Active autologin instruction for the current connection, plus the
@@ -91,15 +108,14 @@ public actor SessionController {
         }
     ) {
         self.scrollbackStore = scrollbackStore
-        connection = NetworkConnection()
+        let (stream, continuation) = AsyncStream<State>.makeStream(
+            bufferingPolicy: .unbounded
+        )
+        connectionStates = stream
+        connectionStatesContinuation = continuation
+        continuation.yield(.disconnected)
         self.autoRecord = autoRecord
         self.autoRecordingURL = autoRecordingURL
-    }
-
-    /// Connection-state stream. Forwards from the underlying
-    /// ``NetworkConnection``.
-    public nonisolated var connectionStates: AsyncStream<State> {
-        connection.states
     }
 
     /// True if MCCP2 has been negotiated and the inbound byte stream is
@@ -144,29 +160,48 @@ public actor SessionController {
         to endpoint: NetworkConnection.Endpoint,
         autologin plan: AutologinPlan? = nil
     ) async throws {
-        let currentState = await connection.state
-        guard currentState == .disconnected else {
+        guard connection == nil else {
             throw SessionError.alreadyConnected
         }
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
-        try await connection.connect(to: endpoint)
+
+        let conn = NetworkConnection()
+        connection = conn
+        // Re-publish this connection's state transitions onto the durable
+        // stream so the UI keeps observing across reconnects.
+        stateForwardTask = Task { [weak self] in
+            for await newState in conn.states {
+                await self?.updateState(newState)
+            }
+        }
+
+        do {
+            try await conn.connect(to: endpoint)
+        } catch {
+            // Connect failed: tear the half-open session down so a retry
+            // can start cleanly, and make sure the UI lands on
+            // `.disconnected`.
+            teardownSession()
+            updateState(.disconnected)
+            throw error
+        }
 
         if autoRecord, recorder == nil, let url = autoRecordingURL() {
             recorder = try? SessionRecorder(url: url)
         }
 
-        startProcessingLoop()
+        startProcessingLoop(on: conn)
     }
 
-    /// Close the connection. Idempotent.
+    /// Close the connection. Idempotent — a no-op when already
+    /// disconnected.
     public func disconnect() async {
-        processTask?.cancel()
-        processTask = nil
-        recorder?.close()
-        recorder = nil
-        autologin = nil
-        await connection.disconnect()
+        guard let conn = connection else { return }
+        teardownSession()
+        await conn.disconnect()
+        await flushOnDisconnect()
+        updateState(.disconnected)
     }
 
     /// Send a user-typed command. Appends `\r\n` (the MUD line
@@ -178,6 +213,7 @@ public actor SessionController {
 
     /// Send raw bytes verbatim (no line terminator added).
     public func sendRaw(_ bytes: [UInt8]) async throws {
+        guard let connection else { throw SessionError.notConnected }
         do {
             try await connection.send(bytes)
         } catch let error as NetworkConnection.ConnectionError {
@@ -192,15 +228,52 @@ public actor SessionController {
 
     // MARK: - Private
 
-    private func startProcessingLoop() {
+    private func startProcessingLoop(on conn: NetworkConnection) {
         processTask?.cancel()
-        let bytesStream = connection.bytes
+        let bytesStream = conn.bytes
         processTask = Task { [weak self] in
             for await chunk in bytesStream {
                 await self?.processChunk(chunk)
             }
-            await self?.flushOnDisconnect()
+            // The byte stream finishing means the peer closed (or the
+            // connection failed): wind the session down. A local
+            // ``disconnect()`` cancels this task first, so this path only
+            // fires for remote-initiated closes.
+            await self?.handleByteStreamEnded()
         }
+    }
+
+    /// React to the inbound byte stream ending on its own — a
+    /// remote-initiated close. Flushes any trailing line, tears the
+    /// session down so a reconnect can start, and surfaces
+    /// `.disconnected`.
+    private func handleByteStreamEnded() async {
+        guard connection != nil else { return }
+        await flushOnDisconnect()
+        teardownSession()
+        updateState(.disconnected)
+    }
+
+    /// Update the mirrored state and republish it. Deduplicates so the
+    /// durable stream never emits the same state twice in a row.
+    private func updateState(_ newState: State) {
+        guard newState != state else { return }
+        state = newState
+        connectionStatesContinuation.yield(newState)
+    }
+
+    /// Cancel the per-session tasks and drop the connection so the next
+    /// ``connect(to:autologin:)`` starts clean. Idempotent. Does *not*
+    /// emit a state transition — callers do that explicitly.
+    private func teardownSession() {
+        processTask?.cancel()
+        processTask = nil
+        stateForwardTask?.cancel()
+        stateForwardTask = nil
+        recorder?.close()
+        recorder = nil
+        autologin = nil
+        connection = nil
     }
 
     private func processChunk(_ wireBytes: [UInt8]) async {
@@ -216,14 +289,14 @@ public actor SessionController {
             // Corrupt MCCP stream — drop the session. Future phases
             // will surface a user-visible error rather than bail
             // silently.
-            await connection.disconnect()
+            await disconnect()
             return
         }
 
         // Negotiation replies go out before line appends so the server
         // sees them promptly.
         for response in output.responses {
-            try? await connection.send(response)
+            try? await connection?.send(response)
         }
         for line in output.lines {
             await scrollbackStore.append(line)
