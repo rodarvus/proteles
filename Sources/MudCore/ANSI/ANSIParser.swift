@@ -41,6 +41,18 @@ public struct ANSIParser: Sendable {
 
     public init() {}
 
+    /// Text decoded so far for the current run but not yet emitted as a
+    /// `.text` event — it is held until a delimiter (control byte) or an
+    /// explicit ``flush(_:)``. Empty between runs.
+    ///
+    /// Un-terminated MUD prompts (e.g. Aardwolf's name/password prompts)
+    /// sit here, so prompt-matching consumers must consult this in
+    /// addition to any already-emitted text. Incomplete trailing UTF-8
+    /// in ``utf8HoldBuffer`` is intentionally excluded.
+    public var pendingText: String {
+        String(decoding: pendingTextBytes, as: UTF8.self)
+    }
+
     /// Feed bytes into the parser. `emit` is invoked once per event in
     /// emission order.
     public mutating func process(

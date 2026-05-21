@@ -29,6 +29,17 @@ public struct LineBuilder: Sendable {
 
     public init() {}
 
+    /// Text accumulated for the line currently being built but not yet
+    /// emitted (no terminating `lineFeed` seen). Empty between lines.
+    ///
+    /// MUD prompts (e.g. Aardwolf's `"What be thy name, adventurer? "`)
+    /// arrive without a trailing newline and therefore sit here rather
+    /// than being emitted as a ``Line`` — autologin prompt-matching reads
+    /// this so it can react before the line is finalised.
+    public var pendingText: String {
+        text
+    }
+
     /// Consume one ANSI event. Emits zero or one ``Line`` via the
     /// closure (exactly one on ``ANSIEvent/lineFeed`` if there is
     /// content or if the previous event ended a line).

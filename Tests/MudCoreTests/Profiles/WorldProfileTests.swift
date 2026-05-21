@@ -100,8 +100,7 @@ struct WorldProfileCodableTests {
     func profileWithAutologinRoundTrip() throws {
         let id = UUID()
         let autologin = Autologin(
-            usernameKeychainAccount: "\(id).username",
-            passwordKeychainAccount: "\(id).password",
+            username: "Conan",
             usernamePrompt: "What be thy name, adventurer?",
             passwordPrompt: "Password:"
         )

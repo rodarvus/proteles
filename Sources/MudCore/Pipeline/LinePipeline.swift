@@ -88,6 +88,16 @@ public struct LinePipeline {
         inflater != nil
     }
 
+    /// Text of the line currently being assembled but not yet emitted as
+    /// a ``Line``. Combines what the ``LineBuilder`` has accepted with the
+    /// tail still buffered inside the ``ANSIParser`` (un-terminated text
+    /// is held there until a delimiter). Lets a consumer match prompts
+    /// that never arrive as a ``Line`` — e.g. Aardwolf's name/password
+    /// prompts.
+    public var pendingLineText: String {
+        lineBuilder.pendingText + ansi.pendingText
+    }
+
     /// Process one chunk of wire bytes and return everything produced.
     /// Throws only if the MCCP stream is corrupted (which the caller
     /// usually treats as a fatal session error).

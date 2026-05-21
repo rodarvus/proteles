@@ -51,6 +51,22 @@ public actor SessionController {
     private var processTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
 
+    /// Active autologin instruction for the current connection, plus the
+    /// phase tracking how far through the prompt sequence we are. `nil`
+    /// when autologin is not configured or has completed.
+    private var autologin: AutologinState?
+
+    private struct AutologinState {
+        var plan: AutologinPlan
+        var phase: Phase
+
+        enum Phase {
+            case awaitingUsername
+            case awaitingPassword
+            case done
+        }
+    }
+
     /// When true, ``connect(to:)`` opens a fresh recording at
     /// ``autoRecordingURL`` so the capture includes every byte from
     /// the first one — crucial for replayable recordings, because
@@ -124,12 +140,16 @@ public actor SessionController {
     /// progress, opens a fresh recording at ``autoRecordingURL`` so
     /// the capture starts from byte one (covers the telnet + MCCP2
     /// handshake, which is what makes the recording replayable).
-    public func connect(to endpoint: NetworkConnection.Endpoint) async throws {
+    public func connect(
+        to endpoint: NetworkConnection.Endpoint,
+        autologin plan: AutologinPlan? = nil
+    ) async throws {
         let currentState = await connection.state
         guard currentState == .disconnected else {
             throw SessionError.alreadyConnected
         }
         pipeline.reset()
+        autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         try await connection.connect(to: endpoint)
 
         if autoRecord, recorder == nil, let url = autoRecordingURL() {
@@ -145,6 +165,7 @@ public actor SessionController {
         processTask = nil
         recorder?.close()
         recorder = nil
+        autologin = nil
         await connection.disconnect()
     }
 
@@ -207,6 +228,44 @@ public actor SessionController {
         for line in output.lines {
             await scrollbackStore.append(line)
         }
+
+        await advanceAutologin(newLines: output.lines)
+    }
+
+    /// Drive the prompt-driven (Diku-style) autologin sequence. Called
+    /// after each processed chunk with the lines it produced.
+    ///
+    /// Prompts arrive without a trailing newline, so they sit in
+    /// ``LinePipeline/pendingLineText`` rather than appearing as a
+    /// ``Line``. We scan both the freshly emitted lines (in case a world
+    /// terminates its prompts) and the pending buffer.
+    private func advanceAutologin(newLines: [Line]) async {
+        guard var state = autologin else { return }
+
+        switch state.phase {
+        case .awaitingUsername:
+            guard sees(state.plan.usernamePrompt, in: newLines) else { return }
+            try? await send(state.plan.username)
+            // Skip the password wait entirely when there's nothing to
+            // send; some characters have no password.
+            state.phase = state.plan.password.isEmpty ? .done : .awaitingPassword
+        case .awaitingPassword:
+            guard sees(state.plan.passwordPrompt, in: newLines) else { return }
+            try? await send(state.plan.password)
+            state.phase = .done
+        case .done:
+            break
+        }
+
+        autologin = state.phase == .done ? nil : state
+    }
+
+    /// True if `needle` appears in any of `lines` or in the pipeline's
+    /// current un-terminated pending text.
+    private func sees(_ needle: String, in lines: [Line]) -> Bool {
+        guard !needle.isEmpty else { return false }
+        if pipeline.pendingLineText.contains(needle) { return true }
+        return lines.contains { $0.text.contains(needle) }
     }
 
     private func flushOnDisconnect() async {

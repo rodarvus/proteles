@@ -41,9 +41,10 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
     /// chooses a per-world palette in Preferences (Phase 7).
     public var paletteOverride: ColorPalette?
 
-    /// Optional autologin descriptor. Credentials themselves live in
-    /// the Keychain; this struct just names which Keychain item to use
-    /// and what to send when prompted.
+    /// Optional autologin descriptor. The username and prompt patterns
+    /// live here (the username is not secret); the matching password is
+    /// stored separately in a ``CredentialStore`` under
+    /// ``Autologin/passwordAccount(for:)``.
     public var autologin: Autologin?
 
     public init(
@@ -118,36 +119,108 @@ public enum TextEncoding: String, Codable, Sendable, Equatable, CaseIterable {
     case latin1
 }
 
-/// Autologin recipe. Credentials live in Keychain — this struct names
-/// the entry by Keychain account (typically `<profileID>.username`,
-/// `<profileID>.password`) and lists which prompt patterns to look
-/// for. Phase 3 ships the data shape; the trigger-driven sender
-/// arrives in Phase 5 alongside the rest of the scripting engine
-/// (PLAN.md §8.6).
+/// Autologin recipe stored in the profile document.
+///
+/// "Diku-style" (MushClient's term) prompt-driven login: after
+/// connecting, the session watches inbound text for ``usernamePrompt``
+/// and sends ``username``, then waits for ``passwordPrompt`` and sends
+/// the password. The username is not secret and lives here in
+/// `profiles.json`; the password is stored separately in a
+/// ``CredentialStore`` (the Keychain in the app) under
+/// ``passwordAccount(for:)``.
+///
+/// The prompt strings default to Aardwolf's, but are overridable so the
+/// same machinery can serve other Diku-derived worlds later.
 public struct Autologin: Codable, Sendable, Equatable {
-    /// Keychain account identifier for the username entry.
-    public var usernameKeychainAccount: String
-
-    /// Keychain account identifier for the password entry.
-    public var passwordKeychainAccount: String
+    /// Sent verbatim (followed by a line terminator) when
+    /// ``usernamePrompt`` is seen.
+    public var username: String
 
     /// Substring that, when seen in inbound text, triggers sending the
-    /// username. Aardwolf's prompt is `"What be thy name, adventurer?"`.
+    /// username. Defaults to Aardwolf's `"What be thy name, adventurer?"`.
     public var usernamePrompt: String
 
-    /// Substring that triggers sending the password. Aardwolf's prompt
-    /// is `"Password:"`.
+    /// Substring that triggers sending the password. Defaults to
+    /// Aardwolf's `"Password:"`.
     public var passwordPrompt: String
 
     public init(
-        usernameKeychainAccount: String,
-        passwordKeychainAccount: String,
-        usernamePrompt: String,
-        passwordPrompt: String
+        username: String,
+        usernamePrompt: String = Autologin.defaultUsernamePrompt,
+        passwordPrompt: String = Autologin.defaultPasswordPrompt
     ) {
-        self.usernameKeychainAccount = usernameKeychainAccount
-        self.passwordKeychainAccount = passwordKeychainAccount
+        self.username = username
         self.usernamePrompt = usernamePrompt
         self.passwordPrompt = passwordPrompt
+    }
+
+    public static let defaultUsernamePrompt = "What be thy name, adventurer?"
+    public static let defaultPasswordPrompt = "Password:"
+
+    /// The ``CredentialStore`` account string for a profile's password.
+    /// Stable across edits because it keys off the profile's UUID.
+    public static func passwordAccount(for profileID: WorldProfile.ID) -> String {
+        "\(profileID.uuidString).password"
+    }
+
+    /// Decoding tolerates older documents that omitted the prompt fields
+    /// (or, pre-rework, stored Keychain account names we no longer use).
+    private enum CodingKeys: String, CodingKey {
+        case username
+        case usernamePrompt
+        case passwordPrompt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
+        usernamePrompt = try container.decodeIfPresent(String.self, forKey: .usernamePrompt)
+            ?? Autologin.defaultUsernamePrompt
+        passwordPrompt = try container.decodeIfPresent(String.self, forKey: .passwordPrompt)
+            ?? Autologin.defaultPasswordPrompt
+    }
+}
+
+/// A fully-resolved autologin instruction handed to
+/// ``SessionController/connect(to:autologin:)``. Unlike ``Autologin`` it
+/// carries the actual password (already fetched from the
+/// ``CredentialStore``), so MudCore networking never depends on the
+/// Security framework and the prompt-driven state machine is trivially
+/// testable with plain values.
+public struct AutologinPlan: Sendable, Equatable {
+    public var username: String
+    public var password: String
+    public var usernamePrompt: String
+    public var passwordPrompt: String
+
+    public init(
+        username: String,
+        password: String,
+        usernamePrompt: String = Autologin.defaultUsernamePrompt,
+        passwordPrompt: String = Autologin.defaultPasswordPrompt
+    ) {
+        self.username = username
+        self.password = password
+        self.usernamePrompt = usernamePrompt
+        self.passwordPrompt = passwordPrompt
+    }
+}
+
+public extension WorldProfile {
+    /// Resolve this profile's ``AutologinPlan`` by combining its
+    /// ``autologin`` descriptor with the password fetched from
+    /// `credentials`. Returns `nil` when autologin is not configured or
+    /// the username is blank (nothing to send).
+    func autologinPlan(using credentials: some CredentialStore) -> AutologinPlan? {
+        guard let autologin else { return nil }
+        let username = autologin.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else { return nil }
+        let password = credentials.password(forAccount: Autologin.passwordAccount(for: id)) ?? ""
+        return AutologinPlan(
+            username: autologin.username,
+            password: password,
+            usernamePrompt: autologin.usernamePrompt,
+            passwordPrompt: autologin.passwordPrompt
+        )
     }
 }
