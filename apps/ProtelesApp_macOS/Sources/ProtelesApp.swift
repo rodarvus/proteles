@@ -25,6 +25,9 @@ struct ProtelesApp: App {
     /// Profile collection + active-world selection, bridged to SwiftUI.
     @State private var worlds: WorldsModel
 
+    /// Captured chat (`comm.channel`), bridged to SwiftUI.
+    @State private var chat: ChatModel
+
     init() {
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
@@ -45,6 +48,7 @@ struct ProtelesApp: App {
             ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("proteles-profiles.json")
         _worlds = State(initialValue: WorldsModel(store: ProfileStore(url: storeURL)))
+        _chat = State(initialValue: ChatModel(store: session.chatStore))
 
         if let persistence {
             let store = session.scrollbackStore
@@ -121,9 +125,15 @@ struct ProtelesApp: App {
             .frame(minWidth: 560, minHeight: 360)
         }
         .windowResizability(.contentSize)
+
+        Window("Chat", id: ProtelesApp.chatWindowID) {
+            ChatView(model: chat)
+                .frame(minWidth: 420, minHeight: 300)
+        }
     }
 
     static let worldsWindowID = "worlds"
+    static let chatWindowID = "chat"
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -161,6 +171,11 @@ private struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.worldsWindowID)
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
+
+            Button("Chat…") {
+                openWindow(id: ProtelesApp.chatWindowID)
+            }
+            .keyboardShortcut("J", modifiers: [.command, .shift])
         }
     }
 }
