@@ -68,4 +68,35 @@ struct CompatShimTests {
         #expect(try await lua.string("Trim('  hi  ')") == "hi")
         #expect(try await lua.number("error_code.eOK") == 0)
     }
+
+    @Test("Send_GMCP_Packet produces a sendGMCP effect")
+    func sendGMCPPacket() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("Send_GMCP_Packet('request prompt')")
+        #expect(effects == [.sendGMCP("request prompt")])
+    }
+
+    @Test("print joins its arguments with tabs and echoes")
+    func printEchoes() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("print('a', 'b', 1)")
+        #expect(effects == [.echo("a\tb\t1")])
+    }
+
+    @Test("IsConnected reflects the host-set connection state")
+    func isConnectedReflectsHost() async throws {
+        let lua = try await shimmed()
+        #expect(try await lua.boolean("IsConnected() == false"))
+        await lua.setConnected(true)
+        #expect(try await lua.boolean("IsConnected() == true"))
+    }
+
+    @Test("GetPluginInfo(id, 20) returns the plugin directory")
+    func getPluginInfoDirectory() async throws {
+        let lua = try await shimmed()
+        await lua.setPluginContext(PluginContext(
+            pluginID: "p", pluginName: "P", pluginDirectory: "/plugins/p"
+        ))
+        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p")
+    }
 }

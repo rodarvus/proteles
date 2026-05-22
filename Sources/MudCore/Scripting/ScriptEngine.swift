@@ -330,6 +330,11 @@ public actor ScriptEngine {
         await runtime.setPluginContext(context)
     }
 
+    /// Update the live connection state reported by `proteles.isConnected`.
+    public func setConnected(_ value: Bool) async {
+        await runtime.setConnected(value)
+    }
+
     /// Install the MUSHclient compatibility globals (`Send`, `Note`,
     /// `ColourNote`, `GetVariable`, `GetInfo`, …) on top of `proteles.*`.
     public func loadCompatShim() async throws {

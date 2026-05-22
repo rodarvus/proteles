@@ -32,6 +32,8 @@ extension SessionController {
                     text: text,
                     runs: Self.noteRuns(text, foreground: foreground, background: background)
                 ))
+            case .sendGMCP(let payload):
+                try? await sendRaw(GMCPMessage.encode(payload: payload))
             }
         }
     }

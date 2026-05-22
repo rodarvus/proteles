@@ -108,6 +108,24 @@ public extension LuaRuntime {
     -- Introspection ---------------------------------------------------------
     function GetInfo(n) return proteles.info(n) end
     function GetPluginID() return proteles.pluginID() end
+    function IsConnected() return proteles.isConnected() end
+    -- GetPluginInfo(id, 20) = the plugin's directory; resolved for the
+    -- current plugin via GetInfo(60). Other infotypes/plugins return nil.
+    function GetPluginInfo(id, n)
+      if id == GetPluginID() and n == 20 then return proteles.info(60) end
+      return nil
+    end
+
+    -- GMCP ------------------------------------------------------------------
+    function Send_GMCP_Packet(text) proteles.sendGMCP(tostring(text)); return error_code.eOK end
+
+    -- print → Note (tab-joined, like MUSHclient's print override) -----------
+    function print(...)
+      local n = select("#", ...)
+      local parts = {}
+      for i = 1, n do parts[i] = tostring((select(i, ...))) end
+      Note(table.concat(parts, "\\t"))
+    end
 
     -- Inter-plugin ----------------------------------------------------------
     -- MUSHclient CallPlugin returns (status, results...); we report eOK and

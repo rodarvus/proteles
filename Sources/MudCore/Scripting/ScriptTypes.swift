@@ -44,4 +44,7 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print coloured text to the scrollback. `foreground`/`background`
     /// are colour names (resolved by the host); `nil` uses defaults.
     case note(text: String, foreground: String?, background: String?)
+    /// Send a GMCP packet to the server (the payload is framed as
+    /// `IAC SB 201 <payload> IAC SE`). Backs `Send_GMCP_Packet`.
+    case sendGMCP(String)
 }

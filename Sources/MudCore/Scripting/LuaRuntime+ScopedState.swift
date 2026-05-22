@@ -17,6 +17,11 @@ public extension LuaRuntime {
         pluginContext = context
     }
 
+    /// Update the live connection state reported by `proteles.isConnected`.
+    func setConnected(_ value: Bool) {
+        connected = value
+    }
+
     /// Replace all in-memory variables (e.g. hydrating from disk on connect).
     /// Clears the dirty set.
     func loadVariables(_ all: [String: [String: String]]) {

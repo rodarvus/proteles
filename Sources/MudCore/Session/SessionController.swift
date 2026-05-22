@@ -446,6 +446,11 @@ public actor SessionController {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
+        // Keep scripts' `proteles.isConnected` in sync.
+        if let scriptEngine {
+            let connected = newState == .connected
+            Task { await scriptEngine.setConnected(connected) }
+        }
     }
 
     /// Cancel the per-session tasks and drop the connection so the next

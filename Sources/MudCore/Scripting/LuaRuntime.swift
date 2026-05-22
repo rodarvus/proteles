@@ -114,8 +114,9 @@ public actor LuaRuntime {
     nonisolated(unsafe) var effects: [ScriptEffect] = []
 
     /// The `proteles.*` functions exposed to scripts; the rawValue is the
-    /// closure upvalue the C dispatcher routes on.
-    private enum HostFunction: Int32 {
+    /// closure upvalue the C dispatcher routes on. Module-internal so the
+    /// host-dispatch extension can switch on it.
+    enum HostFunction: Int32 {
         case send = 1
         case sendNoEcho
         case execute
@@ -135,7 +136,13 @@ public actor LuaRuntime {
         case getPluginVar
         case compileChunk
         case moduleSource
+        case sendGMCP
+        case isConnected
     }
+
+    /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
+    /// updated by the host on connect/disconnect.
+    nonisolated(unsafe) var connected = false
 
     /// Module-loader state (see `LuaRuntime+Modules`): `require` libraries
     /// (name → source) and the dirs `require`/`dofile` may read.
@@ -318,7 +325,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 20)
+        lua_createtable(state, 0, 22)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -338,6 +345,8 @@ public actor LuaRuntime {
         setHostFunction("getPluginVar", .getPluginVar)
         setHostFunction("__compile", .compileChunk)
         setHostFunction("__moduleSource", .moduleSource)
+        setHostFunction("sendGMCP", .sendGMCP)
+        setHostFunction("isConnected", .isConnected)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -362,7 +371,7 @@ public actor LuaRuntime {
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
-        case .send, .sendNoEcho, .execute, .echo, .note:
+        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP:
             recordOutputEffect(function, arguments)
             return []
         case .call:
@@ -374,28 +383,11 @@ public actor LuaRuntime {
             return compileChunk(arguments)
         case .moduleSource:
             return moduleSourceValue(arguments)
-        case .info:
-            return [infoValue(arguments)]
-        case .pluginID:
-            return [.string(pluginContext.pluginID)]
+        case .info, .pluginID, .isConnected:
+            return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)
             return []
-        }
-    }
-
-    /// `proteles.info(code)` → the resolved ``PluginContext/InfoValue`` as a
-    /// Lua value, or `nil` for an unimplemented code.
-    private nonisolated func infoValue(_ arguments: [LuaValue]) -> LuaValue {
-        guard let code = arguments.first?.numberValue.map({ Int($0) }),
-              let value = pluginContext.info(code)
-        else {
-            return .nil
-        }
-        switch value {
-        case .text(let text): return .string(text)
-        case .number(let number): return .number(number)
-        case .flag(let flag): return .boolean(flag)
         }
     }
 
@@ -434,6 +426,7 @@ public actor LuaRuntime {
                 foreground: Self.argOptionalString(arguments, 1),
                 background: Self.argOptionalString(arguments, 2)
             ))
+        case .sendGMCP: effects.append(.sendGMCP(Self.argString(arguments, 0)))
         default: break
         }
     }
@@ -464,21 +457,6 @@ public actor LuaRuntime {
             }
         default: break
         }
-    }
-
-    private static func argString(_ arguments: [LuaValue], _ index: Int) -> String {
-        index < arguments.count ? (arguments[index].stringValue ?? "") : ""
-    }
-
-    private static func argOptionalString(_ arguments: [LuaValue], _ index: Int) -> String? {
-        index < arguments.count ? arguments[index].stringValue : nil
-    }
-
-    private static func argFunctionRef(_ arguments: [LuaValue], _ index: Int) -> Int32? {
-        guard index < arguments.count, case .functionRef(let ref) = arguments[index] else {
-            return nil
-        }
-        return ref
     }
 
     /// Set the `matches` (integer-keyed, 0-based) and `named` globals from
