@@ -43,15 +43,21 @@ dir). Bundled helpers: `gmcphelper` ✅ (re-pointed at native
 `json`, `serialize`, `aardwolf_colors` ⬜ (added as specific plugins need
 them).
 
+## Per-plugin isolation
+
+Each loaded plugin runs in its **own Lua environment** (`setfenv`, metatable
+`__index → _G`): its functions, `OnPluginBroadcast`, and top-level state are
+isolated, while the shim, helper libs, and `matches` are shared via globals.
+A plugin's triggers/aliases/timers and lifecycle callbacks run in that env,
+so two plugins defining the same global no longer collide. ✅
+
 ## Known limitations
 
-- **Single shared Lua environment.** All loaded plugins currently share one
-  global table, so two plugins defining the same global (e.g.
-  `OnPluginBroadcast`) collide. Proper per-plugin environments (`setfenv`)
-  are a follow-up; single-plugin loads are unaffected.
-- **App-level plugin loading** (discovering and loading a profile's `.xml`
-  plugins from disk at connect) is the remaining wiring; the MudCore stack
-  that runs a parsed plugin is complete and tested end-to-end.
+- **Variable persistence** is per-world JSON, written through as scopes
+  change; values survive relaunches.
+- The remaining breadth (below) is feature *coverage*, not architectural
+  gaps: the `json`/`serialize`/`aardwolf_colors` helper libs, the migration
+  CLI, and hand-ported core plugins.
 
 ## Validated end-to-end
 
