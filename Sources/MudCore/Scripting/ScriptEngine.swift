@@ -146,6 +146,18 @@ public actor ScriptEngine {
         }
     }
 
+    /// Replace the entire automation set with `document`'s (e.g. when the
+    /// active world changes). Any runtime-only automations a script created
+    /// are cleared along with the old set. The Lua runtime's globals and
+    /// event handlers are left intact — only the trigger/alias/timer tables
+    /// reset. The host should restart its timer loop afterwards.
+    public func reload(_ document: ScriptDocument, now: Date = Date()) {
+        triggers = TriggerEngine()
+        aliases = AliasEngine()
+        timers = TimerEngine()
+        load(document, now: now)
+    }
+
     // MARK: - Input expansion
 
     /// Expand a typed line through the aliases, returning the effects to

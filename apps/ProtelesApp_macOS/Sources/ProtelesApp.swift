@@ -13,10 +13,11 @@ struct ProtelesApp: App {
     /// a fully-replayable session to
     /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`.
     /// Will become opt-in (off by default) ahead of 1.0.
-    private let session = SessionController(
-        autoRecord: true,
-        reconnectPolicy: .standard
-    )
+    private let session: SessionController
+
+    /// The shared scripting engine (triggers/aliases/timers/Lua), wired into
+    /// the session. `nil` only if the Lua runtime failed to initialise.
+    private let scriptEngine: ScriptEngine?
 
     /// On-disk scrollback log under
     /// `~/Library/Application Support/com.proteles.ProtelesApp/`.
@@ -40,6 +41,16 @@ struct ProtelesApp: App {
             persistence = nil
         }
         self.persistence = persistence
+
+        // Scripting engine → session. A failed Lua init disables scripting
+        // but must not stop the app launching.
+        let scriptEngine = try? ScriptEngine()
+        self.scriptEngine = scriptEngine
+        session = SessionController(
+            scriptEngine: scriptEngine,
+            autoRecord: true,
+            reconnectPolicy: .standard
+        )
 
         // Profile store → WorldsModel. defaultStoreURL only fails if
         // Application Support is unavailable (effectively never on
@@ -119,6 +130,7 @@ struct ProtelesApp: App {
                     await worlds.setActive(profile.id)
                     let plan = worlds.autologinPlan(for: profile)
                     await session.disconnect()
+                    await ProtelesApp.loadScripts(for: profile.id, into: session)
                     try? await session.connect(to: profile.endpoint, autologin: plan)
                 }
             }
@@ -134,6 +146,21 @@ struct ProtelesApp: App {
 
     static let worldsWindowID = "worlds"
     static let chatWindowID = "chat"
+
+    /// Load a profile's persisted triggers/aliases/timers into the live
+    /// session before connecting. Failures are non-fatal — the connection
+    /// proceeds either way, just without that world's automations.
+    static func loadScripts(for profileID: UUID, into session: SessionController) async {
+        guard let url = try? ScriptStore.defaultStoreURL(forProfile: profileID) else { return }
+        let store = ScriptStore(url: url)
+        do {
+            try await store.load()
+        } catch {
+            NSLog("[Proteles] script load failed: \(error)")
+            return
+        }
+        await session.loadScripts(store.document)
+    }
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -151,6 +178,7 @@ private struct ProtelesCommands: Commands {
                 let worlds = worlds
                 Task { @MainActor in
                     guard let active = worlds.activeProfile else { return }
+                    await ProtelesApp.loadScripts(for: active.id, into: session)
                     try? await session.connect(
                         to: active.endpoint,
                         autologin: worlds.autologinPlan(for: active)

@@ -36,6 +36,17 @@ extension SessionController {
         }
     }
 
+    // MARK: - Script set
+
+    /// Replace the live script set (triggers/aliases/timers) with
+    /// `document`'s and restart the timer loop. Called when the active world
+    /// changes. No-op without a script engine.
+    public func loadScripts(_ document: ScriptDocument) async {
+        guard let scriptEngine else { return }
+        await scriptEngine.reload(document)
+        restartTimerLoop()
+    }
+
     // MARK: - Timers
 
     /// Add a timer to the script engine and (re)start the driving loop so the

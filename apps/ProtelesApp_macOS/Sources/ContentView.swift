@@ -72,6 +72,7 @@ struct ContentView: View {
         }
 
         if let active = worlds.activeProfile, active.autoconnect {
+            await ProtelesApp.loadScripts(for: active.id, into: session)
             try? await session.connect(
                 to: active.endpoint,
                 autologin: worlds.autologinPlan(for: active)

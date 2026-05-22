@@ -117,6 +117,22 @@ struct ScriptStoreTests {
         }
     }
 
+    @Test("ScriptEngine.reload replaces the whole automation set")
+    func engineReloadReplaces() async throws {
+        let engine = try ScriptEngine()
+        try await engine.addTrigger(Trigger(pattern: .substring("old"), sendText: "x"))
+        #expect(await engine.triggerList.count == 1)
+
+        await engine.reload(ScriptDocument(
+            triggers: [
+                Trigger(pattern: .substring("new1")),
+                Trigger(pattern: .substring("new2"))
+            ]
+        ))
+        let patterns = await engine.triggerList.map(\.pattern)
+        #expect(patterns == [.substring("new1"), .substring("new2")])
+    }
+
     @Test("ScriptEngine.load ingests a document and skips invalid entries")
     func engineLoadSkipsInvalid() async throws {
         let document = ScriptDocument(
