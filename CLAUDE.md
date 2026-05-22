@@ -16,6 +16,15 @@ The repo vendors three reference MUD clients as git submodules. They are
   Aardwolf-specific (channels, GMCP, soundpack, mapper, etc.).
 - `iterm2/` — terminal reference (ANSI/rendering only).
 
+Reference **plugins** (large, real-world MUSHclient/Aardwolf plugins;
+used as the corpus for designing the scripting API and the Phase-6
+compat shim — also reference-only):
+- `search-and-destroy/` — area search/navigation plugin (beta branch).
+  Multi-file Lua, miniwindow UI with clickable hotspots, lsqlite3, an
+  async/coroutine helper.
+- `dinv/` — inventory manager. 22 Lua files (~26k LOC), heavy
+  `dofile`/`require` of its own modules, lsqlite3-backed, no miniwindows.
+
 **Standing instruction:** When researching, designing, implementing, or
 fixing any Aardwolf- or MUD-specific feature, ALWAYS investigate how these
 submodules handle it first. They encode years of real-world protocol
