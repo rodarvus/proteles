@@ -107,6 +107,9 @@ public struct TriggerMatch: Sendable, Equatable {
 /// engine testable without UI/network/Lua.
 public struct Trigger: Sendable, Identifiable, Equatable, Codable {
     public let id: UUID
+    /// Optional name (MUSHclient triggers are named; used by the plugin
+    /// loader and `EnableTrigger`). Not used by matching.
+    public var name: String?
     public var pattern: TriggerPattern
     public var caseSensitive: Bool
     public var enabled: Bool
@@ -129,6 +132,7 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
 
     public init(
         id: UUID = UUID(),
+        name: String? = nil,
         pattern: TriggerPattern,
         caseSensitive: Bool = false,
         enabled: Bool = true,
@@ -141,6 +145,7 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         script: String? = nil
     ) {
         self.id = id
+        self.name = name
         self.pattern = pattern
         self.caseSensitive = caseSensitive
         self.enabled = enabled

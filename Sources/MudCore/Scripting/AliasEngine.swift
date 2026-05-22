@@ -20,6 +20,9 @@ public enum AliasTarget: String, Sendable, Equatable, Codable {
 /// matching here, action execution in the host.
 public struct Alias: Sendable, Identifiable, Equatable, Codable {
     public let id: UUID
+    /// Optional name (MUSHclient aliases are named; used by the plugin
+    /// loader). Not used by matching.
+    public var name: String?
     public var pattern: TriggerPattern
     public var caseSensitive: Bool
     public var enabled: Bool
@@ -39,6 +42,7 @@ public struct Alias: Sendable, Identifiable, Equatable, Codable {
 
     public init(
         id: UUID = UUID(),
+        name: String? = nil,
         pattern: TriggerPattern,
         caseSensitive: Bool = false,
         enabled: Bool = true,
@@ -50,6 +54,7 @@ public struct Alias: Sendable, Identifiable, Equatable, Codable {
         sendTo: AliasTarget = .world
     ) {
         self.id = id
+        self.name = name
         self.pattern = pattern
         self.caseSensitive = caseSensitive
         self.enabled = enabled
