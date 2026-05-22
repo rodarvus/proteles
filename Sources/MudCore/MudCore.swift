@@ -9,7 +9,7 @@ import Logging
 /// targets each consume `MudCore` plus a thin platform-specific view layer.
 public enum MudCore {
     /// Semantic version of this build. Bumped per release.
-    public static let version = "0.0.3"
+    public static let version = "0.0.4"
 
     /// Shared logger label root. Subsystems should derive child loggers,
     /// e.g. `Logger(label: "\(MudCore.loggerLabel).telnet")`.

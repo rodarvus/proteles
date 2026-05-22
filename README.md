@@ -6,7 +6,7 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 
 ## Status
 
-**Phase 3 complete (v0.0.3).** Phase 4 — GMCP and the Aardwolf surface — is the active work area.
+**Phase 4 complete (v0.0.4).** Phase 5 — the Lua scripting foundation (triggers, aliases, timers) — is the active work area.
 
 ### What works today
 
@@ -22,21 +22,23 @@ The design and implementation plan lives in **[PLAN.md](PLAN.md)** — read that
 - **Keychain-backed autologin** ("Diku-style"): the client watches for the name/password prompts and sends your stored credentials; the password lives in the Keychain, not the profile file.
 - **Resilient connection**: connect timeout, reliable remote-close detection, and autoreconnect with exponential backoff after an unexpected drop.
 - **Command input** with history recall (Up/Down), inline type-ahead autocompletion (Enter accepts; chat/comm commands excluded), auto-focus, and bare-Enter prompt nudges.
-- 287 tests across 88 suites; CI builds + tests + lints on every push.
+- **GMCP** (Aardwolf): live HP/MP/MV gauges and level·class·align in the status bar; an info sidebar with the current room (name/area/exits) and group panel; a chat-capture window (⇧⌘J) with per-channel filtering and `@`-colour rendering. A clean `quit` no longer triggers autoreconnect.
+- 333 tests across 95 suites; CI builds + tests + lints on every push.
 
-### What's next (Phase 4)
+### What's next (Phase 5)
 
-- GMCP parser + module registry; observable per-session Aardwolf state.
-- HP/MP/MV gauges, level/class/align in the status bar.
-- Channel routing toward dedicated windows.
+- Vendored Lua 5.1 runtime (sandboxed).
+- User-defined triggers, aliases, timers, and macros.
+- A scripting API surface (`proteles.*`).
 
 (TLS is deferred until after 1.0 — see [#3](https://github.com/rodarvus/proteles/issues/3). The client ships plain telnet for now.)
 
-See [PLAN.md §8.5](PLAN.md#85-phase-4--gmcp-and-aardwolf-surface-2-weeks) for the full Phase 4 plan.
+See [PLAN.md §8.6](PLAN.md#86-phase-5--scripting-foundation-3-weeks) for the full Phase 5 plan.
 
 ## Releases
 
-- [**v0.0.3**](https://github.com/rodarvus/proteles/releases/tag/v0.0.3) — Phase 3 complete: world profiles, Connection Manager, Keychain autologin, autoreconnect, input history + autocompletion.
+- [**v0.0.4**](https://github.com/rodarvus/proteles/releases/tag/v0.0.4) — Phase 4 complete: GMCP status bar, room/group info sidebar, chat-capture window, clean-quit handling.
+- [v0.0.3](https://github.com/rodarvus/proteles/releases/tag/v0.0.3) — Phase 3 complete: world profiles, Connection Manager, Keychain autologin, autoreconnect, input history + autocompletion.
 - [v0.0.2](https://github.com/rodarvus/proteles/releases/tag/v0.0.2) — Phase 2 complete: MCCP2, persistence, eviction, replay harness, copy-with-codes.
 - [v0.0.1](https://github.com/rodarvus/proteles/releases/tag/v0.0.1) — Phase 1 alpha: first runnable build; connect, display, send.
 
