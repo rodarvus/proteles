@@ -626,14 +626,15 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 - ✅ GMCP wire layer: option-201 negotiation (accept → DO), `IAC SB 201 … IAC SE` parsing (IAC-unescaped), `GMCPMessage` {package, json}.
 - ✅ Client handshake on enable: `Core.Hello`, `Core.Supports.Set ["Char 1","Comm 1","Room 1"]`, then the `config`/`request`/`rawcolor` batch (mirrors `aard_GMCP_handler` fetch_all).
-- ✅ Typed modules + `GMCPStateStore` (observable, subscribe-based): `Char.Vitals`, `Char.MaxStats`, `Char.Status`, `Char.Worth`, `Char.Base`.
+- ✅ Typed modules + `GMCPStateStore` (observable, subscribe-based): `Char.Vitals`, `Char.MaxStats`, `Char.Status`, `Char.Worth`, `Char.Base`, `Room.Info`, `group`. **Wire casing is lowercase** (`char.vitals`, `room.info`, …) — match case-insensitively.
 - ✅ `Char.Vitals`/`MaxStats` → HP/MP/MV gauges in status bar; `Char.Status`/`Char.Base` → level/class/align display.
-- `Comm.Channel` → tappable chat capture window with per-channel filtering and history.
-- `Room.Info`/`Room.Players` → room panel.
-- `Group.*` → group panel.
-- `Char.Worth` → gold/qp/tp.
+- ✅ `comm.channel` → chat-capture window (⇧⌘J) with per-channel filtering; `@`-colour codes parsed via `AardwolfColor`.
+- ✅ `room.info` → room section of the info sidebar (name, area, terrain, exits, vnum).
+- ✅ `group` → group section of the info sidebar (members, levels, HP bars). Member `info` values arrive as **strings**.
+- ✅ `Char.Worth` → gold/qp/tp/trains/pracs in the info sidebar.
+- `Room.Players` → players-in-room list (deferred; `room.info` covers the core room panel).
 
-**Deliverable:** Aardwolf "feels modern": you can see your stats updating, chat in a side panel, room info on a sidebar.
+**Deliverable:** Aardwolf "feels modern": you can see your stats updating, chat in a side panel, room/group info on a sidebar. ✅
 
 ### 8.6 Phase 5 — Scripting Foundation (~3 weeks)
 

@@ -172,3 +172,100 @@ public struct RoomInfo: Codable, Sendable, Equatable {
         self.coord = coord
     }
 }
+
+/// `group` — the player's group. When grouped, ``members`` is populated;
+/// when not, ``reason`` explains why (`"no group"`, `"quit"`, …).
+///
+/// Aardwolf sends each member's stats as **strings** inside `info` (the
+/// reference plugin runs `tonumber()` on them), so ``Member/Info`` stores
+/// strings and exposes parsed accessors.
+public struct GroupInfo: Codable, Sendable, Equatable {
+    public let groupname: String?
+    public let leader: String?
+    public let members: [Member]?
+    public let reason: String?
+
+    public var isGrouped: Bool {
+        !(members ?? []).isEmpty
+    }
+
+    public struct Member: Codable, Sendable, Equatable, Identifiable {
+        public let name: String
+        public let info: Info?
+
+        public var id: String {
+            name
+        }
+
+        public struct Info: Codable, Sendable, Equatable {
+            public let lvl: String?
+            public let hp: String?
+            public let mhp: String?
+            public let mn: String?
+            public let mmn: String?
+            public let mv: String?
+            public let mmv: String?
+            public let tnl: String?
+            public let align: String?
+            public let here: String?
+
+            public init(
+                lvl: String? = nil,
+                hp: String? = nil,
+                mhp: String? = nil,
+                mn: String? = nil,
+                mmn: String? = nil,
+                mv: String? = nil,
+                mmv: String? = nil,
+                tnl: String? = nil,
+                align: String? = nil,
+                here: String? = nil
+            ) {
+                self.lvl = lvl
+                self.hp = hp
+                self.mhp = mhp
+                self.mn = mn
+                self.mmn = mmn
+                self.mv = mv
+                self.mmv = mmv
+                self.tnl = tnl
+                self.align = align
+                self.here = here
+            }
+
+            public var level: Int? {
+                lvl.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            }
+
+            public var hpCurrent: Int? {
+                hp.flatMap { Int($0) }
+            }
+
+            public var hpMax: Int? {
+                mhp.flatMap { Int($0) }
+            }
+
+            /// True when the member is in the same room (`here == "1"`).
+            public var isHere: Bool {
+                here == "1"
+            }
+        }
+
+        public init(name: String, info: Info? = nil) {
+            self.name = name
+            self.info = info
+        }
+    }
+
+    public init(
+        groupname: String? = nil,
+        leader: String? = nil,
+        members: [Member]? = nil,
+        reason: String? = nil
+    ) {
+        self.groupname = groupname
+        self.leader = leader
+        self.members = members
+        self.reason = reason
+    }
+}

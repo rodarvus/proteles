@@ -88,6 +88,37 @@ struct GMCPStateStoreApplyTests {
         #expect(AardwolfColor.stripped(room?.name ?? "") == "A Light Provisions Room")
     }
 
+    @Test("group with members decodes (string-valued member info)")
+    func appliesGroupWithMembers() async {
+        let store = GMCPStateStore()
+        let json = #"""
+        { "groupname": "The A-Team", "leader": "Hannibal", "members": [
+            { "name": "Hannibal", "info": { "lvl": "201", "hp": "3000", "mhp": "3000", "here": "1" } },
+            { "name": "Murdock", "info": { "lvl": "150", "hp": "900", "mhp": "1800", "here": "0" } }
+        ] }
+        """#
+        #expect(await store.apply(GMCPMessage(package: "group", json: json)))
+        let group = await store.state.group
+        #expect(group?.isGrouped == true)
+        #expect(group?.leader == "Hannibal")
+        #expect(group?.members?.count == 2)
+        let murdock = group?.members?.first { $0.name == "Murdock" }
+        #expect(murdock?.info?.level == 150)
+        #expect(murdock?.info?.hpCurrent == 900)
+        #expect(murdock?.info?.hpMax == 1800)
+        #expect(murdock?.info?.isHere == false)
+    }
+
+    @Test("group with no members is not grouped")
+    func appliesGroupEmpty() async {
+        let store = GMCPStateStore()
+        let json = #"{ "groupname": "", "reason": "no group" }"#
+        #expect(await store.apply(GMCPMessage(package: "group", json: json)))
+        let group = await store.state.group
+        #expect(group?.isGrouped == false)
+        #expect(group?.reason == "no group")
+    }
+
     @Test("An unknown package is ignored")
     func ignoresUnknown() async {
         let store = GMCPStateStore()
