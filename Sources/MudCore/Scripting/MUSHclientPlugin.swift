@@ -71,6 +71,25 @@ public enum MUSHclientPluginLoader {
         try parse(Data(xml.utf8))
     }
 
+    /// The per-world plugins directory:
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/plugins/<id>/`.
+    /// Drop `.xml` plugin files here; created on demand. `nil` only if
+    /// Application Support is unavailable.
+    public static func defaultDirectory(
+        forProfile id: UUID,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        guard let support = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first else { return nil }
+        let folder = support
+            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
+            .appendingPathComponent("plugins", isDirectory: true)
+            .appendingPathComponent(id.uuidString, isDirectory: true)
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
     public static func parse(_ data: Data) throws -> MUSHclientPlugin {
         let parser = XMLParser(data: data)
         let delegate = PluginParserDelegate()

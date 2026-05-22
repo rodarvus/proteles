@@ -1,11 +1,11 @@
 import Foundation
 
 /// Applying scripting decisions (triggers/aliases) to the live session.
-extension SessionController {
+public extension SessionController {
     /// Run a received line through the script engine (if any), then append
     /// it unless a trigger gagged it. Trigger sends/echoes are applied
     /// afterwards so echoes land just below the line that produced them.
-    func appendLineThroughScripts(_ line: Line) async {
+    internal func appendLineThroughScripts(_ line: Line) async {
         guard let scriptEngine else {
             await scrollbackStore.append(line)
             return
@@ -19,7 +19,7 @@ extension SessionController {
 
     /// Apply the effects a script produced: sends go to the MUD, echoes/notes
     /// to the scrollback.
-    func applyScriptEffects(_ effects: [ScriptEffect]) async {
+    internal func applyScriptEffects(_ effects: [ScriptEffect]) async {
         for effect in effects {
             switch effect {
             case .send(let command), .execute(let command), .sendNoEcho(let command):
@@ -43,9 +43,42 @@ extension SessionController {
     /// Replace the live script set (triggers/aliases/timers) with
     /// `document`'s and restart the timer loop. Called when the active world
     /// changes. No-op without a script engine.
-    public func loadScripts(_ document: ScriptDocument) async {
+    func loadScripts(_ document: ScriptDocument) async {
         guard let scriptEngine else { return }
         await scriptEngine.reload(document)
+        restartTimerLoop()
+    }
+
+    /// Discover and load every MUSHclient `.xml` plugin in `directory` into
+    /// the live engine: parse each, scope it with a ``PluginContext`` rooted
+    /// at the directory (so `require`/`dofile`/`GetInfo` resolve there), run
+    /// it (firing `OnPluginInstall`), and apply the resulting effects. Call
+    /// after ``loadScripts(_:)`` (which resets the engines) and before
+    /// connecting. No-op without a script engine or plugins.
+    func loadPlugins(fromDirectory directory: URL) async {
+        guard let scriptEngine else { return }
+        let entries = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        )) ?? []
+        let xmlFiles = entries
+            .filter { $0.pathExtension.lowercased() == "xml" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !xmlFiles.isEmpty else { return }
+
+        // Plugins resolve their own files (and dofile targets) here.
+        await scriptEngine.setModuleSearchPaths([directory.path])
+        for url in xmlFiles {
+            guard let data = try? Data(contentsOf: url),
+                  let plugin = try? MUSHclientPluginLoader.parse(data)
+            else { continue }
+            let context = PluginContext(
+                pluginID: plugin.id,
+                pluginName: plugin.name,
+                pluginDirectory: directory.path
+            )
+            await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        }
+        // Plugins may have registered timers.
         restartTimerLoop()
     }
 
@@ -54,20 +87,20 @@ extension SessionController {
     /// Add a timer to the script engine and (re)start the driving loop so the
     /// new deadline is picked up. No-op without a script engine.
     @discardableResult
-    public func addTimer(_ timer: MudTimer) async throws -> UUID? {
+    func addTimer(_ timer: MudTimer) async throws -> UUID? {
         guard let scriptEngine else { return nil }
         let id = try await scriptEngine.addTimer(timer)
         restartTimerLoop()
         return id
     }
 
-    public func removeTimer(id: UUID) async {
+    func removeTimer(id: UUID) async {
         guard let scriptEngine else { return }
         await scriptEngine.removeTimer(id: id)
         restartTimerLoop()
     }
 
-    public func setTimerEnabled(_ enabled: Bool, id: UUID) async {
+    func setTimerEnabled(_ enabled: Bool, id: UUID) async {
         guard let scriptEngine else { return }
         await scriptEngine.setTimerEnabled(enabled, id: id)
         restartTimerLoop()
@@ -76,13 +109,13 @@ extension SessionController {
     /// Atomically replace a timer and restart the loop once. Used by the
     /// editor's live-apply (avoids the remove-then-add reentrancy that can
     /// duplicate registrations).
-    public func updateTimer(_ timer: MudTimer) async {
+    func updateTimer(_ timer: MudTimer) async {
         guard let scriptEngine else { return }
         await scriptEngine.updateTimer(timer)
         restartTimerLoop()
     }
 
-    public func setTimerGroupEnabled(_ enabled: Bool, group: String) async {
+    func setTimerGroupEnabled(_ enabled: Bool, group: String) async {
         guard let scriptEngine else { return }
         await scriptEngine.setTimerGroupEnabled(enabled, group: group)
         restartTimerLoop()
@@ -91,7 +124,7 @@ extension SessionController {
     /// Cancel any running timer loop and start a fresh one. Called whenever
     /// the timer set changes so a newly-added earlier deadline interrupts an
     /// in-flight sleep. The loop exits on its own when no timers remain.
-    func restartTimerLoop() {
+    internal func restartTimerLoop() {
         timerTask?.cancel()
         guard let scriptEngine else {
             timerTask = nil
@@ -112,12 +145,12 @@ extension SessionController {
 
     /// Fire the timers due at `now` and apply their effects. Factored out so
     /// tests can drive timer firing deterministically without real sleeping.
-    func applyDueTimers(at now: Date = Date()) async {
+    internal func applyDueTimers(at now: Date = Date()) async {
         guard let scriptEngine else { return }
         await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
     }
 
-    static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {
+    internal static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {
         var style = StyleAttributes.default
         if let foreground, let color = namedColor(foreground) { style.foreground = color }
         if let background, let color = namedColor(background) { style.background = color }
@@ -126,7 +159,7 @@ extension SessionController {
         return [StyledRun(utf16Range: 0..<length, style: style)]
     }
 
-    static func namedColor(_ name: String) -> ANSIColor? {
+    internal static func namedColor(_ name: String) -> ANSIColor? {
         let names: [String: NamedColor] = [
             "black": .black, "red": .red, "green": .green, "yellow": .yellow,
             "blue": .blue, "magenta": .magenta, "cyan": .cyan, "white": .white

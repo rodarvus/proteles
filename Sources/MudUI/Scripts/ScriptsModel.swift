@@ -44,6 +44,11 @@ public final class ScriptsModel {
         profileID = id
         await refresh()
         await session.loadScripts(store.document)
+        // Then load this world's MUSHclient .xml plugins (after the script
+        // reset above, so their triggers/timers survive).
+        if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
+            await session.loadPlugins(fromDirectory: pluginsDirectory)
+        }
     }
 
     // MARK: - Triggers
