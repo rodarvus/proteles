@@ -27,9 +27,13 @@ public actor ScriptEngine {
     private var triggers = TriggerEngine()
     private var aliases = AliasEngine()
     private var timers = TimerEngine()
-    /// Ids of MUSHclient plugins currently loaded (drives lifecycle callbacks
-    /// and the GMCP→`OnPluginBroadcast` bridge).
-    private var loadedPluginIDs: Set<String> = []
+    /// Ids of MUSHclient plugins currently loaded, in load order (drives
+    /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
+    private var loadedPluginIDs: [String] = []
+    /// Trigger/alias/timer id → owning plugin id, so a fired automation's
+    /// script runs in its plugin's environment. Absent ⇒ a user automation
+    /// (runs in the shared globals).
+    private var automationOwners: [UUID: String] = [:]
 
     /// Max `.execute` re-expansions before bailing (MUSHclient's value).
     private static let maxExecuteDepth = 20
@@ -153,7 +157,9 @@ public actor ScriptEngine {
                 effects.append(.send(send))
             }
             if let script = firing.script {
-                await effects.append(contentsOf: runScript(script, matches: [], named: [:]))
+                await effects.append(contentsOf: runOwnedScript(
+                    script, owner: automationOwners[firing.timerID], matches: [], named: [:]
+                ))
             }
         }
         return effects
@@ -181,63 +187,72 @@ public actor ScriptEngine {
     /// are cleared along with the old set. The Lua runtime's globals and
     /// event handlers are left intact — only the trigger/alias/timer tables
     /// reset. The host should restart its timer loop afterwards.
-    public func reload(_ document: ScriptDocument, now: Date = Date()) {
+    public func reload(_ document: ScriptDocument, now: Date = Date()) async {
         triggers = TriggerEngine()
         aliases = AliasEngine()
         timers = TimerEngine()
+        loadedPluginIDs.removeAll()
+        automationOwners.removeAll()
+        await runtime.clearPluginEnvironments()
         load(document, now: now)
     }
 
     // MARK: - Plugins
 
-    /// Load a parsed MUSHclient plugin into the live engines: scope its
-    /// variables + ambient context to the plugin, install the compat shim,
-    /// run its `<script>` (defining its globals), register its
-    /// triggers/aliases/timers, then invoke `OnPluginInstall`. Returns the
-    /// effects produced during install.
-    ///
-    /// This is the host scaffolding; `require`/`dofile` + helper libraries
-    /// and the GMCP→`OnPluginBroadcast` bridge are later sub-increments, so
-    /// plugins that pull in helper libs won't fully initialise yet.
+    /// Load a parsed MUSHclient plugin into the live engines: give it its own
+    /// Lua environment (so its globals don't collide with other plugins),
+    /// scope its variables + ambient context, install the compat shim, run
+    /// its `<script>` in that env, register its triggers/aliases/timers
+    /// (tagged with the plugin as owner so they later run in the same env),
+    /// then invoke `OnPluginInstall`. Returns the install effects.
     @discardableResult
     public func loadPlugin(
         _ plugin: MUSHclientPlugin,
         context: PluginContext? = nil
     ) async -> [ScriptEffect] {
         let resolved = context ?? PluginContext(pluginID: plugin.id, pluginName: plugin.name)
+        await runtime.createPluginEnvironment(plugin.id)
         await runtime.setVariableScope(plugin.id)
         await runtime.setPluginContext(resolved)
         try? await runtime.loadCompatShim()
 
-        var effects = await run(plugin.script)
+        var effects = await runtime.loadPluginScript(plugin.script, pluginID: plugin.id)
         for trigger in plugin.triggers {
             try? triggers.add(trigger)
+            automationOwners[trigger.id] = plugin.id
         }
         for alias in plugin.aliases {
             try? aliases.add(alias)
+            automationOwners[alias.id] = plugin.id
         }
         for timer in plugin.timers {
             try? timers.add(timer)
+            automationOwners[timer.id] = plugin.id
         }
-        loadedPluginIDs.insert(plugin.id)
-        await effects.append(contentsOf: runtime.callGlobal("OnPluginInstall"))
+        if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
+        await effects.append(contentsOf: runtime.callPluginCallback(plugin.id, "OnPluginInstall"))
         return effects
     }
 
-    /// Fire `OnPluginConnect` on the loaded plugins (the host calls this when
-    /// the session connects).
+    /// Fire `OnPluginConnect` on every loaded plugin (in its own env).
     public func connectPlugins() async -> [ScriptEffect] {
-        guard !loadedPluginIDs.isEmpty else { return [] }
-        return await runtime.callGlobal("OnPluginConnect")
+        await fireCallbackOnAll("OnPluginConnect")
     }
 
-    /// Fire `OnPluginSaveState` then `OnPluginDisconnect` on the loaded
-    /// plugins (the host calls this on disconnect; the host persists the
-    /// variable snapshot separately).
+    /// Fire `OnPluginSaveState` then `OnPluginDisconnect` on every loaded
+    /// plugin (the host persists the variable snapshot separately).
     public func disconnectPlugins() async -> [ScriptEffect] {
-        guard !loadedPluginIDs.isEmpty else { return [] }
-        var effects = await runtime.callGlobal("OnPluginSaveState")
-        await effects.append(contentsOf: runtime.callGlobal("OnPluginDisconnect"))
+        var effects = await fireCallbackOnAll("OnPluginSaveState")
+        await effects.append(contentsOf: fireCallbackOnAll("OnPluginDisconnect"))
+        return effects
+    }
+
+    /// Invoke `name` on every loaded plugin's environment, in load order.
+    private func fireCallbackOnAll(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for pluginID in loadedPluginIDs {
+            await effects.append(contentsOf: runtime.callPluginCallback(pluginID, name, arguments))
+        }
         return effects
     }
 
@@ -285,8 +300,9 @@ public actor ScriptEngine {
             case .output:
                 effects.append(.echo(send))
             case .script:
-                await effects.append(contentsOf: runScript(
+                await effects.append(contentsOf: runOwnedScript(
                     send,
+                    owner: automationOwners[firing.aliasID],
                     matches: firing.match.captures,
                     named: firing.match.named
                 ))
@@ -318,8 +334,9 @@ public actor ScriptEngine {
                 disposition.effects.append(.send(send))
             }
             if let script = firing.script {
-                await disposition.effects.append(contentsOf: runScript(
+                await disposition.effects.append(contentsOf: runOwnedScript(
                     script,
+                    owner: automationOwners[firing.triggerID],
                     matches: firing.match.captures,
                     named: firing.match.named
                 ))
@@ -328,20 +345,32 @@ public actor ScriptEngine {
         return disposition
     }
 
+    /// Run a trigger/alias script: in the owning plugin's environment when
+    /// `owner` is set, otherwise in the shared globals (a user script).
+    private func runOwnedScript(
+        _ script: String,
+        owner: String?,
+        matches: [String],
+        named: [String: String]
+    ) async -> [ScriptEffect] {
+        if let owner {
+            return await runtime.runPluginScript(script, pluginID: owner, matches: matches, named: named)
+        }
+        return await runScript(script, matches: matches, named: named)
+    }
+
     /// Project a GMCP message into the live `proteles.gmcp` table, fire its
     /// `gmcp.*` events, and — when MUSHclient plugins are loaded — synthesise
     /// the GMCP-handler's `OnPluginBroadcast(1, handlerID, "GMCP", package)`
     /// that plugins like `aard_prompt_fixer` wait on. Returns all effects.
     public func applyGMCP(package: String, json: String) async -> [ScriptEffect] {
         var effects = await runtime.applyGMCP(package: package, json: json)
-        if !loadedPluginIDs.isEmpty {
-            await effects.append(contentsOf: runtime.callGlobal("OnPluginBroadcast", [
-                .number(1),
-                .string(Self.gmcpHandlerID),
-                .string("GMCP"),
-                .string(package)
-            ]))
-        }
+        await effects.append(contentsOf: fireCallbackOnAll("OnPluginBroadcast", [
+            .number(1),
+            .string(Self.gmcpHandlerID),
+            .string("GMCP"),
+            .string(package)
+        ]))
         return effects
     }
 

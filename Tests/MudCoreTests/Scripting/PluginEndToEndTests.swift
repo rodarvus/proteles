@@ -68,4 +68,55 @@ struct PluginEndToEndTests {
         let effects = await engine.applyGMCP(package: "char.status", json: #"{"state":3}"#)
         #expect(effects.isEmpty)
     }
+
+    // MARK: - Per-plugin environments
+
+    private func plugin(id: String, send: String) throws -> MUSHclientPlugin {
+        try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="\(id)" name="\(id)"/>
+        <script><![CDATA[
+        function OnPluginBroadcast(msg, handler, name, text)
+          proteles.send("\(send)" .. text)
+        end
+        ]]></script>
+        </muclient>
+        """)
+    }
+
+    @Test("Two plugins defining the same global don't collide")
+    func perPluginEnvironmentsIsolateGlobals() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(plugin(id: "com.a", send: "A:"))
+        try await engine.loadPlugin(plugin(id: "com.b", send: "B:"))
+
+        // Both plugins' OnPluginBroadcast fire (each in its own env) — under a
+        // shared global table, B's definition would have clobbered A's.
+        let effects = await engine.applyGMCP(package: "char.status", json: "{}")
+        #expect(effects.contains(.send("A:char.status")))
+        #expect(effects.contains(.send("B:char.status")))
+    }
+
+    @Test("A plugin trigger calls the plugin's own function, not another's")
+    func ownerRoutedTriggerScripts() async throws {
+        let engine = try ScriptEngine()
+        let makePlugin = { (id: String, word: String) throws -> MUSHclientPlugin in
+            try MUSHclientPluginLoader.parse(xml: """
+            <muclient>
+            <plugin id="\(id)" name="\(id)"/>
+            <triggers>
+            <trigger match="ping" keep_evaluating="y" send_to="12"><send>react()</send></trigger>
+            </triggers>
+            <script><![CDATA[ function react() proteles.echo("\(word)") end ]]></script>
+            </muclient>
+            """)
+        }
+        try await engine.loadPlugin(makePlugin("com.a", "A reacts"))
+        try await engine.loadPlugin(makePlugin("com.b", "B reacts"))
+
+        let disposition = await engine.process(line: "ping")
+        // Each trigger ran its own plugin's react(), in its own env.
+        #expect(disposition.effects.contains(.echo("A reacts")))
+        #expect(disposition.effects.contains(.echo("B reacts")))
+    }
 }

@@ -154,6 +154,12 @@ public actor LuaRuntime {
     /// plugin; defaults to the user-scripts context.
     nonisolated(unsafe) var pluginContext = PluginContext.default
 
+    /// Per-plugin sandbox environments (plugin id → registry ref of an env
+    /// table whose metatable `__index` falls back to `_G`). A plugin's script,
+    /// callbacks, and trigger/alias/timer scripts run in its own env so two
+    /// plugins can't clobber each other's globals. See `LuaRuntime+PluginEnvironments`.
+    nonisolated(unsafe) var pluginEnvs: [String: Int32] = [:]
+
     /// Scoped string variables (`proteles.getVar`/`setVar`/`deleteVar`,
     /// ≈ MUSHclient `Get/SetVariable`). Keyed `scope → name → value`; the
     /// host sets ``currentVariableScope`` per plugin/script so each plugin's
@@ -461,7 +467,7 @@ public actor LuaRuntime {
 
     /// Set the `matches` (integer-keyed, 0-based) and `named` globals from
     /// trigger captures.
-    private func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
+    func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
         lua_createtable(state, Int32(captures.count), 0)
         for (index, value) in captures.enumerated() {
             lua_pushstring(state, value)
