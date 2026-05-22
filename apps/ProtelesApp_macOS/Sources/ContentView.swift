@@ -6,6 +6,7 @@ import SwiftUI
 struct ContentView: View {
     let session: SessionController
     let worlds: WorldsModel
+    let scripts: ScriptsModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
@@ -72,7 +73,7 @@ struct ContentView: View {
         }
 
         if let active = worlds.activeProfile, active.autoconnect {
-            await ProtelesApp.loadScripts(for: active.id, into: session)
+            await scripts.load(forProfile: active.id)
             try? await session.connect(
                 to: active.endpoint,
                 autologin: worlds.autologinPlan(for: active)

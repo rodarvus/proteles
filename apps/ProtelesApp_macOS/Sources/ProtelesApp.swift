@@ -29,6 +29,10 @@ struct ProtelesApp: App {
     /// Captured chat (`comm.channel`), bridged to SwiftUI.
     @State private var chat: ChatModel
 
+    /// The active world's triggers/aliases/timers, bridged to SwiftUI and
+    /// kept in sync with the live session.
+    @State private var scripts: ScriptsModel
+
     init() {
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
@@ -60,6 +64,7 @@ struct ProtelesApp: App {
             .appendingPathComponent("proteles-profiles.json")
         _worlds = State(initialValue: WorldsModel(store: ProfileStore(url: storeURL)))
         _chat = State(initialValue: ChatModel(store: session.chatStore))
+        _scripts = State(initialValue: ScriptsModel(session: session))
 
         if let persistence {
             let store = session.scrollbackStore
@@ -69,7 +74,7 @@ struct ProtelesApp: App {
 
     var body: some Scene {
         WindowGroup("Proteles") {
-            ContentView(session: session, worlds: worlds)
+            ContentView(session: session, worlds: worlds, scripts: scripts)
                 .frame(minWidth: 800, minHeight: 500)
                 .navigationTitle("Proteles")
         }
@@ -88,7 +93,7 @@ struct ProtelesApp: App {
                     )
                 }
             }
-            ProtelesCommands(session: session, worlds: worlds)
+            ProtelesCommands(session: session, worlds: worlds, scripts: scripts)
             CommandGroup(after: .pasteboard) {
                 Button("Copy with Colour Codes") {
                     NSApp.sendAction(
@@ -126,11 +131,12 @@ struct ProtelesApp: App {
             ConnectionManagerView(model: worlds) { profile in
                 let session = session
                 let worlds = worlds
+                let scripts = scripts
                 Task { @MainActor in
                     await worlds.setActive(profile.id)
                     let plan = worlds.autologinPlan(for: profile)
                     await session.disconnect()
-                    await ProtelesApp.loadScripts(for: profile.id, into: session)
+                    await scripts.load(forProfile: profile.id)
                     try? await session.connect(to: profile.endpoint, autologin: plan)
                 }
             }
@@ -142,25 +148,16 @@ struct ProtelesApp: App {
             ChatView(model: chat)
                 .frame(minWidth: 420, minHeight: 300)
         }
+
+        Window("Scripts", id: ProtelesApp.scriptsWindowID) {
+            ScriptsView(model: scripts)
+        }
+        .windowResizability(.contentSize)
     }
 
     static let worldsWindowID = "worlds"
     static let chatWindowID = "chat"
-
-    /// Load a profile's persisted triggers/aliases/timers into the live
-    /// session before connecting. Failures are non-fatal — the connection
-    /// proceeds either way, just without that world's automations.
-    static func loadScripts(for profileID: UUID, into session: SessionController) async {
-        guard let url = try? ScriptStore.defaultStoreURL(forProfile: profileID) else { return }
-        let store = ScriptStore(url: url)
-        do {
-            try await store.load()
-        } catch {
-            NSLog("[Proteles] script load failed: \(error)")
-            return
-        }
-        await session.loadScripts(store.document)
-    }
+    static let scriptsWindowID = "scripts"
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -169,6 +166,7 @@ struct ProtelesApp: App {
 private struct ProtelesCommands: Commands {
     let session: SessionController
     let worlds: WorldsModel
+    let scripts: ScriptsModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -176,9 +174,10 @@ private struct ProtelesCommands: Commands {
             Button("Connect") {
                 let session = session
                 let worlds = worlds
+                let scripts = scripts
                 Task { @MainActor in
                     guard let active = worlds.activeProfile else { return }
-                    await ProtelesApp.loadScripts(for: active.id, into: session)
+                    await scripts.load(forProfile: active.id)
                     try? await session.connect(
                         to: active.endpoint,
                         autologin: worlds.autologinPlan(for: active)
@@ -204,6 +203,11 @@ private struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.chatWindowID)
             }
             .keyboardShortcut("J", modifiers: [.command, .shift])
+
+            Button("Scripts…") {
+                openWindow(id: ProtelesApp.scriptsWindowID)
+            }
+            .keyboardShortcut("T", modifiers: [.command, .shift])
         }
     }
 }
