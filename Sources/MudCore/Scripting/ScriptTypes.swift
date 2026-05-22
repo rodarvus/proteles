@@ -44,6 +44,11 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print coloured text to the scrollback. `foreground`/`background`
     /// are colour names (resolved by the host); `nil` uses defaults.
     case note(text: String, foreground: String?, background: String?)
+    /// Print a multi-colour line built from `ColourNote`'s `(fore, back,
+    /// text)` triples — one styled run per segment, so per-segment colours
+    /// survive (backs the MUSHclient `ColourNote`/`ColourTell` shim and is
+    /// reusable by native features that emit multi-colour lines).
+    case colourNote([NoteSegment])
     /// Send a GMCP packet to the server (the payload is framed as
     /// `IAC SB 201 <payload> IAC SE`). Backs `Send_GMCP_Packet`.
     case sendGMCP(String)
@@ -53,4 +58,21 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print ANSI-SGR-coded text to the scrollback, rendered as styled runs
     /// (the shim's `AnsiNote`).
     case echoAnsi(String)
+}
+
+/// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`
+/// is rendered with `foreground`/`background`, each a colour *name*
+/// (`"red"`, `"white"`, …) or a `#RRGGBB` hex string; `nil` means the
+/// terminal default for that channel. Resolved to concrete styling by the
+/// host.
+public struct NoteSegment: Sendable, Equatable {
+    public let text: String
+    public let foreground: String?
+    public let background: String?
+
+    public init(text: String, foreground: String? = nil, background: String? = nil) {
+        self.text = text
+        self.foreground = foreground
+        self.background = background
+    }
 }

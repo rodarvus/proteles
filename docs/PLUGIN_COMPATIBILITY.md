@@ -12,7 +12,8 @@ top of the native `proteles.*` layer (see PLAN.md §7).
 |---|---|---|
 | `Send`, `SendNoEcho`, `Execute` | ✅ | → `proteles.send`/`sendNoEcho`/`execute` |
 | `Note` | ✅ | → `proteles.echo` |
-| `ColourNote`, `ColourTell`, `Tell` | 🟡 | single styled run per line; multi-triplet segment text is concatenated under the first colour |
+| `ColourNote`, `ColourTell` | ✅ | full multi-colour: each `(fore, back, text)` triple renders as its own styled run; colour names + `#RRGGBB` |
+| `Tell` | 🟡 | text only (no inline newline suppression); colours via `ColourTell` |
 | `AnsiNote` | ✅ | renders ANSI-SGR text as styled runs (pairs with `ColoursToANSI`) |
 | `GetVariable`, `SetVariable`, `DeleteVariable` | ✅ | per-plugin scope; values coerced to strings |
 | `GetPluginVariable` | ✅ | cross-plugin reads |

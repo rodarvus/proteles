@@ -130,4 +130,31 @@ struct SessionControllerScriptingTests {
         await controller.disconnect()
         await listener.stop()
     }
+
+    @Test("ColourNote segments render as one styled run per segment")
+    func colourNoteRendersPerSegmentRuns() {
+        let line = SessionController.colourNoteLine([
+            NoteSegment(text: "a", foreground: "white", background: nil),
+            NoteSegment(text: "bb", foreground: "red", background: "blue"),
+            NoteSegment(text: "c", foreground: nil, background: nil)
+        ])
+        #expect(line.text == "abbc")
+        // Two runs: the white "a" (0..<1) and the red-on-blue "bb" (1..<3).
+        // The default-styled "c" contributes no run.
+        #expect(line.runs.count == 2)
+        #expect(line.runs[0].utf16Range == 0..<1)
+        #expect(line.runs[0].style.foreground == .named(.white))
+        #expect(line.runs[1].utf16Range == 1..<3)
+        #expect(line.runs[1].style.foreground == .named(.red))
+        #expect(line.runs[1].style.background == .named(.blue))
+    }
+
+    @Test("ColourNote resolves #RRGGBB hex colours to RGB runs")
+    func colourNoteHexColour() {
+        let line = SessionController.colourNoteLine([
+            NoteSegment(text: "x", foreground: "#FF8800", background: nil)
+        ])
+        #expect(line.runs.count == 1)
+        #expect(line.runs[0].style.foreground == .rgb(red: 0xFF, green: 0x88, blue: 0x00))
+    }
 }

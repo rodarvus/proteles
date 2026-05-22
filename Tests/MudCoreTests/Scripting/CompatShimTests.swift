@@ -17,21 +17,26 @@ struct CompatShimTests {
         #expect(effects == [.send("kill mob"), .sendNoEcho("secret"), .execute("north")])
     }
 
-    @Test("Note echoes; ColourNote applies the first triplet's colours")
+    @Test("Note echoes; ColourNote emits a single styled segment")
     func output() async throws {
         let lua = try await shimmed()
         let note = try await lua.run("Note('hello')")
         #expect(note == [.echo("hello")])
 
         let coloured = try await lua.run("ColourNote('red', '', 'danger')")
-        #expect(coloured == [.note(text: "danger", foreground: "red", background: nil)])
+        #expect(coloured == [.colourNote([
+            NoteSegment(text: "danger", foreground: "red", background: nil)
+        ])])
     }
 
-    @Test("ColourNote concatenates multi-triplet segment text")
+    @Test("ColourNote preserves per-segment colours (one run per triple)")
     func colourNoteMultiTriplet() async throws {
         let lua = try await shimmed()
-        let effects = try await lua.run("ColourNote('white', '', 'a', 'red', '', 'b')")
-        #expect(effects == [.note(text: "ab", foreground: "white", background: nil)])
+        let effects = try await lua.run("ColourNote('white', '', 'a', 'red', 'blue', 'b')")
+        #expect(effects == [.colourNote([
+            NoteSegment(text: "a", foreground: "white", background: nil),
+            NoteSegment(text: "b", foreground: "red", background: "blue")
+        ])])
     }
 
     @Test("SetVariable / GetVariable round-trip and return eOK")

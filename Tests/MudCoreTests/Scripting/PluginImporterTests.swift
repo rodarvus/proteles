@@ -72,10 +72,12 @@ struct PluginImporterTests {
         #expect(r.aliasCount == 0)
     }
 
-    @Test("ColourNote whole-word match doesn't trip on substrings")
+    @Test("ColourNote is a supported call (whole-word, not a substring trip)")
     func wordBoundary() throws {
-        // "Note" must not match inside "ColourNote".
+        // ColourNote is now fully supported (multi-colour styled runs), and
+        // "Note" must not double-count inside "ColourNote".
         let r = try report(#"function f() ColourNote("white", "", "x") end"#)
-        #expect(r.findings.contains { $0.message.contains("ColourNote") && $0.severity == .warning })
+        #expect(r.verdict == .supported)
+        #expect(r.findings.contains { $0.message.contains("ColourNote") && $0.severity == .ok })
     }
 }

@@ -57,7 +57,8 @@ public struct PluginImportReport: Sendable, Equatable {
 public enum PluginImporter {
     /// World-API methods that are fully supported by the shim.
     private static let supported: Set<String> = [
-        "Send", "SendNoEcho", "Execute", "Note", "Tell", "AnsiNote", "ColourTell",
+        "Send", "SendNoEcho", "Execute", "Note", "Tell", "AnsiNote",
+        "ColourNote", "ColourTell",
         "GetVariable", "SetVariable", "DeleteVariable", "GetPluginVariable",
         "GetPluginID", "BroadcastPlugin", "IsConnected", "Send_GMCP_Packet", "Trim",
         "print", "require", "dofile", "loadstring"
@@ -65,7 +66,6 @@ public enum PluginImporter {
 
     /// Methods that work but with limitations — message per method.
     private static let partial: [String: String] = [
-        "ColourNote": "single colour per line (multi-colour segments are merged)",
         "GetInfo": "common values only; some return stubs",
         "GetPluginInfo": "plugin directory (infotype 20) only",
         "CallPlugin": "forwards to exported functions; no per-plugin call routing",

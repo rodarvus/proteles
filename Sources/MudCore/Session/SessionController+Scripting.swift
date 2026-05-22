@@ -32,6 +32,8 @@ public extension SessionController {
                     text: text,
                     runs: Self.noteRuns(text, foreground: foreground, background: background)
                 ))
+            case .colourNote(let segments):
+                await scrollbackStore.append(Self.colourNoteLine(segments))
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
             case .echoAard(let coded):
@@ -210,11 +212,47 @@ public extension SessionController {
         return [StyledRun(utf16Range: 0..<length, style: style)]
     }
 
+    /// Build one ``Line`` from `ColourNote` segments: the texts concatenate
+    /// into the line, and each non-default segment gets its own styled run
+    /// over its UTF-16 range — so per-segment colours survive.
+    internal static func colourNoteLine(_ segments: [NoteSegment]) -> Line {
+        var text = ""
+        var runs: [StyledRun] = []
+        for segment in segments {
+            let start = (text as NSString).length
+            text += segment.text
+            let end = (text as NSString).length
+            var style = StyleAttributes.default
+            if let fg = segment.foreground, let color = namedColor(fg) { style.foreground = color }
+            if let bg = segment.background, let color = namedColor(bg) { style.background = color }
+            if !style.isDefault, start < end {
+                runs.append(StyledRun(utf16Range: start..<end, style: style))
+            }
+        }
+        return Line(id: LineID(0), text: text, runs: runs)
+    }
+
+    /// Resolve a MUSHclient colour string to an ``ANSIColor``: one of the
+    /// eight names (`"red"`, `"white"`, …) or a `#RRGGBB` hex value. Returns
+    /// `nil` for unrecognised input (rendered as the terminal default).
     internal static func namedColor(_ name: String) -> ANSIColor? {
+        if name.hasPrefix("#"), let rgb = hexColor(name) { return rgb }
         let names: [String: NamedColor] = [
             "black": .black, "red": .red, "green": .green, "yellow": .yellow,
             "blue": .blue, "magenta": .magenta, "cyan": .cyan, "white": .white
         ]
         return names[name.lowercased()].map { .named($0) }
+    }
+
+    /// Parse a `#RRGGBB` hex colour into an ``ANSIColor/rgb``. `nil` unless
+    /// it's exactly six hex digits after the `#`.
+    private static func hexColor(_ string: String) -> ANSIColor? {
+        let hex = string.dropFirst()
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
+        return .rgb(
+            red: UInt8((value >> 16) & 0xFF),
+            green: UInt8((value >> 8) & 0xFF),
+            blue: UInt8(value & 0xFF)
+        )
     }
 }

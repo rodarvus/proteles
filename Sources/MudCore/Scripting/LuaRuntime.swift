@@ -142,6 +142,7 @@ public actor LuaRuntime {
         case jsonEncode
         case echoAard
         case echoAnsi
+        case colourNote
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -361,6 +362,7 @@ public actor LuaRuntime {
         setHostFunction("jsonEncode", .jsonEncode)
         setHostFunction("echoAard", .echoAard)
         setHostFunction("echoAnsi", .echoAnsi)
+        setHostFunction("colourNote", .colourNote)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -385,7 +387,7 @@ public actor LuaRuntime {
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
-        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi:
+        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote:
             recordOutputEffect(function, arguments)
             return []
         case .call:
@@ -428,25 +430,6 @@ public actor LuaRuntime {
             break
         }
         return []
-    }
-
-    /// The inert output effects (`send`/`echo`/`note`/…).
-    private nonisolated func recordOutputEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
-        switch function {
-        case .send: effects.append(.send(Self.argString(arguments, 0)))
-        case .sendNoEcho: effects.append(.sendNoEcho(Self.argString(arguments, 0)))
-        case .execute: effects.append(.execute(Self.argString(arguments, 0)))
-        case .echo: effects.append(.echo(Self.argString(arguments, 0)))
-        case .note: effects.append(.note(
-                text: Self.argString(arguments, 0),
-                foreground: Self.argOptionalString(arguments, 1),
-                background: Self.argOptionalString(arguments, 2)
-            ))
-        case .sendGMCP: effects.append(.sendGMCP(Self.argString(arguments, 0)))
-        case .echoAard: effects.append(.echoAard(Self.argString(arguments, 0)))
-        case .echoAnsi: effects.append(.echoAnsi(Self.argString(arguments, 0)))
-        default: break
-        }
     }
 
     /// The event-bus / RPC registration & firing functions (no return value).

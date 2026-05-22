@@ -45,4 +45,46 @@ extension LuaRuntime {
         }
         return ref
     }
+
+    /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)
+    /// for the host to apply after the chunk returns.
+    nonisolated func recordOutputEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
+        switch function {
+        case .send: effects.append(.send(Self.argString(arguments, 0)))
+        case .sendNoEcho: effects.append(.sendNoEcho(Self.argString(arguments, 0)))
+        case .execute: effects.append(.execute(Self.argString(arguments, 0)))
+        case .echo: effects.append(.echo(Self.argString(arguments, 0)))
+        case .note: effects.append(.note(
+                text: Self.argString(arguments, 0),
+                foreground: Self.argOptionalString(arguments, 1),
+                background: Self.argOptionalString(arguments, 2)
+            ))
+        case .sendGMCP: effects.append(.sendGMCP(Self.argString(arguments, 0)))
+        case .echoAard: effects.append(.echoAard(Self.argString(arguments, 0)))
+        case .echoAnsi: effects.append(.echoAnsi(Self.argString(arguments, 0)))
+        case .colourNote: effects.append(.colourNote(Self.noteSegments(arguments)))
+        default: break
+        }
+    }
+
+    /// Build `ColourNote` segments from its variadic `(fore, back, text)`
+    /// triples. An empty colour string means "default" → `nil`. Trailing
+    /// partial triples (missing text) are ignored, matching MUSHclient.
+    nonisolated static func noteSegments(_ arguments: [LuaValue]) -> [NoteSegment] {
+        var segments: [NoteSegment] = []
+        var index = 0
+        while index + 3 <= arguments.count {
+            let fore = nonEmpty(arguments[index].stringValue)
+            let back = nonEmpty(arguments[index + 1].stringValue)
+            let text = arguments[index + 2].stringValue ?? ""
+            segments.append(NoteSegment(text: text, foreground: fore, background: back))
+            index += 3
+        }
+        return segments
+    }
+
+    private nonisolated static func nonEmpty(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
 }

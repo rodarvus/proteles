@@ -74,19 +74,19 @@ public extension LuaRuntime {
       proteles.echo(text == nil and "" or tostring(text))
     end
 
-    -- ColourNote(fore, back, text, fore2, back2, text2, ...). Per-segment
-    -- colours within one line are not yet supported (single styled run): the
-    -- segment texts are concatenated and the first triplet's colours applied.
+    -- ColourNote(fore, back, text, fore2, back2, text2, ...): each (fore,
+    -- back, text) triple becomes a styled segment on one line. Colours are
+    -- coerced to strings ("" = default) and the whole triple list is handed
+    -- to the host, which renders one styled run per segment.
     function ColourNote(...)
       local args = {...}
-      local text = ""
-      for i = 3, #args, 3 do
-        if args[i] ~= nil then text = text .. tostring(args[i]) end
+      local n = select("#", ...)
+      local coerced = {}
+      for i = 1, n do
+        local v = args[i]
+        coerced[i] = (v == nil) and "" or tostring(v)
       end
-      -- An empty colour string means "default" — pass nil, not "".
-      local fore = (args[1] ~= nil and args[1] ~= "") and args[1] or nil
-      local back = (args[2] ~= nil and args[2] ~= "") and args[2] or nil
-      proteles.note(text, fore, back)
+      proteles.colourNote(unpack(coerced, 1, n))
     end
     ColourTell = ColourNote
     function Tell(text)
