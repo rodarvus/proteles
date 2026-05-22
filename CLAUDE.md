@@ -4,6 +4,26 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
+## Current status (2026-05-22)
+
+**Phases 0–5 complete and released.** Phase 5 (scripting foundation) shipped
+as `v0.0.5`: vendored Lua 5.1 (`CLua`) + sandbox + `proteles.*` host bridge
+(output/send/execute, event bus, `call`/`broadcast` RPC); pure value-type
+`TriggerEngine`/`AliasEngine`/`TimerEngine` in `Sources/MudCore/Scripting/`;
+a live `proteles.gmcp` table + per-level `gmcp.*` events; per-world JSON
+persistence (`ScriptStore`); the app instantiates a `ScriptEngine` and loads
+each world's scripts at connect; and a native Scripts editor window
+(`Sources/MudUI/Scripts/`, ⌘⇧T). Each phase = one patch release
+(Phase N → `v0.0.N`). **Next: Phase 6** — the MUSHclient `mush.lua` compat
+shim + XML plugin loader + first hand-ported plugins (see PLAN.md §8.7).
+
+Rolled forward out of Phase 5: `MacroEngine` (→ Phase 7) and the wider
+`proteles.*` surface (scoped vars, `proteles.db` SQLite, `proteles.info`
+→ Phase 6). Deferred bugs/polish: Scripts-editor UX (#4), trigger multi-fire
+(#5). The pattern to keep: **pure, value-type engines in MudCore** (decide),
+**`ScriptEngine` actor** (orchestrate Lua), **`SessionController`** (apply
+effects/sends) — so logic stays unit-testable without UI/network/Lua.
+
 ## Reference submodules — ALWAYS research them
 
 The repo vendors three reference MUD clients as git submodules. They are

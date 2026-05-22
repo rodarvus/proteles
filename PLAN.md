@@ -2,6 +2,22 @@
 
 > **Status:** Living planning document. Sections are stable in shape but expected to evolve. Decisions noted with **D-NN** are referenced from the [Decision Log](#15-decision-log) at the bottom of this file.
 
+> **Progress snapshot (2026-05-22).** Phases 0–5 are complete and shipped
+> (Phase 5 = `v0.0.5`). Phase 5 delivered the scripting foundation: the
+> vendored Lua 5.1 runtime + sandbox + `proteles.*` host bridge, the
+> `TriggerEngine`/`AliasEngine`/`TimerEngine` automation triad (pure
+> value types, fully tested), a live `proteles.gmcp` table + `gmcp.*`
+> event bus, per-world JSON persistence (`ScriptStore`), the running-app
+> wiring, and a native Scripts editor window. ~441 tests across the suite;
+> all four gates (`swift build`, `swift test`, `swiftformat --lint`,
+> `swiftlint --strict`) green. Two Phase-5 items were intentionally rolled
+> forward: the `MacroEngine` (keyboard chords → Phase 7) and the wider
+> `proteles.*` surface (scoped vars, `proteles.db` SQLite, `proteles.info`
+> → built with the Phase-6 shim that needs them). Known follow-ups from
+> testing: Scripts-editor UX rework (issue #4) and a trigger multi-fire
+> bug (issue #5), both deferred. **Next:** Phase 6 — the MUSHclient compat
+> shim + plugin migration.
+
 ---
 
 ## 1. Project Overview & Identity
@@ -61,44 +77,58 @@ There is a real gap for a fast, native, well-engineered Aardwolf client on Apple
 
 ### 3.1 Module decomposition
 
-Single Swift Package Manager workspace at repo root. Three packages, with an app target per platform:
+A single Swift Package Manager package at the repo root with three library
+products (`MudCore`, `MudUI`, `MudOutputView_macOS`) plus two C targets
+(`CZlib`, `CLua`); the app bundle is a thin XcodeGen-generated Xcode target.
+The tree below reflects the **current** layout (planned-but-not-yet dirs are
+called out under it):
 
 ```
 proteles/
-├── Package.swift                    # workspace
-├── packages/
-│   ├── MudCore/                     # platform-agnostic
-│   │   ├── Networking/              # NWConnection wrapper
-│   │   ├── Telnet/                  # IAC, options, subnegotiation
-│   │   ├── MCCP/                    # streaming zlib inflate
-│   │   ├── ANSI/                    # SGR parser → styled runs
-│   │   ├── GMCP/                    # JSON modules, registry
-│   │   ├── MSDP/, MSSP/, MTTS/      # smaller protocols
-│   │   ├── Scrollback/              # Deque-based line buffer
-│   │   ├── LineModel/               # Line, StyledRun, attributes
-│   │   ├── Profiles/                # WorldProfile (Codable)
-│   │   ├── Session/                 # SessionController (actor)
-│   │   ├── Triggers/, Aliases/, Timers/, Macros/
-│   │   ├── Scripting/               # LuaRuntime, sandbox, API
-│   │   ├── Plugins/                 # PluginLoader, MUSHclient shim
-│   │   ├── Persistence/             # GRDB (SQLite) for logs/state
-│   │   └── Platform/                # PlatformColor/Font typealiases
-│   ├── MudUI/                       # shared SwiftUI chrome
-│   │   ├── Connection/              # ConnectionManager, WorldEditor
-│   │   ├── Preferences/
-│   │   ├── Editors/                 # TriggerEditor, AliasEditor, ...
-│   │   ├── Status/                  # status bar, HP/MP gauges
-│   │   ├── Channels/                # tells, chat windows
-│   │   └── Theme/
-│   ├── MudOutputView_macOS/         # AppKit NSTextView host
-│   └── MudOutputView_iOS/           # UIKit UITextView host (phase 2)
+├── Package.swift                     # single SwiftPM manifest (Swift 6, strict concurrency)
+├── Sources/
+│   ├── CZlib/                        # system-library shim over libz (MCCP2 inflate)
+│   ├── CLua/                         # vendored PUC-Rio Lua 5.1.5 (C target, sandboxed at runtime)
+│   ├── MudCore/                      # platform-agnostic core, no UI
+│   │   ├── Networking/               # NWConnection wrapper (actor, one-shot per connect)
+│   │   ├── Telnet/                   # IAC, options, subnegotiation
+│   │   ├── Compression/              # streaming zlib inflate (MCCP2)
+│   │   ├── ANSI/                     # SGR parser → styled runs
+│   │   ├── GMCP/                     # message parse, typed modules, GMCPStateStore
+│   │   ├── LineModel/                # Line, StyledRun, attributes
+│   │   ├── Pipeline/                 # LinePipeline — the synchronous parse core
+│   │   ├── Scrollback/               # Deque-based line buffer + events
+│   │   ├── Rendering/                # render-coordinator inputs (eviction propagation)
+│   │   ├── Profiles/                 # WorldProfile, ProfileStore, CredentialStore
+│   │   ├── Session/                  # SessionController (actor) + extensions
+│   │   ├── Scripting/                # LuaRuntime, Trigger/Alias/Timer engines, ScriptEngine, ScriptStore
+│   │   ├── Input/                    # CommandHistory (recall + completion)
+│   │   ├── Persistence/              # GRDB (SQLite) scrollback + FTS5 search
+│   │   └── Replay/                   # SessionRecorder / SessionReplayer (JSONL)
+│   ├── MudUI/                        # shared SwiftUI chrome (cross-platform)
+│   │   ├── Connection/               # ConnectionManager, WorldEditor, WorldsModel
+│   │   ├── Chat/                     # chat-capture window
+│   │   ├── Info/                     # room / group / worth sidebar
+│   │   ├── Input/                    # NSTextField-backed command input
+│   │   └── Scripts/                  # Scripts editor (triggers/aliases/timers)
+│   └── MudOutputView_macOS/          # AppKit / TextKit 2 output view
 ├── apps/
-│   ├── ProtelesApp_macOS/           # app bundle, generated by XcodeGen
-│   └── ProtelesApp_iOS/             # (phase 2)
-├── fixtures/                        # recorded sessions, golden files
-├── tools/                           # plugin migration CLI, test harnesses
-└── docs/                            # API docs (DocC), user docs
+│   └── ProtelesApp_macOS/            # app bundle, generated by XcodeGen (project.yml)
+├── Tests/
+│   ├── MudCoreTests/                 # + Fixtures/ (trimmed real-Aardwolf JSONL)
+│   ├── MudUITests/
+│   └── MudOutputView_macOSTests/
+├── scripts/                          # create-dev-signing-cert.sh, …
+├── mushclient/  mudlet/  aardwolfclientpackage/   # reference submodules (read-only)
+├── search-and-destroy/  dinv/        # large reference plugins (compat-shim corpus, read-only)
+└── iterm2/                           # terminal rendering reference (read-only)
 ```
+
+**Planned additions:** `MudCore/Plugins/` (Phase 6 — MUSHclient shim + XML
+loader); `MudCore/MSDP|MSSP|MTTS/` only if a feature needs them; `MudUI/`
+`Preferences/` & `Map/` (Phase 7); `Sources/MudOutputView_iOS/` +
+`apps/ProtelesApp_iOS/` (Phase 9). User/API docs (`docs/`) and the migration
+CLI (`tools/`) arrive with Phases 6–8.
 
 ### 3.2 Data flow
 
@@ -175,6 +205,7 @@ Each decision below is recorded with **rationale**, **alternatives considered**,
 ### 4.5 TLS: Network.framework's built-in `NWParameters.tls`
 
 - **Rationale:** Trust the system stack. Aardwolf supports TLS on a separate port; we configure it per `WorldProfile`.
+- **Status: deferred post-1.0 (D-15).** The `useTLS` flag, editor toggle, and `NWParameters.tls` path were *removed* pre-1.0 — Aardwolf's TLS endpoint couldn't be made to work reliably and it's off the critical path. The client is plain telnet for now; tracked as a GitHub issue to revisit with proper certificate-trust handling. The connect *timeout* stayed (it's useful regardless).
 
 ### 4.6 Protocol layers (Telnet, ANSI, GMCP, MSDP, MSSP, MTTS): hand-rolled
 
@@ -182,7 +213,9 @@ No Swift libraries exist. We write our own — small, well-tested, focused on wh
 
 ### 4.7 Text rendering: TextKit 2 (`NSTextView` / `UITextView`)
 
-**D-02.** Start with TextKit 2 in `NSTextView`, wrapped in `NSViewRepresentable`. Custom `NSTextStorage` subclass backed by our scrollback model. Falls back to a custom Core Text view if profiling shows TextKit 2 can't keep up.
+**D-02.** Start with TextKit 2 in `NSTextView`, wrapped in `NSViewRepresentable`. Falls back to a custom Core Text view if profiling shows TextKit 2 can't keep up.
+
+> **Updated by D-04 / D-12:** the Phase-1 spike passed with ~5× latency headroom, so TextKit 2 was adopted. The originally-planned *custom `NSTextStorage` subclass* turned out to be **unnecessary** — bounding stock `NSTextStorage` via eviction-event propagation (`ScrollbackEvent.evicted(id)` → `deleteCharacters(in:)`) hit the memory target on its own. We use stock `NSTextStorage`.
 
 - **Rationale:** TextKit 2 is viewport-based, intended for exactly this size of document. Native selection, copy, accessibility, Find come for free. iTerm2's continued use of NSTextView (with heavy customization) proves the path is viable. Maximally native feel.
 - **Alternatives:**
@@ -222,10 +255,14 @@ Minimal, principled. Each pulled only when justified:
 | `swift-algorithms` | windowing, chunking utilities | Phase 1 |
 | `swift-log` | logging facade | Phase 0 |
 | `swift-testing` | unit/integration tests | Phase 0 |
-| `swift-argument-parser` | CLI tools (plugin migrator) | Phase 6 |
-| GRDB.swift | SQLite | Phase 2 |
-| (vendored) Lua 5.1 | scripting | Phase 5 |
-| (vendored) libz | already in SDK | Phase 2 |
+| `swift-argument-parser` | CLI tools (plugin migrator) | Phase 6 (not yet) |
+| GRDB.swift | SQLite (scrollback + FTS5) | Phase 2 ✅ in use (7.0+) |
+| (vendored) Lua 5.1.5 → `CLua` target | scripting | Phase 5 ✅ in use |
+| libz → `CZlib` system-library target | MCCP2 inflate (already in SDK) | Phase 2 ✅ in use |
+
+As of 2026-05-22 the integrated set is `swift-log`, `swift-collections`,
+`swift-algorithms`, `GRDB.swift`, the vendored Lua (`CLua`), and libz
+(`CZlib`). `swift-argument-parser` arrives with the Phase-6 migration CLI.
 
 No Alamofire, no third-party reactive frameworks, no SnapKit. Keep the dependency tree shallow.
 
@@ -400,9 +437,18 @@ Lines arrive on the parser actor and are appended to the store immediately. A **
 
 This means 100 inbound lines in 100 ms produce **6 layout passes**, not 100.
 
-### 6.4 NSTextStorage subclass
+### 6.4 NSTextStorage strategy
 
-Custom `NSTextStorage` subclass that maintains an internal `Deque<Line>` and materializes runs into `NSAttributedString` on demand for the viewport. We override:
+> **Superseded by D-12.** The custom-subclass design below was the original
+> plan; in practice **stock `NSTextStorage` + eviction-event propagation**
+> (Phase 2) met the memory budget without it (2000-line RSS delta 57 MB →
+> 23 MB at the same ~3 ms P99), so no subclass was written. The append/evict
+> path drives stock storage in a single `beginEditing`/`endEditing` per
+> frame and `deleteCharacters(in:)` on eviction. The sketch is retained as
+> the fallback shape if a future need (e.g. on-demand re-load of
+> scrolled-back persisted lines) reopens it.
+
+A custom `NSTextStorage` subclass would maintain an internal `Deque<Line>` and materialize runs into `NSAttributedString` on demand for the viewport, overriding:
 
 - `string` (composed plaintext — back this with a rope-like adapter for efficiency in late phases)
 - `attributes(at:effectiveRange:)`
@@ -641,18 +687,19 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 **Goal:** Lua runtime; user-defined triggers, aliases, timers, macros.
 
 - ✅ Vendored Lua 5.1 SwiftPM target (`CLua`, D-03).
-- ✅ `LuaRuntime` actor; first-pass sandbox (D-10) + execution-timeout hook.
-- **`proteles.*` API surface — designed below (D-19).** The native API must
-  be a rich enough *primitive* layer that the Phase-6 `mush.lua` compat
-  shim can be built on top of it, since the real plugin corpus
-  (`aardwolfclientpackage`, `search-and-destroy`, `dinv`) leans on a much
-  larger surface than a minimal "send/note" set.
-- **TriggerEngine:** regex (NSRegularExpression), literal, wildcard, group captures; per-trigger enabled flag, sequence priority, "match against plain text" vs "match against styled text".
-- **AliasEngine:** input-line expansion; supports parameters.
-- **TimerEngine:** wall-clock, tick-aligned (driven by Aardwolf GMCP-published ticks).
-- **MacroEngine:** keyboard chord → command/script.
-- **SwiftUI editors:** TriggerEditor, AliasEditor, TimerEditor, MacroEditor.
-- **Profile-scoped vs global** scoping.
+- ✅ `LuaRuntime` actor; first-pass sandbox (D-10) + execution-timeout hook; the `proteles.*` host bridge — output (`echo`/`note`), `send`/`sendNoEcho`/`execute`, the event bus (`onEvent`/`raiseEvent`), and cross-plugin RPC (`call`/`broadcast`/`onBroadcast`, `export`).
+- ✅ **`proteles.*` API surface — designed below (D-19)** as a rich *primitive* layer the Phase-6 `mush.lua` shim can sit on top of, since the real corpus (`aardwolfclientpackage`, `search-and-destroy`, `dinv`) leans on far more than "send/note". Output + send + event-bus + RPC + live GMCP are built; vars / `db` / `info` are pending (below).
+- ✅ **TriggerEngine** — `substring`/`beginsWith`/`exact`/`wildcard`/`regex` via cached `NSRegularExpression`, numbered + named captures, sequence priority, per-trigger + group enable, one-shot, gag, and an explicit `continueEvaluation` (improving on MUSHclient's loop-aborting default). Pure value type, matched on the plain-text projection; fully tested.
+- ✅ **AliasEngine** — input-line expansion with `%`-substitution; `world`/`execute`/`script`/`output` send-to targets (`execute` re-expansion depth-guarded at 20, MUSHclient's value); `keepEvaluating` defaults false (typed input → one intent). Pure value type.
+- ✅ **TimerEngine** — `after` (one-shot) / `every` (recurring, optional first-fire offset) / `atTimeOfDay` schedules; wall-clock with anti-drift coalescing of missed ticks; groups + one-shot; driven by a `SessionController` loop (D-20).
+- ✅ **Live `proteles.gmcp` table + `gmcp.*` event bus** (D-21) — see the API subsection.
+- ✅ **Persistence** — `ScriptStore` (per-world JSON, mirrors `ProfileStore`) for triggers/aliases/timers; Codable models; transient/script-created automations (one-shot triggers, temporary timers) are not persisted (D-22).
+- ✅ **App wiring** — the app instantiates one `ScriptEngine`, hands it to the `SessionController`, and loads each world's scripts at connect; scripting now runs live end-to-end (previously the engine was never instantiated by the app).
+- ✅ **SwiftUI editors** — a tabbed "Scripts" window (⌘⇧T) with list+detail editors for triggers, aliases, and timers; edits persist *and* sync into the running session immediately (D-22).
+- ↪️ **MacroEngine** — keyboard chord → command/script. **Rolled forward to Phase 7** (the macro editor lands with the rest of the Preferences/editor polish); not required to call the scripting *foundation* done.
+- ↪️ **Wider `proteles.*` surface** — scoped `getVar`/`setVar`, the `proteles.db` SQLite/lsqlite3 binding, `proteles.info(id)`, `echoAard`/`hyperlink`. Designed (D-19); **built with the Phase-6 shim** that actually exercises them.
+- ↪️ **Profile-scoped vs global** scoping — scripts are per-world today; a shared/global tier is a later follow-up.
+- 🐞 **Known issues (deferred):** Scripts-editor UX is cumbersome and aliases need multiline command+actions editing (#4); a trigger can fire/echo multiple times for one matched line (#5). Both filed for later.
 
 #### `proteles.*` API surface (D-19)
 
@@ -725,7 +772,15 @@ off (live GMCP table, an event bus) rather than cloning MUSHclient's
   circle/noexp glyphs), validating D-19. S&D miniwindow code:
   `search-and-destroy/Search_and_Destroy.xml` ~5482–6450.
 
-**Deliverable:** A user can sit down and write triggers/aliases/macros that feel familiar to a MUSHclient/Mudlet user.
+**Phase 5 status — COMPLETE (2026-05-22), shipped as `v0.0.5`.** The
+trigger/alias/timer automation triad, the Lua runtime + sandbox + event bus
++ RPC, the live GMCP projection, per-world persistence, the running-app
+wiring, and the Scripts editor are all done and live. ~441 tests; all four
+gates green. The `MacroEngine` (→ Phase 7) and the wider `proteles.*` surface
+(vars / `db` / `info` → Phase 6) were intentionally rolled forward; the UX
+rework (#4) and trigger multi-fire bug (#5) are deferred follow-ups.
+
+**Deliverable:** A user can sit down and write triggers/aliases/timers that feel familiar to a MUSHclient/Mudlet user. ✅
 
 ### 8.7 Phase 6 — Plugin Migration (~3 weeks)
 
@@ -744,6 +799,7 @@ off (live GMCP table, an event bus) rather than cloning MUSHclient's
 **Goal:** Feature-complete preferences, mapping, theming, notifications.
 
 - Full Preferences UI: appearance, fonts, palettes, notifications, logging, network, scripting.
+- **MacroEngine + MacroEditor** (rolled forward from Phase 5): keyboard chord → command/script, edited alongside the trigger/alias/timer editors. Includes the Phase-5 Scripts-editor UX rework (issue #4 — clearer layouts, multiline alias command+actions).
 - **Map view:** native SwiftUI map driven by Aardwolf MapHack GMCP. Click-to-walk where appropriate.
 - **Themes:** named palette + window-theme bundles.
 - **Notifications:** macOS user notifications on tells, channel mentions, named events.
@@ -1040,6 +1096,15 @@ A non-exhaustive map of where to look in the submodules during each phase. Treat
 - `sources/iTermTextDrawingHelper.m` — drawing. If we go custom Core Text, this is your reference.
 - `sources/VT100Terminal.m` — ANSI/VT parsing. Vastly more capable than we need, but the parsing patterns are clean.
 
+### 14.5 In `search-and-destroy/` and `dinv/` (Phases 5, 6)
+
+The two large real-world plugins vendored as the compat-shim corpus. Treat
+as the stress test for the `proteles.*` surface and the Phase-6 shim.
+
+- `search-and-destroy/Search_and_Destroy.xml` — multi-file Lua, a clickable miniwindow (≈5482–6450, validated as natively reproducible per D-19), `lsqlite3`, an async/coroutine helper, and `CallPlugin(mapperID, …)` — the case that makes the native **mapper** a v1.0 dependency.
+- `dinv/` — 22 Lua files (~26k LOC); heavy `dofile`/`require` of its own modules and a per-character `lsqlite3` DB. The motivating case for the controlled per-plugin module loader and `proteles.db`.
+- Helper libs both lean on (must ship): `serialize`, `json`, `async`, `wait`, `check`, `tprint`, `gmcphelper` (and `movewindow`, which drops out once panels are native).
+
 ---
 
 ## 15. Decision Log
@@ -1067,6 +1132,9 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-17 | 2026-05-21 | `SessionController` recreates a one-shot `NetworkConnection` per connect and owns a durable state stream; autoreconnect (exponential backoff) lives in the controller and is off by default | `NetworkConnection`'s `bytes` AsyncStream is finished permanently on disconnect, so reusing one connection across reconnects silently dropped the second session's bytes ("connected but nothing shows") and remote closes weren't reacted to. Making the connection genuinely one-shot — and giving the controller a durable `connectionStates` it re-publishes onto — fixes both and matches the type's documented contract. Autoreconnect belongs in the controller (it knows the endpoint/credentials and the user-vs-remote disconnect distinction); default-off keeps tests and library use predictable, the app opts in with `.standard` | adopted |
 | D-18 | 2026-05-21 | Command input is `NSTextField`-backed (not SwiftUI `TextField`) with a pure `CommandHistory` model; autocompletion sources from history and excludes communication commands | SwiftUI's `TextField` swallows the Up/Down/Tab keys needed for history recall and completion, so the input is an `NSViewRepresentable` over `NSTextField` using the field-editor `doCommandBySelector` hook (Mudlet `TCommandLine` is the model). The history/completion logic is a value type in MudCore so it's unit-tested without the UI. Completion matches whole lines from history (you're "repeating a command"), and the first-word communication/chat exclusion list — seeded from `aard_channels_fiendish.xml` — keeps half-typed `tell`/`reply` private messages from ever being re-offered | adopted |
 | D-19 | 2026-05-22 | `proteles.*` API designed as a rich *primitive* layer (output+colour, send/execute, scoped vars, SQLite `db`, triggers/aliases/timers, live `gmcp` table, event bus + `call`/`broadcast` RPC, per-plugin module loader); **native panels instead of a generic miniwindow drawing API** | Measured usage across `aardwolfclientpackage` (43 plugins), `search-and-destroy`, and `dinv` shows the load-bearing surface is coloured output, per-plugin variables, `GetInfo`, `CallPlugin`/`BroadcastPlugin`, triggers, and — for serious plugins — `dofile`/`require` of own modules and `lsqlite3`. The native API must be primitive-complete enough to build the Phase-6 `mush.lua` shim on top of. Live `gmcp` + an event bus are deliberately *better* than MUSHclient's poll/callback model. MUSHclient's 47-call immediate-mode `Window*` API is a poor fit for SwiftUI, and the few plugins that use it (health bars, group/stat monitors, mapper, S&D's results list) are exactly the ones we're already rebuilding natively — so we offer a declarative `proteles.ui.*` + native ports rather than a generic drawing surface | adopted |
+| D-20 | 2026-05-22 | `TimerEngine` uses wall-clock `Date` with an anti-drift rebase (an overdue recurring timer fires once, then rebases to `now + interval`); kill/enable by id only; a single `action` payload enum; the host (`SessionController`) drives a loop that sleeps to the next deadline | Mirrors MUSHclient's coalesce-and-rebase (so machine sleep / clock jumps don't replay every missed tick) **without** its snapshot-and-relookup re-entrancy hacks — the value-type engine + actor host make that free. Avoids Mudlet's ambiguous id-vs-name enable/disable overload, and its lack of any missed-tick policy. Wall-clock (not `ContinuousClock`) makes `atTimeOfDay` natural and lets one rule cover both sleep and clock changes | adopted |
+| D-21 | 2026-05-22 | Expose GMCP to Lua as a live nested `proteles.gmcp` table **plus per-level `gmcp.*` events** (Mudlet model); the typed `GMCPStateStore` stays the source of truth and Lua is a projected read-only view; the leaf is replaced wholesale | Mudlet's auto-populated `gmcp` table + per-path-level events (`gmcp.char`, then `gmcp.char.vitals`) is the convention the Lua-MUD ecosystem and the Aardwolf corpus expect; far better than MUSHclient's poll/callback model. Values keep native Lua types on our own namespace. The Aardwolf-compat *stringified* `gmcp("dotted.path")` accessor and Mudlet's configurable merge-keys are deferred to the Phase-6 shim that needs them | adopted |
+| D-22 | 2026-05-22 | Persist user triggers/aliases/timers **per-world** as JSON (`ScriptStore`, mirroring `ProfileStore`); never persist transient/script-created automations (one-shot triggers, temporary timers); editor edits **apply immediately** — written to the store *and* synced into the running engine | Keeps the persisted set human-inspectable and decoupled from the live engine; a per-world file matches how triggers differ between worlds. Immediate-apply (vs apply-on-reconnect) is the expected UX. Loading a world installs the whole set via `SessionController.loadScripts`; subsequent edits apply incrementally (remove-then-add, since the pure engines have no in-place update) | adopted |
 
 Append new decisions as the project evolves. Never edit history; supersede instead.
 
