@@ -34,6 +34,10 @@ public extension SessionController {
                 ))
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
+            case .echoAard(let coded):
+                await scrollbackStore.append(AardwolfColor.styledLine(from: coded))
+            case .echoAnsi(let ansi):
+                await scrollbackStore.append(Self.ansiLine(ansi))
             }
         }
     }
@@ -174,6 +178,27 @@ public extension SessionController {
     internal func applyDueTimers(at now: Date = Date()) async {
         guard let scriptEngine else { return }
         await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+    }
+
+    /// Render an ANSI-SGR string into a single ``Line`` with styled runs, by
+    /// running it through the ``ANSIParser`` (used by the shim's `AnsiNote`,
+    /// e.g. `AnsiNote(ColoursToANSI(text))`).
+    static func ansiLine(_ ansi: String) -> Line {
+        var parser = ANSIParser()
+        var text = ""
+        var runs: [StyledRun] = []
+        let collect: (ANSIEvent) -> Void = { event in
+            guard case .text(let segment, let style) = event else { return }
+            let start = (text as NSString).length
+            text += segment
+            let end = (text as NSString).length
+            if !style.isDefault, start < end {
+                runs.append(StyledRun(utf16Range: start..<end, style: style))
+            }
+        }
+        parser.process(Array(ansi.utf8), emit: collect)
+        parser.flush(collect)
+        return Line(id: LineID(0), text: text, runs: runs)
     }
 
     internal static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {

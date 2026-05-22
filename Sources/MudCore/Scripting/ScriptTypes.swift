@@ -47,4 +47,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Send a GMCP packet to the server (the payload is framed as
     /// `IAC SB 201 <payload> IAC SE`). Backs `Send_GMCP_Packet`.
     case sendGMCP(String)
+    /// Print Aardwolf `@`-coded text to the scrollback, rendered as styled
+    /// runs (`proteles.echoAard`).
+    case echoAard(String)
+    /// Print ANSI-SGR-coded text to the scrollback, rendered as styled runs
+    /// (the shim's `AnsiNote`).
+    case echoAnsi(String)
 }

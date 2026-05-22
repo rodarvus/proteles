@@ -77,6 +77,12 @@ extension LuaRuntime {
         for candidate in [name] + moduleSearchPaths.map({ $0 + "/" + name }) {
             if isAllowed(candidate), let source = readLua(candidate) { return source }
         }
+        // Fall back to a bundled module matching the file's basename, so a
+        // plugin's `dofile("…/aardwolf_colors.lua")` resolves to our built-in.
+        let base = (name as NSString).lastPathComponent
+        if base.hasSuffix(".lua") {
+            return bundledModules[String(base.dropLast(4))]
+        }
         return nil
     }
 

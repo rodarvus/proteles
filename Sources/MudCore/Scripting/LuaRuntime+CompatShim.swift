@@ -92,6 +92,8 @@ public extension LuaRuntime {
     function Tell(text)
       proteles.echo(text == nil and "" or tostring(text))
     end
+    -- Render ANSI-SGR text in colour (often `AnsiNote(ColoursToANSI(text))`).
+    function AnsiNote(text) proteles.echoAnsi(text == nil and "" or tostring(text)) end
 
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end

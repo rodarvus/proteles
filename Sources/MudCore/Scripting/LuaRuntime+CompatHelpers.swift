@@ -18,8 +18,109 @@ extension LuaRuntime {
         "commas": commasSource,
         "pairsbykeys": pairsByKeysSource,
         "serialize": serializeSource,
-        "json": jsonSource
+        "json": jsonSource,
+        "aardwolf_colors": aardwolfColorsSource
     ]
+
+    /// The load-bearing `aardwolf_colors` functions (clean-room): the 4 the
+    /// corpus uses on Aardwolf `@`-colour codes — `strip_colours`,
+    /// `ColoursToANSI`, `ColoursToStyles`, `StylesToColours`. Defined as
+    /// globals (like MUSHclient's). The miniwindow-drawing functions
+    /// (`TruncateStyles`/`StylesWidth`/…) are intentionally omitted.
+    private static let aardwolfColorsSource = """
+    local ANSI = {
+      k="0;30", r="0;31", g="0;32", y="0;33", b="0;34", m="0;35", c="0;36", w="0;37",
+      D="1;30", R="1;31", G="1;32", Y="1;33", B="1;34", M="1;35", C="1;36", W="1;37",
+    }
+    local RGB = {
+      k=0x000000, r=0xAA0000, g=0x00AA00, y=0xAAAA00, b=0x0000AA, m=0xAA00AA, c=0x00AAAA, w=0xAAAAAA,
+      D=0x555555, R=0xFF5555, G=0x55FF55, Y=0xFFFF55, B=0x5555FF, M=0xFF55FF, C=0x55FFFF, W=0xFFFFFF,
+    }
+    local BOLD = { D=true, R=true, G=true, Y=true, B=true, M=true, C=true, W=true }
+    local RGB_TO_CODE = {}
+    for code, value in pairs(RGB) do RGB_TO_CODE[value] = code end
+    local ESC = string.char(27)
+
+    local function xtermRGB(n)
+      if n < 8 then return RGB[("krgybmcw"):sub(n + 1, n + 1)]
+      elseif n < 16 then return RGB[("DRGYBMCW"):sub(n - 7, n - 7)]
+      elseif n < 232 then
+        local c = n - 16
+        local function v(x) return x == 0 and 0 or (x * 40 + 55) end
+        return v(math.floor(c / 36) % 6) * 65536 + v(math.floor(c / 6) % 6) * 256 + v(c % 6)
+      else
+        local gray = (n - 232) * 10 + 8
+        return gray * 65536 + gray * 256 + gray
+      end
+    end
+
+    -- Walk @-coded text: onText(segment) for visible text, onColour(rgb, bold,
+    -- ansi) at each colour code. @@ → @, @- → ~, @x### → xterm, @<c> → colour.
+    local function walk(input, onText, onColour)
+      local i, n = 1, #input
+      local buffer = {}
+      local function flush() if #buffer > 0 then onText(table.concat(buffer)); buffer = {} end end
+      while i <= n do
+        local ch = input:sub(i, i)
+        if ch ~= "@" then
+          buffer[#buffer + 1] = ch; i = i + 1
+        else
+          local nxt = input:sub(i + 1, i + 1)
+          if nxt == "@" then buffer[#buffer + 1] = "@"; i = i + 2
+          elseif nxt == "-" then buffer[#buffer + 1] = "~"; i = i + 2
+          elseif nxt == "x" then
+            local digits = input:match("^%d%d?%d?", i + 2)
+            if digits then
+              flush(); onColour(xtermRGB(tonumber(digits)), false, "38;5;" .. digits)
+              i = i + 2 + #digits
+            else buffer[#buffer + 1] = "@x"; i = i + 2 end
+          elseif nxt == "" then i = i + 1
+          elseif RGB[nxt] then
+            flush(); onColour(RGB[nxt], BOLD[nxt] or false, ANSI[nxt]); i = i + 2
+          else i = i + 2 end
+        end
+      end
+      flush()
+    end
+
+    function strip_colours(s)
+      local out = {}
+      walk(s or "", function(t) out[#out + 1] = t end, function() end)
+      return table.concat(out)
+    end
+
+    function ColoursToANSI(text)
+      local out = {}
+      walk(text or "",
+        function(t) out[#out + 1] = t end,
+        function(_, _, ansi) out[#out + 1] = ESC .. "[" .. ansi .. "m" end)
+      return table.concat(out) .. ESC .. "[0m"
+    end
+
+    function ColoursToStyles(input)
+      local styles, rgb, bold = {}, nil, false
+      walk(input or "",
+        function(t)
+          styles[#styles + 1] = {
+            text = t, length = #t, textcolour = rgb or 0xAAAAAA, backcolour = 0, bold = bold,
+          }
+        end,
+        function(colour, isBold) rgb = colour; bold = isBold end)
+      return styles
+    end
+
+    function StylesToColours(styles)
+      local out = {}
+      for _, style in ipairs(styles or {}) do
+        local code = RGB_TO_CODE[style.textcolour]
+        if code then out[#out + 1] = "@" .. code end
+        out[#out + 1] = (style.text or ""):gsub("@", "@@")
+      end
+      return table.concat(out)
+    end
+
+    return true
+    """
 
     /// `serialize.save_simple(value)` → a Lua-source table/value literal;
     /// `serialize.save(name [, value])` → a `name = <literal>` assignment
