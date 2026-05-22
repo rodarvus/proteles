@@ -195,6 +195,12 @@ public actor ScriptEngine {
         return disposition
     }
 
+    /// Project a GMCP message into the live `proteles.gmcp` table and fire
+    /// its `gmcp.*` events, returning any effects the handlers recorded.
+    public func applyGMCP(package: String, json: String) async -> [ScriptEffect] {
+        await runtime.applyGMCP(package: package, json: json)
+    }
+
     /// Run an arbitrary script (e.g. from an alias or a command), returning
     /// its effects. Errors surface as a red note.
     @discardableResult

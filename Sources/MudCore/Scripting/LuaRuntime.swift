@@ -101,14 +101,16 @@ public actor LuaRuntime {
     private static let hookInstructionInterval: Int32 = 1000
 
     /// Accessed only on the actor, except in `deinit` (which runs when no
-    /// other reference survives) — hence `nonisolated(unsafe)`.
-    private nonisolated(unsafe) let state: OpaquePointer
+    /// other reference survives) — hence `nonisolated(unsafe)`. Module-internal
+    /// (not `private`) so the GMCP projection extension can reach it.
+    nonisolated(unsafe) let state: OpaquePointer
 
     /// Side effects recorded by `proteles.*` calls during the current run.
     /// `nonisolated(unsafe)` because the C host-function dispatch appends to
     /// it synchronously inside `lua_pcall` (same actor executor), and `run`
-    /// reads/clears it around that call.
-    private nonisolated(unsafe) var effects: [ScriptEffect] = []
+    /// reads/clears it around that call. Module-internal for the GMCP
+    /// projection extension.
+    nonisolated(unsafe) var effects: [ScriptEffect] = []
 
     /// The `proteles.*` functions exposed to scripts; the rawValue is the
     /// closure upvalue the C dispatcher routes on.
@@ -127,7 +129,8 @@ public actor LuaRuntime {
     }
 
     /// Event name → registry refs of registered handler functions.
-    private nonisolated(unsafe) var eventHandlers: [String: [Int32]] = [:]
+    /// Module-internal for the GMCP projection extension.
+    nonisolated(unsafe) var eventHandlers: [String: [Int32]] = [:]
     /// Registry refs of `onBroadcast` handler functions.
     private nonisolated(unsafe) var broadcastHandlers: [Int32] = []
     /// Exported callable name → registry ref (for `call`).
@@ -280,7 +283,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 11)
+        lua_createtable(state, 0, 12)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -292,6 +295,11 @@ public actor LuaRuntime {
         setHostFunction("broadcast", .broadcast)
         setHostFunction("export", .export)
         setHostFunction("call", .call)
+        // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
+        // state, populated by ``applyGMCP`` as messages arrive — e.g.
+        // `proteles.gmcp.char.vitals.hp`. Starts empty.
+        lua_createtable(state, 0, 0)
+        lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
     }
 
@@ -415,7 +423,7 @@ public actor LuaRuntime {
     }
 
     /// Free every still-unclaimed function ref created during this run.
-    private nonisolated func releaseTransientRefs() {
+    nonisolated func releaseTransientRefs() {
         for ref in transientRefs {
             luaL_unref(state, LUA_REGISTRYINDEX, ref)
         }
@@ -424,7 +432,7 @@ public actor LuaRuntime {
 
     /// Call each handler ref with `payload`, discarding results. Handler
     /// errors are surfaced as a red note rather than aborting the caller.
-    private nonisolated func invokeHandlers(_ refs: [Int32], payload: [LuaValue]) {
+    nonisolated func invokeHandlers(_ refs: [Int32], payload: [LuaValue]) {
         for ref in refs {
             lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
             for value in payload {

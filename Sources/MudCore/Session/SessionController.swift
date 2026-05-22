@@ -496,6 +496,11 @@ public actor SessionController {
         for message in output.gmcp {
             await gmcpState.apply(message)
             await chatStore.ingest(message)
+            if let scriptEngine {
+                await applyScriptEffects(
+                    scriptEngine.applyGMCP(package: message.package, json: message.json)
+                )
+            }
         }
 
         await advanceAutologin(newLines: output.lines)

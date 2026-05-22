@@ -71,4 +71,16 @@ struct ScriptEngineTests {
         let effects = await engine.run("proteles.echo('hi'); proteles.send('look')")
         #expect(effects == [.echo("hi"), .send("look")])
     }
+
+    @Test("applyGMCP updates the live table and fires gmcp events")
+    func applyGMCPRoutesThrough() async throws {
+        let engine = try ScriptEngine()
+        await engine.run("""
+        proteles.onEvent('gmcp.char.vitals', function()
+            proteles.send('hp:' .. proteles.gmcp.char.vitals.hp)
+        end)
+        """)
+        let effects = await engine.applyGMCP(package: "char.vitals", json: #"{"hp":42}"#)
+        #expect(effects == [.send("hp:42")])
+    }
 }

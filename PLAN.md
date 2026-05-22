@@ -668,7 +668,13 @@ off (live GMCP table, an event bus) rather than cloning MUSHclient's
 - **Sending:** `proteles.send(cmd)` (raw to MUD), `proteles.sendNoEcho(cmd)`
   (passwords), `proteles.execute(cmd)` (as if typed — runs through aliases).
 - **GMCP (better than the references):** a live `proteles.gmcp` table mirror
-  of `GMCPStateStore`, plus `proteles.gmcp("Char.Vitals")` accessor.
+  of `GMCPStateStore` — **implemented**. Each message walks the dotted package
+  into nested tables (`proteles.gmcp.char.vitals.hp`, native Lua types) and
+  raises one event per path level (`gmcp.char`, then `gmcp.char.vitals`),
+  Mudlet-style, each carrying the full dotted package name. Leaf is replaced
+  wholesale (typed store stays source of truth). The Aardwolf-compat
+  `gmcp("char.vitals.hp")` dotted-path accessor (stringified values, per
+  `gmcphelper.lua`) lands with the Phase-6 shim.
 - **State / introspection:** typed `proteles.state` (session/world/char) and
   a `proteles.info(id)` compat path for the `mush.lua` `GetInfo` shim.
 - **Variables:** `proteles.getVar(name)` / `setVar(name, value)`, **scoped
