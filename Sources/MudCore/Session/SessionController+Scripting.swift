@@ -36,6 +36,65 @@ extension SessionController {
         }
     }
 
+    // MARK: - Timers
+
+    /// Add a timer to the script engine and (re)start the driving loop so the
+    /// new deadline is picked up. No-op without a script engine.
+    @discardableResult
+    public func addTimer(_ timer: MudTimer) async throws -> UUID? {
+        guard let scriptEngine else { return nil }
+        let id = try await scriptEngine.addTimer(timer)
+        restartTimerLoop()
+        return id
+    }
+
+    public func removeTimer(id: UUID) async {
+        guard let scriptEngine else { return }
+        await scriptEngine.removeTimer(id: id)
+        restartTimerLoop()
+    }
+
+    public func setTimerEnabled(_ enabled: Bool, id: UUID) async {
+        guard let scriptEngine else { return }
+        await scriptEngine.setTimerEnabled(enabled, id: id)
+        restartTimerLoop()
+    }
+
+    public func setTimerGroupEnabled(_ enabled: Bool, group: String) async {
+        guard let scriptEngine else { return }
+        await scriptEngine.setTimerGroupEnabled(enabled, group: group)
+        restartTimerLoop()
+    }
+
+    /// Cancel any running timer loop and start a fresh one. Called whenever
+    /// the timer set changes so a newly-added earlier deadline interrupts an
+    /// in-flight sleep. The loop exits on its own when no timers remain.
+    func restartTimerLoop() {
+        timerTask?.cancel()
+        guard let scriptEngine else {
+            timerTask = nil
+            return
+        }
+        timerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let deadline = await scriptEngine.nextTimerDeadline() else { return }
+                let delay = deadline.timeIntervalSinceNow
+                if delay > 0 {
+                    try? await Task.sleep(for: .seconds(delay))
+                }
+                if Task.isCancelled { return }
+                await self?.applyDueTimers()
+            }
+        }
+    }
+
+    /// Fire the timers due at `now` and apply their effects. Factored out so
+    /// tests can drive timer firing deterministically without real sleeping.
+    func applyDueTimers(at now: Date = Date()) async {
+        guard let scriptEngine else { return }
+        await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+    }
+
     static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {
         var style = StyleAttributes.default
         if let foreground, let color = namedColor(foreground) { style.foreground = color }

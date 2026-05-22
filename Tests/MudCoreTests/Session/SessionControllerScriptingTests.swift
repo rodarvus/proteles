@@ -83,6 +83,28 @@ struct SessionControllerScriptingTests {
         drainTask.cancel()
     }
 
+    @Test("A timer fires on its schedule and sends to the MUD")
+    func timerSendsCommand() async throws {
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+        let sink = ByteSink()
+        let drainTask = Task { for await chunk in listener.received {
+            await sink.append(chunk)
+        } }
+
+        let engine = try ScriptEngine()
+        let controller = SessionController(scriptEngine: engine)
+        try await controller.connect(to: .init(host: "127.0.0.1", port: port))
+        await listener.waitForConnection()
+
+        try await controller.addTimer(MudTimer(schedule: .after(0.05), action: .send("save")))
+        #expect(await waitFor(Array("save\r\n".utf8), in: sink))
+
+        await controller.disconnect()
+        await listener.stop()
+        drainTask.cancel()
+    }
+
     @Test("A gag trigger keeps the matched line out of the scrollback")
     func gagTriggerDropsLine() async throws {
         let listener = LoopbackListener()

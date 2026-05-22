@@ -26,6 +26,7 @@ public actor ScriptEngine {
     private let runtime: LuaRuntime
     private var triggers = TriggerEngine()
     private var aliases = AliasEngine()
+    private var timers = TimerEngine()
 
     /// Max `.execute` re-expansions before bailing (MUSHclient's value).
     private static let maxExecuteDepth = 20
@@ -81,6 +82,51 @@ public actor ScriptEngine {
 
     public var aliasList: [Alias] {
         aliases.allAliases
+    }
+
+    // MARK: - Timers
+
+    @discardableResult
+    public func addTimer(_ timer: MudTimer, now: Date = Date()) throws -> UUID {
+        try timers.add(timer, now: now)
+    }
+
+    public func removeTimer(id: UUID) {
+        timers.remove(id: id)
+    }
+
+    public func setTimerEnabled(_ enabled: Bool, id: UUID) {
+        timers.setEnabled(enabled, id: id)
+    }
+
+    public func setTimerGroupEnabled(_ enabled: Bool, group: String) {
+        timers.setGroupEnabled(enabled, group: group)
+    }
+
+    public var timerList: [MudTimer] {
+        timers.allTimers
+    }
+
+    /// The earliest instant a timer is due, or `nil` when none are
+    /// scheduled. The host sleeps until this, then calls ``fireDueTimers``.
+    public func nextTimerDeadline() -> Date? {
+        timers.nextDeadline()
+    }
+
+    /// Fire every timer due at `now`, returning the effects in order
+    /// (sends + script effects). Recurring timers reschedule; one-shots are
+    /// removed. Script errors surface as red notes.
+    public func fireDueTimers(at now: Date = Date()) async -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for firing in timers.due(at: now) {
+            if let send = firing.send, !send.isEmpty {
+                effects.append(.send(send))
+            }
+            if let script = firing.script {
+                await effects.append(contentsOf: runScript(script, matches: [], named: [:]))
+            }
+        }
+        return effects
     }
 
     // MARK: - Input expansion

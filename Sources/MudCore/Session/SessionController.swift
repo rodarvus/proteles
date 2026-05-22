@@ -79,6 +79,9 @@ public actor SessionController {
     private var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
     private var stateForwardTask: Task<Void, Never>?
+    /// Drives the script engine's timers: sleeps until the next deadline,
+    /// fires the due timers, then loops. Restarted whenever timers change.
+    var timerTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
 
     /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
@@ -274,6 +277,7 @@ public actor SessionController {
         }
 
         startProcessingLoop(on: conn)
+        restartTimerLoop()
     }
 
     /// Close the connection. Idempotent. A user-initiated disconnect — it
@@ -283,6 +287,8 @@ public actor SessionController {
         isReconnecting = false
         reconnectTask?.cancel()
         reconnectTask = nil
+        timerTask?.cancel()
+        timerTask = nil
 
         if let conn = connection {
             teardownSession()
