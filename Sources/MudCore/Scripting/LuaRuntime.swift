@@ -133,7 +133,14 @@ public actor LuaRuntime {
         case info
         case pluginID
         case getPluginVar
+        case compileChunk
+        case moduleSource
     }
+
+    /// Module-loader state (see `LuaRuntime+Modules`): `require` libraries
+    /// (name → source) and the dirs `require`/`dofile` may read.
+    nonisolated(unsafe) var bundledModules: [String: String] = [:]
+    nonisolated(unsafe) var moduleSearchPaths: [String] = []
 
     /// Ambient environment for `proteles.info`/`proteles.pluginID`
     /// (≈ MUSHclient `GetInfo`/`GetPluginID`). The loader sets this per
@@ -180,6 +187,7 @@ public actor LuaRuntime {
             try Self.applySandbox(to: state)
         }
         installProtelesAPI()
+        installModuleLoader()
     }
 
     deinit {
@@ -310,7 +318,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 18)
+        lua_createtable(state, 0, 20)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -328,6 +336,8 @@ public actor LuaRuntime {
         setHostFunction("info", .info)
         setHostFunction("pluginID", .pluginID)
         setHostFunction("getPluginVar", .getPluginVar)
+        setHostFunction("__compile", .compileChunk)
+        setHostFunction("__moduleSource", .moduleSource)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -360,6 +370,10 @@ public actor LuaRuntime {
             return invokeFunction(ref, payload: Array(arguments.dropFirst()))
         case .getVar, .setVar, .deleteVar, .getPluginVar:
             return accessVariable(function, arguments)
+        case .compileChunk:
+            return compileChunk(arguments)
+        case .moduleSource:
+            return moduleSourceValue(arguments)
         case .info:
             return [infoValue(arguments)]
         case .pluginID:

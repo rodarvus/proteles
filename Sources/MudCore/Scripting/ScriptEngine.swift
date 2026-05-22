@@ -221,6 +221,21 @@ public actor ScriptEngine {
         await runtime.callGlobal(name, arguments)
     }
 
+    /// Register a helper library available to `require name`.
+    public func registerModule(_ name: String, source: String) async {
+        await runtime.registerModule(name, source: source)
+    }
+
+    /// Register several helper libraries at once.
+    public func registerModules(_ modules: [String: String]) async {
+        await runtime.registerModules(modules)
+    }
+
+    /// Set the directories `require`/`dofile` may read `.lua` files from.
+    public func setModuleSearchPaths(_ paths: [String]) async {
+        await runtime.setModuleSearchPaths(paths)
+    }
+
     // MARK: - Input expansion
 
     /// Expand a typed line through the aliases, returning the effects to

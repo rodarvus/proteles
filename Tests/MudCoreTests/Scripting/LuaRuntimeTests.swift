@@ -38,13 +38,29 @@ struct LuaRuntimeSandboxTests {
     @Test("Dangerous globals are removed by default")
     func dangerousGlobalsRemoved() async throws {
         let lua = try LuaRuntime()
-        for global in ["io", "package", "require", "module", "dofile", "loadfile", "loadstring", "load"] {
+        for global in ["io", "package", "module", "loadfile", "loadstring", "load"] {
             #expect(try await lua.boolean("\(global) == nil"), "\(global) should be nil")
         }
         #expect(try await lua.boolean("os.execute == nil"))
         #expect(try await lua.boolean("os.remove == nil"))
         #expect(try await lua.boolean("os.getenv == nil"))
         #expect(try await lua.boolean("debug.getregistry == nil"))
+    }
+
+    @Test("require / dofile are present but controlled (gated to allowed sources)")
+    func requireDofileAreControlled() async throws {
+        let lua = try LuaRuntime()
+        // Reintroduced as controlled functions, not the stdlib originals.
+        #expect(try await lua.boolean("type(require) == 'function'"))
+        #expect(try await lua.boolean("type(dofile) == 'function'"))
+        // With nothing registered and no search paths, they can't reach the
+        // filesystem: an unknown module / disallowed path fails.
+        await #expect(throws: (any Error).self) {
+            try await lua.run("require('arbitrary')")
+        }
+        await #expect(throws: (any Error).self) {
+            try await lua.run("dofile('/etc/hosts')")
+        }
     }
 
     @Test("Safe stdlib survives the sandbox")
