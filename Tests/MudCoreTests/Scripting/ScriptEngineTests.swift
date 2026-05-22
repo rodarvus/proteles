@@ -72,6 +72,41 @@ struct ScriptEngineTests {
         #expect(effects == [.echo("hi"), .send("look")])
     }
 
+    @Test("updateTrigger replaces in place — no duplicate registration")
+    func updateTriggerReplaces() async throws {
+        let engine = try ScriptEngine()
+        let id = UUID()
+        try await engine.addTrigger(Trigger(id: id, pattern: .substring("a"), sendText: "one"))
+        await engine.updateTrigger(Trigger(id: id, pattern: .substring("a"), sendText: "two"))
+        let matching = await engine.triggerList.filter { $0.id == id }
+        #expect(matching.count == 1)
+        #expect(matching.first?.sendText == "two")
+    }
+
+    @Test("Concurrent updateTrigger calls never leave duplicates (the #5 multi-fire bug)")
+    func concurrentUpdatesStaySingle() async throws {
+        let engine = try ScriptEngine()
+        let id = UUID()
+        try await engine.addTrigger(Trigger(id: id, pattern: .substring("hit"), sendText: "v0"))
+
+        // Simulate the editor firing many live-apply updates as the user types.
+        // Atomic updateTrigger means any interleaving still ends with one copy.
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<50 {
+                group.addTask {
+                    await engine.updateTrigger(
+                        Trigger(id: id, pattern: .substring("hit"), sendText: "v\(index)")
+                    )
+                }
+            }
+        }
+        #expect(await engine.triggerList.count(where: { $0.id == id }) == 1)
+
+        // And the surviving single trigger fires exactly once per matched line.
+        let disposition = await engine.process(line: "you hit it")
+        #expect(disposition.effects.count(where: { if case .send = $0 { true } else { false } }) == 1)
+    }
+
     @Test("applyGMCP updates the live table and fires gmcp events")
     func applyGMCPRoutesThrough() async throws {
         let engine = try ScriptEngine()

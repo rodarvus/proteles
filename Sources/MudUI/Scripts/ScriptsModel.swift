@@ -77,8 +77,7 @@ public final class ScriptsModel {
                 }
                 Task {
                     try? await self.store?.updateTrigger(newValue)
-                    await self.session.scriptEngine?.removeTrigger(id: id)
-                    try? await self.session.scriptEngine?.addTrigger(newValue)
+                    await self.session.scriptEngine?.updateTrigger(newValue)
                 }
             }
         )
@@ -115,8 +114,7 @@ public final class ScriptsModel {
                 }
                 Task {
                     try? await self.store?.updateAlias(newValue)
-                    await self.session.scriptEngine?.removeAlias(id: id)
-                    try? await self.session.scriptEngine?.addAlias(newValue)
+                    await self.session.scriptEngine?.updateAlias(newValue)
                 }
             }
         )
@@ -154,8 +152,7 @@ public final class ScriptsModel {
                 }
                 Task {
                     try? await self.store?.updateTimer(newValue)
-                    await self.session.removeTimer(id: id)
-                    _ = try? await self.session.addTimer(newValue)
+                    await self.session.updateTimer(newValue)
                 }
             }
         )

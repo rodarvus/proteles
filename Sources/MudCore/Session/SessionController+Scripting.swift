@@ -71,6 +71,15 @@ extension SessionController {
         restartTimerLoop()
     }
 
+    /// Atomically replace a timer and restart the loop once. Used by the
+    /// editor's live-apply (avoids the remove-then-add reentrancy that can
+    /// duplicate registrations).
+    public func updateTimer(_ timer: MudTimer) async {
+        guard let scriptEngine else { return }
+        await scriptEngine.updateTimer(timer)
+        restartTimerLoop()
+    }
+
     public func setTimerGroupEnabled(_ enabled: Bool, group: String) async {
         guard let scriptEngine else { return }
         await scriptEngine.setTimerGroupEnabled(enabled, group: group)

@@ -50,6 +50,16 @@ public actor ScriptEngine {
         triggers.remove(id: id)
     }
 
+    /// Atomically replace a trigger (remove + re-add in a single actor call).
+    /// The editor's live-apply must use this rather than separate
+    /// `removeTrigger`/`addTrigger` calls: two `await`s can interleave with
+    /// other in-flight edit tasks (actor reentrancy) and leave duplicate
+    /// registrations with the same id — the cause of a trigger firing N×.
+    public func updateTrigger(_ trigger: Trigger) {
+        triggers.remove(id: trigger.id)
+        try? triggers.add(trigger)
+    }
+
     public func setTriggerEnabled(_ enabled: Bool, id: UUID) {
         triggers.setEnabled(enabled, id: id)
     }
@@ -70,6 +80,12 @@ public actor ScriptEngine {
 
     public func removeAlias(id: UUID) {
         aliases.remove(id: id)
+    }
+
+    /// Atomically replace an alias (see ``updateTrigger(_:)`` for why).
+    public func updateAlias(_ alias: Alias) {
+        aliases.remove(id: alias.id)
+        try? aliases.add(alias)
     }
 
     public func setAliasEnabled(_ enabled: Bool, id: UUID) {
@@ -93,6 +109,12 @@ public actor ScriptEngine {
 
     public func removeTimer(id: UUID) {
         timers.remove(id: id)
+    }
+
+    /// Atomically replace a timer (see ``updateTrigger(_:)`` for why).
+    public func updateTimer(_ timer: MudTimer, now: Date = Date()) {
+        timers.remove(id: timer.id)
+        try? timers.add(timer, now: now)
     }
 
     public func setTimerEnabled(_ enabled: Bool, id: UUID) {
