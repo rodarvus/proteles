@@ -274,6 +274,12 @@ public actor ScriptEngine {
         await runtime.setPluginContext(context)
     }
 
+    /// Install the MUSHclient compatibility globals (`Send`, `Note`,
+    /// `ColourNote`, `GetVariable`, `GetInfo`, …) on top of `proteles.*`.
+    public func loadCompatShim() async throws {
+        try await runtime.loadCompatShim()
+    }
+
     /// The scopes whose variables changed since the last call (clears the
     /// set), so the host persists only what changed.
     public func takeDirtyVariableScopes() async -> Set<String> {

@@ -131,6 +131,7 @@ public actor LuaRuntime {
         case deleteVar
         case info
         case pluginID
+        case getPluginVar
     }
 
     /// Ambient environment for `proteles.info`/`proteles.pluginID`
@@ -307,7 +308,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 17)
+        lua_createtable(state, 0, 18)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -324,6 +325,7 @@ public actor LuaRuntime {
         setHostFunction("deleteVar", .deleteVar)
         setHostFunction("info", .info)
         setHostFunction("pluginID", .pluginID)
+        setHostFunction("getPluginVar", .getPluginVar)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -354,7 +356,7 @@ public actor LuaRuntime {
         case .call:
             guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
             return invokeFunction(ref, payload: Array(arguments.dropFirst()))
-        case .getVar, .setVar, .deleteVar:
+        case .getVar, .setVar, .deleteVar, .getPluginVar:
             return accessVariable(function, arguments)
         case .info:
             return [infoValue(arguments)]
@@ -395,6 +397,9 @@ public actor LuaRuntime {
         case .deleteVar:
             variables[currentVariableScope]?[name] = nil
             dirtyVariableScopes.insert(currentVariableScope)
+        case .getPluginVar:
+            // arg0 is the target scope (plugin id), arg1 the variable name.
+            return [variables[name]?[Self.argString(arguments, 1)].map { LuaValue.string($0) } ?? .nil]
         default:
             break
         }
