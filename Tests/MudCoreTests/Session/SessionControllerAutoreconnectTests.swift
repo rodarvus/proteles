@@ -104,4 +104,31 @@ struct SessionControllerAutoreconnectTests {
 
         await listener.stop()
     }
+
+    @Test("A quit command makes the ensuing server close a clean logout (no reconnect)")
+    func quitSuppressesReconnect() async throws {
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+
+        let controller = SessionController(reconnectPolicy: fastPolicy(maxAttempts: 10))
+        let observer = observe(controller) { seen in
+            seen.contains(.connected) && seen.last == .disconnected
+        }
+
+        try await controller.connect(to: .init(host: "127.0.0.1", port: port))
+        await listener.waitForConnection()
+
+        // User logs out; the server then closes its side.
+        try await controller.send("quit")
+        await listener.stop()
+
+        let seen = await observer.value
+        #expect(seen.contains(.connected))
+        #expect(seen.last == .disconnected)
+
+        // No reconnect should have started.
+        try await Task.sleep(for: .milliseconds(200))
+        let finalState = await controller.state
+        #expect(finalState == .disconnected)
+    }
 }

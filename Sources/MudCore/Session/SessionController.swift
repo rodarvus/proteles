@@ -99,6 +99,17 @@ public actor SessionController {
     /// autoreconnect.
     private var userInitiatedDisconnect = false
 
+    /// Set when the user sends a quit command (see ``quitCommands``), so a
+    /// server-initiated close that follows is treated as a clean logout —
+    /// not an unexpected drop to autoreconnect from. Cleared by any other
+    /// command (e.g. if the quit needed confirming and the user kept
+    /// playing) and on each fresh connect.
+    private var expectsCleanClose = false
+
+    /// Commands that mean "log me out" — a server close right after one is
+    /// expected, not a dropped link. Aardwolf's is `quit`.
+    public static let quitCommands: Set<String> = ["quit"]
+
     /// Whether the GMCP handshake has been sent for the current
     /// connection (sent once, when the server enables GMCP).
     private var gmcpHandshakeSent = false
@@ -210,6 +221,7 @@ public actor SessionController {
         reconnectTask = nil
         isReconnecting = false
         userInitiatedDisconnect = false
+        expectsCleanClose = false
         lastEndpoint = endpoint
         lastAutologinPlan = plan
 
@@ -275,7 +287,14 @@ public actor SessionController {
 
     /// Send a user-typed command. Appends `\r\n` (the MUD line
     /// terminator). Throws if not connected.
+    ///
+    /// Tracks quit commands so the server-initiated close that follows a
+    /// `quit` is treated as a clean logout rather than a dropped link —
+    /// otherwise autoreconnect would immediately drag the user back in.
     public func send(_ command: String) async throws {
+        expectsCleanClose = Self.quitCommands.contains(
+            command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        )
         let payload = command + "\r\n"
         try await sendRaw(Array(payload.utf8))
     }
@@ -315,14 +334,18 @@ public actor SessionController {
     /// React to the inbound byte stream ending on its own — a
     /// remote-initiated close. Flushes any trailing line and tears the
     /// session down, then either begins autoreconnect (if the policy is
-    /// enabled and this wasn't a user disconnect) or surfaces
-    /// `.disconnected`.
+    /// enabled and this was neither a user disconnect nor a clean quit) or
+    /// surfaces `.disconnected`.
     private func handleByteStreamEnded() async {
         guard connection != nil else { return }
         await flushOnDisconnect()
         teardownSession()
 
-        if reconnectPolicy.isEnabled, !userInitiatedDisconnect, lastEndpoint != nil {
+        let shouldReconnect = reconnectPolicy.isEnabled
+            && !userInitiatedDisconnect
+            && !expectsCleanClose
+            && lastEndpoint != nil
+        if shouldReconnect {
             beginReconnect()
         } else {
             updateState(.disconnected)
