@@ -6,21 +6,31 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 
 ## Current status (2026-05-22)
 
-**Phases 0–5 complete and released.** Phase 5 (scripting foundation) shipped
-as `v0.0.5`: vendored Lua 5.1 (`CLua`) + sandbox + `proteles.*` host bridge
-(output/send/execute, event bus, `call`/`broadcast` RPC); pure value-type
-`TriggerEngine`/`AliasEngine`/`TimerEngine` in `Sources/MudCore/Scripting/`;
-a live `proteles.gmcp` table + per-level `gmcp.*` events; per-world JSON
-persistence (`ScriptStore`); the app instantiates a `ScriptEngine` and loads
-each world's scripts at connect; and a native Scripts editor window
-(`Sources/MudUI/Scripts/`, ⌘⇧T). Each phase = one patch release
-(Phase N → `v0.0.N`). **Next: Phase 6** — the MUSHclient `mush.lua` compat
-shim + XML plugin loader + first hand-ported plugins (see PLAN.md §8.7).
+**Phases 0–5 complete; Phase 6's core compatibility loop complete** —
+shipped as `v0.0.6`. Each phase ≈ one patch release (Phase N → `v0.0.N`).
 
-Rolled forward out of Phase 5: `MacroEngine` (→ Phase 7) and the wider
-`proteles.*` surface (scoped vars, `proteles.db` SQLite, `proteles.info`
-→ Phase 6). Deferred bugs/polish: Scripts-editor UX (#4), trigger multi-fire
-(#5). The pattern to keep: **pure, value-type engines in MudCore** (decide),
+Phase 5 (scripting foundation): vendored Lua 5.1 (`CLua`) + sandbox +
+`proteles.*`; pure value-type `TriggerEngine`/`AliasEngine`/`TimerEngine`;
+live `proteles.gmcp` + `gmcp.*` events; per-world `ScriptStore`; the Scripts
+editor window (`Sources/MudUI/Scripts/`, ⌘⇧T).
+
+Phase 6 (MUSHclient compatibility): the `mush.lua` Tier-1 world API on top
+of `proteles.*`; scoped per-plugin variables + `PluginContext`
+(`GetInfo`/`GetPluginID`); controlled `require`/`dofile` + bundled helper
+libs (`gmcphelper` re-pointed at native GMCP, plus pure helpers); the
+`MUSHclientPluginLoader` XML parser; the plugin host with lifecycle
+callbacks + the GMCP→`OnPluginBroadcast` bridge; and app-level loading
+(a world's `.xml` plugins under `…/plugins/<profileID>/` load on connect).
+All in `Sources/MudCore/Scripting/`, validated end-to-end. Also fixed the
+trigger multi-fire bug (#5).
+
+**Remaining Phase-6 breadth:** per-plugin Lua environments (`setfenv` —
+plugins currently share one global table), `json`/`serialize`/
+`aardwolf_colors`, the migration CLI, hand-ported core plugins. See
+`docs/PLUGIN_COMPATIBILITY.md`. Deferred: Scripts-editor UX rework (#4) and
+`MacroEngine` → Phase 7.
+
+The pattern to keep: **pure, value-type engines in MudCore** (decide),
 **`ScriptEngine` actor** (orchestrate Lua), **`SessionController`** (apply
 effects/sends) — so logic stays unit-testable without UI/network/Lua.
 

@@ -2,21 +2,27 @@
 
 > **Status:** Living planning document. Sections are stable in shape but expected to evolve. Decisions noted with **D-NN** are referenced from the [Decision Log](#15-decision-log) at the bottom of this file.
 
-> **Progress snapshot (2026-05-22).** Phases 0–5 are complete and shipped
-> (Phase 5 = `v0.0.5`). Phase 5 delivered the scripting foundation: the
-> vendored Lua 5.1 runtime + sandbox + `proteles.*` host bridge, the
-> `TriggerEngine`/`AliasEngine`/`TimerEngine` automation triad (pure
-> value types, fully tested), a live `proteles.gmcp` table + `gmcp.*`
-> event bus, per-world JSON persistence (`ScriptStore`), the running-app
-> wiring, and a native Scripts editor window. ~441 tests across the suite;
-> all four gates (`swift build`, `swift test`, `swiftformat --lint`,
-> `swiftlint --strict`) green. Two Phase-5 items were intentionally rolled
-> forward: the `MacroEngine` (keyboard chords → Phase 7) and the wider
-> `proteles.*` surface (scoped vars, `proteles.db` SQLite, `proteles.info`
-> → built with the Phase-6 shim that needs them). Known follow-ups from
-> testing: Scripts-editor UX rework (issue #4) and a trigger multi-fire
-> bug (issue #5), both deferred. **Next:** Phase 6 — the MUSHclient compat
-> shim + plugin migration.
+> **Progress snapshot (2026-05-22).** Phases 0–5 complete and shipped;
+> **Phase 6's core compatibility loop is complete** (`v0.0.6`). Phase 5
+> delivered the scripting foundation (Lua 5.1 runtime + sandbox +
+> `proteles.*`, the `TriggerEngine`/`AliasEngine`/`TimerEngine` triad, live
+> `proteles.gmcp` + events, per-world persistence, the Scripts editor).
+> **Phase 6** added the MUSHclient compatibility shim end-to-end: scoped
+> per-plugin variables, the `GetInfo`/`GetPluginID` surface, the Tier-1
+> `mush.lua` world API (`Send`/`Note`/`ColourNote`/`Get`-`SetVariable`/
+> `CallPlugin`/`BroadcastPlugin`/`Send_GMCP_Packet`/…), controlled
+> `require`/`dofile`, bundled helper libs (`gmcphelper` re-pointed at native
+> GMCP, plus pure helpers), the XML plugin parser, the plugin host with
+> lifecycle callbacks, the GMCP→`OnPluginBroadcast` bridge, and **app-level
+> loading** (drop a world's `.xml` plugins into
+> `…/plugins/<profileID>/` and they load on connect). Validated end-to-end
+> in tests. ~496 tests; all four gates green. Also fixed the trigger
+> multi-fire bug (#5). **Remaining Phase-6 breadth:** per-plugin Lua
+> environments (`setfenv` — today plugins share one global table), the
+> `json`/`serialize`/`aardwolf_colors` libs, the migration CLI, and
+> hand-ported core plugins — tracked in `docs/PLUGIN_COMPATIBILITY.md`. The
+> Scripts-editor UX rework (#4) stays deferred to Phase 7. **Next:** finish
+> Phase-6 breadth, then Phase 7 (polish, mapping, preferences, MacroEngine).
 
 ---
 
@@ -786,13 +792,21 @@ rework (#4) and trigger multi-fire bug (#5) are deferred follow-ups.
 
 **Goal:** MUSHclient compat shim + XML loader + first hand-ported plugins.
 
-- `mush.lua` compat shim, iteratively built against the actual Aardwolf plugin package as the test corpus.
-- `PluginLoader` for MUSHclient XML.
-- Migration CLI tool (`proteles-migrate`).
-- Hand-port 4 of the 14 priority plugins: chat capture, channel highlights, health bars, prompt fixer.
-- **Compatibility matrix doc:** for each plugin in `aardwolfclientpackage`, "works as-is / works with edits / not yet / not planned".
+- ✅ **`mush.lua` compat shim** — the Tier-1 world API (frequency-grounded against the corpus) on top of `proteles.*`: `Send`/`SendNoEcho`/`Execute`, `Note`/`ColourNote`/`Tell`, `Get`/`Set`/`DeleteVariable` + `GetPluginVariable` (scoped per plugin), `GetInfo`/`GetPluginID`/`GetPluginInfo`, `CallPlugin`/`BroadcastPlugin`, `IsConnected`, `Send_GMCP_Packet`, `Trim`, `print`, `error_code`.
+- ✅ **Scoped variables + `PluginContext`** (`proteles.getVar`/`setVar`/`deleteVar`, `proteles.info`/`pluginID`) — the substrate the shim maps onto.
+- ✅ **Controlled `require`/`dofile`** — gated to bundled libs + the plugin's own dir; **bundled helpers** `gmcphelper` (re-pointed at native `proteles.gmcp`, stringifying leaves), `tprint`/`copytable`/`commas`/`pairsbykeys` (clean-room).
+- ✅ **`MUSHclientPluginLoader`** for MUSHclient XML (plugin metadata + triggers/aliases/timers mapped to value types + `<script>`).
+- ✅ **Plugin host** — runs a parsed plugin (scope + context + shim + script + automations), invokes lifecycle callbacks (`OnPluginInstall`/`Connect`/`Disconnect`/`SaveState`), and bridges native GMCP into `OnPluginBroadcast`.
+- ✅ **App-level loading** — a world's `.xml` plugins under `…/plugins/<profileID>/` load on connect.
+- ✅ **Compatibility matrix doc** — `docs/PLUGIN_COMPATIBILITY.md`.
+- ⬜ **Migration CLI** (`proteles-migrate`).
+- ⬜ **Hand-port** the priority plugins (chat capture, channel highlights, health bars, prompt fixer).
+- ⬜ **Per-plugin Lua environments** (`setfenv`) — today plugins share one global table; multiple plugins defining the same global collide. Documented limitation.
+- ⬜ **`json`/`serialize`/`aardwolf_colors`** helper libs (added as specific plugins need them).
 
-**Deliverable:** A user can drop an Aardwolf-package plugin into Proteles and have it run or fail informatively.
+**Phase 6 status — core compatibility loop COMPLETE (2026-05-22), shipped as `v0.0.6`.** The shim, scoped vars, module loader, helper libs, XML parser, plugin host, GMCP bridge, and app-level loading are done and validated end-to-end (`PluginEndToEndTests`). ~496 tests; all four gates green. The CLI, hand-ports, per-plugin environments, and the bulkier helper libs are the remaining breadth.
+
+**Deliverable:** A user can drop an Aardwolf-package plugin into a world's plugins folder and have it run (or fail informatively). ✅ (single-plugin; multi-plugin env isolation pending)
 
 ### 8.8 Phase 7 — Polish, Mapping, Preferences (~2 weeks)
 
