@@ -27,9 +27,17 @@ public actor ScriptEngine {
     private var triggers = TriggerEngine()
     private var aliases = AliasEngine()
     private var timers = TimerEngine()
+    /// Ids of MUSHclient plugins currently loaded (drives lifecycle callbacks
+    /// and the GMCP→`OnPluginBroadcast` bridge).
+    private var loadedPluginIDs: Set<String> = []
 
     /// Max `.execute` re-expansions before bailing (MUSHclient's value).
     private static let maxExecuteDepth = 20
+
+    /// The well-known id of the Aardwolf GMCP-handler plugin. Native GMCP is
+    /// handled in Swift, but plugins gate `OnPluginBroadcast` on this id, so
+    /// the bridge synthesises broadcasts as if they came from it.
+    private static let gmcpHandlerID = "3e7dedbe37e44942dd46d264"
 
     public init(runtime: LuaRuntime) {
         self.runtime = runtime
@@ -211,7 +219,25 @@ public actor ScriptEngine {
         for timer in plugin.timers {
             try? timers.add(timer)
         }
+        loadedPluginIDs.insert(plugin.id)
         await effects.append(contentsOf: runtime.callGlobal("OnPluginInstall"))
+        return effects
+    }
+
+    /// Fire `OnPluginConnect` on the loaded plugins (the host calls this when
+    /// the session connects).
+    public func connectPlugins() async -> [ScriptEffect] {
+        guard !loadedPluginIDs.isEmpty else { return [] }
+        return await runtime.callGlobal("OnPluginConnect")
+    }
+
+    /// Fire `OnPluginSaveState` then `OnPluginDisconnect` on the loaded
+    /// plugins (the host calls this on disconnect; the host persists the
+    /// variable snapshot separately).
+    public func disconnectPlugins() async -> [ScriptEffect] {
+        guard !loadedPluginIDs.isEmpty else { return [] }
+        var effects = await runtime.callGlobal("OnPluginSaveState")
+        await effects.append(contentsOf: runtime.callGlobal("OnPluginDisconnect"))
         return effects
     }
 
@@ -302,10 +328,21 @@ public actor ScriptEngine {
         return disposition
     }
 
-    /// Project a GMCP message into the live `proteles.gmcp` table and fire
-    /// its `gmcp.*` events, returning any effects the handlers recorded.
+    /// Project a GMCP message into the live `proteles.gmcp` table, fire its
+    /// `gmcp.*` events, and — when MUSHclient plugins are loaded — synthesise
+    /// the GMCP-handler's `OnPluginBroadcast(1, handlerID, "GMCP", package)`
+    /// that plugins like `aard_prompt_fixer` wait on. Returns all effects.
     public func applyGMCP(package: String, json: String) async -> [ScriptEffect] {
-        await runtime.applyGMCP(package: package, json: json)
+        var effects = await runtime.applyGMCP(package: package, json: json)
+        if !loadedPluginIDs.isEmpty {
+            await effects.append(contentsOf: runtime.callGlobal("OnPluginBroadcast", [
+                .number(1),
+                .string(Self.gmcpHandlerID),
+                .string("GMCP"),
+                .string(package)
+            ]))
+        }
+        return effects
     }
 
     // MARK: - Scoped variables

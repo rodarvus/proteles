@@ -446,10 +446,18 @@ public actor SessionController {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
-        // Keep scripts' `proteles.isConnected` in sync.
+        // Keep scripts' `proteles.isConnected` in sync and drive plugin
+        // connect/disconnect lifecycle callbacks.
         if let scriptEngine {
-            let connected = newState == .connected
-            Task { await scriptEngine.setConnected(connected) }
+            Task { [weak self] in
+                await scriptEngine.setConnected(newState == .connected)
+                let effects: [ScriptEffect] = switch newState {
+                case .connected: await scriptEngine.connectPlugins()
+                case .disconnected: await scriptEngine.disconnectPlugins()
+                default: []
+                }
+                if !effects.isEmpty { await self?.applyScriptEffects(effects) }
+            }
         }
     }
 
