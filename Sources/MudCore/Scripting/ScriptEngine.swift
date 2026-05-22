@@ -269,6 +269,11 @@ public actor ScriptEngine {
         await runtime.setVariableScope(scope)
     }
 
+    /// Set the ambient context `proteles.info`/`proteles.pluginID` report.
+    public func setPluginContext(_ context: PluginContext) async {
+        await runtime.setPluginContext(context)
+    }
+
     /// The scopes whose variables changed since the last call (clears the
     /// set), so the host persists only what changed.
     public func takeDirtyVariableScopes() async -> Set<String> {

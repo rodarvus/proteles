@@ -1,0 +1,116 @@
+import Foundation
+
+/// The ambient information a script/plugin can query about its environment —
+/// the backing for the MUSHclient `GetInfo(N)` / `GetPluginID` surface the
+/// Phase-6 shim maps onto (PLAN.md §8.7).
+///
+/// A plain value type the host sets per plugin (the loader builds one with
+/// the plugin's id + directories; the user's own scripts get ``default``).
+/// ``info(_:now:)`` resolves only the `GetInfo` numbers the Aardwolf corpus
+/// actually uses — mostly path/dir lookups plus world identity, time, and a
+/// few flags. Window-geometry numbers (only meaningful once miniwindows
+/// exist) return sane stubs so non-window plugins that read them don't crash;
+/// everything unrecognised returns `nil` (≈ MUSHclient returning nil).
+public struct PluginContext: Sendable, Equatable {
+    /// A resolved `GetInfo` value, typed so the bridge can push the right
+    /// Lua type (string / number / boolean).
+    public enum InfoValue: Sendable, Equatable {
+        case text(String)
+        case number(Double)
+        case flag(Bool)
+    }
+
+    public var pluginID: String
+    public var pluginName: String
+    /// Directory the plugin was loaded from (its own files live here).
+    public var pluginDirectory: String
+    public var worldName: String
+    /// Directory of the world/profile's files and per-world databases.
+    public var worldDirectory: String
+    /// The app's support directory (≈ MUSHclient application directory).
+    public var appDirectory: String
+    /// Where plugin state (persisted variables, etc.) is written.
+    public var stateDirectory: String
+    public var soundsDirectory: String
+    public var logDirectory: String
+    /// Output-view pixel size — stubbed; only used by miniwindow layout.
+    public var outputWidth: Int
+    public var outputHeight: Int
+
+    public init(
+        pluginID: String,
+        pluginName: String,
+        pluginDirectory: String = "",
+        worldName: String = "Aardwolf",
+        worldDirectory: String = "",
+        appDirectory: String = "",
+        stateDirectory: String = "",
+        soundsDirectory: String = "",
+        logDirectory: String = "",
+        outputWidth: Int = 800,
+        outputHeight: Int = 600
+    ) {
+        self.pluginID = pluginID
+        self.pluginName = pluginName
+        self.pluginDirectory = pluginDirectory
+        self.worldName = worldName
+        self.worldDirectory = worldDirectory
+        self.appDirectory = appDirectory
+        self.stateDirectory = stateDirectory
+        self.soundsDirectory = soundsDirectory
+        self.logDirectory = logDirectory
+        self.outputWidth = outputWidth
+        self.outputHeight = outputHeight
+    }
+
+    /// The context for the user's own (non-plugin) scripts.
+    public static let `default` = PluginContext(
+        pluginID: "_user",
+        pluginName: "User Scripts"
+    )
+
+    /// Resolve a MUSHclient `GetInfo` number. Returns `nil` for codes we
+    /// don't implement, matching MUSHclient's nil-for-unknown behaviour.
+    /// (Numbers per `mushclient/scripting/methods/methods_info.cpp`.)
+    public func info(_ code: Int, now: Date = Date()) -> InfoValue? {
+        if let text = textInfo(code) { return .text(text) }
+        if let flag = flagInfo(code) { return .flag(flag) }
+        if let number = numberInfo(code, now: now) { return .number(number) }
+        return nil
+    }
+
+    /// Path/identity codes.
+    private func textInfo(_ code: Int) -> String? {
+        switch code {
+        case 2: worldName // world name
+        case 56, 66: appDirectory // app pathname / application directory
+        case 58: logDirectory // log files directory
+        case 60, 64: pluginDirectory // plugin path / current directory
+        case 67: worldDirectory // world file directory
+        case 74: soundsDirectory // sounds directory
+        case 85: stateDirectory // state files directory
+        default: nil
+        }
+    }
+
+    /// Boolean status codes.
+    private func flagInfo(_ code: Int) -> Bool? {
+        switch code {
+        case 113: true // world is active
+        case 114: false // output paused/frozen
+        case 120: true // scroll bar visible
+        default: nil
+        }
+    }
+
+    /// Numeric codes (time, output geometry — geometry is a stub until
+    /// miniwindows exist).
+    private func numberInfo(_ code: Int, now: Date) -> Double? {
+        switch code {
+        case 280: Double(outputHeight)
+        case 281: Double(outputWidth)
+        case 304: now.timeIntervalSince1970
+        default: nil
+        }
+    }
+}
