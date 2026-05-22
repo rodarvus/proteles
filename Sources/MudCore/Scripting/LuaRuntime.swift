@@ -1,6 +1,63 @@
 import CLua
 import Foundation
 
+// MARK: - Lua ↔ Swift bridge
+
+/// Read the Lua value at `index` as a ``LuaValue`` (scalars only).
+private func luaReadValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
+    switch lua_type(state, index) {
+    case LUA_TBOOLEAN:
+        .boolean(lua_toboolean(state, index) != 0)
+    case LUA_TNUMBER:
+        .number(lua_tonumber(state, index))
+    case LUA_TSTRING:
+        clua_tostring(state, index).map { .string(String(cString: $0)) } ?? .nil
+    default:
+        .nil
+    }
+}
+
+/// Push a ``LuaValue`` onto the Lua stack.
+private func luaPushValue(_ state: OpaquePointer, _ value: LuaValue) {
+    switch value {
+    case .nil: lua_pushnil(state)
+    case .boolean(let flag): lua_pushboolean(state, flag ? 1 : 0)
+    case .number(let number): lua_pushnumber(state, number)
+    case .string(let text): lua_pushstring(state, text)
+    }
+}
+
+/// Single C entry point for every registered host function. Upvalue 1 is
+/// the owning ``LuaRuntime`` (lightuserdata); upvalue 2 is the host-function
+/// id. Non-capturing, as `@convention(c)` requires — all context comes
+/// from the upvalues. Runs synchronously inside `lua_pcall`, i.e. on the
+/// owning actor's executor.
+private let luaHostDispatch: @convention(c) (OpaquePointer?) -> Int32 = { statePointer in
+    guard let state = statePointer,
+          let runtimePointer = lua_touserdata(state, clua_upvalueindex(1))
+    else {
+        return 0
+    }
+    let runtime = Unmanaged<LuaRuntime>
+        .fromOpaque(UnsafeRawPointer(runtimePointer))
+        .takeUnretainedValue()
+    let functionID = Int32(lua_tointeger(state, clua_upvalueindex(2)))
+
+    var arguments: [LuaValue] = []
+    let argumentCount = lua_gettop(state)
+    if argumentCount > 0 {
+        for index in 1...argumentCount {
+            arguments.append(luaReadValue(state, index))
+        }
+    }
+
+    let results = runtime.invokeHostFunction(id: functionID, arguments: arguments)
+    for result in results {
+        luaPushValue(state, result)
+    }
+    return Int32(results.count)
+}
+
 /// Thin Swift actor over a vendored PUC-Rio Lua 5.1 interpreter
 /// (`CLua`) — the foundation for triggers, aliases, timers, and the
 /// `proteles.*` scripting API (PLAN.md §8.6, D-03).
@@ -8,9 +65,10 @@ import Foundation
 /// One `lua_State` per runtime, owned and isolated by the actor so the
 /// (non-reentrant) interpreter is only ever touched from one place.
 ///
-/// **Not yet sandboxed.** This opens the full standard library for now;
-/// the `_G` replacement / `io`/`os` restriction / instruction-count hook
-/// (D-10) land in the next increment, before any untrusted script runs.
+/// Sandboxed by default (D-10): the dangerous standard-library surface is
+/// removed and a wall-clock timeout hook guards against runaway loops.
+/// Scripts reach the host through the `proteles.*` table, whose calls
+/// record ``ScriptEffect``s the host applies after the chunk returns.
 public actor LuaRuntime {
     public enum LuaError: Error, Equatable, Sendable {
         case initializationFailed
@@ -38,6 +96,22 @@ public actor LuaRuntime {
     /// other reference survives) — hence `nonisolated(unsafe)`.
     private nonisolated(unsafe) let state: OpaquePointer
 
+    /// Side effects recorded by `proteles.*` calls during the current run.
+    /// `nonisolated(unsafe)` because the C host-function dispatch appends to
+    /// it synchronously inside `lua_pcall` (same actor executor), and `run`
+    /// reads/clears it around that call.
+    private nonisolated(unsafe) var effects: [ScriptEffect] = []
+
+    /// The `proteles.*` functions exposed to scripts; the rawValue is the
+    /// closure upvalue the C dispatcher routes on.
+    private enum HostFunction: Int32 {
+        case send = 1
+        case sendNoEcho
+        case execute
+        case echo
+        case note
+    }
+
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before the runtime is usable —
     /// see ``sandboxScript``. Pass `false` only for fully-trusted internal
@@ -52,16 +126,21 @@ public actor LuaRuntime {
         if sandboxed {
             try Self.applySandbox(to: state)
         }
+        installProtelesAPI()
     }
 
     deinit {
         lua_close(state)
     }
 
-    /// Execute a chunk for its side effects; results are discarded.
-    public func run(_ script: String) throws {
+    /// Execute a chunk and return the side effects its `proteles.*` calls
+    /// recorded, in order. The host applies them.
+    @discardableResult
+    public func run(_ script: String) throws -> [ScriptEffect] {
+        effects.removeAll(keepingCapacity: true)
         try load(script)
         try call(argumentCount: 0, resultCount: 0)
+        return effects
     }
 
     /// Evaluate an expression and return its numeric result.
@@ -152,6 +231,57 @@ public actor LuaRuntime {
         let message = clua_tostring(state, -1).map { String(cString: $0) } ?? "unknown Lua error"
         clua_pop(state, 1)
         return message
+    }
+
+    // MARK: - proteles.* host API
+
+    /// Build the global `proteles` table, each entry a C closure carrying
+    /// this runtime (lightuserdata) and a function id as upvalues.
+    /// `nonisolated` so the initializer can call it; touches only `state`
+    /// and `self`'s pointer.
+    private nonisolated func installProtelesAPI() {
+        lua_createtable(state, 0, 5)
+        setHostFunction("send", .send)
+        setHostFunction("sendNoEcho", .sendNoEcho)
+        setHostFunction("execute", .execute)
+        setHostFunction("echo", .echo)
+        setHostFunction("note", .note)
+        clua_setglobal(state, "proteles")
+    }
+
+    /// Set `proteles[name]` (table assumed on top of the stack) to a C
+    /// closure routing to `id`.
+    private nonisolated func setHostFunction(_ name: String, _ id: HostFunction) {
+        lua_pushlightuserdata(state, Unmanaged.passUnretained(self).toOpaque())
+        lua_pushinteger(state, lua_Integer(id.rawValue))
+        lua_pushcclosure(state, luaHostDispatch, 2)
+        lua_setfield(state, -2, name)
+    }
+
+    /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*`
+    /// function is called from Lua. Records the corresponding effect.
+    /// `nonisolated` (and reaches `effects` via `nonisolated(unsafe)`)
+    /// because it runs inside `lua_pcall` on the actor's executor.
+    nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
+        guard let function = HostFunction(rawValue: id) else { return [] }
+        func string(_ index: Int) -> String {
+            index < arguments.count ? (arguments[index].stringValue ?? "") : ""
+        }
+        func optionalString(_ index: Int) -> String? {
+            index < arguments.count ? arguments[index].stringValue : nil
+        }
+        switch function {
+        case .send: effects.append(.send(string(0)))
+        case .sendNoEcho: effects.append(.sendNoEcho(string(0)))
+        case .execute: effects.append(.execute(string(0)))
+        case .echo: effects.append(.echo(string(0)))
+        case .note: effects.append(.note(
+                text: string(0),
+                foreground: optionalString(1),
+                background: optionalString(2)
+            ))
+        }
+        return []
     }
 
     // MARK: - Private

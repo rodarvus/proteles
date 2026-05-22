@@ -31,4 +31,9 @@ static inline void clua_setglobal(lua_State *L, const char *name) {
     lua_setfield(L, LUA_GLOBALSINDEX, name);
 }
 
+/* Pseudo-index of a C closure's i-th upvalue (a macro in lua.h). */
+static inline int clua_upvalueindex(int i) {
+    return lua_upvalueindex(i);
+}
+
 #endif /* CLUA_SHIM_H */

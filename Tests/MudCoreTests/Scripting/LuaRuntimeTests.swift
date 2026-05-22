@@ -71,6 +71,72 @@ struct LuaRuntimeSandboxTests {
     }
 }
 
+@Suite("LuaRuntime — proteles.* host API")
+struct LuaRuntimeHostAPITests {
+    @Test("The proteles table and its functions exist")
+    func apiInstalled() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.boolean("type(proteles) == 'table'"))
+        for fn in ["send", "sendNoEcho", "execute", "echo", "note"] {
+            #expect(try await lua.boolean("type(proteles.\(fn)) == 'function'"), "\(fn)")
+        }
+    }
+
+    @Test("proteles.send records a .send effect")
+    func sendEffect() async throws {
+        let lua = try LuaRuntime()
+        let effects = try await lua.run("proteles.send('kill rabbit')")
+        #expect(effects == [.send("kill rabbit")])
+    }
+
+    @Test("echo / execute / sendNoEcho record their effects")
+    func simpleEffects() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.run("proteles.echo('hi')") == [.echo("hi")])
+        #expect(try await lua.run("proteles.execute('look')") == [.execute("look")])
+        #expect(try await lua.run("proteles.sendNoEcho('secret')") == [.sendNoEcho("secret")])
+    }
+
+    @Test("proteles.note carries optional colours")
+    func noteColours() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.run("proteles.note('plain')")
+            == [.note(text: "plain", foreground: nil, background: nil)])
+        #expect(try await lua.run("proteles.note('warn', 'red', 'black')")
+            == [.note(text: "warn", foreground: "red", background: "black")])
+    }
+
+    @Test("Effects are collected in order, including from loops")
+    func orderedEffects() async throws {
+        let lua = try LuaRuntime()
+        let effects = try await lua.run("""
+        proteles.echo('start')
+        for i = 1, 3 do proteles.send('hit ' .. i) end
+        proteles.echo('done')
+        """)
+        #expect(effects == [
+            .echo("start"),
+            .send("hit 1"), .send("hit 2"), .send("hit 3"),
+            .echo("done")
+        ])
+    }
+
+    @Test("The effect buffer is cleared between runs")
+    func effectsClearedBetweenRuns() async throws {
+        let lua = try LuaRuntime()
+        _ = try await lua.run("proteles.send('first')")
+        let second = try await lua.run("proteles.send('second')")
+        #expect(second == [.send("second")])
+    }
+
+    @Test("Numbers passed to send are stringified")
+    func numericArgsCoerced() async throws {
+        let lua = try LuaRuntime()
+        // Lua concatenation coerces; a bare number arg becomes "".
+        #expect(try await lua.run("proteles.send(tostring(42))") == [.send("42")])
+    }
+}
+
 @Suite("LuaRuntime — execution timeout")
 struct LuaRuntimeTimeoutTests {
     @Test("An infinite loop is aborted with .timedOut, not a hang")
