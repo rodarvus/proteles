@@ -71,6 +71,49 @@ struct LuaRuntimeSandboxTests {
     }
 }
 
+@Suite("LuaRuntime — execution timeout")
+struct LuaRuntimeTimeoutTests {
+    @Test("An infinite loop is aborted with .timedOut, not a hang")
+    func infiniteLoopTimesOut() async throws {
+        let lua = try LuaRuntime(executionTimeout: .milliseconds(150))
+        let start = ContinuousClock.now
+        do {
+            try await lua.run("while true do end")
+            Issue.record("expected the loop to time out")
+        } catch let error as LuaRuntime.LuaError {
+            #expect(error == .timedOut)
+        }
+        // It should abort promptly, not run away.
+        #expect(ContinuousClock.now - start < .seconds(2))
+    }
+
+    @Test("A long bounded loop is also caught")
+    func longLoopTimesOut() async throws {
+        let lua = try LuaRuntime(executionTimeout: .milliseconds(150))
+        do {
+            try await lua.run("local n = 0; for i = 1, 1e12 do n = n + i end")
+            Issue.record("expected the loop to time out")
+        } catch let error as LuaRuntime.LuaError {
+            #expect(error == .timedOut)
+        }
+    }
+
+    @Test("Quick scripts run normally under the timeout")
+    func quickScriptNotAffected() async throws {
+        let lua = try LuaRuntime(executionTimeout: .milliseconds(150))
+        try await lua.run("total = 0; for i = 1, 1000 do total = total + i end")
+        #expect(try await lua.number("total") == 500_500)
+    }
+
+    @Test("The runtime survives a timeout and can run again")
+    func recoversAfterTimeout() async throws {
+        let lua = try LuaRuntime(executionTimeout: .milliseconds(150))
+        _ = try? await lua.run("while true do end")
+        // State is intact; a fresh evaluation still works.
+        #expect(try await lua.number("2 + 2") == 4)
+    }
+}
+
 @Suite("LuaRuntime — state & errors")
 struct LuaRuntimeStateTests {
     @Test("State persists across run calls")

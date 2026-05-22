@@ -20,7 +20,19 @@ public actor LuaRuntime {
         case runtime(String)
         /// A result wasn't of the expected type.
         case typeMismatch(String)
+        /// The chunk ran longer than ``LuaRuntime/executionTimeout`` and
+        /// was aborted (e.g. an accidental infinite loop).
+        case timedOut
     }
+
+    /// Wall-clock budget for a single ``run``/evaluation. A chunk that
+    /// exceeds it is aborted with ``LuaError/timedOut``. `.zero` (or
+    /// negative) disables the guard. Generous by default — trigger/alias
+    /// actions should be near-instant.
+    public var executionTimeout: Duration
+
+    /// How often (in VM instructions) the timeout hook checks the clock.
+    private static let hookInstructionInterval: Int32 = 1000
 
     /// Accessed only on the actor, except in `deinit` (which runs when no
     /// other reference survives) — hence `nonisolated(unsafe)`.
@@ -30,11 +42,12 @@ public actor LuaRuntime {
     /// standard-library surface is removed before the runtime is usable —
     /// see ``sandboxScript``. Pass `false` only for fully-trusted internal
     /// scripts.
-    public init(sandboxed: Bool = true) throws {
+    public init(sandboxed: Bool = true, executionTimeout: Duration = .seconds(2)) throws {
         guard let state = luaL_newstate() else {
             throw LuaError.initializationFailed
         }
         self.state = state
+        self.executionTimeout = executionTimeout
         luaL_openlibs(state)
         if sandboxed {
             try Self.applySandbox(to: state)
@@ -157,8 +170,14 @@ public actor LuaRuntime {
     }
 
     private func call(argumentCount: Int32, resultCount: Int32) throws {
+        clua_install_timeout(state, executionTimeout.inSeconds, Self.hookInstructionInterval)
+        defer { clua_clear_timeout(state) }
         if lua_pcall(state, argumentCount, resultCount, 0) != 0 {
-            throw LuaError.runtime(popError())
+            let message = popError()
+            if message.contains("proteles:timeout") {
+                throw LuaError.timedOut
+            }
+            throw LuaError.runtime(message)
         }
     }
 

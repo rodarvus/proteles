@@ -4,4 +4,5 @@
 #include "lualib.h"
 #include "lauxlib.h"
 #include "clua_shim.h"
+#include "clua_timeout.h"
 #endif
