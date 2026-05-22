@@ -640,16 +640,65 @@ Each phase ends with a runnable, demoable build. Time estimates are rough; treat
 
 **Goal:** Lua runtime; user-defined triggers, aliases, timers, macros.
 
-- Vendored Lua 5.1 SwiftPM target.
-- `LuaRuntime` actor.
-- Sandbox: replaced `_G`, instruction-count hook, fs/network restrictions.
-- `proteles.*` API surface (send, note, gmcp, state, triggers, aliases, timers, persist).
+- ✅ Vendored Lua 5.1 SwiftPM target (`CLua`, D-03).
+- ✅ `LuaRuntime` actor; first-pass sandbox (D-10) + execution-timeout hook.
+- **`proteles.*` API surface — designed below (D-19).** The native API must
+  be a rich enough *primitive* layer that the Phase-6 `mush.lua` compat
+  shim can be built on top of it, since the real plugin corpus
+  (`aardwolfclientpackage`, `search-and-destroy`, `dinv`) leans on a much
+  larger surface than a minimal "send/note" set.
 - **TriggerEngine:** regex (NSRegularExpression), literal, wildcard, group captures; per-trigger enabled flag, sequence priority, "match against plain text" vs "match against styled text".
 - **AliasEngine:** input-line expansion; supports parameters.
 - **TimerEngine:** wall-clock, tick-aligned (driven by Aardwolf GMCP-published ticks).
 - **MacroEngine:** keyboard chord → command/script.
 - **SwiftUI editors:** TriggerEditor, AliasEditor, TimerEditor, MacroEditor.
 - **Profile-scoped vs global** scoping.
+
+#### `proteles.*` API surface (D-19)
+
+Grounded in measured usage across `aardwolfclientpackage` (43 plugins),
+`search-and-destroy` (beta), and `dinv` (~26k LOC). Modern where it pays
+off (live GMCP table, an event bus) rather than cloning MUSHclient's
+~435-method `world` object verbatim.
+
+- **Output (most-used):** `proteles.echo(text)`, `proteles.note(text, fg?, bg?)`
+  (≈ `ColourNote`), `proteles.echoAard(text)` (render Aardwolf `@`-codes via
+  `AardwolfColor`), `proteles.hyperlink(text, action)`, partial-line
+  `proteles.tell` / coloured `tell`.
+- **Sending:** `proteles.send(cmd)` (raw to MUD), `proteles.sendNoEcho(cmd)`
+  (passwords), `proteles.execute(cmd)` (as if typed — runs through aliases).
+- **GMCP (better than the references):** a live `proteles.gmcp` table mirror
+  of `GMCPStateStore`, plus `proteles.gmcp("Char.Vitals")` accessor.
+- **State / introspection:** typed `proteles.state` (session/world/char) and
+  a `proteles.info(id)` compat path for the `mush.lua` `GetInfo` shim.
+- **Variables:** `proteles.getVar(name)` / `setVar(name, value)`, **scoped
+  per script/plugin** and persisted (≈ `Get/SetVariable`).
+- **Structured persistence:** `proteles.db` — a SQLite binding (over the
+  vendored SQLite), since serious plugins (`dinv`, `search-and-destroy`)
+  keep their own databases via `lsqlite3`. Provide an lsqlite3-compatible
+  surface for the shim.
+- **Automations:** `proteles.addTrigger{…}` / `addAlias{…}` / `addTimer{…}`,
+  with enable/disable/delete, **temporary**, **group**, and **one-shot**
+  semantics; `proteles.doAfter(seconds, fn)`.
+- **Events / IPC (the backbone):** `proteles.raiseEvent(name, …)` /
+  `onEvent(name, fn)` pub/sub bus, plus `proteles.call(plugin, fn, …)`
+  (≈ `CallPlugin`) and `proteles.broadcast(id, …)` / `onBroadcast` (≈
+  `BroadcastPlugin`). `CallPlugin`/`BroadcastPlugin` were the single most
+  load-bearing cross-plugin mechanism in the corpus.
+- **Controlled module loading:** complex plugins are multi-file and load
+  themselves (`dinv` `dofile`/`require`s 22 modules). The sandbox removes
+  raw `dofile`/`require`; instead provide a **per-plugin loader** that
+  resolves names only within that plugin's own directory (no arbitrary fs
+  access).
+- **UI — native, not miniwindows (D-19):** **no generic immediate-mode
+  drawing API.** Offer a declarative `proteles.ui.*` (gauges, labels,
+  lists, hotspots) rendered into native SwiftUI panels, and natively
+  reimplement the handful of plugins that draw miniwindows (health bars,
+  group/stat monitors, mapper, S&D's results list). Raw-miniwindow plugins
+  are ported, not run as-is — replicating MUSHclient's 47-call
+  `Window*` drawing API in SwiftUI is a poor, un-idiomatic fit.
+- Lua's `coroutine` library stays available (safe) so plugins' async/
+  multi-step MUD interactions work.
 
 **Deliverable:** A user can sit down and write triggers/aliases/macros that feel familiar to a MUSHclient/Mudlet user.
 
@@ -992,6 +1041,7 @@ A short, append-only record of architectural decisions with date and rationale. 
 | D-16 | 2026-05-21 | Autologin is prompt-driven ("Diku-style"), not send-on-connect; password in Keychain, username + prompts in the profile | The two reference clients both send on connect (MushClient immediately, Mudlet on 2 s/3 s timers), which is fragile to server timing. Watching the stream for the name/password prompts is robust. Prompts arrive un-terminated, so they sit in the ANSI parser / line-builder pending buffers, never as a `Line` — `LinePipeline.pendingLineText` surfaces that text so the matcher can react. Storing the password in the Keychain (not plaintext `profiles.json`) keeps secrets off disk; the `CredentialStore` protocol keeps MudCore free of a hard Security-framework dependency and makes the state machine testable with plain values | adopted |
 | D-17 | 2026-05-21 | `SessionController` recreates a one-shot `NetworkConnection` per connect and owns a durable state stream; autoreconnect (exponential backoff) lives in the controller and is off by default | `NetworkConnection`'s `bytes` AsyncStream is finished permanently on disconnect, so reusing one connection across reconnects silently dropped the second session's bytes ("connected but nothing shows") and remote closes weren't reacted to. Making the connection genuinely one-shot — and giving the controller a durable `connectionStates` it re-publishes onto — fixes both and matches the type's documented contract. Autoreconnect belongs in the controller (it knows the endpoint/credentials and the user-vs-remote disconnect distinction); default-off keeps tests and library use predictable, the app opts in with `.standard` | adopted |
 | D-18 | 2026-05-21 | Command input is `NSTextField`-backed (not SwiftUI `TextField`) with a pure `CommandHistory` model; autocompletion sources from history and excludes communication commands | SwiftUI's `TextField` swallows the Up/Down/Tab keys needed for history recall and completion, so the input is an `NSViewRepresentable` over `NSTextField` using the field-editor `doCommandBySelector` hook (Mudlet `TCommandLine` is the model). The history/completion logic is a value type in MudCore so it's unit-tested without the UI. Completion matches whole lines from history (you're "repeating a command"), and the first-word communication/chat exclusion list — seeded from `aard_channels_fiendish.xml` — keeps half-typed `tell`/`reply` private messages from ever being re-offered | adopted |
+| D-19 | 2026-05-22 | `proteles.*` API designed as a rich *primitive* layer (output+colour, send/execute, scoped vars, SQLite `db`, triggers/aliases/timers, live `gmcp` table, event bus + `call`/`broadcast` RPC, per-plugin module loader); **native panels instead of a generic miniwindow drawing API** | Measured usage across `aardwolfclientpackage` (43 plugins), `search-and-destroy`, and `dinv` shows the load-bearing surface is coloured output, per-plugin variables, `GetInfo`, `CallPlugin`/`BroadcastPlugin`, triggers, and — for serious plugins — `dofile`/`require` of own modules and `lsqlite3`. The native API must be primitive-complete enough to build the Phase-6 `mush.lua` shim on top of. Live `gmcp` + an event bus are deliberately *better* than MUSHclient's poll/callback model. MUSHclient's 47-call immediate-mode `Window*` API is a poor fit for SwiftUI, and the few plugins that use it (health bars, group/stat monitors, mapper, S&D's results list) are exactly the ones we're already rebuilding natively — so we offer a declarative `proteles.ui.*` + native ports rather than a generic drawing surface | adopted |
 
 Append new decisions as the project evolves. Never edit history; supersede instead.
 
