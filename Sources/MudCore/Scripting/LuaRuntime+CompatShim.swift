@@ -16,9 +16,11 @@ import Foundation
 /// `EnableTrigger`/`Timer`/`Group` are stubs here — they become real once
 /// the loader registers named triggers.
 public extension LuaRuntime {
-    /// Install the compatibility globals into the Lua state. Idempotent.
+    /// Install the compatibility globals into the Lua state and register the
+    /// standard helper libraries for `require`. Idempotent.
     func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
+        registerModules(Self.standardHelpers)
     }
 
     /// Call a global Lua function by name (e.g. a plugin lifecycle callback
