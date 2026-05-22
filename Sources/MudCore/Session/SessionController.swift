@@ -46,6 +46,11 @@ public actor SessionController {
     /// pipeline; observed by the status bar.
     public nonisolated let gmcpState: GMCPStateStore
 
+    /// Optional scripting engine. When present, every received line is run
+    /// through its triggers; resulting sends go to the MUD, echoes/notes to
+    /// the scrollback, and gagged lines are dropped.
+    public nonisolated let scriptEngine: ScriptEngine?
+
     /// Captured `comm.channel` chat lines. Fed by the inbound pipeline;
     /// observed by the chat-capture window.
     public nonisolated let chatStore: ChatStore
@@ -150,6 +155,7 @@ public actor SessionController {
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
         gmcpState: GMCPStateStore = GMCPStateStore(),
         chatStore: ChatStore = ChatStore(),
+        scriptEngine: ScriptEngine? = nil,
         autoRecord: Bool = false,
         reconnectPolicy: ReconnectPolicy = .disabled,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
@@ -159,6 +165,7 @@ public actor SessionController {
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
         self.chatStore = chatStore
+        self.scriptEngine = scriptEngine
         let (stream, continuation) = AsyncStream<State>.makeStream(
             bufferingPolicy: .unbounded
         )
@@ -462,7 +469,7 @@ public actor SessionController {
             try? await connection?.send(response)
         }
         for line in output.lines {
-            await scrollbackStore.append(line)
+            await appendLineThroughScripts(line)
         }
 
         // The server enabled GMCP — send our handshake once so it starts
@@ -476,6 +483,57 @@ public actor SessionController {
         }
 
         await advanceAutologin(newLines: output.lines)
+    }
+
+    /// Run a received line through the script engine (if any), then append
+    /// it unless a trigger gagged it. Trigger sends/echoes are applied
+    /// afterwards so echoes land just below the line that produced them.
+    private func appendLineThroughScripts(_ line: Line) async {
+        guard let scriptEngine else {
+            await scrollbackStore.append(line)
+            return
+        }
+        let disposition = await scriptEngine.process(line: line.text)
+        if !disposition.gag {
+            await scrollbackStore.append(line)
+        }
+        await applyScriptEffects(disposition.effects)
+    }
+
+    /// Apply the effects a script produced: sends go to the MUD, echoes/notes
+    /// to the scrollback.
+    private func applyScriptEffects(_ effects: [ScriptEffect]) async {
+        for effect in effects {
+            switch effect {
+            case .send(let command), .execute(let command), .sendNoEcho(let command):
+                try? await sendRaw(Array((command + "\r\n").utf8))
+            case .echo(let text):
+                await scrollbackStore.append(Line(id: LineID(0), text: text))
+            case .note(let text, let foreground, let background):
+                await scrollbackStore.append(Line(
+                    id: LineID(0),
+                    text: text,
+                    runs: Self.noteRuns(text, foreground: foreground, background: background)
+                ))
+            }
+        }
+    }
+
+    private static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {
+        var style = StyleAttributes.default
+        if let foreground, let color = namedColor(foreground) { style.foreground = color }
+        if let background, let color = namedColor(background) { style.background = color }
+        let length = (text as NSString).length
+        guard !style.isDefault, length > 0 else { return [] }
+        return [StyledRun(utf16Range: 0..<length, style: style)]
+    }
+
+    private static func namedColor(_ name: String) -> ANSIColor? {
+        let names: [String: NamedColor] = [
+            "black": .black, "red": .red, "green": .green, "yellow": .yellow,
+            "blue": .blue, "magenta": .magenta, "cyan": .cyan, "white": .white
+        ]
+        return names[name.lowercased()].map { .named($0) }
     }
 
     /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,

@@ -168,6 +168,21 @@ public actor LuaRuntime {
         return effects
     }
 
+    /// Run a chunk with trigger captures bound to globals first, returning
+    /// the recorded effects. Sets `matches` (a table keyed `0…n`, where
+    /// `matches[0]` is the whole match and `matches[i]` the i-th group) and
+    /// `named` (named captures). Done in one isolated call so nothing
+    /// interleaves between binding and running.
+    @discardableResult
+    public func runScript(
+        _ script: String,
+        matches captures: [String] = [],
+        named: [String: String] = [:]
+    ) throws -> [ScriptEffect] {
+        setMatchGlobals(captures, named)
+        return try run(script)
+    }
+
     /// Evaluate an expression and return its numeric result.
     public func number(_ expression: String) throws -> Double {
         try evaluate(expression)
@@ -365,6 +380,24 @@ public actor LuaRuntime {
             return nil
         }
         return ref
+    }
+
+    /// Set the `matches` (integer-keyed, 0-based) and `named` globals from
+    /// trigger captures.
+    private func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
+        lua_createtable(state, Int32(captures.count), 0)
+        for (index, value) in captures.enumerated() {
+            lua_pushstring(state, value)
+            lua_rawseti(state, -2, Int32(index))
+        }
+        clua_setglobal(state, "matches")
+
+        lua_createtable(state, 0, Int32(named.count))
+        for (key, value) in named {
+            lua_pushstring(state, value)
+            lua_setfield(state, -2, key)
+        }
+        clua_setglobal(state, "named")
     }
 
     // MARK: - Calling Lua from Swift (event bus / RPC)
