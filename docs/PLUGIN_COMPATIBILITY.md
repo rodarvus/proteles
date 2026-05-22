@@ -37,11 +37,12 @@ top of the native `proteles.*` layer (see PLAN.md §7).
 
 ## Module loading & helper libraries
 
-Controlled `require`/`dofile` ✅ (gated to bundled libs + the plugin's own
-dir). Bundled helpers: `gmcphelper` ✅ (re-pointed at native
-`proteles.gmcp`), `tprint`/`copytable`/`commas`/`pairsbykeys` ✅ (clean-room).
-`json`, `serialize`, `aardwolf_colors` ⬜ (added as specific plugins need
-them).
+Controlled `require`/`dofile` ✅ and `loadstring`/`load` ✅ (compiled via a
+host primitive, run in the caller's env; gated to bundled libs + the
+plugin's own dir). Bundled helpers: `gmcphelper` ✅ (re-pointed at native
+`proteles.gmcp`), `serialize` ✅, `json` ✅ (encode/decode over Foundation),
+`tprint`/`copytable`/`commas`/`pairsbykeys` ✅ (clean-room). `aardwolf_colors`
+⬜ (added next).
 
 ## Per-plugin isolation
 
