@@ -1,3 +1,4 @@
+import CLua
 import Foundation
 
 /// The MUSHclient world-API compatibility shim (Phase 6, PLAN.md §7.3).
@@ -14,14 +15,40 @@ import Foundation
 /// `gmcphelper`, …) via a controlled module loader. Name-based
 /// `EnableTrigger`/`Timer`/`Group` are stubs here — they become real once
 /// the loader registers named triggers.
-extension LuaRuntime {
+public extension LuaRuntime {
     /// Install the compatibility globals into the Lua state. Idempotent.
-    public func loadCompatShim() throws {
+    func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
     }
 
+    /// Call a global Lua function by name (e.g. a plugin lifecycle callback
+    /// like `OnPluginInstall`), returning the effects it recorded. A no-op
+    /// when the global isn't a function. Errors surface as a red note rather
+    /// than throwing, so a broken callback can't abort the host.
+    @discardableResult
+    func callGlobal(_ name: String, _ arguments: [LuaValue] = []) -> [ScriptEffect] {
+        effects.removeAll(keepingCapacity: true)
+        defer { releaseTransientRefs() }
+        clua_getglobal(state, name)
+        guard lua_type(state, -1) == LUA_TFUNCTION else {
+            clua_pop(state, 1)
+            return effects
+        }
+        for argument in arguments {
+            luaPushValue(state, argument)
+        }
+        if lua_pcall(state, Int32(arguments.count), 0, 0) != 0 {
+            effects.append(.note(
+                text: "Lua callback error in \(name): \(Self.popMessage(state))",
+                foreground: "red",
+                background: nil
+            ))
+        }
+        return effects
+    }
+
     /// The shim source, applied on top of an existing `proteles` table.
-    nonisolated static let compatShimSource = """
+    internal nonisolated static let compatShimSource = """
     -- MUSHclient world-API compatibility shim, mapped onto proteles.*.
     local proteles = proteles
 

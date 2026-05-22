@@ -17,8 +17,9 @@ private func luaReadValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
     }
 }
 
-/// Push a ``LuaValue`` onto the Lua stack.
-private func luaPushValue(_ state: OpaquePointer, _ value: LuaValue) {
+/// Push a ``LuaValue`` onto the Lua stack. Module-internal so the compat-shim
+/// extension can reuse it.
+func luaPushValue(_ state: OpaquePointer, _ value: LuaValue) {
     switch value {
     case .nil: lua_pushnil(state)
     case .boolean(let flag): lua_pushboolean(state, flag ? 1 : 0)
@@ -295,7 +296,8 @@ public actor LuaRuntime {
 
     /// Pop the top-of-stack error object as a String (state-only; shared
     /// by the initializer's sandbox path and the instance error path).
-    private static func popMessage(_ state: OpaquePointer) -> String {
+    /// Module-internal so the compat-shim extension can reuse it.
+    static func popMessage(_ state: OpaquePointer) -> String {
         let message = clua_tostring(state, -1).map { String(cString: $0) } ?? "unknown Lua error"
         clua_pop(state, 1)
         return message

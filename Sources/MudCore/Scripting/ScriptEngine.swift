@@ -180,6 +180,47 @@ public actor ScriptEngine {
         load(document, now: now)
     }
 
+    // MARK: - Plugins
+
+    /// Load a parsed MUSHclient plugin into the live engines: scope its
+    /// variables + ambient context to the plugin, install the compat shim,
+    /// run its `<script>` (defining its globals), register its
+    /// triggers/aliases/timers, then invoke `OnPluginInstall`. Returns the
+    /// effects produced during install.
+    ///
+    /// This is the host scaffolding; `require`/`dofile` + helper libraries
+    /// and the GMCP→`OnPluginBroadcast` bridge are later sub-increments, so
+    /// plugins that pull in helper libs won't fully initialise yet.
+    @discardableResult
+    public func loadPlugin(
+        _ plugin: MUSHclientPlugin,
+        context: PluginContext? = nil
+    ) async -> [ScriptEffect] {
+        let resolved = context ?? PluginContext(pluginID: plugin.id, pluginName: plugin.name)
+        await runtime.setVariableScope(plugin.id)
+        await runtime.setPluginContext(resolved)
+        try? await runtime.loadCompatShim()
+
+        var effects = await run(plugin.script)
+        for trigger in plugin.triggers {
+            try? triggers.add(trigger)
+        }
+        for alias in plugin.aliases {
+            try? aliases.add(alias)
+        }
+        for timer in plugin.timers {
+            try? timers.add(timer)
+        }
+        await effects.append(contentsOf: runtime.callGlobal("OnPluginInstall"))
+        return effects
+    }
+
+    /// Invoke a plugin lifecycle callback (`OnPluginConnect`, … ) by name.
+    @discardableResult
+    public func callGlobal(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
+        await runtime.callGlobal(name, arguments)
+    }
+
     // MARK: - Input expansion
 
     /// Expand a typed line through the aliases, returning the effects to
