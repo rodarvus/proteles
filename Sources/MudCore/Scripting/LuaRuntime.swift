@@ -126,7 +126,24 @@ public actor LuaRuntime {
         case broadcast
         case export
         case call
+        case getVar
+        case setVar
+        case deleteVar
     }
+
+    /// Scoped string variables (`proteles.getVar`/`setVar`/`deleteVar`,
+    /// ≈ MUSHclient `Get/SetVariable`). Keyed `scope → name → value`; the
+    /// host sets ``currentVariableScope`` per plugin/script so each plugin's
+    /// variables are isolated. Held in memory (so reads return synchronously
+    /// inside the Lua dispatch) and synced to/from disk by the host around
+    /// runs. `nonisolated(unsafe)` for the same reason as ``effects``.
+    private nonisolated(unsafe) var variables: [String: [String: String]] = [:]
+    /// The scope `getVar`/`setVar`/`deleteVar` read and write. Defaults to a
+    /// shared user scope; the plugin loader sets it per plugin id.
+    private nonisolated(unsafe) var currentVariableScope = "_user"
+    /// Scopes whose variables changed since the last ``takeDirtyScopes``, so
+    /// the host knows what to persist.
+    private nonisolated(unsafe) var dirtyVariableScopes: Set<String> = []
 
     /// Event name → registry refs of registered handler functions.
     /// Module-internal for the GMCP projection extension.
@@ -227,6 +244,39 @@ public actor LuaRuntime {
         clua_setglobal(state, name)
     }
 
+    // MARK: - Scoped variables
+
+    /// Set the scope `getVar`/`setVar`/`deleteVar` operate on (a plugin id,
+    /// or the default user scope). The loader sets this before running a
+    /// plugin's script and its callbacks.
+    public func setVariableScope(_ scope: String) {
+        currentVariableScope = scope
+    }
+
+    /// Replace all in-memory variables (e.g. hydrating from disk on connect).
+    /// Clears the dirty set.
+    public func loadVariables(_ all: [String: [String: String]]) {
+        variables = all
+        dirtyVariableScopes.removeAll()
+    }
+
+    /// A snapshot of every scope's variables (for persistence).
+    public func variablesSnapshot() -> [String: [String: String]] {
+        variables
+    }
+
+    /// The variables in one scope.
+    public func variables(inScope scope: String) -> [String: String] {
+        variables[scope] ?? [:]
+    }
+
+    /// The scopes mutated since the last call, clearing the set. Lets the
+    /// host persist only what changed.
+    public func takeDirtyVariableScopes() -> Set<String> {
+        defer { dirtyVariableScopes.removeAll() }
+        return dirtyVariableScopes
+    }
+
     // MARK: - Sandbox
 
     /// First-pass sandbox (D-10): strip the standard-library surface that
@@ -283,7 +333,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 12)
+        lua_createtable(state, 0, 15)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -295,6 +345,9 @@ public actor LuaRuntime {
         setHostFunction("broadcast", .broadcast)
         setHostFunction("export", .export)
         setHostFunction("call", .call)
+        setHostFunction("getVar", .getVar)
+        setHostFunction("setVar", .setVar)
+        setHostFunction("deleteVar", .deleteVar)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -325,10 +378,32 @@ public actor LuaRuntime {
         case .call:
             guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
             return invokeFunction(ref, payload: Array(arguments.dropFirst()))
+        case .getVar, .setVar, .deleteVar:
+            return accessVariable(function, arguments)
         default:
             registerOrRaise(function, arguments)
             return []
         }
+    }
+
+    /// Scoped variable get/set/delete. `getVar` returns the stored string (or
+    /// `nil` when unset, matching MUSHclient `GetVariable`); `setVar`/
+    /// `deleteVar` mutate the current scope and mark it dirty.
+    private nonisolated func accessVariable(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        let name = Self.argString(arguments, 0)
+        switch function {
+        case .getVar:
+            return [variables[currentVariableScope]?[name].map { LuaValue.string($0) } ?? .nil]
+        case .setVar:
+            variables[currentVariableScope, default: [:]][name] = Self.argString(arguments, 1)
+            dirtyVariableScopes.insert(currentVariableScope)
+        case .deleteVar:
+            variables[currentVariableScope]?[name] = nil
+            dirtyVariableScopes.insert(currentVariableScope)
+        default:
+            break
+        }
+        return []
     }
 
     /// The inert output effects (`send`/`echo`/`note`/…).

@@ -230,6 +230,29 @@ public actor ScriptEngine {
         await runtime.applyGMCP(package: package, json: json)
     }
 
+    // MARK: - Scoped variables
+
+    /// Hydrate the runtime's scoped variables (e.g. from disk on connect).
+    public func loadVariables(_ all: [String: [String: String]]) async {
+        await runtime.loadVariables(all)
+    }
+
+    /// A snapshot of every scope's variables (for persistence).
+    public func variablesSnapshot() async -> [String: [String: String]] {
+        await runtime.variablesSnapshot()
+    }
+
+    /// Set the scope `getVar`/`setVar`/`deleteVar` operate on.
+    public func setVariableScope(_ scope: String) async {
+        await runtime.setVariableScope(scope)
+    }
+
+    /// The scopes whose variables changed since the last call (clears the
+    /// set), so the host persists only what changed.
+    public func takeDirtyVariableScopes() async -> Set<String> {
+        await runtime.takeDirtyVariableScopes()
+    }
+
     /// Run an arbitrary script (e.g. from an alias or a command), returning
     /// its effects. Errors surface as a red note.
     @discardableResult
