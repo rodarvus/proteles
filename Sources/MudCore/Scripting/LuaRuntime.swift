@@ -26,12 +26,19 @@ public actor LuaRuntime {
     /// other reference survives) — hence `nonisolated(unsafe)`.
     private nonisolated(unsafe) let state: OpaquePointer
 
-    public init() throws {
+    /// Create a runtime. When `sandboxed` (the default), the dangerous
+    /// standard-library surface is removed before the runtime is usable —
+    /// see ``sandboxScript``. Pass `false` only for fully-trusted internal
+    /// scripts.
+    public init(sandboxed: Bool = true) throws {
         guard let state = luaL_newstate() else {
             throw LuaError.initializationFailed
         }
         self.state = state
         luaL_openlibs(state)
+        if sandboxed {
+            try Self.applySandbox(to: state)
+        }
     }
 
     deinit {
@@ -85,6 +92,55 @@ public actor LuaRuntime {
         clua_setglobal(state, name)
     }
 
+    // MARK: - Sandbox
+
+    /// First-pass sandbox (D-10): strip the standard-library surface that
+    /// can touch the filesystem, run programs, load native code, or escape
+    /// back to the removed libraries.
+    ///
+    /// Removed: `io`, `package` (and so `package.loaded`, a back-door to
+    /// the removed libraries), `require`/`module`/`dofile`/`loadfile`/
+    /// `loadstring`/`load`. `os` keeps only the clock/date helpers. `debug`
+    /// keeps only `traceback` — dropping `getregistry`, the other recovery
+    /// path to removed libraries. `math`/`string`/`table` stay intact.
+    ///
+    /// An instruction-count / wall-clock timeout hook (to stop runaway
+    /// loops) is a separate follow-up.
+    nonisolated static let sandboxScript = """
+    io = nil
+    package = nil
+    require = nil
+    module = nil
+    dofile = nil
+    loadfile = nil
+    loadstring = nil
+    load = nil
+    local _os = os
+    os = { time = _os.time, clock = _os.clock, date = _os.date, difftime = _os.difftime }
+    local _debug = debug
+    debug = { traceback = _debug.traceback }
+    """
+
+    /// Run the sandbox chunk directly on a freshly-opened state. Static so
+    /// it's callable from the (nonisolated) initializer; it touches only
+    /// the passed pointer, not the actor's isolated surface.
+    private static func applySandbox(to state: OpaquePointer) throws {
+        if luaL_loadstring(state, sandboxScript) != 0 {
+            throw LuaError.syntax(popMessage(state))
+        }
+        if lua_pcall(state, 0, 0, 0) != 0 {
+            throw LuaError.runtime(popMessage(state))
+        }
+    }
+
+    /// Pop the top-of-stack error object as a String (state-only; shared
+    /// by the initializer's sandbox path and the instance error path).
+    private static func popMessage(_ state: OpaquePointer) -> String {
+        let message = clua_tostring(state, -1).map { String(cString: $0) } ?? "unknown Lua error"
+        clua_pop(state, 1)
+        return message
+    }
+
     // MARK: - Private
 
     /// Compile + run `return <expression>`, leaving the single result on
@@ -108,8 +164,6 @@ public actor LuaRuntime {
 
     /// Pop the error object at the top of the stack as a String.
     private func popError() -> String {
-        let message = clua_tostring(state, -1).map { String(cString: $0) } ?? "unknown Lua error"
-        clua_pop(state, 1)
-        return message
+        Self.popMessage(state)
     }
 }

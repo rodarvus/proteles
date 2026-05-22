@@ -33,6 +33,44 @@ struct LuaRuntimeEvaluationTests {
     }
 }
 
+@Suite("LuaRuntime — sandbox")
+struct LuaRuntimeSandboxTests {
+    @Test("Dangerous globals are removed by default")
+    func dangerousGlobalsRemoved() async throws {
+        let lua = try LuaRuntime()
+        for global in ["io", "package", "require", "module", "dofile", "loadfile", "loadstring", "load"] {
+            #expect(try await lua.boolean("\(global) == nil"), "\(global) should be nil")
+        }
+        #expect(try await lua.boolean("os.execute == nil"))
+        #expect(try await lua.boolean("os.remove == nil"))
+        #expect(try await lua.boolean("os.getenv == nil"))
+        #expect(try await lua.boolean("debug.getregistry == nil"))
+    }
+
+    @Test("Safe stdlib survives the sandbox")
+    func safeStdlibSurvives() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.boolean("type(os.time()) == 'number'"))
+        #expect(try await lua.number("math.max(2, 5)") == 5)
+        #expect(try await lua.string("string.lower('HI')") == "hi")
+        #expect(try await lua.boolean("type(debug.traceback) == 'function'"))
+    }
+
+    @Test("package.loaded back-door to io is closed")
+    func packageBackdoorClosed() async throws {
+        let lua = try LuaRuntime()
+        // With `package` gone, there's no package.loaded.io to recover.
+        #expect(try await lua.boolean("package == nil"))
+    }
+
+    @Test("An unsandboxed runtime keeps the full library")
+    func unsandboxedKeepsLibrary() async throws {
+        let lua = try LuaRuntime(sandboxed: false)
+        #expect(try await lua.boolean("io ~= nil"))
+        #expect(try await lua.boolean("type(os.execute) == 'function'"))
+    }
+}
+
 @Suite("LuaRuntime — state & errors")
 struct LuaRuntimeStateTests {
     @Test("State persists across run calls")
