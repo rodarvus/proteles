@@ -144,5 +144,17 @@ extension LuaRuntime {
       if chunk == nil then error("error loading '" .. tostring(path) .. "'", 2) end
       return chunk()
     end
+
+    -- Controlled loadstring/load: compile via the host primitive and run the
+    -- chunk in the caller's environment (so plugins stay isolated). Returns
+    -- nil + message on a compile error, like the stdlib.
+    function loadstring(text, chunkname)
+      if type(text) ~= "string" then return nil, "loadstring expects a string" end
+      local chunk = proteles.__compile(text, chunkname or "loadstring")
+      if chunk == nil then return nil, "compile error" end
+      setfenv(chunk, getfenv(2))
+      return chunk
+    end
+    load = loadstring
     """
 }

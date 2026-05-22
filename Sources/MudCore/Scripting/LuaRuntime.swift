@@ -138,6 +138,8 @@ public actor LuaRuntime {
         case moduleSource
         case sendGMCP
         case isConnected
+        case jsonDecode
+        case jsonEncode
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -331,7 +333,7 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 22)
+        lua_createtable(state, 0, 24)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
@@ -353,6 +355,8 @@ public actor LuaRuntime {
         setHostFunction("__moduleSource", .moduleSource)
         setHostFunction("sendGMCP", .sendGMCP)
         setHostFunction("isConnected", .isConnected)
+        setHostFunction("jsonDecode", .jsonDecode)
+        setHostFunction("jsonEncode", .jsonEncode)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -389,6 +393,8 @@ public actor LuaRuntime {
             return compileChunk(arguments)
         case .moduleSource:
             return moduleSourceValue(arguments)
+        case .jsonDecode, .jsonEncode:
+            return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected:
             return queryValue(function, arguments)
         default:

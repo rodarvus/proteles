@@ -16,8 +16,56 @@ extension LuaRuntime {
         "tprint": tprintSource,
         "copytable": copytableSource,
         "commas": commasSource,
-        "pairsbykeys": pairsByKeysSource
+        "pairsbykeys": pairsByKeysSource,
+        "serialize": serializeSource,
+        "json": jsonSource
     ]
+
+    /// `serialize.save_simple(value)` → a Lua-source table/value literal;
+    /// `serialize.save(name [, value])` → a `name = <literal>` assignment
+    /// (looks the value up in the caller's environment when omitted). Restore
+    /// with `loadstring(...)()`. No cycle handling (matches `save_simple`'s
+    /// contract; sufficient for the flat state tables plugins persist).
+    private static let serializeSource = """
+    local function isIdentifier(key)
+      return type(key) == "string" and key:match("^[%a_][%w_]*$") ~= nil
+    end
+    local function literal(value)
+      local t = type(value)
+      if t == "string" then return string.format("%q", value)
+      elseif t == "number" or t == "boolean" then return tostring(value)
+      elseif t == "table" then
+        local parts = {}
+        for key, val in pairs(value) do
+          local keyText = isIdentifier(key) and key or ("[" .. literal(key) .. "]")
+          parts[#parts + 1] = keyText .. "=" .. literal(val)
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+      end
+      return "nil"
+    end
+    -- Global (like MUSHclient's module()) so `require "serialize"` then
+    -- `serialize.save(...)` works.
+    serialize = {}
+    function serialize.save_simple(value) return literal(value) end
+    function serialize.save(name, value)
+      if value == nil then value = getfenv(2)[name] end
+      return name .. " = " .. literal(value)
+    end
+    return serialize
+    """
+
+    /// `json.encode(value)` / `json.decode(text)` over Foundation (via the
+    /// `proteles.jsonEncode`/`jsonDecode` host primitives). `json.util` is a
+    /// stub — the corpus references it but doesn't call its members.
+    private static let jsonSource = """
+    json = {
+      encode = function(value) return proteles.jsonEncode(value) end,
+      decode = function(text) return proteles.jsonDecode(text) end,
+      util = {},
+    }
+    return json
+    """
 
     /// `gmcp(path)` / `gmcpval(path)` over the live `proteles.gmcp` table.
     /// A table node is returned as-is; a leaf scalar is stringified (Aardwolf

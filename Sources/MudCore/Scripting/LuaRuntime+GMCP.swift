@@ -61,10 +61,105 @@ extension LuaRuntime {
         clua_pop(state, 1) // pop parent
     }
 
-    /// Recursively push a decoded-JSON Foundation value onto the Lua stack
-    /// as a native Lua value (objects → string-keyed tables, arrays →
-    /// 1-based tables, numbers stay numbers, booleans stay booleans).
-    private func pushJSONValue(_ value: Any?) {
+    /// Route `proteles.jsonDecode`/`jsonEncode` (grouped to keep the host
+    /// dispatch under the cyclomatic-complexity limit).
+    nonisolated func jsonValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        function == .jsonDecode ? jsonDecode(arguments) : jsonEncode(arguments)
+    }
+
+    /// `proteles.jsonDecode(text)` → the decoded value as a Lua table/scalar
+    /// (via the registry-ref bridge), or nil on a parse error. Backs the
+    /// `json` helper's `decode`, reusing Foundation's parser + ``pushJSONValue``.
+    nonisolated func jsonDecode(_ arguments: [LuaValue]) -> [LuaValue] {
+        let text = arguments.first?.stringValue ?? ""
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(
+                  with: data, options: [.fragmentsAllowed]
+              )
+        else { return [.nil] }
+        pushJSONValue(object) // [value]
+        let ref = luaL_ref(state, LUA_REGISTRYINDEX) // pops + stores
+        noteTransientRef(ref)
+        return [.functionRef(ref)]
+    }
+
+    /// `proteles.jsonEncode(value)` → a JSON string. The value is read
+    /// directly off the Lua stack (arg 1) and walked into a Foundation
+    /// object, so `JSONSerialization` handles all the escaping. Backs the
+    /// `json` helper's `encode`.
+    nonisolated func jsonEncode(_: [LuaValue]) -> [LuaValue] {
+        let object = luaValueToFoundation(at: 1)
+        guard JSONSerialization.isValidJSONObject(object)
+            || object is String || object is NSNumber || object is NSNull,
+            let data = try? JSONSerialization.data(
+                withJSONObject: object, options: [.fragmentsAllowed]
+            ),
+            let json = String(data: data, encoding: .utf8)
+        else { return [.string("null")] }
+        return [.string(json)]
+    }
+
+    /// Convert the Lua value at `index` to a Foundation object.
+    private nonisolated func luaValueToFoundation(at index: Int32) -> Any {
+        switch lua_type(state, index) {
+        case LUA_TBOOLEAN: lua_toboolean(state, index) != 0
+        case LUA_TNUMBER: lua_tonumber(state, index)
+        case LUA_TSTRING: clua_tostring(state, index).map { String(cString: $0) } ?? ""
+        case LUA_TTABLE: luaTableToFoundation(at: index)
+        default: NSNull()
+        }
+    }
+
+    /// Convert a Lua table to an array (keys 1…n) or a dictionary.
+    private nonisolated func luaTableToFoundation(at index: Int32) -> Any {
+        let absolute = index < 0 ? lua_gettop(state) + index + 1 : index
+        var pairs: [(key: Any, value: Any)] = []
+        lua_pushnil(state)
+        while lua_next(state, absolute) != 0 {
+            let value = luaValueToFoundation(at: -1)
+            let key: Any = switch lua_type(state, -2) {
+            case LUA_TNUMBER: lua_tonumber(state, -2)
+            case LUA_TSTRING: clua_tostring(state, -2).map { String(cString: $0) } ?? ""
+            default: ""
+            }
+            pairs.append((key, value))
+            clua_pop(state, 1) // pop value, keep key for the next lua_next
+        }
+        return Self.foundationCollection(from: pairs)
+    }
+
+    /// Choose array vs. dictionary for a table's key/value pairs.
+    private nonisolated static func foundationCollection(from pairs: [(key: Any, value: Any)]) -> Any {
+        var array = [Any?](repeating: nil, count: pairs.count)
+        var isArray = !pairs.isEmpty
+        for (key, value) in pairs {
+            guard isArray, let number = key as? Double, number == number.rounded(),
+                  Int(number) >= 1, Int(number) <= pairs.count
+            else { isArray = false; break }
+            array[Int(number) - 1] = value
+        }
+        if isArray, !array.contains(where: { $0 == nil }) {
+            return array.compactMap(\.self)
+        }
+        var dictionary: [String: Any] = [:]
+        for (key, value) in pairs {
+            dictionary[Self.jsonKey(key)] = value
+        }
+        return dictionary
+    }
+
+    private nonisolated static func jsonKey(_ key: Any) -> String {
+        if let string = key as? String { return string }
+        if let number = key as? Double {
+            return number == number.rounded() ? String(Int(number)) : String(number)
+        }
+        return ""
+    }
+
+    /// Recursively push a decoded-JSON Foundation value onto the Lua stack as
+    /// a native Lua value (objects → string-keyed tables, arrays → 1-based
+    /// tables, numbers stay numbers, booleans stay booleans).
+    nonisolated func pushJSONValue(_ value: Any?) {
         switch value {
         case let number as NSNumber:
             if CFGetTypeID(number) == CFBooleanGetTypeID() {
