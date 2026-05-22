@@ -700,6 +700,25 @@ off (live GMCP table, an event bus) rather than cloning MUSHclient's
 - Lua's `coroutine` library stays available (safe) so plugins' async/
   multi-step MUD interactions work.
 
+**Core-plugin investigation findings (S&D + dinv), which the host must satisfy:**
+- **Cross-plugin RPC is hard-required and brings in the mapper.** S&D paths
+  via `CallPlugin(mapperID, "map_find_query", …)`; both S&D and dinv gate
+  init on the GMCP plugin's broadcast. So `call`/`broadcast`/`onBroadcast`
+  must be real and our native **mapper** + **GMCP handler** must participate
+  — i.e. S&D depends on a native mapper (a v1.0 core-plugin dependency).
+- **SQLite is opened by path, including other plugins' DBs.** S&D reads its
+  own `SnDdb.db` *and* the mapper's `aardwolf.db` (via the world dir,
+  `GetInfo(66)`); dinv opens a per-character `dinv.db`. `proteles.db` must
+  allow opening DB files by path within an allowed area, and the world/state
+  dir must be exposed — not just a private per-plugin store.
+- **Ship the standard helper libs** plugins `require`: `serialize`, `json`,
+  `async`, `wait`, `check`, `tprint`, `gmcphelper` (and `movewindow`, which
+  drops out once miniwindows are native).
+- S&D's miniwindow is confirmed faithfully reproducible as a native panel
+  (scrolling tappable target list + button strip + a small `Canvas` for the
+  circle/noexp glyphs), validating D-19. S&D miniwindow code:
+  `search-and-destroy/Search_and_Destroy.xml` ~5482–6450.
+
 **Deliverable:** A user can sit down and write triggers/aliases/macros that feel familiar to a MUSHclient/Mudlet user.
 
 ### 8.7 Phase 6 — Plugin Migration (~3 weeks)
