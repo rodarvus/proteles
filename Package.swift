@@ -21,9 +21,20 @@ let package = Package(
     targets: [
         .systemLibrary(name: "CZlib"),
         .target(
+            name: "CLua",
+            exclude: ["LICENSE.txt"],
+            cSettings: [
+                // Enables the macOS/POSIX feature set (dlopen-based
+                // package loading, etc.). The Lua environment is
+                // sandboxed at runtime (D-10), not at compile time.
+                .define("LUA_USE_MACOSX")
+            ]
+        ),
+        .target(
             name: "MudCore",
             dependencies: [
                 "CZlib",
+                "CLua",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
