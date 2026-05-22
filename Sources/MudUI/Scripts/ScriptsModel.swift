@@ -44,6 +44,12 @@ public final class ScriptsModel {
         profileID = id
         await refresh()
         await session.loadScripts(store.document)
+        // Hydrate persisted plugin/script variables before loading plugins,
+        // so their OnPluginInstall reads saved values (and the store is then
+        // written through as variables change).
+        if let variableURL = try? VariableStore.defaultStoreURL(forProfile: id) {
+            await session.attachVariableStore(VariableStore(url: variableURL))
+        }
         // Then load this world's MUSHclient .xml plugins (after the script
         // reset above, so their triggers/timers survive).
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {

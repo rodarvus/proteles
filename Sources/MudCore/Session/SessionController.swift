@@ -83,6 +83,10 @@ public actor SessionController {
     /// fires the due timers, then loops. Restarted whenever timers change.
     var timerTask: Task<Void, Never>?
     private var recorder: SessionRecorder?
+    /// Per-world persistence for scoped script/plugin variables. Set via
+    /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes
+    /// only) after each Lua batch so plugin variables survive relaunches.
+    var variableStore: VariableStore?
 
     /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
     /// so library/test callers opt in explicitly; the app sets
@@ -311,6 +315,7 @@ public actor SessionController {
         )
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.expandInput(command))
+            await persistVariablesIfDirty()
         } else {
             try await sendLine(command)
         }
@@ -457,6 +462,7 @@ public actor SessionController {
                 default: []
                 }
                 if !effects.isEmpty { await self?.applyScriptEffects(effects) }
+                await self?.persistVariablesIfDirty()
             }
         }
     }
@@ -517,6 +523,7 @@ public actor SessionController {
         }
 
         await advanceAutologin(newLines: output.lines)
+        await persistVariablesIfDirty()
     }
 
     /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,

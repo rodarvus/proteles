@@ -41,6 +41,52 @@ struct SessionControllerPluginTests {
         #expect(scopes["com.test.dirplug"]?["ok"] == "1")
     }
 
+    @Test("Plugin variables persist across sessions (the counter case)")
+    func variablesPersistAcrossSessions() async throws {
+        let pluginsDir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: pluginsDir) }
+        let xml = """
+        <muclient>
+        <plugin id="com.test.counter" name="Counter" save_state="y"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          local n = (tonumber(GetVariable("n")) or 0) + 1
+          SetVariable("n", tostring(n))
+        end
+        ]]></script>
+        </muclient>
+        """
+        try xml.write(
+            to: pluginsDir.appendingPathComponent("counter.xml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let variableURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("proteles-vars-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: variableURL) }
+
+        // First session: install runs once → n = 1, persisted.
+        do {
+            let engine = try ScriptEngine()
+            let controller = SessionController(scriptEngine: engine)
+            await controller.attachVariableStore(VariableStore(url: variableURL))
+            await controller.loadPlugins(fromDirectory: pluginsDir)
+            #expect(await engine.variablesSnapshot()["com.test.counter"]?["n"] == "1")
+        }
+        let store = VariableStore(url: variableURL)
+        try await store.load()
+        #expect(await store.scopes["com.test.counter"]?["n"] == "1")
+
+        // Second session ("relaunch"): hydrate from disk → install bumps to 2.
+        do {
+            let engine = try ScriptEngine()
+            let controller = SessionController(scriptEngine: engine)
+            await controller.attachVariableStore(VariableStore(url: variableURL))
+            await controller.loadPlugins(fromDirectory: pluginsDir)
+            #expect(await engine.variablesSnapshot()["com.test.counter"]?["n"] == "2")
+        }
+    }
+
     @Test("loadPlugins is a no-op for an empty / missing directory")
     func emptyDirectoryNoOp() async throws {
         let directory = try temporaryDirectory()

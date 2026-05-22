@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!--
+  A tiny demo plugin for verifying Proteles' MUSHclient plugin loading
+  (v0.0.6). Uses only what the Phase-6 compat shim implements: the bundled
+  `gmcphelper`, aliases (with %-substitution), a regex trigger, ColourNote,
+  persisted per-plugin variables, and the OnPluginInstall/OnPluginConnect
+  lifecycle callbacks. No miniwindows, no unbundled libraries.
+
+  Try after loading:
+    pdemo        - prints your current HP from live GMCP
+    greet Bob    - prints a coloured greeting (alias parameter)
+    (a tell)     - any "X tells you '...'" line echoes a coloured note
+-->
+<muclient>
+<plugin
+   name="Proteles_Demo"
+   author="Proteles"
+   id="com.proteles.demo"
+   language="Lua"
+   purpose="Verifies Proteles plugin loading (aliases, triggers, GMCP, lifecycle)"
+   date_written="2026-05-22"
+   requires="4.00"
+   version="1.0"
+   save_state="y"
+>
+<description trim="y">
+<![CDATA[
+A small plugin that proves Proteles can load and run MUSHclient/Aardwolf
+plugins. Type `pdemo` to read your live HP via GMCP, or `greet <name>`.
+]]>
+</description>
+</plugin>
+
+<aliases>
+  <alias
+     name="pdemo"
+     match="pdemo"
+     enabled="y"
+     send_to="12"
+     sequence="100"
+  >
+  <send>
+local hp = gmcp("char.vitals.hp")
+local maxhp = gmcp("char.maxstats.maxhp")
+if hp then
+  ColourNote("green", "", "[Proteles Demo] HP: " .. tostring(hp) .. "/" .. tostring(maxhp or "?"))
+else
+  ColourNote("yellow", "", "[Proteles Demo] No GMCP vitals yet - connect to Aardwolf and try again.")
+end
+  </send>
+  </alias>
+
+  <alias
+     name="pgreet"
+     match="greet *"
+     enabled="y"
+     send_to="12"
+     sequence="100"
+  >
+  <send>ColourNote("cyan", "", "[Proteles Demo] Hello, %1!")</send>
+  </alias>
+</aliases>
+
+<triggers>
+  <trigger
+     name="onTell"
+     enabled="y"
+     regexp="y"
+     match="tells you '(.*)'"
+     keep_evaluating="y"
+     send_to="12"
+     sequence="100"
+  >
+  <send>ColourNote("magenta", "", "[Proteles Demo] tell received: " .. matches[1])</send>
+  </trigger>
+</triggers>
+
+<script>
+<![CDATA[
+require "gmcphelper"
+
+function OnPluginInstall()
+  local installs = (tonumber(GetVariable("installs")) or 0) + 1
+  SetVariable("installs", tostring(installs))
+  ColourNote("white", "blue",
+    "[Proteles Demo] Plugin loaded (run #" .. installs .. "). Try:  pdemo  |  greet <name>")
+end
+
+function OnPluginConnect()
+  ColourNote("green", "",
+    "[Proteles Demo] Connected" .. (IsConnected() and "." or "?"))
+end
+]]>
+</script>
+</muclient>

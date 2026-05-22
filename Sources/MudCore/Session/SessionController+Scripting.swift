@@ -49,6 +49,30 @@ public extension SessionController {
         restartTimerLoop()
     }
 
+    /// Attach a per-world variable store and hydrate the engine's scoped
+    /// variables from it. Call on connect, before loading plugins (so their
+    /// `OnPluginInstall` reads persisted values). The store is then written
+    /// through as variables change.
+    func attachVariableStore(_ store: VariableStore) async {
+        guard let scriptEngine else { return }
+        variableStore = store
+        try? await store.load()
+        await scriptEngine.loadVariables(store.scopes)
+    }
+
+    /// Persist any variable scopes mutated since the last call to the
+    /// attached store. Cheap when nothing changed (no I/O). Called after each
+    /// batch of script execution so plugin variables survive relaunches.
+    func persistVariablesIfDirty() async {
+        guard let variableStore, let scriptEngine else { return }
+        let dirty = await scriptEngine.takeDirtyVariableScopes()
+        guard !dirty.isEmpty else { return }
+        let snapshot = await scriptEngine.variablesSnapshot()
+        for scope in dirty {
+            try? await variableStore.update(scope: scope, variables: snapshot[scope] ?? [:])
+        }
+    }
+
     /// Discover and load every MUSHclient `.xml` plugin in `directory` into
     /// the live engine: parse each, scope it with a ``PluginContext`` rooted
     /// at the directory (so `require`/`dofile`/`GetInfo` resolve there), run
@@ -78,6 +102,8 @@ public extension SessionController {
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         }
+        // OnPluginInstall may have set variables; persist them.
+        await persistVariablesIfDirty()
         // Plugins may have registered timers.
         restartTimerLoop()
     }
