@@ -3,7 +3,7 @@ import Foundation
 /// When a ``MudTimer`` should fire. Both MUSHclient (`eInterval`/`eAtTime`)
 /// and Mudlet (interval-only `tempTimer`) shapes are covered, with explicit
 /// cases so the intent is never ambiguous.
-public enum TimerSchedule: Sendable, Equatable {
+public enum TimerSchedule: Sendable, Equatable, Codable {
     /// Fire once after `delay` seconds, then remove the timer (Mudlet's
     /// `tempTimer`). `delay` may be `0` (fire on the next tick).
     case after(TimeInterval)
@@ -19,7 +19,7 @@ public enum TimerSchedule: Sendable, Equatable {
 /// What a timer does when it fires. Modelled as a single payload (unlike
 /// MUSHclient/Mudlet, which carry both a send string and a script slot on
 /// every timer): a timer either sends text or runs a script.
-public enum TimerAction: Sendable, Equatable {
+public enum TimerAction: Sendable, Equatable, Codable {
     /// Send text to the MUD.
     case send(String)
     /// Run Lua (the host provides no captures).
@@ -40,7 +40,7 @@ public enum TimerAction: Sendable, Equatable {
 /// due; the host (``SessionController``) performs the send/script. `label`
 /// and `temporary` are metadata for the UI/persistence layers; the engine
 /// keys everything off ``id``.
-public struct MudTimer: Sendable, Identifiable, Equatable {
+public struct MudTimer: Sendable, Identifiable, Equatable, Codable {
     public let id: UUID
     /// Human-facing name (optional). Unused by matching — kill/enable is by
     /// ``id`` to avoid Mudlet's id-vs-name overload ambiguity.

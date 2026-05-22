@@ -2,7 +2,7 @@ import Foundation
 
 /// Where an alias's expanded text goes (modelled on MUSHclient's `iSendTo`,
 /// trimmed to what matters for v1).
-public enum AliasTarget: Sendable, Equatable {
+public enum AliasTarget: String, Sendable, Equatable, Codable {
     /// Send the expansion raw to the MUD (`eSendToWorld`). The default.
     case world
     /// Re-feed the expansion through alias matching (`eSendToExecute`),
@@ -18,7 +18,7 @@ public enum AliasTarget: Sendable, Equatable {
 /// An input-line rule: matches what the user types and rewrites it before
 /// it's sent. The input-side counterpart to ``Trigger``. A pure value type —
 /// matching here, action execution in the host.
-public struct Alias: Sendable, Identifiable, Equatable {
+public struct Alias: Sendable, Identifiable, Equatable, Codable {
     public let id: UUID
     public var pattern: TriggerPattern
     public var caseSensitive: Bool

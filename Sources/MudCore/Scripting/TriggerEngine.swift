@@ -4,7 +4,7 @@ import Foundation
 /// `NSRegularExpression`. Unlike MUSHclient (which anchors every literal
 /// pattern to the whole line and silently drops `?`), the match scope is
 /// explicit here.
-public enum TriggerPattern: Sendable, Equatable {
+public enum TriggerPattern: Sendable, Equatable, Codable {
     /// Matches anywhere in the line (Mudlet "substring").
     case substring(String)
     /// Matches at the start of the line.
@@ -105,7 +105,7 @@ public struct TriggerMatch: Sendable, Equatable {
 /// value type: matching is decided here, but *executing* the response
 /// (sending, running the script, gagging) is the host's job — keeping the
 /// engine testable without UI/network/Lua.
-public struct Trigger: Sendable, Identifiable, Equatable {
+public struct Trigger: Sendable, Identifiable, Equatable, Codable {
     public let id: UUID
     public var pattern: TriggerPattern
     public var caseSensitive: Bool

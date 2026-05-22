@@ -129,6 +129,23 @@ public actor ScriptEngine {
         return effects
     }
 
+    // MARK: - Bulk load
+
+    /// Load a persisted ``ScriptDocument`` into the live engines. Invalid
+    /// entries (e.g. a malformed regex) are skipped rather than aborting the
+    /// whole load, so one bad rule can't disable a user's entire script set.
+    public func load(_ document: ScriptDocument, now: Date = Date()) {
+        for trigger in document.triggers {
+            try? triggers.add(trigger)
+        }
+        for alias in document.aliases {
+            try? aliases.add(alias)
+        }
+        for timer in document.timers {
+            try? timers.add(timer, now: now)
+        }
+    }
+
     // MARK: - Input expansion
 
     /// Expand a typed line through the aliases, returning the effects to
