@@ -33,6 +33,9 @@ struct ProtelesApp: App {
     /// kept in sync with the live session.
     @State private var scripts: ScriptsModel
 
+    /// The active world's installed MUSHclient plugins (Plugins window).
+    @State private var plugins: PluginsModel
+
     init() {
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
@@ -65,6 +68,7 @@ struct ProtelesApp: App {
         _worlds = State(initialValue: WorldsModel(store: ProfileStore(url: storeURL)))
         _chat = State(initialValue: ChatModel(store: session.chatStore))
         _scripts = State(initialValue: ScriptsModel(session: session))
+        _plugins = State(initialValue: PluginsModel(session: session))
 
         if let persistence {
             let store = session.scrollbackStore
@@ -153,11 +157,26 @@ struct ProtelesApp: App {
             ScriptsView(model: scripts)
         }
         .windowResizability(.contentSize)
+
+        Window("Plugins", id: ProtelesApp.pluginsWindowID) {
+            PluginsView(model: plugins)
+                .task(id: worlds.activeProfileID) {
+                    guard let id = worlds.activeProfileID,
+                          let directory = MUSHclientPluginLoader.defaultDirectory(forProfile: id)
+                    else { return }
+                    let scripts = scripts
+                    plugins.prepare(directory: directory) {
+                        await scripts.load(forProfile: id)
+                    }
+                }
+        }
+        .windowResizability(.contentSize)
     }
 
     static let worldsWindowID = "worlds"
     static let chatWindowID = "chat"
     static let scriptsWindowID = "scripts"
+    static let pluginsWindowID = "plugins"
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -208,6 +227,11 @@ private struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.scriptsWindowID)
             }
             .keyboardShortcut("T", modifiers: [.command, .shift])
+
+            Button("Plugins…") {
+                openWindow(id: ProtelesApp.pluginsWindowID)
+            }
+            .keyboardShortcut("P", modifiers: [.command, .shift])
         }
     }
 }
