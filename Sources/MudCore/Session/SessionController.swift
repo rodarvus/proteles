@@ -292,8 +292,9 @@ public actor SessionController {
         updateState(.disconnected)
     }
 
-    /// Send a user-typed command. Appends `\r\n` (the MUD line
-    /// terminator). Throws if not connected.
+    /// Send a user-typed command. When a script engine is present the line
+    /// is first run through its aliases (so a matched alias rewrites it);
+    /// otherwise it goes to the MUD verbatim. Either way `\r\n` is appended.
     ///
     /// Tracks quit commands so the server-initiated close that follows a
     /// `quit` is treated as a clean logout rather than a dropped link —
@@ -302,8 +303,17 @@ public actor SessionController {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
-        let payload = command + "\r\n"
-        try await sendRaw(Array(payload.utf8))
+        if let scriptEngine {
+            await applyScriptEffects(scriptEngine.expandInput(command))
+        } else {
+            try await sendLine(command)
+        }
+    }
+
+    /// Send a single line to the MUD (raw text + `\r\n`), bypassing alias
+    /// expansion. Used for internal sends (autologin, applied effects).
+    func sendLine(_ text: String) async throws {
+        try await sendRaw(Array((text + "\r\n").utf8))
     }
 
     /// Send raw bytes verbatim (no line terminator added).
@@ -485,57 +495,6 @@ public actor SessionController {
         await advanceAutologin(newLines: output.lines)
     }
 
-    /// Run a received line through the script engine (if any), then append
-    /// it unless a trigger gagged it. Trigger sends/echoes are applied
-    /// afterwards so echoes land just below the line that produced them.
-    private func appendLineThroughScripts(_ line: Line) async {
-        guard let scriptEngine else {
-            await scrollbackStore.append(line)
-            return
-        }
-        let disposition = await scriptEngine.process(line: line.text)
-        if !disposition.gag {
-            await scrollbackStore.append(line)
-        }
-        await applyScriptEffects(disposition.effects)
-    }
-
-    /// Apply the effects a script produced: sends go to the MUD, echoes/notes
-    /// to the scrollback.
-    private func applyScriptEffects(_ effects: [ScriptEffect]) async {
-        for effect in effects {
-            switch effect {
-            case .send(let command), .execute(let command), .sendNoEcho(let command):
-                try? await sendRaw(Array((command + "\r\n").utf8))
-            case .echo(let text):
-                await scrollbackStore.append(Line(id: LineID(0), text: text))
-            case .note(let text, let foreground, let background):
-                await scrollbackStore.append(Line(
-                    id: LineID(0),
-                    text: text,
-                    runs: Self.noteRuns(text, foreground: foreground, background: background)
-                ))
-            }
-        }
-    }
-
-    private static func noteRuns(_ text: String, foreground: String?, background: String?) -> [StyledRun] {
-        var style = StyleAttributes.default
-        if let foreground, let color = namedColor(foreground) { style.foreground = color }
-        if let background, let color = namedColor(background) { style.background = color }
-        let length = (text as NSString).length
-        guard !style.isDefault, length > 0 else { return [] }
-        return [StyledRun(utf16Range: 0..<length, style: style)]
-    }
-
-    private static func namedColor(_ name: String) -> ANSIColor? {
-        let names: [String: NamedColor] = [
-            "black": .black, "red": .red, "green": .green, "yellow": .yellow,
-            "blue": .blue, "magenta": .magenta, "cyan": .cyan, "white": .white
-        ]
-        return names[name.lowercased()].map { .named($0) }
-    }
-
     /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,
     /// then the config/request batch). Sent at most once per connection.
     private func sendGMCPHandshake() async {
@@ -559,13 +518,14 @@ public actor SessionController {
         switch state.phase {
         case .awaitingUsername:
             guard sees(state.plan.usernamePrompt, in: newLines) else { return }
-            try? await send(state.plan.username)
+            // Credentials bypass alias expansion and quit detection.
+            try? await sendLine(state.plan.username)
             // Skip the password wait entirely when there's nothing to
             // send; some characters have no password.
             state.phase = state.plan.password.isEmpty ? .done : .awaitingPassword
         case .awaitingPassword:
             guard sees(state.plan.passwordPrompt, in: newLines) else { return }
-            try? await send(state.plan.password)
+            try? await sendLine(state.plan.password)
             state.phase = .done
         case .done:
             break

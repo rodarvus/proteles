@@ -56,6 +56,33 @@ struct SessionControllerScriptingTests {
         drainTask.cancel()
     }
 
+    @Test("A typed alias is expanded before being sent to the MUD")
+    func aliasExpandsUserInput() async throws {
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+        let sink = ByteSink()
+        let drainTask = Task { for await chunk in listener.received {
+            await sink.append(chunk)
+        } }
+
+        let engine = try ScriptEngine()
+        try await engine.addAlias(Alias(pattern: .wildcard("gg *"), sendText: "get %1 from corpse"))
+        let controller = SessionController(scriptEngine: engine)
+        try await controller.connect(to: .init(host: "127.0.0.1", port: port))
+        await listener.waitForConnection()
+
+        try await controller.send("gg sword")
+        #expect(await waitFor(Array("get sword from corpse\r\n".utf8), in: sink))
+
+        // An un-aliased command passes through verbatim.
+        try await controller.send("look")
+        #expect(await waitFor(Array("look\r\n".utf8), in: sink))
+
+        await controller.disconnect()
+        await listener.stop()
+        drainTask.cancel()
+    }
+
     @Test("A gag trigger keeps the matched line out of the scrollback")
     func gagTriggerDropsLine() async throws {
         let listener = LoopbackListener()

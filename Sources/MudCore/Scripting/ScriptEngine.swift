@@ -25,6 +25,10 @@ public actor ScriptEngine {
 
     private let runtime: LuaRuntime
     private var triggers = TriggerEngine()
+    private var aliases = AliasEngine()
+
+    /// Max `.execute` re-expansions before bailing (MUSHclient's value).
+    private static let maxExecuteDepth = 20
 
     public init(runtime: LuaRuntime) {
         self.runtime = runtime
@@ -55,6 +59,71 @@ public actor ScriptEngine {
 
     public var triggerList: [Trigger] {
         triggers.allTriggers
+    }
+
+    // MARK: - Aliases
+
+    public func addAlias(_ alias: Alias) throws {
+        try aliases.add(alias)
+    }
+
+    public func removeAlias(id: UUID) {
+        aliases.remove(id: id)
+    }
+
+    public func setAliasEnabled(_ enabled: Bool, id: UUID) {
+        aliases.setEnabled(enabled, id: id)
+    }
+
+    public func setAliasGroupEnabled(_ enabled: Bool, group: String) {
+        aliases.setGroupEnabled(enabled, group: group)
+    }
+
+    public var aliasList: [Alias] {
+        aliases.allAliases
+    }
+
+    // MARK: - Input expansion
+
+    /// Expand a typed line through the aliases, returning the effects to
+    /// apply. If no alias matches, the line is sent verbatim. `.execute`
+    /// targets re-expand (depth-guarded); `.script` runs Lua; `.output`
+    /// echoes locally.
+    public func expandInput(_ input: String) async -> [ScriptEffect] {
+        await expandInput(input, depth: 0)
+    }
+
+    private func expandInput(_ input: String, depth: Int) async -> [ScriptEffect] {
+        let firings = aliases.match(input)
+        guard !firings.isEmpty else { return [.send(input)] }
+
+        var effects: [ScriptEffect] = []
+        for firing in firings {
+            guard let send = firing.send else { continue }
+            switch firing.target {
+            case .world:
+                effects.append(.send(send))
+            case .output:
+                effects.append(.echo(send))
+            case .script:
+                await effects.append(contentsOf: runScript(
+                    send,
+                    matches: firing.match.captures,
+                    named: firing.match.named
+                ))
+            case .execute:
+                if depth < Self.maxExecuteDepth {
+                    await effects.append(contentsOf: expandInput(send, depth: depth + 1))
+                } else {
+                    effects.append(.note(
+                        text: "alias execute recursion limit (\(Self.maxExecuteDepth)) reached",
+                        foreground: "red",
+                        background: nil
+                    ))
+                }
+            }
+        }
+        return effects
     }
 
     // MARK: - Processing

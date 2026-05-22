@@ -175,17 +175,12 @@ public struct TriggerFiring: Sendable, Equatable {
 /// ``Trigger/continueEvaluation`` to false. A non-match never stops the loop
 /// (unlike MUSHclient). One-shot triggers are removed after they fire.
 public struct TriggerEngine {
-    private struct Compiled {
-        let regex: NSRegularExpression
-        let names: [String]
-    }
-
     public enum TriggerError: Error, Equatable {
         case invalidPattern(String)
     }
 
     private var triggers: [Trigger] = []
-    private var compiled: [UUID: Compiled] = [:]
+    private var matchers: [UUID: PatternMatcher] = [:]
     private var disabledGroups: Set<String> = []
 
     public init() {}
@@ -197,7 +192,14 @@ public struct TriggerEngine {
 
     /// Add a trigger (compiling its pattern). Throws on an invalid regex.
     public mutating func add(_ trigger: Trigger) throws {
-        compiled[trigger.id] = try Self.compile(trigger)
+        do {
+            matchers[trigger.id] = try PatternMatcher(
+                pattern: trigger.pattern,
+                caseSensitive: trigger.caseSensitive
+            )
+        } catch PatternMatcher.MatchError.invalidPattern(let source) {
+            throw TriggerError.invalidPattern(source)
+        }
         let index = triggers.firstIndex { $0.sequence > trigger.sequence } ?? triggers.count
         triggers.insert(trigger, at: index)
     }
@@ -205,7 +207,7 @@ public struct TriggerEngine {
     /// Remove a trigger by id.
     public mutating func remove(id: UUID) {
         triggers.removeAll { $0.id == id }
-        compiled[id] = nil
+        matchers[id] = nil
     }
 
     /// Enable or disable a single trigger.
@@ -228,9 +230,7 @@ public struct TriggerEngine {
         for trigger in triggers {
             guard trigger.enabled else { continue }
             if let group = trigger.group, disabledGroups.contains(group) { continue }
-            guard let compiled = compiled[trigger.id],
-                  let match = Self.match(line, with: compiled)
-            else { continue }
+            guard let match = matchers[trigger.id]?.match(line) else { continue }
 
             firings.append(TriggerFiring(
                 triggerID: trigger.id,
@@ -247,50 +247,5 @@ public struct TriggerEngine {
             remove(id: id)
         }
         return firings
-    }
-
-    // MARK: - Private
-
-    private static func compile(_ trigger: Trigger) throws -> Compiled {
-        let source = trigger.pattern.regexSource()
-        var options: NSRegularExpression.Options = []
-        if !trigger.caseSensitive { options.insert(.caseInsensitive) }
-        guard let regex = try? NSRegularExpression(pattern: source, options: options) else {
-            throw TriggerError.invalidPattern(source)
-        }
-        return Compiled(regex: regex, names: capturedGroupNames(in: source))
-    }
-
-    private static func match(_ line: String, with compiled: Compiled) -> TriggerMatch? {
-        let text = line as NSString
-        let range = NSRange(location: 0, length: text.length)
-        guard let result = compiled.regex.firstMatch(in: line, options: [], range: range) else {
-            return nil
-        }
-        var captures: [String] = []
-        for index in 0..<result.numberOfRanges {
-            let groupRange = result.range(at: index)
-            captures.append(groupRange.location == NSNotFound ? "" : text.substring(with: groupRange))
-        }
-        var named: [String: String] = [:]
-        for name in compiled.names {
-            let namedRange = result.range(withName: name)
-            named[name] = namedRange.location == NSNotFound ? "" : text.substring(with: namedRange)
-        }
-        return TriggerMatch(whole: captures.first ?? "", captures: captures, named: named)
-    }
-
-    /// Extract the names of `(?<name>…)` capture groups from a regex source.
-    private static let namePattern = try? NSRegularExpression(
-        pattern: #"\(\?P?<([A-Za-z_][A-Za-z0-9_]*)>"#
-    )
-
-    private static func capturedGroupNames(in source: String) -> [String] {
-        guard let namePattern else { return [] }
-        let text = source as NSString
-        let range = NSRange(location: 0, length: text.length)
-        return namePattern.matches(in: source, range: range).map {
-            text.substring(with: $0.range(at: 1))
-        }
     }
 }
