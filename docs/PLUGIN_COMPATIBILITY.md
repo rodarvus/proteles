@@ -13,6 +13,7 @@ top of the native `proteles.*` layer (see PLAN.md §7).
 | `Send`, `SendNoEcho`, `Execute` | ✅ | → `proteles.send`/`sendNoEcho`/`execute` |
 | `Note` | ✅ | → `proteles.echo` |
 | `ColourNote`, `ColourTell`, `Tell` | 🟡 | single styled run per line; multi-triplet segment text is concatenated under the first colour |
+| `AnsiNote` | ✅ | renders ANSI-SGR text as styled runs (pairs with `ColoursToANSI`) |
 | `GetVariable`, `SetVariable`, `DeleteVariable` | ✅ | per-plugin scope; values coerced to strings |
 | `GetPluginVariable` | ✅ | cross-plugin reads |
 | `GetInfo(n)` | 🟡 | the path/identity/time/flag subset the corpus uses; window-geometry numbers stubbed |
@@ -41,8 +42,24 @@ Controlled `require`/`dofile` ✅ and `loadstring`/`load` ✅ (compiled via a
 host primitive, run in the caller's env; gated to bundled libs + the
 plugin's own dir). Bundled helpers: `gmcphelper` ✅ (re-pointed at native
 `proteles.gmcp`), `serialize` ✅, `json` ✅ (encode/decode over Foundation),
-`tprint`/`copytable`/`commas`/`pairsbykeys` ✅ (clean-room). `aardwolf_colors`
-⬜ (added next).
+`tprint`/`copytable`/`commas`/`pairsbykeys` ✅ (clean-room), `aardwolf_colors`
+✅ (clean-room: `strip_colours`/`ColoursToANSI`/`ColoursToStyles`/
+`StylesToColours`; miniwindow-drawing functions omitted; colour numbers are
+a standard-palette approximation). `dofile` of a missing colours/helper file
+falls back to the bundled module by basename.
+
+## Native `@`-colour output
+
+`proteles.echoAard(text)` renders Aardwolf `@`-codes as styled scrollback
+lines; the shim's `AnsiNote(text)` renders ANSI-SGR. So `@`-coloured plugin
+output is visible in-app, e.g. `AnsiNote(ColoursToANSI("@rhi"))`.
+
+## Validated
+
+The real `aard_prompt_fixer.xml` loads end-to-end with no script errors
+(require gmcphelper, dofile aardwolf_colors via the bundled fallback,
+GetPluginInfo/Send_GMCP_Packet/print/ColourNote, the trigger, and the
+GMCP→OnPluginBroadcast path).
 
 ## Per-plugin isolation
 
