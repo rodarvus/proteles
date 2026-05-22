@@ -24,6 +24,7 @@ private func luaPushValue(_ state: OpaquePointer, _ value: LuaValue) {
     case .boolean(let flag): lua_pushboolean(state, flag ? 1 : 0)
     case .number(let number): lua_pushnumber(state, number)
     case .string(let text): lua_pushstring(state, text)
+    case .functionRef(let ref): lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
     }
 }
 
@@ -47,7 +48,14 @@ private let luaHostDispatch: @convention(c) (OpaquePointer?) -> Int32 = { stateP
     let argumentCount = lua_gettop(state)
     if argumentCount > 0 {
         for index in 1...argumentCount {
-            arguments.append(luaReadValue(state, index))
+            if lua_type(state, index) == LUA_TFUNCTION {
+                lua_pushvalue(state, index)
+                let ref = luaL_ref(state, LUA_REGISTRYINDEX)
+                runtime.noteTransientRef(ref)
+                arguments.append(.functionRef(ref))
+            } else {
+                arguments.append(luaReadValue(state, index))
+            }
         }
     }
 
@@ -110,7 +118,23 @@ public actor LuaRuntime {
         case execute
         case echo
         case note
+        case onEvent
+        case raiseEvent
+        case onBroadcast
+        case broadcast
+        case export
+        case call
     }
+
+    /// Event name → registry refs of registered handler functions.
+    private nonisolated(unsafe) var eventHandlers: [String: [Int32]] = [:]
+    /// Registry refs of `onBroadcast` handler functions.
+    private nonisolated(unsafe) var broadcastHandlers: [Int32] = []
+    /// Exported callable name → registry ref (for `call`).
+    private nonisolated(unsafe) var exportedFunctions: [String: Int32] = [:]
+    /// Function refs created this run that no handler/export claimed; freed
+    /// at the end of the run so transient callbacks don't leak registry slots.
+    private nonisolated(unsafe) var transientRefs: [Int32] = []
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before the runtime is usable —
@@ -138,6 +162,7 @@ public actor LuaRuntime {
     @discardableResult
     public func run(_ script: String) throws -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        defer { releaseTransientRefs() }
         try load(script)
         try call(argumentCount: 0, resultCount: 0)
         return effects
@@ -240,12 +265,18 @@ public actor LuaRuntime {
     /// `nonisolated` so the initializer can call it; touches only `state`
     /// and `self`'s pointer.
     private nonisolated func installProtelesAPI() {
-        lua_createtable(state, 0, 5)
+        lua_createtable(state, 0, 11)
         setHostFunction("send", .send)
         setHostFunction("sendNoEcho", .sendNoEcho)
         setHostFunction("execute", .execute)
         setHostFunction("echo", .echo)
         setHostFunction("note", .note)
+        setHostFunction("onEvent", .onEvent)
+        setHostFunction("raiseEvent", .raiseEvent)
+        setHostFunction("onBroadcast", .onBroadcast)
+        setHostFunction("broadcast", .broadcast)
+        setHostFunction("export", .export)
+        setHostFunction("call", .call)
         clua_setglobal(state, "proteles")
     }
 
@@ -264,24 +295,143 @@ public actor LuaRuntime {
     /// because it runs inside `lua_pcall` on the actor's executor.
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
-        func string(_ index: Int) -> String {
-            index < arguments.count ? (arguments[index].stringValue ?? "") : ""
-        }
-        func optionalString(_ index: Int) -> String? {
-            index < arguments.count ? arguments[index].stringValue : nil
-        }
         switch function {
-        case .send: effects.append(.send(string(0)))
-        case .sendNoEcho: effects.append(.sendNoEcho(string(0)))
-        case .execute: effects.append(.execute(string(0)))
-        case .echo: effects.append(.echo(string(0)))
-        case .note: effects.append(.note(
-                text: string(0),
-                foreground: optionalString(1),
-                background: optionalString(2)
-            ))
+        case .send, .sendNoEcho, .execute, .echo, .note:
+            recordOutputEffect(function, arguments)
+            return []
+        case .call:
+            guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
+            return invokeFunction(ref, payload: Array(arguments.dropFirst()))
+        default:
+            registerOrRaise(function, arguments)
+            return []
         }
-        return []
+    }
+
+    /// The inert output effects (`send`/`echo`/`note`/…).
+    private nonisolated func recordOutputEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
+        switch function {
+        case .send: effects.append(.send(Self.argString(arguments, 0)))
+        case .sendNoEcho: effects.append(.sendNoEcho(Self.argString(arguments, 0)))
+        case .execute: effects.append(.execute(Self.argString(arguments, 0)))
+        case .echo: effects.append(.echo(Self.argString(arguments, 0)))
+        case .note: effects.append(.note(
+                text: Self.argString(arguments, 0),
+                foreground: Self.argOptionalString(arguments, 1),
+                background: Self.argOptionalString(arguments, 2)
+            ))
+        default: break
+        }
+    }
+
+    /// The event-bus / RPC registration & firing functions (no return value).
+    private nonisolated func registerOrRaise(_ function: HostFunction, _ arguments: [LuaValue]) {
+        switch function {
+        case .onEvent:
+            if let ref = Self.argFunctionRef(arguments, 1) {
+                eventHandlers[Self.argString(arguments, 0), default: []].append(claim(ref))
+            }
+        case .raiseEvent:
+            invokeHandlers(
+                eventHandlers[Self.argString(arguments, 0)] ?? [],
+                payload: Array(arguments.dropFirst())
+            )
+        case .onBroadcast:
+            if let ref = Self.argFunctionRef(arguments, 0) {
+                broadcastHandlers.append(claim(ref))
+            }
+        case .broadcast:
+            invokeHandlers(broadcastHandlers, payload: arguments)
+        case .export:
+            if let ref = Self.argFunctionRef(arguments, 1) {
+                let name = Self.argString(arguments, 0)
+                if let previous = exportedFunctions[name] { luaL_unref(state, LUA_REGISTRYINDEX, previous) }
+                exportedFunctions[name] = claim(ref)
+            }
+        default: break
+        }
+    }
+
+    private static func argString(_ arguments: [LuaValue], _ index: Int) -> String {
+        index < arguments.count ? (arguments[index].stringValue ?? "") : ""
+    }
+
+    private static func argOptionalString(_ arguments: [LuaValue], _ index: Int) -> String? {
+        index < arguments.count ? arguments[index].stringValue : nil
+    }
+
+    private static func argFunctionRef(_ arguments: [LuaValue], _ index: Int) -> Int32? {
+        guard index < arguments.count, case .functionRef(let ref) = arguments[index] else {
+            return nil
+        }
+        return ref
+    }
+
+    // MARK: - Calling Lua from Swift (event bus / RPC)
+
+    /// Record a function ref that will be freed at run-end unless claimed.
+    nonisolated func noteTransientRef(_ ref: Int32) {
+        transientRefs.append(ref)
+    }
+
+    /// Mark a transient ref as owned (stored long-term), so it isn't freed
+    /// at run-end. Returns the same ref for convenience.
+    private nonisolated func claim(_ ref: Int32) -> Int32 {
+        transientRefs.removeAll { $0 == ref }
+        return ref
+    }
+
+    /// Free every still-unclaimed function ref created during this run.
+    private nonisolated func releaseTransientRefs() {
+        for ref in transientRefs {
+            luaL_unref(state, LUA_REGISTRYINDEX, ref)
+        }
+        transientRefs.removeAll(keepingCapacity: true)
+    }
+
+    /// Call each handler ref with `payload`, discarding results. Handler
+    /// errors are surfaced as a red note rather than aborting the caller.
+    private nonisolated func invokeHandlers(_ refs: [Int32], payload: [LuaValue]) {
+        for ref in refs {
+            lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
+            for value in payload {
+                luaPushValue(state, value)
+            }
+            if lua_pcall(state, Int32(payload.count), 0, 0) != 0 {
+                effects.append(.note(
+                    text: "Lua event error: \(Self.popMessage(state))",
+                    foreground: "red",
+                    background: nil
+                ))
+            }
+        }
+    }
+
+    /// Call an exported function ref with `payload`, returning its results.
+    private nonisolated func invokeFunction(_ ref: Int32, payload: [LuaValue]) -> [LuaValue] {
+        let base = lua_gettop(state)
+        lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
+        for value in payload {
+            luaPushValue(state, value)
+        }
+        if lua_pcall(state, Int32(payload.count), LUA_MULTRET, 0) != 0 {
+            effects.append(.note(
+                text: "Lua call error: \(Self.popMessage(state))",
+                foreground: "red",
+                background: nil
+            ))
+            lua_settop(state, base)
+            return []
+        }
+        let resultCount = lua_gettop(state) - base
+        var results: [LuaValue] = []
+        if resultCount > 0 {
+            for index in (base + 1)...(base + resultCount) {
+                results.append(luaReadValue(state, index))
+            }
+        }
+        lua_settop(state, base)
+        return results
     }
 
     // MARK: - Private

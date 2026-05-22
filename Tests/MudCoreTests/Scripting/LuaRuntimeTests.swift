@@ -137,6 +137,91 @@ struct LuaRuntimeHostAPITests {
     }
 }
 
+@Suite("LuaRuntime — event bus & RPC")
+struct LuaRuntimeEventTests {
+    @Test("raiseEvent invokes handlers registered with onEvent")
+    func eventHandlerFires() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.onEvent('tick', function() proteles.send('refresh') end)")
+        let effects = try await lua.run("proteles.raiseEvent('tick')")
+        #expect(effects == [.send("refresh")])
+    }
+
+    @Test("Event handlers receive payload arguments")
+    func eventPayload() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("""
+        proteles.onEvent('hp', function(cur, max)
+            proteles.echo('HP ' .. cur .. '/' .. max)
+        end)
+        """)
+        let effects = try await lua.run("proteles.raiseEvent('hp', 1200, 2000)")
+        #expect(effects == [.echo("HP 1200/2000")])
+    }
+
+    @Test("Multiple handlers fire in registration order")
+    func multipleHandlers() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.onEvent('go', function() proteles.send('one') end)")
+        try await lua.run("proteles.onEvent('go', function() proteles.send('two') end)")
+        let effects = try await lua.run("proteles.raiseEvent('go')")
+        #expect(effects == [.send("one"), .send("two")])
+    }
+
+    @Test("Raising an event with no handlers is a no-op")
+    func eventNoHandlers() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.run("proteles.raiseEvent('nobody')").isEmpty)
+    }
+
+    @Test("broadcast reaches onBroadcast handlers with all args")
+    func broadcast() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("""
+        proteles.onBroadcast(function(id, text)
+            proteles.note(text, 'green', nil)
+        end)
+        """)
+        let effects = try await lua.run("proteles.broadcast(7, 'hello')")
+        #expect(effects == [.note(text: "hello", foreground: "green", background: nil)])
+    }
+
+    @Test("call invokes an exported function and returns its result")
+    func exportAndCall() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.export('add', function(a, b) return a + b end)")
+        #expect(try await lua.number("proteles.call('add', 3, 4)") == 7)
+    }
+
+    @Test("call to an unknown export returns nothing")
+    func callUnknown() async throws {
+        let lua = try LuaRuntime()
+        #expect(try await lua.boolean("proteles.call('missing') == nil"))
+    }
+
+    @Test("A throwing event handler surfaces as a note, not a crash")
+    func handlerErrorSurfaced() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.onEvent('boom', function() error('kaboom') end)")
+        let effects = try await lua.run("proteles.raiseEvent('boom')")
+        #expect(effects.count == 1)
+        if case .note(let text, _, _) = effects.first {
+            #expect(text.contains("kaboom"))
+        } else {
+            Issue.record("expected an error note, got \(String(describing: effects.first))")
+        }
+    }
+
+    @Test("Handlers persist across runs; transient callbacks don't leak")
+    func handlersPersist() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.onEvent('ping', function() proteles.send('pong') end)")
+        // A later, separate run can still fire it.
+        #expect(try await lua.run("proteles.raiseEvent('ping')") == [.send("pong")])
+        #expect(try await lua.run("proteles.raiseEvent('ping')") == [.send("pong")])
+    }
+}
+
 @Suite("LuaRuntime — execution timeout")
 struct LuaRuntimeTimeoutTests {
     @Test("An infinite loop is aborted with .timedOut, not a hang")
