@@ -71,6 +71,23 @@ struct GMCPStateStoreApplyTests {
         #expect(state.base?.race == "Eldar")
     }
 
+    @Test("room.info decodes name, zone, and exits")
+    func appliesRoom() async {
+        let store = GMCPStateStore()
+        // Shape from a live capture (name carries @-codes), trimmed to fit.
+        let json = #"""
+        { "num": 2339, "name": "@GA Light Provisions Room@w", "zone": "light",
+          "terrain": "inside", "exits": { "n": 2343, "e": 2341 },
+          "coord": { "id": 0, "x": 30, "y": 20, "cont": 0 } }
+        """#
+        #expect(await store.apply(GMCPMessage(package: "room.info", json: json)))
+        let room = await store.state.room
+        #expect(room?.num == 2339)
+        #expect(room?.zone == "light")
+        #expect(room?.exits?["n"] == 2343)
+        #expect(AardwolfColor.stripped(room?.name ?? "") == "A Light Provisions Room")
+    }
+
     @Test("An unknown package is ignored")
     func ignoresUnknown() async {
         let store = GMCPStateStore()

@@ -9,21 +9,41 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
+    @State private var showInfo = true
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
     private static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
 
     var body: some View {
-        VStack(spacing: 0) {
-            MudOutputView(store: session.scrollbackStore)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            CommandInputView { command in
-                Task {
-                    try? await session.send(command)
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                MudOutputView(store: session.scrollbackStore)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                CommandInputView { command in
+                    Task {
+                        try? await session.send(command)
+                    }
                 }
+                StatusBarView(state: connectionState, gmcp: gmcp)
             }
-            StatusBarView(state: connectionState, gmcp: gmcp)
+            .frame(maxWidth: .infinity)
+
+            if showInfo {
+                Divider()
+                InfoPanel(state: gmcp)
+                    .frame(width: 240)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showInfo.toggle()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .help("Toggle the info panel")
+            }
         }
         .task {
             for await networkState in session.connectionStates {

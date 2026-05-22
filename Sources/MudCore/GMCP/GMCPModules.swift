@@ -126,3 +126,49 @@ public struct CharBase: Codable, Sendable, Equatable {
         self.sex = sex
     }
 }
+
+/// `Room.Info` — the current room. `name` carries Aardwolf `@`-colour
+/// codes (strip with ``AardwolfColor/stripped(_:)`` for plain display).
+/// `exits` maps a direction (`n`, `s`, `u`, …) to the destination room
+/// number. `zone` is Aardwolf's area name.
+public struct RoomInfo: Codable, Sendable, Equatable {
+    public let num: Int
+    public let name: String
+    public let zone: String?
+    public let terrain: String?
+    public let details: String?
+    public let exits: [String: Int]?
+    public let coord: Coord?
+
+    public struct Coord: Codable, Sendable, Equatable {
+        public let id: Int?
+        public let x: Int?
+        public let y: Int?
+        public let cont: Int?
+
+        public init(id: Int? = nil, x: Int? = nil, y: Int? = nil, cont: Int? = nil) {
+            self.id = id
+            self.x = x
+            self.y = y
+            self.cont = cont
+        }
+    }
+
+    public init(
+        num: Int,
+        name: String,
+        zone: String? = nil,
+        terrain: String? = nil,
+        details: String? = nil,
+        exits: [String: Int]? = nil,
+        coord: Coord? = nil
+    ) {
+        self.num = num
+        self.name = name
+        self.zone = zone
+        self.terrain = terrain
+        self.details = details
+        self.exits = exits
+        self.coord = coord
+    }
+}

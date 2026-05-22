@@ -9,6 +9,7 @@ public struct GMCPState: Sendable, Equatable {
     public var status: CharStatus?
     public var worth: CharWorth?
     public var base: CharBase?
+    public var room: RoomInfo?
 
     public init() {}
 }
@@ -40,6 +41,7 @@ public actor GMCPStateStore {
         case "char.status": set(\.status, from: message, as: CharStatus.self)
         case "char.worth": set(\.worth, from: message, as: CharWorth.self)
         case "char.base": set(\.base, from: message, as: CharBase.self)
+        case "room.info": set(\.room, from: message, as: RoomInfo.self)
         default: false
         }
         if changed { broadcast() }
