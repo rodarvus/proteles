@@ -17,6 +17,20 @@ struct CompatShimTests {
         #expect(effects == [.send("kill mob"), .sendNoEcho("secret"), .execute("north")])
     }
 
+    @Test("CallPlugin to the mapper id records a mapperCall effect")
+    func callPluginMapper() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("CallPlugin('b6eae87ccedd84f510b74714', 'find', '3', '9')")
+        #expect(effects == [.mapperCall(function: "find", args: ["3", "9"])])
+    }
+
+    @Test("CallPlugin to another id forwards to exports (no mapperCall)")
+    func callPluginOther() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("CallPlugin('some_other_plugin', 'whatever')")
+        #expect(!effects.contains { if case .mapperCall = $0 { true } else { false } })
+    }
+
     @Test("Note echoes; ColourNote emits a single styled segment")
     func output() async throws {
         let lua = try await shimmed()

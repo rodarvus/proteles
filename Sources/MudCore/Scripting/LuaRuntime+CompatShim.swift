@@ -133,8 +133,15 @@ public extension LuaRuntime {
 
     -- Inter-plugin ----------------------------------------------------------
     -- MUSHclient CallPlugin returns (status, results...); we report eOK and
-    -- forward the callee's return values.
-    function CallPlugin(id, fn, ...) return error_code.eOK, proteles.call(fn, ...) end
+    -- forward the callee's return values. Calls to the native GMCP mapper's
+    -- well-known id are routed to it (find results arrive via OnPluginBroadcast
+    -- 500/501, like the real mapper).
+    function CallPlugin(id, fn, ...)
+      if id == "b6eae87ccedd84f510b74714" then
+        proteles.mapperCall(fn, ...); return error_code.eOK
+      end
+      return error_code.eOK, proteles.call(fn, ...)
+    end
     function BroadcastPlugin(msg, text)
       proteles.broadcast(msg, text); return error_code.eOK
     end

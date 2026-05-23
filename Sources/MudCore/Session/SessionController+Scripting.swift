@@ -60,8 +60,24 @@ public extension SessionController {
             try? await sendRaw(Self.aardwolfTelnetBytes(option: option, on: on))
         case .updateMap(let map):
             await mapStore.update(map)
+        case .mapperCall(let function, let args):
+            await applyMapperCall(function: function, args: args)
         default:
             break
+        }
+    }
+
+    /// Run a `CallPlugin(<mapper>, …)` against the native mapper and deliver
+    /// any resulting broadcasts (e.g. 500/501 path results) back to plugins
+    /// via `OnPluginBroadcast`.
+    private func applyMapperCall(function: String, args: [String]) async {
+        guard let mapper, let scriptEngine else { return }
+        let result = await mapper.handlePluginCall(function, args: args)
+        for broadcast in result.broadcasts {
+            await applyScriptEffects(scriptEngine.deliverMapperBroadcast(
+                id: broadcast.id,
+                text: broadcast.text
+            ))
         }
     }
 

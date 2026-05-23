@@ -459,6 +459,18 @@ public actor ScriptEngine {
         return effects
     }
 
+    /// Deliver a mapper broadcast (e.g. 500 `found_paths`, 501 `unfound_paths`)
+    /// to every plugin's `OnPluginBroadcast`, as if the native mapper had
+    /// called `BroadcastPlugin(id, text)`.
+    public func deliverMapperBroadcast(id: Int, text: String) async -> [ScriptEffect] {
+        await fireCallbackOnAll("OnPluginBroadcast", [
+            .number(Double(id)),
+            .string(Mapper.pluginID),
+            .string("GMCP Mapper"),
+            .string(text)
+        ])
+    }
+
     // MARK: - Scoped variables
 
     /// Hydrate the runtime's scoped variables (e.g. from disk on connect).

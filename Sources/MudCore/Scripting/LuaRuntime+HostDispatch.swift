@@ -46,6 +46,16 @@ extension LuaRuntime {
         return ref
     }
 
+    /// Route an effect-recording host call to the right recorder (mapper
+    /// calls have a distinct shape; everything else is an inert output effect).
+    nonisolated func recordEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
+        if case .mapperCall = function {
+            recordMapperCall(arguments)
+        } else {
+            recordOutputEffect(function, arguments)
+        }
+    }
+
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)
     /// for the host to apply after the chunk returns.
     nonisolated func recordOutputEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
@@ -65,6 +75,15 @@ extension LuaRuntime {
         case .colourNote: effects.append(.colourNote(Self.noteSegments(arguments)))
         default: break
         }
+    }
+
+    /// Record a `proteles.mapperCall(fn, args…)` effect: arg0 is the function
+    /// name, the rest are string arguments forwarded to the native mapper.
+    nonisolated func recordMapperCall(_ arguments: [LuaValue]) {
+        effects.append(.mapperCall(
+            function: Self.argString(arguments, 0),
+            args: arguments.dropFirst().map { $0.stringValue ?? "" }
+        ))
     }
 
     /// Build `ColourNote` segments from its variadic `(fore, back, text)`

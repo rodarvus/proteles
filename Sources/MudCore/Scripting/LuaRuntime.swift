@@ -143,6 +143,7 @@ public actor LuaRuntime {
         case echoAard
         case echoAnsi
         case colourNote
+        case mapperCall
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -363,6 +364,7 @@ public actor LuaRuntime {
         setHostFunction("echoAard", .echoAard)
         setHostFunction("echoAnsi", .echoAnsi)
         setHostFunction("colourNote", .colourNote)
+        setHostFunction("mapperCall", .mapperCall)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -387,8 +389,9 @@ public actor LuaRuntime {
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
-        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote:
-            recordOutputEffect(function, arguments)
+        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
+             .mapperCall:
+            recordEffect(function, arguments)
             return []
         case .call:
             guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }

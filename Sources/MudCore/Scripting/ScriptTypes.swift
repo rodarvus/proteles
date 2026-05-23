@@ -74,6 +74,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish a captured ASCII map block (its styled lines) to the Map
     /// panel; an empty array clears it.
     case updateMap([Line])
+    /// A `CallPlugin(<mapper>, function, args…)` routed to the native mapper.
+    /// The host runs it and delivers any resulting broadcasts (e.g. the
+    /// 500/501 path results) back through `OnPluginBroadcast`.
+    case mapperCall(function: String, args: [String])
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`
