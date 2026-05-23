@@ -40,11 +40,28 @@ public extension SessionController {
                 await scrollbackStore.append(AardwolfColor.styledLine(from: coded))
             case .echoAnsi(let ansi):
                 await scrollbackStore.append(Self.ansiLine(ansi))
-            case .setAutomationsSuspended(let suspended):
-                await scriptEngine?.setSuspended(suspended)
-            case .persistPluginState(let id):
-                await persistNativePluginState(id: id)
+            default:
+                await applyControlEffect(effect)
             }
+        }
+    }
+
+    /// Apply the non-scrollback "control" effects (engine suspension,
+    /// persistence, Aardwolf telnet options, map updates). Split out of
+    /// ``applyScriptEffects(_:)`` to keep each switch within the complexity
+    /// budget.
+    private func applyControlEffect(_ effect: ScriptEffect) async {
+        switch effect {
+        case .setAutomationsSuspended(let suspended):
+            await scriptEngine?.setSuspended(suspended)
+        case .persistPluginState(let id):
+            await persistNativePluginState(id: id)
+        case .aardwolfTelnet(let option, let on):
+            try? await sendRaw(Self.aardwolfTelnetBytes(option: option, on: on))
+        case .updateMap(let map):
+            await mapStore.update(map)
+        default:
+            break
         }
     }
 
@@ -216,6 +233,14 @@ public extension SessionController {
     /// Render an ANSI-SGR string into a single ``Line`` with styled runs, by
     /// running it through the ``ANSIParser`` (used by the shim's `AnsiNote`,
     /// e.g. `AnsiNote(ColoursToANSI(text))`).
+    /// Frame an Aardwolf telnet-option toggle: `IAC SB 102 <option>
+    /// <1=on|2=off> IAC SE`.
+    static func aardwolfTelnetBytes(option: Int, on: Bool) -> [UInt8] {
+        let iac: UInt8 = 0xFF, sb: UInt8 = 0xFA, se: UInt8 = 0xF0
+        let aardwolfOption: UInt8 = 102
+        return [iac, sb, aardwolfOption, UInt8(option), on ? 1 : 2, iac, se]
+    }
+
     static func ansiLine(_ ansi: String) -> Line {
         var parser = ANSIParser()
         var text = ""

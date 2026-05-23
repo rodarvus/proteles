@@ -67,6 +67,13 @@ public enum ScriptEffect: Sendable, Equatable {
     /// store (emitted by a plugin after a command mutates its state, e.g.
     /// adding a `#sub` rule).
     case persistPluginState(id: String)
+    /// Toggle one of Aardwolf's telnet options (sub-negotiation 102), e.g.
+    /// enabling the ASCII-map / room-desc tag streams. Framed as
+    /// `IAC SB 102 <option> <1=on|2=off> IAC SE`.
+    case aardwolfTelnet(option: Int, on: Bool)
+    /// Publish a captured ASCII map block (its styled lines) to the Map
+    /// panel; an empty array clears it.
+    case updateMap([Line])
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

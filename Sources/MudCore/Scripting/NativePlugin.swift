@@ -88,6 +88,10 @@ public protocol NativePlugin: Sendable {
     /// is registered or re-enabled. Default: no effects.
     mutating func install() -> [ScriptEffect]
 
+    /// Run when the session connects (≈ `OnPluginConnect`). Use it to send
+    /// enabling handshakes (e.g. Aardwolf telnet options). Default: none.
+    mutating func connect() -> [ScriptEffect]
+
     /// Handle a typed command. Return `nil` to leave the input unhandled
     /// (it is sent to the MUD as usual); return an effect list — possibly
     /// empty — to *consume* the input (it is NOT sent) and apply those
@@ -123,6 +127,10 @@ public extension NativePlugin {
     }
 
     mutating func install() -> [ScriptEffect] {
+        []
+    }
+
+    mutating func connect() -> [ScriptEffect] {
         []
     }
 
@@ -188,6 +196,15 @@ public struct NativePluginRegistry: Sendable {
         entries.map {
             NativePluginInfo(metadata: $0.plugin.metadata, help: $0.plugin.help, enabled: $0.enabled)
         }
+    }
+
+    /// Fire `connect()` on every enabled plugin, concatenating effects.
+    public mutating func connect() -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for index in entries.indices where entries[index].enabled {
+            effects.append(contentsOf: entries[index].plugin.connect())
+        }
+        return effects
     }
 
     /// Offer a typed command to each enabled plugin in order; the first to

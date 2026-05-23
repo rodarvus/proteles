@@ -55,6 +55,10 @@ public actor SessionController {
     /// observed by the chat-capture window.
     public nonisolated let chatStore: ChatStore
 
+    /// Latest captured ASCII map (`<MAPSTART>…<MAPEND>`); observed by the
+    /// Map window. Fed by the native ASCII-map plugin via `.updateMap`.
+    public nonisolated let mapStore: MapStore
+
     /// Durable, controller-lifetime stream of connection-state
     /// transitions for the UI to observe.
     ///
@@ -176,6 +180,7 @@ public actor SessionController {
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
         self.chatStore = chatStore
+        mapStore = MapStore()
         self.scriptEngine = scriptEngine
         let (stream, continuation) = AsyncStream<State>.makeStream(
             bufferingPolicy: .unbounded
@@ -261,6 +266,7 @@ public actor SessionController {
         gmcpHandshakeSent = false
         await gmcpState.reset()
         await chatStore.reset()
+        await mapStore.reset()
 
         let conn = NetworkConnection()
         connection = conn
@@ -460,10 +466,13 @@ public actor SessionController {
         if let scriptEngine {
             Task { [weak self] in
                 await scriptEngine.setConnected(newState == .connected)
-                let effects: [ScriptEffect] = switch newState {
+                var effects: [ScriptEffect] = switch newState {
                 case .connected: await scriptEngine.connectPlugins()
                 case .disconnected: await scriptEngine.disconnectPlugins()
                 default: []
+                }
+                if newState == .connected {
+                    await effects.append(contentsOf: scriptEngine.connectNativePlugins())
                 }
                 if !effects.isEmpty { await self?.applyScriptEffects(effects) }
                 await self?.persistVariablesIfDirty()

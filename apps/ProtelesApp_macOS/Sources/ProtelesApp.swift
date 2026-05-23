@@ -36,6 +36,9 @@ struct ProtelesApp: App {
     /// The active world's installed MUSHclient plugins (Plugins window).
     @State private var plugins: PluginsModel
 
+    /// The captured ASCII map (Map window).
+    @State private var map: MapModel
+
     init() {
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
@@ -67,6 +70,7 @@ struct ProtelesApp: App {
                 await scriptEngine.registerNativePlugin(NoteMode())
                 await scriptEngine.registerNativePlugin(TextSubstitution())
                 await scriptEngine.registerNativePlugin(ChatEcho())
+                await scriptEngine.registerNativePlugin(AsciiMap())
             }
         }
 
@@ -80,6 +84,7 @@ struct ProtelesApp: App {
         _chat = State(initialValue: ChatModel(store: session.chatStore))
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
+        _map = State(initialValue: MapModel(store: session.mapStore))
 
         if let persistence {
             let store = session.scrollbackStore
@@ -183,12 +188,18 @@ struct ProtelesApp: App {
                 }
         }
         .windowResizability(.contentSize)
+
+        Window("Map", id: ProtelesApp.mapWindowID) {
+            MapView(model: map)
+        }
+        .windowResizability(.contentSize)
     }
 
     static let worldsWindowID = "worlds"
     static let chatWindowID = "chat"
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
+    static let mapWindowID = "map"
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -244,6 +255,11 @@ private struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.pluginsWindowID)
             }
             .keyboardShortcut("P", modifiers: [.command, .shift])
+
+            Button("Map…") {
+                openWindow(id: ProtelesApp.mapWindowID)
+            }
+            .keyboardShortcut("B", modifiers: [.command, .shift])
         }
     }
 }

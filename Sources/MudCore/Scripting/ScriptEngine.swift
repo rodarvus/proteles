@@ -202,6 +202,11 @@ public actor ScriptEngine {
         nativePlugins.call(id: id, function: function, arguments: arguments)
     }
 
+    /// Fire `connect()` on enabled native plugins (on session connect).
+    public func connectNativePlugins() -> [ScriptEffect] {
+        nativePlugins.connect()
+    }
+
     /// Pause/resume all automations (triggers/aliases/timers/native). While
     /// suspended, input is sent verbatim and incoming lines pass through.
     public func setSuspended(_ value: Bool) {
