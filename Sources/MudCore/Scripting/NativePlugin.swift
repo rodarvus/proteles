@@ -94,9 +94,11 @@ public protocol NativePlugin: Sendable {
     /// effects. Default: unhandled.
     mutating func handleCommand(_ input: String) -> [ScriptEffect]?
 
-    /// React to an incoming line: a gag decision plus effects, like a
-    /// trigger. Default: pass through (no gag, no effects).
-    mutating func onLine(_ text: String) -> ScriptEngine.LineDisposition
+    /// React to an incoming styled line: a gag decision, effects, and/or a
+    /// rewritten replacement line (text substitution). The plugin reads
+    /// `line.text`/`line.runs` and may return `replacement` preserving the
+    /// line's id/timestamp. Default: pass through (no gag, no effects).
+    mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition
 
     /// React to a GMCP package update (`package` is the lowercased name,
     /// `json` its decoded payload). Default: no effects.
@@ -120,7 +122,7 @@ public extension NativePlugin {
         nil
     }
 
-    mutating func onLine(_: String) -> ScriptEngine.LineDisposition {
+    mutating func onLine(_: Line) -> ScriptEngine.LineDisposition {
         .init()
     }
 
@@ -183,15 +185,19 @@ public struct NativePluginRegistry: Sendable {
         return nil
     }
 
-    /// Fold an incoming line through every enabled plugin, OR-ing gags and
-    /// concatenating effects in registration order.
-    public mutating func onLine(_ text: String) -> ScriptEngine.LineDisposition {
+    /// Fold an incoming line through every enabled plugin in registration
+    /// order: gags OR together, effects concatenate, and a plugin's
+    /// rewritten line is fed to the next (a substitution pipeline).
+    public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
         var disposition = ScriptEngine.LineDisposition()
+        var current = line
         for index in entries.indices where entries[index].enabled {
-            let result = entries[index].plugin.onLine(text)
+            let result = entries[index].plugin.onLine(current)
             if result.gag { disposition.gag = true }
             disposition.effects.append(contentsOf: result.effects)
+            if let replacement = result.replacement { current = replacement }
         }
+        if current != line { disposition.replacement = current }
         return disposition
     }
 

@@ -16,10 +16,15 @@ public actor ScriptEngine {
         public var gag: Bool
         /// Effects produced by matched triggers / their scripts, in order.
         public var effects: [ScriptEffect]
+        /// A rewritten line to display *instead* of the original (e.g. a
+        /// text substitution), preserving the original id/timestamp. `nil`
+        /// leaves the incoming line unchanged.
+        public var replacement: Line?
 
-        public init(gag: Bool = false, effects: [ScriptEffect] = []) {
+        public init(gag: Bool = false, effects: [ScriptEffect] = [], replacement: Line? = nil) {
             self.gag = gag
             self.effects = effects
+            self.replacement = replacement
         }
     }
 
@@ -371,11 +376,18 @@ public actor ScriptEngine {
     /// Run `line` through the triggers, returning the gag decision and the
     /// effects (trigger sends + script effects, in order). Script errors
     /// surface as red notes rather than aborting.
-    public func process(line: String) async -> LineDisposition {
+    public func process(line text: String) async -> LineDisposition {
+        await process(Line(id: LineID(0), text: text))
+    }
+
+    /// Styled-line entry point: triggers match `line.text`, and native
+    /// plugins receive the full styled ``Line`` so they can rewrite it
+    /// (text substitution) while preserving per-segment colour.
+    public func process(_ line: Line) async -> LineDisposition {
         // While suspended (Note mode), lines pass through untouched.
         if suspended { return LineDisposition() }
         var disposition = LineDisposition()
-        for firing in triggers.process(line) {
+        for firing in triggers.process(line.text) {
             if firing.gag { disposition.gag = true }
             if let send = firing.send, !send.isEmpty {
                 disposition.effects.append(.send(send))
@@ -389,10 +401,11 @@ public actor ScriptEngine {
                 ))
             }
         }
-        // Fold native plugins' reactions to the same line.
+        // Fold native plugins' reactions (gag / effects / a rewritten line).
         let native = nativePlugins.onLine(line)
         if native.gag { disposition.gag = true }
         disposition.effects.append(contentsOf: native.effects)
+        disposition.replacement = native.replacement
         return disposition
     }
 

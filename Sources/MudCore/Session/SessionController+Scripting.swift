@@ -10,9 +10,9 @@ public extension SessionController {
             await scrollbackStore.append(line)
             return
         }
-        let disposition = await scriptEngine.process(line: line.text)
+        let disposition = await scriptEngine.process(line)
         if !disposition.gag {
-            await scrollbackStore.append(line)
+            await scrollbackStore.append(disposition.replacement ?? line)
         }
         await applyScriptEffects(disposition.effects)
     }

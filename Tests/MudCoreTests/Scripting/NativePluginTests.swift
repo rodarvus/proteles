@@ -23,9 +23,9 @@ private struct PingPlugin: NativePlugin {
 private struct LineWatcherPlugin: NativePlugin {
     let metadata = NativePluginMetadata(id: "test.lines", name: "Lines")
 
-    func onLine(_ text: String) -> ScriptEngine.LineDisposition {
-        if text.contains("SPAM") { return .init(gag: true) }
-        if text.contains("hello") { return .init(effects: [.echo("greeted")]) }
+    func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
+        if line.text.contains("SPAM") { return .init(gag: true) }
+        if line.text.contains("hello") { return .init(effects: [.echo("greeted")]) }
         return .init()
     }
 }
@@ -44,9 +44,13 @@ struct NativePluginRegistryTests {
     func onLine() {
         var registry = NativePluginRegistry()
         registry.register(LineWatcherPlugin())
-        #expect(registry.onLine("SPAM ad").gag == true)
-        #expect(registry.onLine("hello there").effects == [.echo("greeted")])
-        #expect(registry.onLine("plain").effects.isEmpty)
+        #expect(registry.onLine(line("SPAM ad")).gag == true)
+        #expect(registry.onLine(line("hello there")).effects == [.echo("greeted")])
+        #expect(registry.onLine(line("plain")).effects.isEmpty)
+    }
+
+    private func line(_ text: String) -> Line {
+        Line(id: LineID(0), text: text)
     }
 
     @Test("Disabling a plugin stops it handling commands; re-enabling restores it")
