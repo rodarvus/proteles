@@ -41,6 +41,9 @@ public final class SearchAndDestroyStore: Sendable {
             var configuration = Configuration()
             configuration.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA journal_mode = WAL")
+                // Wait out a concurrent writer (S&D's lsqlite3 connection) on
+                // import rather than failing immediately with SQLITE_BUSY.
+                try db.execute(sql: "PRAGMA busy_timeout = 5000")
             }
             dbQueue = try DatabaseQueue(path: url.path, configuration: configuration)
             try Self.ensureSchema(dbQueue)

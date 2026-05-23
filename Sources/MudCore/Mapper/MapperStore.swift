@@ -41,6 +41,9 @@ public final class MapperStore: Sendable {
             var configuration = Configuration()
             configuration.prepareDatabase { db in
                 try db.execute(sql: "PRAGMA journal_mode = WAL")
+                // Wait out a concurrent reader/writer (a plugin's lsqlite3
+                // connection) rather than failing with SQLITE_BUSY.
+                try db.execute(sql: "PRAGMA busy_timeout = 5000")
             }
             dbQueue = try DatabaseQueue(path: url.path, configuration: configuration)
             try Self.ensureSchema(dbQueue)

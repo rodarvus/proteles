@@ -510,15 +510,10 @@ public actor SessionController {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
-        // Keep S&D's `IsConnected()` in sync and fire its init bootstrap on
-        // connect (its tim_init_plugin timer requests GMCP once connected).
+        syncTimerLoop(to: newState)
+        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap).
         if let searchAndDestroy {
-            Task { [weak self] in
-                await searchAndDestroy.setConnected(newState == .connected)
-                if newState == .connected {
-                    await self?.restartTimerLoop()
-                }
-            }
+            Task { await searchAndDestroy.setConnected(newState == .connected) }
         }
         // Keep scripts' `proteles.isConnected` in sync and drive plugin
         // connect/disconnect lifecycle callbacks.
@@ -539,6 +534,19 @@ public actor SessionController {
         }
     }
 
+    /// Drive the timer loop with the connection: start it on connect (so a
+    /// reconnect re-arms timers), stop it on disconnect so recurring timers
+    /// (e.g. S&D's 0.5s tim_init_plugin bootstrap) don't spin on a dead
+    /// session. A remote drop also cancels the loop via teardownSession; this
+    /// covers the reconnect re-arm.
+    private func syncTimerLoop(to newState: State) {
+        switch newState {
+        case .connected: restartTimerLoop()
+        case .disconnected: timerTask?.cancel(); timerTask = nil
+        default: break
+        }
+    }
+
     /// Cancel the per-session tasks and drop the connection so the next
     /// ``connect(to:autologin:)`` starts clean. Idempotent. Does *not*
     /// emit a state transition — callers do that explicitly.
@@ -547,6 +555,10 @@ public actor SessionController {
         processTask = nil
         stateForwardTask?.cancel()
         stateForwardTask = nil
+        // Stop the timer loop so recurring plugin/S&D timers don't keep firing
+        // on a dropped session (re-armed by updateState on the next connect).
+        timerTask?.cancel()
+        timerTask = nil
         recorder?.close()
         recorder = nil
         autologin = nil
