@@ -126,7 +126,14 @@ public struct MapPanelView: View {
 
         let style = MapPalette.style(for: room)
         if room.kind == .unknown {
-            context.stroke(shape, with: .color(style.border), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            // Unvisited: dark-red fill + diagonal hatch + dotted border.
+            context.fill(shape, with: .color(MapPalette.unknownFill))
+            drawHatch(in: rect, clip: shape, colour: MapPalette.unknownBorder.opacity(0.7), context: context)
+            context.stroke(
+                shape,
+                with: .color(MapPalette.unknownBorder),
+                style: StrokeStyle(lineWidth: 1, dash: [2, 2])
+            )
         } else {
             context.fill(shape, with: .color(style.fill))
             context.stroke(shape, with: .color(style.border), lineWidth: style.borderWidth)
@@ -140,11 +147,32 @@ public struct MapPanelView: View {
         if room.hasUp { chevron(up: true, in: rect, colour: MapPalette.exitUpDown, context: context) }
         if room.hasDown { chevron(up: false, in: rect, colour: MapPalette.exitUpDown, context: context) }
 
+        // PK danger pip (top-right), unless that corner is busy with an up chevron.
+        if room.isPK, !room.hasUp {
+            let pip = CGRect(x: rect.maxX - 4, y: rect.minY, width: 4, height: 4)
+            context.fill(Path(pip), with: .color(MapPalette.pk))
+        }
+
         if side >= 13, let glyph = style.glyph {
             let text = Text(glyph).font(.system(size: side * 0.62, weight: .bold))
                 .foregroundColor(style.glyphColour)
             context.draw(text, at: centre)
         }
+    }
+
+    /// Fill a room with thin diagonal hatch lines (used for unvisited rooms),
+    /// clipped to the room's rounded shape.
+    private func drawHatch(in rect: CGRect, clip: Path, colour: Color, context: GraphicsContext) {
+        var inner = context
+        inner.clip(to: clip)
+        var path = Path()
+        var offset = -rect.height
+        while offset < rect.width {
+            path.move(to: CGPoint(x: rect.minX + offset, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + offset + rect.height, y: rect.minY))
+            offset += 4
+        }
+        inner.stroke(path, with: .color(colour), lineWidth: 1)
     }
 
     private func chevron(up: Bool, in rect: CGRect, colour: Color, context: GraphicsContext) {
@@ -312,8 +340,9 @@ struct MapGeometry {
     let zoom: CGFloat
     let pan: CGSize
 
-    private static let baseRoom: CGFloat = 18
-    private static let baseGap: CGFloat = 15
+    // Tight packing matching the Aardwolf mapper's density (it uses 12/8).
+    private static let baseRoom: CGFloat = 17
+    private static let baseGap: CGFloat = 8
 
     var room: CGFloat {
         Self.baseRoom * zoom

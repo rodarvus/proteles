@@ -49,7 +49,12 @@ public actor Mapper {
         guard let uid = currentRoomUID else {
             return MapLayout.build(graph: RoomGraph(), current: "")
         }
-        return MapLayout.build(graph: graph, current: uid)
+        return MapLayout.build(
+            graph: graph,
+            current: uid,
+            terrainColours: terrainColours,
+            environments: environments
+        )
     }
 
     /// Subscribe to layout updates (no backfill — read ``currentLayout()``

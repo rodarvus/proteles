@@ -25,8 +25,20 @@ enum MapPalette {
         let glyphColour: Color
     }
 
+    /// Dark-red unvisited room fill (drawn hatched + dotted by the view),
+    /// matching the Aardwolf mapper's "unknown room" treatment.
+    static let unknownFill = Color(red: 0.42, green: 0.10, blue: 0.10)
+    static let unknownBorder = Color(red: 0.69, green: 0.42, blue: 0.42)
+    /// PK danger marker (border + corner pip).
+    static let pk = Color(red: 0.89, green: 0.23, blue: 0.23)
+
     static func style(for room: PlacedRoom) -> Style {
-        let (fill, glyph) = fillAndGlyph(for: room.kind)
+        var (fill, glyph) = fillAndGlyph(for: room.kind)
+        // Normal rooms take their terrain's sector colour (134 terrains map to
+        // ~15 ANSI colours); fall back to the neutral fill when unknown.
+        if room.kind == .normal, let index = room.terrainColorIndex {
+            fill = ansi(index)
+        }
         var border = defaultBorder
         var width: CGFloat = 1
 
@@ -39,7 +51,10 @@ enum MapPalette {
         case .sameArea:
             if let tint = room.areaColor.flatMap(parse) { border = tint }
         }
-        if room.isPK, room.relation != .current { border = Color(red: 0.85, green: 0.2, blue: 0.2) }
+        if room.isPK, room.relation != .current {
+            border = pk
+            width = 2
+        }
 
         return Style(
             fill: room.relation == .otherArea ? fill.opacity(0.55) : fill,
@@ -62,6 +77,33 @@ enum MapPalette {
         case .normal: (defaultFill, nil)
         case .unknown: (defaultFill, nil)
         }
+    }
+
+    /// The 16-colour ANSI palette the MUD's sector colours index into,
+    /// brightened slightly so dark terrains (navy, black) stay legible on the
+    /// dark map. Out-of-range indices fall back to the neutral fill.
+    private static let ansiPalette: [Color] = [
+        Color(red: 0.30, green: 0.30, blue: 0.33), // 0 black → dark grey
+        Color(red: 0.70, green: 0.22, blue: 0.22), // 1 red
+        Color(red: 0.36, green: 0.62, blue: 0.34), // 2 green
+        Color(red: 0.72, green: 0.58, blue: 0.30), // 3 yellow/brown
+        Color(red: 0.36, green: 0.50, blue: 0.78), // 4 blue
+        Color(red: 0.66, green: 0.40, blue: 0.74), // 5 magenta
+        Color(red: 0.34, green: 0.68, blue: 0.70), // 6 cyan
+        Color(red: 0.78, green: 0.78, blue: 0.80), // 7 white/grey
+        Color(red: 0.42, green: 0.42, blue: 0.46), // 8 bright black
+        Color(red: 0.88, green: 0.34, blue: 0.34), // 9 bright red
+        Color(red: 0.40, green: 0.74, blue: 0.36), // 10 bright green
+        Color(red: 0.86, green: 0.74, blue: 0.36), // 11 bright yellow
+        Color(red: 0.42, green: 0.62, blue: 0.92), // 12 bright blue
+        Color(red: 0.82, green: 0.50, blue: 0.88), // 13 bright magenta
+        Color(red: 0.44, green: 0.82, blue: 0.84), // 14 bright cyan
+        Color(red: 0.92, green: 0.92, blue: 0.94) // 15 bright white
+    ]
+
+    static func ansi(_ index: Int) -> Color {
+        guard ansiPalette.indices.contains(index) else { return defaultFill }
+        return ansiPalette[index]
     }
 
     /// A small tint for the header area dot, derived from the stored colour.

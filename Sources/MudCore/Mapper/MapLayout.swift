@@ -49,6 +49,10 @@ public struct PlacedRoom: Sendable, Equatable, Identifiable {
     /// Area border tint string (as stored), if any.
     public let areaColor: String?
     public let terrain: String?
+    /// Resolved terrain colour as an ANSI palette index (0–15), or nil when
+    /// the terrain/sector palette doesn't cover it. The view maps this to a
+    /// fill — matching the Aardwolf mapper's terrain colouring.
+    public let terrainColorIndex: Int?
     public let note: String?
     /// Sorted exit directions/commands, for the tooltip.
     public let exits: [String]
@@ -121,12 +125,15 @@ public struct MapLayout: Sendable, Equatable {
         current: String,
         maxDepth: Int = 60,
         maxRooms: Int = 600,
-        showOtherAreas: Bool = true
+        showOtherAreas: Bool = true,
+        terrainColours: [String: Int] = [:],
+        environments: [String: String] = [:]
     ) -> MapLayout {
         guard graph.rooms[current] != nil else {
             return MapLayout(current: current, rooms: [], links: [], minX: 0, minY: 0, maxX: 0, maxY: 0)
         }
         let currentArea = graph.rooms[current]?.area
+        let palette = TerrainPalette(colours: terrainColours, environments: environments)
 
         var placed: [String: GridPoint] = [:] // uid → where it was drawn (dedupe)
         var occupied: [GridPoint: String] = [GridPoint.zero: current] // cell → uid
@@ -146,7 +153,8 @@ public struct MapLayout: Sendable, Equatable {
                     point: point,
                     graph: graph,
                     currentUID: current,
-                    currentArea: currentArea
+                    currentArea: currentArea,
+                    palette: palette
                 ))
 
                 // Unknown rooms carry no exits to traverse.
@@ -269,8 +277,14 @@ public struct MapLayout: Sendable, Equatable {
 
     // MARK: - Room classification
 
+    // swiftlint:disable:next function_parameter_count
     private static func makePlaced(
-        uid: String, point: GridPoint, graph: RoomGraph, currentUID: String, currentArea: String?
+        uid: String,
+        point: GridPoint,
+        graph: RoomGraph,
+        currentUID: String,
+        currentArea: String?,
+        palette: TerrainPalette
     ) -> PlacedRoom {
         guard let room = graph.rooms[uid] else {
             return PlacedRoom(
@@ -286,6 +300,7 @@ public struct MapLayout: Sendable, Equatable {
                 isPK: false,
                 areaColor: nil,
                 terrain: nil,
+                terrainColorIndex: nil,
                 note: nil,
                 exits: []
             )
@@ -306,9 +321,25 @@ public struct MapLayout: Sendable, Equatable {
             isPK: tags.contains("pk"),
             areaColor: room.area.flatMap { graph.areas[$0]?.color },
             terrain: room.terrain,
+            terrainColorIndex: palette.colourIndex(for: room.terrain),
             note: room.notes,
             exits: room.exits.keys.sorted()
         )
+    }
+
+    /// Resolves a room's terrain to an ANSI colour index, mirroring the
+    /// Aardwolf mapper: the stored terrain is either a sector *name* or a
+    /// numeric environment *id* (looked up in `environments` → name), then
+    /// the name maps to a colour via the `room.sectors` palette.
+    struct TerrainPalette {
+        let colours: [String: Int]
+        let environments: [String: String]
+
+        func colourIndex(for terrain: String?) -> Int? {
+            guard let terrain, !terrain.isEmpty else { return nil }
+            let name = Int(terrain) != nil ? (environments[terrain] ?? terrain) : terrain
+            return colours[name]
+        }
     }
 
     /// Classify a room by its tags, in the Aardwolf mapper's priority order.

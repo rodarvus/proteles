@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — Map panel mock v2 (tight packing + terrain)</title>
+<style>
+  :root {
+    --panel: #161617; --text: #e8e8ea; --muted: #8a8a90;
+    --exit: #8fa6b5; --exit-ud: #ff9ec4; --locked: #c9a227;
+    --accent: #ff2d92; --note: #7ed957;
+  }
+  html,body { margin:0; background:#0e0e10; color:var(--text);
+    font:13px -apple-system,"SF Pro Text",system-ui,sans-serif; }
+  .wrap { display:flex; gap:26px; padding:26px; flex-wrap:wrap; align-items:flex-start; }
+  .caption { color:var(--muted); max-width:330px; line-height:1.5; }
+  .caption h1 { font-size:15px; color:var(--text); margin:0 0 6px; }
+  .caption h2 { font-size:13px; color:var(--text); margin:16px 0 4px; }
+  .legend { display:grid; grid-template-columns:auto 1fr; gap:5px 9px; margin-top:6px; align-items:center; }
+  .sw { width:15px; height:15px; border-radius:3px; }
+  .panel { width:360px; height:640px; background:var(--panel); border:1px solid #000;
+    border-radius:12px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.5);
+    display:flex; flex-direction:column; }
+  .header { padding:9px 11px; display:flex; align-items:center; gap:8px;
+    background:linear-gradient(#202024,#1a1a1c); border-bottom:1px solid #000; }
+  .areadot { width:10px; height:10px; border-radius:3px; background:#2f6f5e; }
+  .titles { line-height:1.25; min-width:0; }
+  .room-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .area-name { color:var(--muted); font-size:11px; }
+  .vnum { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; font-size:11px;
+    background:#0c0c0d; border:1px solid #000; padding:2px 6px; border-radius:5px; }
+  .canvas { flex:1; position:relative; }
+  svg { display:block; width:100%; height:100%; }
+  .pulse { transform-origin:center; animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.06} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="header">
+      <span class="areadot"></span>
+      <div class="titles">
+        <div class="room-name">Market Square</div>
+        <div class="area-name">The City of Aylor</div>
+      </div>
+      <span class="vnum">32418</span>
+    </div>
+    <div class="canvas">
+      <svg id="map" viewBox="0 0 360 560"></svg>
+    </div>
+  </div>
+
+  <div class="caption">
+    <h1>Map panel — v2 (tight + terrain)</h1>
+    <p><b>Packing:</b> room 17&nbsp;px, gap 8&nbsp;px (pitch 25) — matches the Aardwolf mapper's
+    density, not the loose v1 mock.</p>
+
+    <h2>Terrain colour (134 terrains → 15 colours)</h2>
+    <p>Normal rooms are filled by their <b>terrain</b> colour, exactly like the Aardwolf mapper
+    (the MUD only defines ~15 distinct sector colours). Per-terrain icons aren't viable at 17&nbsp;px,
+    so colour carries terrain; icons are reserved for the few functional types below.</p>
+
+    <h2>Functional icons</h2>
+    <p>$ shop · + healer · B bank · G guild · Q questor · ✓ safe — distinct fill + glyph.</p>
+
+    <h2>PK rooms</h2>
+    <p>Thick red border + a red corner pip, so danger zones read instantly.</p>
+
+    <h2>Visited vs not</h2>
+    <p>Unvisited rooms (exits we know of but haven't entered) use the Aardwolf pattern:
+    <b>dark-red, dotted border, diagonal hatch</b> — clearly "here be dragons / unmapped".</p>
+
+    <h2>Legend</h2>
+    <div class="legend">
+      <span class="sw" style="background:#3a2030;outline:2px solid #ff2d92;outline-offset:-2px"></span><span>Current room (pulsing)</span>
+      <span class="sw" style="background:#c8c8c8"></span><span>City / indoor terrain</span>
+      <span class="sw" style="background:#4f9e4f"></span><span>Forest terrain</span>
+      <span class="sw" style="background:#3f7fd0"></span><span>Water terrain</span>
+      <span class="sw" style="background:#b89a6a"></span><span>Road / field terrain</span>
+      <span class="sw" style="background:#ffad2f"></span><span>Shop $ (functional)</span>
+      <span class="sw" style="background:#161617;outline:2px solid #e23b3b;outline-offset:-2px"></span><span>PK room</span>
+      <span class="sw" style="background:repeating-linear-gradient(45deg,#5a1414,#5a1414 2px,#2a0c0c 2px,#2a0c0c 4px);outline:1px dotted #b06a6a;outline-offset:-1px"></span><span>Unvisited</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("map");
+const R=17, GAP=8, PITCH=R+GAP;           // tight packing
+const CX=180, CY=250;                       // current room centre
+const cell=(gx,gy)=>[CX+gx*PITCH, CY+gy*PITCH];
+function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
+// terrain palette (brightened ANSI, like the MUD's sector colours)
+const T={city:"#c8c8c8",road:"#b89a6a",field:"#7fae5a",forest:"#4f9e4f",water:"#3f7fd0",
+         indoor:"#6a6a72",desert:"#d9c060"};
+svg.appendChild(el("rect",{x:0,y:0,width:360,height:560,fill:"#161617"}));
+
+// ---- links (drawn under rooms) ----
+function link(gx,gy,dir,opt={}){
+  const D={n:[0,-1],s:[0,1],e:[1,0],w:[-1,0],u:[1,-1],d:[-1,1]}[dir];
+  const [x,y]=cell(gx,gy);
+  const len=(opt.stub?0.42:1)*PITCH, m=Math.hypot(D[0],D[1]);
+  const x2=x+D[0]/m*len, y2=y+D[1]/m*len;
+  const ud=(dir==="u"||dir==="d");
+  svg.appendChild(el("line",{x1:x,y1:y,x2,y2,
+    stroke:ud?getC("--exit-ud"):(opt.locked?getC("--locked"):getC("--exit")),
+    "stroke-width":opt.locked?2.5:1.5,"stroke-linecap":"round",
+    "stroke-dasharray":opt.unknown?"2 3":""}));
+}
+function getC(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+// a compact Aylor-ish blob: spine + side streets, tightly packed
+const links=[
+ [0,-2,"s"],[0,-1,"s"],[0,0,"s"],[0,1,"s"],[0,2,"s"],
+ [0,0,"e"],[0,0,"w"],[1,0,"e"],[-1,0,"w"],[-2,0,"e"],[2,0,"e"],
+ [0,-1,"e"],[0,-1,"w"],[1,-1,"s"],[-1,-1,"s"],
+ [0,1,"e"],[0,1,"w"],[1,1,"e"],[-1,1,"w"],
+ [-2,0,"s"],[-2,1,"e"],[2,0,"s"],[2,1,"w"],
+ [0,0,"u",{}],            // up stub from current (handled as chevron too)
+ [3,0,"e",{locked:true}], // locked door east
+ [0,-2,"n",{unknown:true}], // unexplored north
+ [-3,0,"w",{unknown:true}],
+];
+for(const [gx,gy,dir,opt] of links) link(gx,gy,dir,opt||{});
+
+// ---- rooms ----
+function room(gx,gy,opt={}){
+  const [x,y]=cell(gx,gy); const half=R/2;
+  if(opt.unknown){
+    // dark-red dotted hatch
+    const id="h"+gx+"_"+gy;
+    const pat=el("pattern",{id,patternUnits:"userSpaceOnUse",width:4,height:4,patternTransform:"rotate(45)"});
+    pat.appendChild(el("rect",{width:4,height:4,fill:"#2a0c0c"}));
+    pat.appendChild(el("rect",{width:2,height:4,fill:"#5a1414"}));
+    svg.appendChild(pat);
+    svg.appendChild(el("rect",{x:x-half,y:y-half,width:R,height:R,rx:4,fill:`url(#${id})`,
+      stroke:"#b06a6a","stroke-width":1,"stroke-dasharray":"2 2"}));
+    return;
+  }
+  const fill=opt.fill||T.city;
+  svg.appendChild(el("rect",{x:x-half,y:y-half,width:R,height:R,rx:4,fill,
+    stroke:opt.border||"#00000055","stroke-width":opt.bw||1}));
+  if(opt.glyph){
+    const t=el("text",{x,y:y+0.5,"text-anchor":"middle","dominant-baseline":"central",
+      "font-size":11,"font-weight":700,fill:"#1a1200"}); t.textContent=opt.glyph; svg.appendChild(t);
+  }
+  if(opt.note){ svg.appendChild(el("circle",{cx:x-half,cy:y-half,r:2.6,fill:getC("--note"),stroke:"#0e0e10"})); }
+  if(opt.up){ tri(x+half-3,y-half-3,true); }
+  if(opt.pk){ svg.appendChild(el("rect",{x:x+half-4,y:y-half,width:4,height:4,fill:"#e23b3b"})); }
+}
+function tri(x,y,up){ const p=el("polygon",{points:up?`${x},${y} ${x-4},${y+4} ${x+4},${y+4}`:`${x},${y} ${x-4},${y-4} ${x+4},${y-4}`,fill:getC("--exit-ud")}); svg.appendChild(p); }
+
+// terrain spread + functional + pk + current
+room(0,-2,{fill:T.city});
+room(0,-1,{fill:T.city,up:true});
+// current room glow + box
+const [cx,cy]=cell(0,0);
+const g=el("circle",{cx,cy,r:R*1.5,fill:"#ff2d92"}); g.setAttribute("class","pulse");
+g.setAttribute("opacity",".35"); svg.appendChild(g);
+room(0,0,{fill:"#3a2030",border:getC("--accent"),bw:2.5,up:true,note:true});
+room(0,1,{fill:T.road});
+room(0,2,{fill:T.field});
+room(1,0,{fill:T.city,glyph:"$",}); // shop
+room(2,0,{fill:T.city,glyph:"B"}); // bank
+room(3,0,{fill:T.indoor});         // beyond locked door
+room(-1,0,{fill:"#7ed957",glyph:"+"}); // healer
+room(-2,0,{fill:T.forest});
+room(-2,1,{fill:T.forest});
+room(1,-1,{fill:T.water});
+room(-1,-1,{fill:T.water});
+room(1,1,{fill:T.city,glyph:"G"});  // guild
+room(-1,1,{fill:T.road});
+room(2,1,{fill:T.city,pk:true,border:"#e23b3b",bw:2}); // PK room
+room(0,-2,{fill:T.city}); // (already) overdraw harmless
+// unvisited rooms (dark-red hatch)
+room(0,-3,{unknown:true});
+room(-3,0,{unknown:true});
+</script>
+</body>
+</html>

@@ -152,4 +152,32 @@ struct MapLayoutTests {
         let layout = MapLayout.build(graph: graph(["1": [:]]), current: "999")
         #expect(layout.isEmpty)
     }
+
+    @Test("Terrain resolves to an ANSI colour index (by name and by env id)")
+    func terrainColour() {
+        var graph = RoomGraph()
+        // Room 1's terrain is the sector *name*; room 2's is a numeric env id.
+        graph.rooms["1"] = Room(
+            uid: "1",
+            name: "A",
+            area: "z",
+            terrain: "forest",
+            exits: ["n": Exit(dir: "n", to: "2")]
+        )
+        graph.rooms["2"] = Room(
+            uid: "2",
+            name: "B",
+            area: "z",
+            terrain: "4",
+            exits: ["s": Exit(dir: "s", to: "1")]
+        )
+        let layout = MapLayout.build(
+            graph: graph,
+            current: "1",
+            terrainColours: ["forest": 10, "water": 4],
+            environments: ["4": "water"]
+        )
+        #expect(placed(layout, "1")?.terrainColorIndex == 10) // forest → 10
+        #expect(placed(layout, "2")?.terrainColorIndex == 4) // env id 4 → "water" → 4
+    }
 }
