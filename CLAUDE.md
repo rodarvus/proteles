@@ -126,6 +126,13 @@ path outside the repo, e.g.
 
 ## Workflow conventions
 
+- **Porting the Aardwolf MUSHclient package (the plugin list, PLAN.md
+  §7.6):** for every plugin we tackle — whether it becomes a native app
+  *feature* or a native Proteles *plugin* — PROPOSE a plan first (analysis,
+  trade-offs, options) and wait for the user's approval. Do NOT implement
+  the port directly. None of these plugins run through the Lua shim; the
+  shim stays only for arbitrary 3rd-party plugins. (Cross-cutting
+  foundations and app/UI plumbing follow the normal build flow.)
 - Work in phases per PLAN.md; keep high test coverage; new logic gets
   thorough tests (prefer pure, value-type models in MudCore so they're
   unit-testable without the UI/network).
