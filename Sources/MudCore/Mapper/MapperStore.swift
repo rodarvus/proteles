@@ -214,6 +214,89 @@ public final class MapperStore: Sendable {
         }
     }
 
+    // MARK: - Import
+
+    /// What an incremental import added.
+    public struct ImportSummary: Sendable, Equatable {
+        public var rooms = 0
+        public var areas = 0
+        public var exits = 0
+        public var notes = 0
+
+        public var total: Int {
+            rooms + areas + exits + notes
+        }
+
+        public var isEmpty: Bool {
+            total == 0
+        }
+    }
+
+    public enum ImportError: Error, Equatable {
+        /// The chosen file isn't a recognisable mapper database.
+        case notAMapperDatabase
+    }
+
+    /// Incrementally merge another mapper database into this one
+    /// (`INSERT OR IGNORE` per table, keyed by primary key) — it *adds what
+    /// we don't already have* and never overwrites local rooms, exits, or
+    /// notes. Works against any MUSHclient-schema `Aardwolf.db`. Returns the
+    /// per-table counts of newly inserted rows.
+    public func importIncremental(from source: URL) throws -> ImportSummary {
+        do {
+            return try dbQueue.write { db in
+                try Self.merge(into: db, from: source)
+            }
+        } catch let error as ImportError {
+            throw error // surface our own errors unwrapped
+        } catch {
+            throw StoreError.writeFailed(error.localizedDescription)
+        }
+    }
+
+    private static func merge(into db: Database, from source: URL) throws -> ImportSummary {
+        try db.execute(sql: "ATTACH DATABASE ? AS importsrc", arguments: [source.path])
+        defer { try? db.execute(sql: "DETACH DATABASE importsrc") }
+
+        // Validate: a mapper DB has at least a `rooms` table.
+        let hasRooms = try Bool.fetchOne(
+            db,
+            sql: """
+            SELECT count(*) > 0 FROM importsrc.sqlite_master
+            WHERE type = 'table' AND name = 'rooms'
+            """
+        ) ?? false
+        guard hasRooms else { throw ImportError.notAMapperDatabase }
+
+        var summary = ImportSummary()
+        let roomColumns = """
+        uid, name, area, building, terrain, info, x, y, z, \
+        norecall, noportal, ignore_exits_mismatch
+        """
+        summary.rooms = try insertIgnore(db, table: "rooms", columns: roomColumns)
+        summary.areas = try insertIgnore(db, table: "areas", columns: "uid, name, texture, color, flags")
+        summary.exits = try insertIgnore(db, table: "exits", columns: "dir, fromuid, touid, level")
+        summary.notes = try insertIgnore(db, table: "bookmarks", columns: "uid, notes")
+        return summary
+    }
+
+    /// `INSERT OR IGNORE INTO <table> (cols) SELECT cols FROM importsrc.<table>`,
+    /// returning the number of rows actually inserted. Tables missing from the
+    /// source contribute zero (older DBs may lack `areas`/`bookmarks`).
+    private static func insertIgnore(_ db: Database, table: String, columns: String) throws -> Int {
+        let present = try Bool.fetchOne(
+            db,
+            sql: "SELECT count(*) > 0 FROM importsrc.sqlite_master WHERE type='table' AND name=?",
+            arguments: [table]
+        ) ?? false
+        guard present else { return 0 }
+        try db.execute(sql: """
+        INSERT OR IGNORE INTO \(table) (\(columns))
+        SELECT \(columns) FROM importsrc.\(table)
+        """)
+        return db.changesCount
+    }
+
     // MARK: - Reads
 
     /// Fetch one room (with its exits and joined note), or nil if unknown.

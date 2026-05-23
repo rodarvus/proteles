@@ -1,6 +1,10 @@
 import MudCore
 import Observation
 import SwiftUI
+#if os(macOS)
+    import AppKit
+    import UniformTypeIdentifiers
+#endif
 
 /// `@Observable` bridge for the graphical GMCP map panel: holds the latest
 /// ``MapLayout`` published by the session's ``Mapper`` and turns room clicks
@@ -18,6 +22,16 @@ public final class MapPanelModel {
     public private(set) var showOtherAreas = false
     /// Whether to mark exits leaving the current area. Off by default.
     public private(set) var showAreaExits = false
+
+    /// Result of the most recent import, shown in an alert (nil = none).
+    public var importAlert: ImportAlert?
+
+    /// A one-shot import result for the UI alert.
+    public struct ImportAlert: Identifiable, Equatable {
+        public let id = UUID()
+        public let title: String
+        public let message: String
+    }
 
     private let session: SessionController
     private var mapper: Mapper?
@@ -90,6 +104,49 @@ public final class MapPanelModel {
     /// republishes the layout so the note marker updates.
     public func setNote(_ text: String, for uid: String) {
         Task { await mapper?.setNote(text, uid: uid) }
+    }
+
+    // MARK: - Import
+
+    /// Prompt for a mapper database (default: ~/Documents) and incrementally
+    /// merge it — adds rooms/areas/exits/notes we don't already have. The map
+    /// refreshes and a summary alert is shown.
+    public func importDatabase() {
+        #if os(macOS)
+            guard let mapper else { return }
+            let panel = NSOpenPanel()
+            panel.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            panel.allowedContentTypes = [UTType(filenameExtension: "db") ?? .data]
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+            panel.message = "Choose a mapper database to merge (adds rooms you don't already have)."
+            panel.prompt = "Import"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            let accessing = url.startAccessingSecurityScopedResource()
+            Task {
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let summary = try await mapper.importMap(from: url)
+                    importAlert = ImportAlert(title: "Map Imported", message: Self.summaryMessage(summary))
+                } catch {
+                    importAlert = ImportAlert(
+                        title: "Import Failed",
+                        message: "Couldn't import that file. It may not be a mapper database."
+                    )
+                }
+            }
+        #endif
+    }
+
+    private static func summaryMessage(_ summary: MapperStore.ImportSummary) -> String {
+        guard !summary.isEmpty else {
+            return "Nothing new — your map already had everything in that file."
+        }
+        return """
+        Added \(summary.rooms.formatted()) rooms, \(summary.areas.formatted()) areas, \
+        \(summary.exits.formatted()) exits, and \(summary.notes.formatted()) notes.
+        """
     }
 
     private func send(_ command: String) {

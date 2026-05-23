@@ -426,6 +426,17 @@ public actor Mapper {
 
     // MARK: - Lifecycle
 
+    /// Incrementally import another mapper database (adds rooms/areas/exits/
+    /// notes we don't already have, never overwriting local data), then
+    /// reload the in-memory graph and republish the layout. Returns the
+    /// per-table counts of what was added.
+    public func importMap(from source: URL) throws -> MapperStore.ImportSummary {
+        let summary = try store.importIncremental(from: source)
+        graph = try store.loadGraph()
+        publishLayout()
+        return summary
+    }
+
     /// Reload the in-memory graph from the store (e.g. after an import).
     public func reload() throws {
         graph = try store.loadGraph()

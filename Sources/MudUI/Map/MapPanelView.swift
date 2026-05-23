@@ -24,17 +24,39 @@ public struct MapPanelView: View {
     public var body: some View {
         Group {
             if model.layout.isEmpty {
-                ContentUnavailableView(
-                    "No Map Yet",
-                    systemImage: "map",
-                    description: Text("The map appears here once you're connected and moving.")
-                )
+                emptyState
             } else {
                 mapBody
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { model.start() }
+        .alert(
+            model.importAlert?.title ?? "",
+            isPresented: Binding(
+                get: { model.importAlert != nil },
+                set: { if !$0 { model.importAlert = nil } }
+            )
+        ) {
+            Button("OK") { model.importAlert = nil }
+        } message: {
+            Text(model.importAlert?.message ?? "")
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            ContentUnavailableView(
+                "No Map Yet",
+                systemImage: "map",
+                description: Text("The map fills in as you explore — or import an existing database.")
+            )
+            Button {
+                model.importDatabase()
+            } label: {
+                Label("Import Map Database…", systemImage: "square.and.arrow.down")
+            }
+        }
     }
 
     private var mapBody: some View {
@@ -357,6 +379,10 @@ public struct MapPanelView: View {
                 tint: model.showAreaExits ? .accentColor : nil,
                 help: "Mark exits to other areas"
             ) { model.toggleShowAreaExits() }
+            Divider().frame(width: 28)
+            toolbarButton("square.and.arrow.down", help: "Import a map database…") {
+                model.importDatabase()
+            }
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .padding(10)

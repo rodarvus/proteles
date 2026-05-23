@@ -132,6 +132,55 @@ struct MapperStoreTests {
         }
     }
 
+    @Test("Incremental import adds missing rows and never overwrites local ones")
+    func incrementalImport() throws {
+        // Source DB: two rooms (5, 6), an area, an exit, and a note.
+        let sourceURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        let source = try MapperStore(url: sourceURL)
+        try source.upsert(Area(uid: "z", name: "Source Area"))
+        try source.upsert(Room(uid: "5", name: "Imported Five", area: "z"))
+        try source.upsert(Room(uid: "6", name: "Imported Six", area: "z"))
+        try source.saveExits(from: "5", exits: ["n": Exit(dir: "n", to: "6")])
+        try source.setNote("imported note", uid: "6")
+
+        // Destination already has room 5 (with a local name) but not 6.
+        let destURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: destURL) }
+        let dest = try MapperStore(url: destURL)
+        try dest.upsert(Room(uid: "5", name: "My Local Five", area: "z"))
+        try dest.setNote("my local note", uid: "5")
+
+        let summary = try dest.importIncremental(from: sourceURL)
+        // Room 6 + its area + the n→6 exit + room 6's note are new; room 5 is not.
+        #expect(summary.rooms == 1)
+        #expect(summary.exits == 1)
+        #expect(summary.notes == 1)
+
+        // Local room 5 keeps its name and note (not clobbered).
+        #expect(try dest.room(uid: "5")?.name == "My Local Five")
+        #expect(try dest.room(uid: "5")?.notes == "my local note")
+        // Room 6 was added with the imported note.
+        #expect(try dest.room(uid: "6")?.name == "Imported Six")
+        #expect(try dest.room(uid: "6")?.notes == "imported note")
+    }
+
+    @Test("Importing a non-mapper file throws notAMapperDatabase")
+    func importInvalid() throws {
+        let bogusURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: bogusURL) }
+        // A valid SQLite file with no `rooms` table.
+        let bogus = try DatabaseQueue(path: bogusURL.path)
+        try bogus.write { try $0.execute(sql: "CREATE TABLE junk(x)") }
+
+        let destURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: destURL) }
+        let dest = try MapperStore(url: destURL)
+        #expect(throws: MapperStore.ImportError.notAMapperDatabase) {
+            _ = try dest.importIncremental(from: bogusURL)
+        }
+    }
+
     @Test("An older DB missing flag columns gets them added defensively")
     func importOlderMissingColumns() throws {
         let url = tempURL()
