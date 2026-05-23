@@ -40,6 +40,8 @@ public extension SessionController {
                 await scrollbackStore.append(AardwolfColor.styledLine(from: coded))
             case .echoAnsi(let ansi):
                 await scrollbackStore.append(Self.ansiLine(ansi))
+            case .setAutomationsSuspended(let suspended):
+                await scriptEngine?.setSuspended(suspended)
             }
         }
     }

@@ -29,6 +29,9 @@ public actor ScriptEngine {
     private var timers = TimerEngine()
     /// Native (Swift) plugins folded into the same pipeline as Lua plugins.
     private var nativePlugins = NativePluginRegistry()
+    /// When true, automations are paused: typed input is sent verbatim,
+    /// incoming lines pass through, and timers don't fire (Note mode).
+    private var suspended = false
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
     private var loadedPluginIDs: [String] = []
@@ -153,6 +156,8 @@ public actor ScriptEngine {
     /// (sends + script effects). Recurring timers reschedule; one-shots are
     /// removed. Script errors surface as red notes.
     public func fireDueTimers(at now: Date = Date()) async -> [ScriptEffect] {
+        // While suspended (Note mode), timers don't fire.
+        if suspended { return [] }
         var effects: [ScriptEffect] = []
         for firing in timers.due(at: now) {
             if let send = firing.send, !send.isEmpty {
@@ -190,6 +195,12 @@ public actor ScriptEngine {
     /// Route a `CallPlugin`-style call to a native plugin by id.
     public func callNativePlugin(id: String, function: String, arguments: [LuaValue]) -> [LuaValue] {
         nativePlugins.call(id: id, function: function, arguments: arguments)
+    }
+
+    /// Pause/resume all automations (triggers/aliases/timers/native). While
+    /// suspended, input is sent verbatim and incoming lines pass through.
+    public func setSuspended(_ value: Bool) {
+        suspended = value
     }
 
     // MARK: - Bulk load
@@ -315,6 +326,8 @@ public actor ScriptEngine {
     }
 
     private func expandInput(_ input: String, depth: Int) async -> [ScriptEffect] {
+        // While suspended (Note mode), input goes straight to the MUD.
+        if suspended { return [.send(input)] }
         let firings = aliases.match(input)
         guard !firings.isEmpty else {
             // No user alias matched — offer the command to native plugins
@@ -359,6 +372,8 @@ public actor ScriptEngine {
     /// effects (trigger sends + script effects, in order). Script errors
     /// surface as red notes rather than aborting.
     public func process(line: String) async -> LineDisposition {
+        // While suspended (Note mode), lines pass through untouched.
+        if suspended { return LineDisposition() }
         var disposition = LineDisposition()
         for firing in triggers.process(line) {
             if firing.gag { disposition.gag = true }

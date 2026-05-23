@@ -58,6 +58,11 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print ANSI-SGR-coded text to the scrollback, rendered as styled runs
     /// (the shim's `AnsiNote`).
     case echoAnsi(String)
+    /// Suspend (or resume) the scripting engines: while suspended, typed
+    /// input is sent verbatim (no alias/native-command expansion), incoming
+    /// lines pass through untouched (no triggers/native reactions), and
+    /// timers don't fire. Backs the native Note-mode plugin.
+    case setAutomationsSuspended(Bool)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

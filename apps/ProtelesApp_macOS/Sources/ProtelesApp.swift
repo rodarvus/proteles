@@ -62,7 +62,10 @@ struct ProtelesApp: App {
         // Register the built-in native plugins (ported from the Aardwolf
         // package). Registration is quick and completes well before connect.
         if let scriptEngine {
-            Task { await scriptEngine.registerNativePlugin(VitalShortcuts()) }
+            Task {
+                await scriptEngine.registerNativePlugin(VitalShortcuts())
+                await scriptEngine.registerNativePlugin(NoteMode())
+            }
         }
 
         // Profile store → WorldsModel. defaultStoreURL only fails if
