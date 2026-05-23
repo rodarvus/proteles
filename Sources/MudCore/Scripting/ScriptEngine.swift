@@ -182,8 +182,8 @@ public actor ScriptEngine {
         nativePlugins.setEnabled(enabled, id: id)
     }
 
-    /// Registered native plugins' metadata + enabled state (Plugins window).
-    public func nativePluginListing() -> [(metadata: NativePluginMetadata, enabled: Bool)] {
+    /// Registered native plugins' info + enabled state (Plugins window).
+    public func nativePluginListing() -> [NativePluginInfo] {
         nativePlugins.listing
     }
 

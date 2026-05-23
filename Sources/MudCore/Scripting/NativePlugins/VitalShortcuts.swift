@@ -28,6 +28,23 @@ public struct VitalShortcuts: NativePlugin {
     /// commands then pass through so they reach the note unmodified.
     private var noteMode = false
 
+    public var help: NativePluginHelp {
+        NativePluginHelp(
+            overview: "Quick vital checks. Commands are case-insensitive. Coloured by "
+                + "threshold: green > 66%, yellow 34–66%, red ≤ 33%.",
+            commands: [
+                .init(syntax: "hp / hit", summary: "Your hitpoint percentage"),
+                .init(syntax: "mn / mana", summary: "Your mana percentage"),
+                .init(syntax: "mv / moves", summary: "Your moves percentage"),
+                .init(syntax: "vitals", summary: "All three at once"),
+                .init(syntax: "hp <player>", summary: "A grouped member's stat"),
+                .init(syntax: "hp below <n>", summary: "You or group members under n%"),
+                .init(syntax: "vitals below <n>", summary: "All three, for anyone under n%"),
+                .init(syntax: "vitals help", summary: "Show this help in-game")
+            ]
+        )
+    }
+
     public init() {}
 
     // MARK: - GMCP
@@ -54,7 +71,7 @@ public struct VitalShortcuts: NativePlugin {
         let words = input.lowercased().split(separator: " ").map(String.init)
         guard let first = words.first else { return nil }
 
-        if words == ["vitals", "help"] { return help() }
+        if words == ["vitals", "help"] { return helpOutput() }
         // While note-writing, let the command through untouched.
         if noteMode, isOwnedCommand(first) { return nil }
 
@@ -182,7 +199,7 @@ public struct VitalShortcuts: NativePlugin {
         return palette[name] ?? name
     }
 
-    private func help() -> [ScriptEffect] {
+    private func helpOutput() -> [ScriptEffect] {
         func tip(_ command: String, _ description: String) -> ScriptEffect {
             .colourNote([
                 NoteSegment(text: "  \(command)", foreground: Self.colour("khaki")),

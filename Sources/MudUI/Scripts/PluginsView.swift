@@ -46,19 +46,20 @@ public struct PluginsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(selection: $model.selectedID) {
+        List(selection: $model.selection) {
             if !model.nativePlugins.isEmpty {
                 Section("Built-in") {
                     ForEach(model.nativePlugins) { plugin in
                         NativePluginRowView(plugin: plugin) { enabled in
                             Task { await model.setNativeEnabled(enabled, id: plugin.id) }
                         }
+                        .tag(PluginSelection.native(plugin.id))
                     }
                 }
             }
             Section("Installed") {
                 ForEach(model.installed) { plugin in
-                    PluginRow(plugin: plugin).tag(plugin.id)
+                    PluginRow(plugin: plugin).tag(PluginSelection.imported(plugin.id))
                 }
                 if model.installed.isEmpty {
                     Text("Import a MUSHclient .xml plugin to add one.")
@@ -78,27 +79,29 @@ public struct PluginsView: View {
                 } label: {
                     Label("Remove", systemImage: "trash")
                 }
-                .disabled(model.selectedID == nil)
+                .disabled(model.selectedImportedURL == nil)
             }
         }
     }
 
     // MARK: - Detail
 
-    private var selectedPlugin: InstalledPlugin? {
-        guard let id = model.selectedID else { return nil }
-        return model.installed.first { $0.id == id }
+    private var selectedImportedPlugin: InstalledPlugin? {
+        guard let url = model.selectedImportedURL else { return nil }
+        return model.installed.first { $0.id == url }
     }
 
     @ViewBuilder
     private var detail: some View {
-        if let plugin = selectedPlugin {
+        if let native = model.selectedNative {
+            NativePluginDetail(plugin: native)
+        } else if let plugin = selectedImportedPlugin {
             InstalledPluginDetail(plugin: plugin, report: model.report(for: plugin.id))
         } else {
             ContentUnavailableView(
                 "No Plugin Selected",
                 systemImage: "puzzlepiece.extension",
-                description: Text("Select a plugin to see its compatibility report, or import a new one.")
+                description: Text("Select a plugin to see what it does, or import a new one.")
             )
         }
     }
@@ -126,13 +129,13 @@ public struct PluginsView: View {
             let installedID = await model.install(from: pending.sourceURL)
             isInstalling = false
             pendingImport = nil
-            if let installedID { model.selectedID = installedID }
+            if let installedID { model.selection = .imported(installedID) }
         }
     }
 
     private func removeSelected() async {
-        guard let id = model.selectedID,
-              let plugin = model.installed.first(where: { $0.id == id }) else { return }
+        guard let url = model.selectedImportedURL,
+              let plugin = model.installed.first(where: { $0.id == url }) else { return }
         await model.remove(plugin)
     }
 }
@@ -196,6 +199,64 @@ private struct NativePluginRowView: View {
 }
 
 // MARK: - Detail content
+
+/// The detail pane for a built-in native plugin: identity, overview, an
+/// enabled badge, and the table of commands it provides.
+private struct NativePluginDetail: View {
+    let plugin: NativePluginRow
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plugin.name).font(.title2.bold())
+                    Text(metaLine).font(.caption).foregroundStyle(.secondary)
+                }
+
+                Label(
+                    plugin.enabled ? "Enabled" : "Disabled",
+                    systemImage: plugin.enabled ? "checkmark.circle.fill" : "pause.circle.fill"
+                )
+                .font(.callout)
+                .foregroundStyle(plugin.enabled ? Color.green : .secondary)
+
+                if !plugin.help.overview.isEmpty {
+                    Text(plugin.help.overview).font(.callout)
+                } else if !plugin.summary.isEmpty {
+                    Text(plugin.summary).font(.callout)
+                }
+
+                if !plugin.help.commands.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("COMMANDS").font(.caption.bold()).foregroundStyle(.secondary)
+                        ForEach(plugin.help.commands) { command in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(command.syntax)
+                                    .font(.callout.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(minWidth: 120, alignment: .leading)
+                                Text(command.summary)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+    }
+
+    private var metaLine: String {
+        var parts = ["Built-in"]
+        if !plugin.author.isEmpty { parts.append(plugin.author) }
+        if !plugin.version.isEmpty { parts.append("v\(plugin.version)") }
+        return parts.joined(separator: " · ")
+    }
+}
 
 /// The detail pane for an installed plugin: its identity plus the same
 /// compatibility report shown during import (so the user can revisit it).

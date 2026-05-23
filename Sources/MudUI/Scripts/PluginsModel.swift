@@ -19,14 +19,22 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
 }
 
 /// A built-in native (Swift) plugin shown in the Plugins window, with its
-/// live enabled state.
+/// live enabled state and displayable help.
 public struct NativePluginRow: Identifiable, Sendable, Equatable {
     public let id: String
     public let name: String
     public let author: String
     public let version: String
     public let summary: String
+    public let help: NativePluginHelp
     public var enabled: Bool
+}
+
+/// What's selected in the Plugins window: a built-in native plugin (by id)
+/// or an imported `.xml` plugin (by file URL).
+public enum PluginSelection: Hashable, Sendable {
+    case native(String)
+    case imported(URL)
 }
 
 /// `@Observable` model for the Plugins window: lists a world's installed
@@ -40,7 +48,7 @@ public final class PluginsModel {
     public private(set) var installed: [InstalledPlugin] = []
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
-    public var selectedID: URL?
+    public var selection: PluginSelection?
 
     private let session: SessionController
     private var directory: URL?
@@ -48,6 +56,19 @@ public final class PluginsModel {
 
     public init(session: SessionController) {
         self.session = session
+    }
+
+    /// The selected imported plugin's file URL, if an imported plugin (not a
+    /// native one) is selected — used by the import/remove flow.
+    public var selectedImportedURL: URL? {
+        if case .imported(let url) = selection { return url }
+        return nil
+    }
+
+    /// The selected built-in native plugin, if one is selected.
+    public var selectedNative: NativePluginRow? {
+        guard case .native(let id) = selection else { return nil }
+        return nativePlugins.first { $0.id == id }
     }
 
     /// Load the built-in native plugins' current enabled state from the
@@ -61,6 +82,7 @@ public final class PluginsModel {
                 author: $0.metadata.author,
                 version: $0.metadata.version,
                 summary: $0.metadata.summary,
+                help: $0.help,
                 enabled: $0.enabled
             )
         }
@@ -124,7 +146,7 @@ public final class PluginsModel {
     /// Delete an installed plugin's file and re-sync.
     public func remove(_ plugin: InstalledPlugin) async {
         try? FileManager.default.removeItem(at: plugin.id)
-        if selectedID == plugin.id { selectedID = nil }
+        if selection == .imported(plugin.id) { selection = nil }
         refresh()
         await resync?()
     }

@@ -27,6 +27,43 @@ public struct NativePluginMetadata: Sendable, Equatable {
     }
 }
 
+/// Human-readable help for a ``NativePlugin``, shown in the Plugins window
+/// when its row is selected: a short overview plus the commands it enables.
+public struct NativePluginHelp: Sendable, Equatable {
+    /// One command the plugin handles: its syntax and what it does.
+    public struct Command: Sendable, Equatable, Identifiable {
+        public let syntax: String
+        public let summary: String
+        public var id: String {
+            syntax
+        }
+
+        public init(syntax: String, summary: String) {
+            self.syntax = syntax
+            self.summary = summary
+        }
+    }
+
+    public var overview: String
+    public var commands: [Command]
+
+    public init(overview: String = "", commands: [Command] = []) {
+        self.overview = overview
+        self.commands = commands
+    }
+
+    /// No help (the default for plugins that don't provide any).
+    public static let none = NativePluginHelp()
+}
+
+/// A registered native plugin's display info + live enabled state — what the
+/// Plugins window needs to list and describe it.
+public struct NativePluginInfo: Sendable, Equatable {
+    public let metadata: NativePluginMetadata
+    public let help: NativePluginHelp
+    public let enabled: Bool
+}
+
 /// A self-contained, *native* (Swift) Proteles plugin: a value-type reducer
 /// that participates in the same effect pipeline as Lua plugins (PLAN.md
 /// §7.6). It owns commands, reacts to incoming lines and GMCP, and exposes
@@ -43,6 +80,9 @@ public struct NativePluginMetadata: Sendable, Equatable {
 public protocol NativePlugin: Sendable {
     /// Stable identity + display metadata.
     var metadata: NativePluginMetadata { get }
+
+    /// Overview + command list shown in the Plugins window. Default: empty.
+    var help: NativePluginHelp { get }
 
     /// One-time setup (≈ MUSHclient `OnPluginInstall`), run when the plugin
     /// is registered or re-enabled. Default: no effects.
@@ -68,6 +108,10 @@ public protocol NativePlugin: Sendable {
 }
 
 public extension NativePlugin {
+    var help: NativePluginHelp {
+        .none
+    }
+
     mutating func install() -> [ScriptEffect] {
         []
     }
@@ -122,10 +166,12 @@ public struct NativePluginRegistry: Sendable {
         return (enabled && !wasEnabled) ? entries[index].plugin.install() : []
     }
 
-    /// The registered plugins' metadata + current enabled state, in
-    /// registration order (drives the Plugins window listing).
-    public var listing: [(metadata: NativePluginMetadata, enabled: Bool)] {
-        entries.map { ($0.plugin.metadata, $0.enabled) }
+    /// The registered plugins' info + current enabled state, in registration
+    /// order (drives the Plugins window listing).
+    public var listing: [NativePluginInfo] {
+        entries.map {
+            NativePluginInfo(metadata: $0.plugin.metadata, help: $0.plugin.help, enabled: $0.enabled)
+        }
     }
 
     /// Offer a typed command to each enabled plugin in order; the first to

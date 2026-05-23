@@ -77,6 +77,19 @@ struct NativePluginRegistryTests {
         #expect(listing.map(\.metadata.id) == ["test.ping", "test.lines"])
         #expect(listing.map(\.enabled) == [true, false])
     }
+
+    @Test("Listing carries each plugin's help (default empty when unprovided)")
+    func listingHelp() {
+        var registry = NativePluginRegistry()
+        registry.register(PingPlugin())
+        registry.register(VitalShortcuts())
+        let listing = registry.listing
+        // PingPlugin provides no help → the default.
+        #expect(listing[0].help == .none)
+        // VitalShortcuts documents its commands.
+        #expect(listing[1].help.commands.isEmpty == false)
+        #expect(listing[1].help.commands.contains { $0.syntax.contains("vitals") })
+    }
 }
 
 @Suite("ScriptEngine — native plugin integration")
