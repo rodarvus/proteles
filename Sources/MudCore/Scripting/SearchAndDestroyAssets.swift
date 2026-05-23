@@ -35,7 +35,7 @@ public enum SearchAndDestroyAssets {
     /// The vendored helper modules to register with the runtime's module
     /// loader (so S&D's `require`s resolve), keyed by module name.
     public static var helperModules: [String: String] {
-        ["constants", "areaReferences", "sqlSetup", "tablesSetup", "wait"]
+        ["constants", "areaReferences", "sqlSetup", "tablesSetup", "wait", "check"]
             .reduce(into: [:]) { result, name in result[name] = lua(name) }
     }
 }

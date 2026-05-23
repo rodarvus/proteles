@@ -138,7 +138,9 @@ extension LuaRuntime {
       if source == nil then error("module '" .. tostring(name) .. "' not found", 2) end
       local chunk = proteles.__compile(source, name)
       if chunk == nil then error("error loading module '" .. tostring(name) .. "'", 2) end
-      local result = chunk()
+      -- Pass the module name as the chunk's vararg, like real `require`, so
+      -- modules using `module(...)` (Lua 5.1) get their name.
+      local result = chunk(name)
       if result == nil then result = true end
       loaded[name] = result
       return result
