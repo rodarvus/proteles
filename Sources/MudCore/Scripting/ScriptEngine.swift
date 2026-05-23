@@ -325,6 +325,13 @@ public actor ScriptEngine {
         await runtime.callGlobal(name, arguments)
     }
 
+    /// Constrain `sqlite3.open` (the lsqlite3 binding) to `directory` — the
+    /// per-profile world-data dir where the mapper DB and plugins' own SQLite
+    /// stores live. `nil` re-closes file access.
+    public func setSQLiteDirectory(_ directory: String?) async {
+        await runtime.setSQLiteDirectory(directory)
+    }
+
     /// Register a helper library available to `require name`.
     public func registerModule(_ name: String, source: String) async {
         await runtime.registerModule(name, source: source)

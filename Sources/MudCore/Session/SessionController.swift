@@ -100,9 +100,11 @@ public actor SessionController {
     /// `room.info`/`room.area`/`room.sectors` from the GMCP stream.
     public internal(set) var mapper: Mapper?
 
-    /// Subscribers notified each time a ``Mapper`` is attached (a world
-    /// loads), so the map panel can (re)bind to the new one. The
-    /// subscribe/yield logic lives in the +Scripting extension.
+    /// Per-profile world-data dir (`GetInfo(66)` + lsqlite3 sandbox root).
+    var worldDataDirectory: String?
+
+    /// Subscribers notified when a ``Mapper`` is attached (the map panel
+    /// rebinds); subscribe/yield logic lives in the +Scripting extension.
     var mapperAttachmentSubscribers: [UUID: AsyncStream<Mapper>.Continuation] = [:]
 
     /// True while the server is echoing (it sent `WILL ECHO`, e.g. a

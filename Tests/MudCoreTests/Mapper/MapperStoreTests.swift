@@ -181,6 +181,35 @@ struct MapperStoreTests {
         }
     }
 
+    @Test("Legacy DB migrates to the world-data path (and not over an existing one)")
+    func legacyMigration() throws {
+        let fm = FileManager.default
+        let legacy = tempURL()
+        let target = tempURL()
+        defer { try? fm.removeItem(at: legacy); try? fm.removeItem(at: target) }
+
+        // A legacy DB with a marker room; no target yet.
+        do {
+            let store = try MapperStore(url: legacy)
+            try store.upsert(Room(uid: "7", name: "Legacy Room"))
+        }
+        MapperStore.migrateDatabaseIfNeeded(from: legacy, to: target)
+        #expect(!fm.fileExists(atPath: legacy.path)) // moved
+        #expect(fm.fileExists(atPath: target.path))
+        #expect(try MapperStore(url: target).room(uid: "7")?.name == "Legacy Room")
+
+        // A second legacy file must NOT clobber the now-existing target.
+        let legacy2 = tempURL()
+        defer { try? fm.removeItem(at: legacy2) }
+        do {
+            let store = try MapperStore(url: legacy2)
+            try store.upsert(Room(uid: "7", name: "Should Not Win"))
+        }
+        MapperStore.migrateDatabaseIfNeeded(from: legacy2, to: target)
+        #expect(fm.fileExists(atPath: legacy2.path)) // left in place
+        #expect(try MapperStore(url: target).room(uid: "7")?.name == "Legacy Room")
+    }
+
     @Test("An older DB missing flag columns gets them added defensively")
     func importOlderMissingColumns() throws {
         let url = tempURL()

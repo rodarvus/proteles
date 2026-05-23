@@ -115,6 +115,14 @@ public extension SessionController {
         await scriptEngine.applyNativePluginEnabled(document.enabled)
     }
 
+    /// Attach the per-profile world-data directory: the lsqlite3 sandbox root
+    /// and `GetInfo(66)` for loaded plugins (so they find the mapper DB and
+    /// keep their own SQLite stores here). Call when a world loads.
+    func attachWorldDataDirectory(_ path: String) async {
+        worldDataDirectory = path
+        await scriptEngine?.setSQLiteDirectory(path)
+    }
+
     /// Attach the per-world live map. Call when a world loads; the GMCP
     /// stream then feeds it room/area/sector updates.
     func attachMapper(_ mapper: Mapper) {
@@ -192,10 +200,15 @@ public extension SessionController {
             guard let data = try? Data(contentsOf: url),
                   let plugin = try? MUSHclientPluginLoader.parse(data)
             else { continue }
+            // GetInfo(66)/(67) → the world-data dir (trailing slash so
+            // `GetInfo(66)..WorldName()..".db"` resolves to the mapper DB).
+            let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
-                pluginDirectory: directory.path
+                pluginDirectory: directory.path,
+                worldDirectory: worldDir,
+                appDirectory: worldDir
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         }

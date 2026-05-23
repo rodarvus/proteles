@@ -34,29 +34,87 @@ public final class MapperStore: Sendable {
     public init(url: URL) throws {
         self.url = url
         do {
-            dbQueue = try DatabaseQueue(path: url.path)
+            // WAL so a plugin's lsqlite3 reader can read the map while we
+            // write it (a second connection); rollback-journal mode would
+            // block concurrent access. Set on each connection before use
+            // (PRAGMA journal_mode can't run inside a transaction).
+            var configuration = Configuration()
+            configuration.prepareDatabase { db in
+                try db.execute(sql: "PRAGMA journal_mode = WAL")
+            }
+            dbQueue = try DatabaseQueue(path: url.path, configuration: configuration)
             try Self.ensureSchema(dbQueue)
         } catch {
             throw StoreError.openFailed(error.localizedDescription)
         }
     }
 
-    /// Per-world location:
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/mapper/<id>.db`.
+    /// Legacy per-world DB location (pre-world-data-dir):
+    /// `…/com.proteles.ProtelesApp/mapper/<id>.db`. Kept as the migration
+    /// source for ``worldDatabaseURL(forProfile:worldName:)``.
     public static func defaultStoreURL(
         forProfile id: UUID,
         fileManager: FileManager = .default
     ) throws -> URL {
-        guard
-            let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        else {
-            throw StoreError.openFailed("no Application Support directory")
-        }
-        let folder = support
-            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
+        let folder = try appSupport(fileManager)
             .appendingPathComponent("mapper", isDirectory: true)
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appendingPathComponent("\(id.uuidString).db")
+    }
+
+    /// Per-profile world-data directory — the single place the mapper DB and
+    /// MUSHclient-compat plugins' own SQLite stores live (this is what
+    /// `GetInfo(66)` resolves to). `…/com.proteles.ProtelesApp/worlds/<id>/`.
+    public static func worldDataDirectory(
+        forProfile id: UUID,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let folder = try appSupport(fileManager)
+            .appendingPathComponent("worlds", isDirectory: true)
+            .appendingPathComponent(id.uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    /// The mapper DB inside the world-data directory, named `<worldName>.db`
+    /// so plugins find it at `GetInfo(66)..WorldName()..".db"`. Migrates a
+    /// pre-existing legacy `mapper/<id>.db` here on first use.
+    public static func worldDatabaseURL(
+        forProfile id: UUID,
+        worldName: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let directory = try worldDataDirectory(forProfile: id, fileManager: fileManager)
+        let target = directory.appendingPathComponent("\(worldName).db")
+        if let legacy = try? defaultStoreURL(forProfile: id, fileManager: fileManager) {
+            migrateDatabaseIfNeeded(from: legacy, to: target, fileManager: fileManager)
+        }
+        return target
+    }
+
+    /// Move a legacy DB to `target` only when `target` doesn't yet exist and
+    /// the legacy file does (idempotent; moves the `-wal`/`-shm` sidecars too).
+    static func migrateDatabaseIfNeeded(
+        from legacy: URL,
+        to target: URL,
+        fileManager: FileManager = .default
+    ) {
+        guard !fileManager.fileExists(atPath: target.path),
+              fileManager.fileExists(atPath: legacy.path)
+        else { return }
+        try? fileManager.moveItem(at: legacy, to: target)
+        for suffix in ["-wal", "-shm"] {
+            let from = URL(fileURLWithPath: legacy.path + suffix)
+            if fileManager.fileExists(atPath: from.path) {
+                try? fileManager.moveItem(at: from, to: URL(fileURLWithPath: target.path + suffix))
+            }
+        }
+    }
+
+    private static func appSupport(_ fileManager: FileManager) throws -> URL {
+        guard let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { throw StoreError.openFailed("no Application Support directory") }
+        return support.appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
     }
 
     // MARK: - Schema

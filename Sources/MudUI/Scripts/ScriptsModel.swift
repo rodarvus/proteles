@@ -55,6 +55,12 @@ public final class ScriptsModel {
         if let nativeURL = try? NativePluginStore.defaultStoreURL(forProfile: id) {
             await session.attachNativePluginStore(NativePluginStore(url: nativeURL))
         }
+        // The per-profile world-data dir: the lsqlite3 sandbox root + the
+        // GetInfo(66) plugins use to find the mapper DB / keep their own DBs.
+        // Attach it before loading the mapper + plugins.
+        if let dir = try? MapperStore.worldDataDirectory(forProfile: id) {
+            await session.attachWorldDataDirectory(dir.path)
+        }
         // Attach the per-world live map (GMCP feeds it once connected).
         if let mapper = Self.makeMapper(forProfile: id) {
             await session.attachMapper(mapper)
@@ -180,9 +186,11 @@ public final class ScriptsModel {
 
     // MARK: - Private
 
-    /// Open (or create) the per-world map store and load its graph.
+    /// Open (or create) the per-world map store and load its graph. The DB
+    /// lives in the world-data dir as `<WorldName>.db` (migrating any legacy
+    /// `mapper/<id>.db`), so plugins find it at `GetInfo(66)..WorldName()..".db"`.
     private static func makeMapper(forProfile id: UUID) -> Mapper? {
-        guard let url = try? MapperStore.defaultStoreURL(forProfile: id),
+        guard let url = try? MapperStore.worldDatabaseURL(forProfile: id, worldName: "Aardwolf"),
               let store = try? MapperStore(url: url)
         else { return nil }
         return try? Mapper(store: store)
