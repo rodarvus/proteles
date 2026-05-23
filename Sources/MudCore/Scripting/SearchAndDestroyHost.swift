@@ -174,6 +174,31 @@ public actor SearchAndDestroyHost {
         return out
     }
 
+    /// S&D's GMCP-handler plugin id (`plugin_id_gmcp_handler` in core.lua).
+    /// Its `gmcp(path)`/`send_gmcp_packet` route `CallPlugin` to this id; our
+    /// curated bindings answer it from the runtime's live `proteles.gmcp`.
+    public static let gmcpHandlerID = "3e7dedbe37e44942dd46d264"
+
+    /// Update S&D's view of the connection (`IsConnected()` gates its
+    /// init/bootstrap). Mirror the session's connection state here.
+    public func setConnected(_ value: Bool) async {
+        await runtime.setConnected(value)
+    }
+
+    /// Project a GMCP message into S&D's runtime (`proteles.gmcp`) and fire its
+    /// `OnPluginBroadcast(1, <gmcp id>, "GMCP", package)` — the path by which
+    /// S&D learns it's on a campaign/quest and tracks the current room.
+    public func applyGMCP(package: String, json: String) async -> [ScriptEffect] {
+        var effects = await runtime.applyGMCP(package: package, json: json)
+        effects += await runtime.callGlobal("OnPluginBroadcast", [
+            .number(1),
+            .string(Self.gmcpHandlerID),
+            .string("GMCP"),
+            .string(package)
+        ])
+        return consume(effects)
+    }
+
     private func applyFiring(send: String?, script: String?, match: TriggerMatch?) async -> [ScriptEffect] {
         var out: [ScriptEffect] = []
         if let send, !send.isEmpty { out.append(.send(send)) }
@@ -285,9 +310,48 @@ public actor SearchAndDestroyHost {
       else return nil end
     end
 
+    -- Connection state --------------------------------------------------------
+    function IsConnected() return proteles.isConnected() end
+
+    -- GMCP handler shim: S&D's gmcp(path)/send_gmcp_packet route through
+    -- CallPlugin to the GMCP-handler plugin id; we answer from the runtime's
+    -- live `proteles.gmcp` table. `gmcpdata_as_string` returns the value at a
+    -- dotted path serialised as a Lua literal (what S&D's gmcp() loadstrings).
+    local function snd_gmcp_path(s)
+      local node = proteles.gmcp
+      if s ~= nil and s ~= "" then
+        for key in tostring(s):gmatch("[^%.]+") do
+          if type(node) ~= "table" then return nil end
+          node = node[key]
+        end
+      end
+      return node
+    end
+    local function snd_lua_literal(v)
+      local t = type(v)
+      if t == "table" then
+        local parts = {}
+        for k, val in pairs(v) do
+          local key = type(k) == "number" and ("[" .. k .. "]")
+            or ("[" .. string.format("%q", tostring(k)) .. "]")
+          parts[#parts + 1] = key .. "=" .. snd_lua_literal(val)
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+      elseif t == "string" then return string.format("%q", v)
+      elseif t == "number" or t == "boolean" then return tostring(v)
+      else return "nil" end
+    end
+    function gmcpdata_as_string(s) return snd_lua_literal(snd_gmcp_path(s)) end
+    function Send_GMCP_Packet(s) proteles.sendGMCP(tostring(s)); return 0 end
+
     -- Inter-plugin ------------------------------------------------------------
     function CallPlugin(id, fn, ...)
       if id == "b6eae87ccedd84f510b74714" then proteles.mapperCall(fn, ...); return 0 end
+      if id == "3e7dedbe37e44942dd46d264" then  -- GMCP handler
+        if fn == "gmcpdata_as_string" then return 0, gmcpdata_as_string(...) end
+        if fn == "Send_GMCP_Packet" then return Send_GMCP_Packet(...) end
+        return 0
+      end
       return 0, proteles.call(fn, ...)
     end
     function BroadcastPlugin(msg, text) proteles.broadcast(msg, text); return 0 end

@@ -59,6 +59,19 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.expandCommand("snd history") != nil)
     }
 
+    @Test("GMCP feeds S&D's runtime and its gmcp() accessor reads it back")
+    func gmcpProjection() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Project char.status into S&D's runtime (the path it uses to learn
+        // its state) and fire its OnPluginBroadcast.
+        _ = await host.applyGMCP(package: "char.status", json: #"{"state":"3","level":"150"}"#)
+        // S&D's gmcp("char.status.<field>") → CallPlugin → our handler shim
+        // reading proteles.gmcp.
+        #expect(await host.evaluate(#"gmcp("char.status.state")"#) == "3")
+        #expect(await host.evaluate(#"gmcp("char.status.level")"#) == "150")
+    }
+
     @Test("process() runs incoming lines through S&D's triggers without crashing")
     func processLineIsSafe() async throws {
         let host = try SearchAndDestroyHost()

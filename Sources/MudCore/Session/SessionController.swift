@@ -510,6 +510,16 @@ public actor SessionController {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
+        // Keep S&D's `IsConnected()` in sync and fire its init bootstrap on
+        // connect (its tim_init_plugin timer requests GMCP once connected).
+        if let searchAndDestroy {
+            Task { [weak self] in
+                await searchAndDestroy.setConnected(newState == .connected)
+                if newState == .connected {
+                    await self?.restartTimerLoop()
+                }
+            }
+        }
         // Keep scripts' `proteles.isConnected` in sync and drive plugin
         // connect/disconnect lifecycle callbacks.
         if let scriptEngine {

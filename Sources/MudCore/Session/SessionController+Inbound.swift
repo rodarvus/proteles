@@ -56,6 +56,11 @@ extension SessionController {
                     scriptEngine.applyGMCP(package: message.package, json: message.json)
                 )
             }
+            if let searchAndDestroy {
+                await applyScriptEffects(
+                    searchAndDestroy.applyGMCP(package: message.package, json: message.json)
+                )
+            }
         }
         for line in output.lines {
             await appendLineThroughScripts(line)
