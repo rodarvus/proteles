@@ -45,11 +45,42 @@ struct AsciiMapTests {
         #expect(!effects.contains(.send("map")))
     }
 
-    @Test("room.info triggers a map refresh (the post-login request)")
-    func refreshesOnRoomChange() {
+    @Test("room.info refreshes the map only while in a playing state")
+    func refreshGatedOnState() {
         var plugin = AsciiMap()
+        // Before any playing-state status: room.info must NOT send `map`
+        // (this is what would corrupt auto-login / a note).
+        #expect(plugin.onGMCP(package: "room.info", json: "{}").isEmpty)
+
+        // Enter a playing state (3) → entering fires an initial map request.
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) == [.send("map")])
+        // Now room.info refreshes.
         #expect(plugin.onGMCP(package: "room.info", json: "{}") == [.send("map")])
+
+        // Non-map packages are ignored.
         #expect(plugin.onGMCP(package: "char.vitals", json: "{}").isEmpty)
+    }
+
+    @Test("Login (state 1) and note-writing (state 5) never trigger a map request")
+    func unsafeStatesBlocked() {
+        var plugin = AsciiMap()
+        // Login state — no request, and room.info stays silent.
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":1}"#).isEmpty)
+        #expect(plugin.onGMCP(package: "room.info", json: "{}").isEmpty)
+
+        // Enter play (3), then start a note (5): room.info must not send `map`
+        // (it would be typed into the note).
+        _ = plugin.onGMCP(package: "char.status", json: #"{"state":3}"#)
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":5}"#).isEmpty)
+        #expect(plugin.onGMCP(package: "room.info", json: "{}").isEmpty)
+    }
+
+    @Test("Entering a playing state requests a map only on the transition")
+    func requestsOnceOnTransition() {
+        var plugin = AsciiMap()
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) == [.send("map")])
+        // Staying in state 3 (e.g. align update) must not re-request.
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#).isEmpty)
     }
 
     @Test("Aardwolf telnet framing is IAC SB 102 <opt> <1|2> IAC SE")

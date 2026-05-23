@@ -26,9 +26,19 @@ public struct AsciiMap: NativePlugin {
 
     /// Aardwolf telnet option that brackets the `map` output.
     private static let telnetOptionMap = 4
+    /// `char.status.state` values in which it's safe to request a map —
+    /// mirroring aard_ASCII_map's `can_request_map`: 3 (standing/playing)
+    /// and 11 (AFK/idle, still in-world). Never during login (1), MOTD,
+    /// note-writing (5), or combat (8), where a `map` command would be
+    /// consumed as input or is unwanted.
+    private static let mapRequestStates: Set<Int> = [3, 11]
 
     private var capturing = false
     private var buffer: [Line] = []
+    /// Whether we're currently in a state that permits a map request.
+    private var playing = false
+
+    private struct StatusState: Decodable { let state: Int? }
 
     public init() {}
 
@@ -59,8 +69,22 @@ public struct AsciiMap: NativePlugin {
         return .init(gag: true)
     }
 
-    public func onGMCP(package: String, json _: String) -> [ScriptEffect] {
-        // Refresh the map when the room changes (response is captured/gagged).
-        package.lowercased() == "room.info" ? [.send("map")] : []
+    public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {
+        switch package.lowercased() {
+        case "char.status":
+            // Track the play state; request a map when we first enter a
+            // playing state (e.g. just after login completes).
+            let state = (try? JSONDecoder().decode(StatusState.self, from: Data(json.utf8)))?.state
+            let nowPlaying = state.map(Self.mapRequestStates.contains) ?? false
+            defer { playing = nowPlaying }
+            return (nowPlaying && !playing) ? [.send("map")] : []
+        case "room.info":
+            // Refresh on movement — but only while in a playing state, so we
+            // never send `map` during login / note-writing / combat (it would
+            // corrupt the note or break auto-login).
+            return playing ? [.send("map")] : []
+        default:
+            return []
+        }
     }
 }
