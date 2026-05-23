@@ -14,6 +14,8 @@ public struct MapPanelView: View {
     @State private var pan: CGSize = .zero
     @State private var panStart: CGSize = .zero
     @State private var hovered: PlacedRoom?
+    @State private var editingNote: PlacedRoom?
+    @State private var noteText = ""
 
     public init(model: MapPanelModel) {
         self.model = model
@@ -71,6 +73,19 @@ public struct MapPanelView: View {
                 // Recenter on the new current room.
                 pan = .zero
                 panStart = .zero
+            }
+            .alert(
+                "Note for \(editingNote?.name ?? "room")",
+                isPresented: Binding(get: { editingNote != nil }, set: { if !$0 { editingNote = nil } })
+            ) {
+                TextField("Room note", text: $noteText)
+                Button("Save") {
+                    if let room = editingNote { model.setNote(noteText, for: room.uid) }
+                    editingNote = nil
+                }
+                Button("Cancel", role: .cancel) { editingNote = nil }
+            } message: {
+                Text("Notes mark a room on the map and are searchable with “mapper notes”.")
             }
         }
     }
@@ -273,11 +288,21 @@ public struct MapPanelView: View {
             Button("Go here (portals)") { model.go(to: room.uid) }
             Button("Where") { model.showWhere(room.uid) }
             Divider()
+            Button((room.note?.isEmpty == false) ? "Edit Note…" : "Add Note…") { beginEditingNote(room) }
+            if room.note?.isEmpty == false {
+                Button("Clear Note") { model.setNote("", for: room.uid) }
+            }
+            Divider()
             Button("Recenter") { recenter() }
         } else {
             Button("Recenter") { recenter() }
             Button("Reset zoom") { zoom = 1; zoomStart = 1 }
         }
+    }
+
+    private func beginEditingNote(_ room: PlacedRoom) {
+        editingNote = room
+        noteText = room.note ?? ""
     }
 
     private var toolbar: some View {

@@ -75,6 +75,13 @@ public final class MapPanelModel {
         send("mapper where \(uid)")
     }
 
+    /// Set (or clear, when empty) a room's note. Calls the mapper directly so
+    /// the note text isn't constrained by command parsing; the mapper
+    /// republishes the layout so the note marker updates.
+    public func setNote(_ text: String, for uid: String) {
+        Task { await mapper?.setNote(text, uid: uid) }
+    }
+
     private func send(_ command: String) {
         Task { try? await session.send(command) }
     }

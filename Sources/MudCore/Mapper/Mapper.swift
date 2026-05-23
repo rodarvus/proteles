@@ -291,9 +291,55 @@ public actor Mapper {
         case "walkto": return route(to: arg, allowPortals: false)
         case "where": return whereRoom(arg)
         case "find", "list": return find(arg)
+        case "note", "addnote": return noteCommand(arg)
+        case "notes", "bookmarks": return listNotes()
         case "", "help": return helpOutput()
         default: return [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
         }
+    }
+
+    // MARK: - Notes / bookmarks
+
+    /// Set or clear a room's note (the `bookmarks` table), then republish the
+    /// layout so the panel's note marker updates. `uid` defaults to the
+    /// current room. Empty `text` clears the note. Called directly by the UI
+    /// (note text can contain anything, so it doesn't round-trip a command).
+    @discardableResult
+    public func setNote(_ text: String, uid: String? = nil) -> Bool {
+        guard let target = uid ?? currentRoomUID, var room = graph.rooms[target] else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        room.notes = trimmed.isEmpty ? nil : trimmed
+        graph[target] = room
+        try? store.setNote(room.notes, uid: target)
+        publishLayout()
+        return true
+    }
+
+    /// `mapper note [text]` — set the current room's note (empty clears it).
+    private func noteCommand(_ text: String) -> [ScriptEffect] {
+        guard let uid = currentRoomUID, graph.rooms[uid] != nil else {
+            return [Self.note("Your current location is unknown.")]
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = setNote(trimmed, uid: uid)
+        if trimmed.isEmpty {
+            return [Self.note("Cleared the note for this room.")]
+        }
+        return [Self.note("Noted [\(uid)]: \(trimmed)")]
+    }
+
+    /// `mapper notes` / `mapper bookmarks` — list every room that has a note.
+    private func listNotes() -> [ScriptEffect] {
+        let noted = graph.rooms.values
+            .filter { !($0.notes ?? "").isEmpty }
+            .sorted { $0.uid < $1.uid }
+            .prefix(50)
+        guard !noted.isEmpty else { return [Self.note("No room notes yet.")] }
+        var effects: [ScriptEffect] = [Self.note("Room notes:")]
+        for room in noted {
+            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(room.notes ?? "")"))
+        }
+        return effects
     }
 
     private func route(to uid: String, allowPortals: Bool) -> [ScriptEffect] {
@@ -352,7 +398,9 @@ public actor Mapper {
             "mapper goto <room>   — speedwalk to a room (portals allowed)",
             "mapper walkto <room> — walk to a room (no portals)",
             "mapper where [room]  — show a room and its distance",
-            "mapper find <text>   — search rooms by name"
+            "mapper find <text>   — search rooms by name",
+            "mapper note [text]   — note the current room (empty clears it)",
+            "mapper notes         — list rooms that have notes"
         ].map { Self.note($0) }
     }
 

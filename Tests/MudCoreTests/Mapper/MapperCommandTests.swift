@@ -90,6 +90,33 @@ struct MapperCommandTests {
         #expect(!result.contains("Middle"))
     }
 
+    @Test("mapper note sets, lists, and clears a room note")
+    func notes() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        // Set a note on the current room (1).
+        #expect(await notes(mapper.handleCommand("mapper note recall point"))
+            .contains { $0.contains("Noted") })
+        // It appears in the listing.
+        let listed = await notes(mapper.handleCommand("mapper notes")).joined(separator: "\n")
+        #expect(listed.contains("recall point"))
+        #expect(listed.contains("[1]"))
+        // Clearing it empties the list.
+        _ = await mapper.handleCommand("mapper note")
+        #expect(await notes(mapper.handleCommand("mapper notes")).contains { $0.contains("No room notes") })
+    }
+
+    @Test("setNote updates the room directly (used by the panel)")
+    func setNoteDirect() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        #expect(await mapper.setNote("treasure", uid: "3") == true)
+        let listed = await notes(mapper.handleCommand("mapper notes")).joined(separator: "\n")
+        #expect(listed.contains("treasure") && listed.contains("[3]"))
+    }
+
     @Test("help lists the commands; non-mapper input is ignored")
     func helpAndPassthrough() async throws {
         let (mapper, url) = try seeded()
