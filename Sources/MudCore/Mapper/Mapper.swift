@@ -42,15 +42,33 @@ public actor Mapper {
         // Restore persisted UI preferences (per-profile, in proteles_meta).
         showOtherAreas = Self.persistedFlag(store, Self.showOtherAreasKey)
         showAreaExits = Self.persistedFlag(store, Self.showAreaExitsKey)
+        pkBlink = Self.persistedFlag(store, Self.pkBlinkKey, default: true)
+        scanDepth = Self.persistedInt(store, Self.scanDepthKey, default: Self.defaultScanDepth)
     }
 
     private static let showOtherAreasKey = "ui.show_other_areas"
     private static let showAreaExitsKey = "ui.show_area_exits"
+    private static let pkBlinkKey = "ui.pk_blink"
+    private static let scanDepthKey = "ui.scan_depth"
 
-    /// Read a persisted boolean preference (`"1"` = true), defaulting to false.
-    private static func persistedFlag(_ store: MapperStore, _ key: String) -> Bool {
-        guard let value = try? store.meta(forKey: key) else { return false }
+    /// Default + clamp range for the scan depth (rooms drawn outward).
+    public static let defaultScanDepth = 600
+    static let scanDepthRange = 50...5000
+
+    /// Read a persisted boolean preference (`"1"` = true).
+    private static func persistedFlag(
+        _ store: MapperStore,
+        _ key: String,
+        default def: Bool = false
+    ) -> Bool {
+        guard let value = try? store.meta(forKey: key) else { return def }
         return value == "1"
+    }
+
+    /// Read a persisted integer preference.
+    private static func persistedInt(_ store: MapperStore, _ key: String, default def: Int) -> Int {
+        guard let value = try? store.meta(forKey: key), let number = Int(value) else { return def }
+        return number
     }
 
     /// Whether neighbouring areas render inline (vs. cross-area exits drawn as
@@ -61,6 +79,13 @@ public actor Mapper {
     /// Whether to mark exits that leave the current area with a boundary
     /// marker (Aardwolf's `SHOW_AREA_EXITS`, default off). Toggled from the UI.
     public private(set) var showAreaExits = false
+
+    /// Whether the PK warning animates (Aardwolf's `BLINK_PK_TITLE`, default
+    /// on). The PK indicator itself stays regardless.
+    public private(set) var pkBlink = true
+
+    /// How many rooms the fan-out BFS draws outward (Aardwolf's scan depth).
+    public private(set) var scanDepth = Mapper.defaultScanDepth
 
     // MARK: - Layout publishing
 
@@ -79,8 +104,11 @@ public actor Mapper {
         MapLayout.build(
             graph: graph,
             current: uid,
+            maxDepth: scanDepth,
+            maxRooms: scanDepth,
             showOtherAreas: showOtherAreas,
             showAreaExits: showAreaExits,
+            pkBlink: pkBlink,
             terrainColours: terrainColours,
             environments: environments
         )
@@ -99,6 +127,23 @@ public actor Mapper {
         guard value != showAreaExits else { return }
         showAreaExits = value
         try? store.setMeta(value ? "1" : "0", forKey: Self.showAreaExitsKey)
+        publishLayout()
+    }
+
+    /// Toggle the PK warning animation, persist it, and republish.
+    public func setPKBlink(_ value: Bool) {
+        guard value != pkBlink else { return }
+        pkBlink = value
+        try? store.setMeta(value ? "1" : "0", forKey: Self.pkBlinkKey)
+        publishLayout()
+    }
+
+    /// Set how many rooms the map draws outward (clamped), persist, republish.
+    public func setScanDepth(_ value: Int) {
+        let clamped = min(max(value, Self.scanDepthRange.lowerBound), Self.scanDepthRange.upperBound)
+        guard clamped != scanDepth else { return }
+        scanDepth = clamped
+        try? store.setMeta(String(clamped), forKey: Self.scanDepthKey)
         publishLayout()
     }
 
@@ -317,10 +362,20 @@ public actor Mapper {
         case "walkto": return route(to: arg, allowPortals: false)
         case "where": return whereRoom(arg)
         case "find", "list": return find(arg)
-        case "note", "addnote": return noteCommand(arg)
-        case "notes", "bookmarks": return listNotes()
         case "", "help": return helpOutput()
-        default: return [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
+        default: return handleSecondaryCommand(sub, arg)
+        }
+    }
+
+    /// Notes/bookmarks + view-config subcommands, split out of
+    /// ``handleCommand(_:)`` to keep each within the complexity budget.
+    private func handleSecondaryCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
+        switch sub {
+        case "note", "addnote": noteCommand(arg)
+        case "notes", "bookmarks": listNotes()
+        case "depth": depthCommand(arg)
+        case "blink": blinkCommand(arg)
+        default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
         }
     }
 
@@ -419,6 +474,31 @@ public actor Mapper {
         return effects
     }
 
+    /// `mapper depth [rooms]` — show or set how far the map draws.
+    private func depthCommand(_ arg: String) -> [ScriptEffect] {
+        let trimmed = arg.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            return [Self.note("Map scan depth: \(scanDepth) rooms.")]
+        }
+        guard let value = Int(trimmed) else {
+            let range = "\(Self.scanDepthRange.lowerBound)–\(Self.scanDepthRange.upperBound)"
+            return [Self.note("Usage: mapper depth <rooms> (\(range))")]
+        }
+        setScanDepth(value)
+        return [Self.note("Map scan depth set to \(scanDepth) rooms.")]
+    }
+
+    /// `mapper blink [on|off]` — toggle the PK warning animation.
+    private func blinkCommand(_ arg: String) -> [ScriptEffect] {
+        switch arg.lowercased() {
+        case "on": setPKBlink(true); return [Self.note("PK warning blink: on.")]
+        case "off": setPKBlink(false); return [Self.note("PK warning blink: off.")]
+        case "": return [Self
+                .note("PK warning blink is \(pkBlink ? "on" : "off"). Use 'mapper blink on|off'.")]
+        default: return [Self.note("Usage: mapper blink on|off")]
+        }
+    }
+
     private func helpOutput() -> [ScriptEffect] {
         [
             "mapper goto <room>   — speedwalk to a room (portals allowed)",
@@ -426,7 +506,9 @@ public actor Mapper {
             "mapper where [room]  — show a room and its distance",
             "mapper find <text>   — search rooms by name",
             "mapper note [text]   — note the current room (empty clears it)",
-            "mapper notes         — list rooms that have notes"
+            "mapper notes         — list rooms that have notes",
+            "mapper depth [n]     — how many rooms to draw outward",
+            "mapper blink [on|off]— toggle the PK-room warning animation"
         ].map { Self.note($0) }
     }
 
@@ -436,61 +518,6 @@ public actor Mapper {
 
     private static func note(_ text: String) -> ScriptEffect {
         .colourNote([NoteSegment(text: text, foreground: "#7FB0FF")])
-    }
-
-    // MARK: - Plugin bridge (CallPlugin → native mapper)
-
-    /// The mapper's well-known MUSHclient plugin id — the one third-party
-    /// plugins target with `CallPlugin(...)` / listen to broadcasts from.
-    public static let pluginID = "b6eae87ccedd84f510b74714"
-
-    /// Handle a `CallPlugin(<mapper>, function, args…)` routed to the native
-    /// mapper. Returns synchronous `results` plus any `broadcasts` to deliver
-    /// to every plugin's `OnPluginBroadcast` (e.g. 500/501 path results).
-    /// Unknown functions return an empty result (graceful, like a no-op call).
-    public func handlePluginCall(_ function: String, args: [String]) -> MapperCallResult {
-        switch function.lowercased() {
-        case "get_current_room":
-            MapperCallResult(results: [currentRoomUID ?? ""])
-        case "getkeyword":
-            MapperCallResult(results: [keywordMatches(args.first ?? "")])
-        case "override_continents":
-            MapperCallResult() // accepted; we have no continent bigmap
-        case "find", "do_find", "findpath":
-            MapperCallResult(broadcasts: MapperPluginBridge.broadcasts(for: resolveTargets(args)))
-        default:
-            MapperCallResult()
-        }
-    }
-
-    /// Area uids whose key or name matches `query` (case-insensitive,
-    /// comma-joined) — mirrors the mapper's `getkeyword`.
-    private func keywordMatches(_ query: String) -> String {
-        let needle = query.lowercased()
-        guard !needle.isEmpty else { return "" }
-        return graph.areas.values
-            .filter { $0.uid.lowercased().contains(needle) || ($0.name ?? "").lowercased().contains(needle) }
-            .map(\.uid)
-            .sorted()
-            .joined(separator: ",")
-    }
-
-    /// Route from the current room to each target uid in `args`, producing
-    /// resolved ``MapperPluginBridge/Target`` records (path or unfound).
-    private func resolveTargets(_ args: [String]) -> [MapperPluginBridge.Target] {
-        let uids = args.flatMap { $0.split(whereSeparator: { $0 == "," || $0 == " " }).map(String.init) }
-        guard let src = currentRoomUID else {
-            return uids.map { .init(uid: $0, reason: nil, path: nil) }
-        }
-        let finder = Pathfinder(graph: graph)
-        let options = Pathfinder.Options(level: level, tier: tier)
-        return uids.map { uid in
-            MapperPluginBridge.Target(
-                uid: uid,
-                reason: nil,
-                path: finder.path(from: src, to: uid, options: options)
-            )
-        }
     }
 
     // MARK: - Lifecycle

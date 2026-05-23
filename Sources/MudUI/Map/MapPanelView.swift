@@ -287,7 +287,7 @@ public struct MapPanelView: View {
                     }
                 }
                 Spacer(minLength: 4)
-                if current.isPK { PKBadge() }
+                if current.isPK { PKBadge(blink: layout.pkBlink) }
                 Text(current.uid).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 5))
@@ -503,6 +503,9 @@ private struct PulseRing: View {
 /// a player-kill room — the Aardwolf mapper's title-blink warning, reimagined
 /// as a contained badge (no app-wide alarm).
 private struct PKBadge: View {
+    /// When false the badge is shown static (the indicator stays; only the
+    /// animation is suppressed — Aardwolf's `BLINK_PK_TITLE` off).
+    let blink: Bool
     @State private var on = false
 
     var body: some View {
@@ -512,8 +515,11 @@ private struct PKBadge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(MapPalette.pk, in: Capsule())
-            .opacity(on ? 1.0 : 0.45)
-            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: on)
+            .opacity(blink && !on ? 0.45 : 1.0)
+            .animation(
+                blink ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default,
+                value: on
+            )
             .onAppear { on = true }
             .help("You are in a player-kill room.")
     }

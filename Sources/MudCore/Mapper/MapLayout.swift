@@ -107,6 +107,9 @@ public struct MapLayout: Sendable, Equatable {
     /// Boundary markers for exits leaving the current area (empty unless
     /// `showAreaExits` was requested).
     public let areaExits: [AreaExitMarker]
+    /// Render hint: animate the PK warning (Aardwolf's `BLINK_PK_TITLE`).
+    /// Carried on the layout so a runtime toggle reaches the view live.
+    public let pkBlink: Bool
     /// Bounding box of placed rooms, in grid units (origin = current room).
     public let minX: Int
     public let minY: Int
@@ -142,6 +145,7 @@ public struct MapLayout: Sendable, Equatable {
         maxRooms: Int = 600,
         showOtherAreas: Bool = true,
         showAreaExits: Bool = false,
+        pkBlink: Bool = true,
         terrainColours: [String: Int] = [:],
         environments: [String: String] = [:]
     ) -> MapLayout {
@@ -151,6 +155,7 @@ public struct MapLayout: Sendable, Equatable {
                 rooms: [],
                 links: [],
                 areaExits: [],
+                pkBlink: pkBlink,
                 minX: 0,
                 minY: 0,
                 maxX: 0,
@@ -178,6 +183,7 @@ public struct MapLayout: Sendable, Equatable {
             rooms: rooms,
             links: links,
             areaExits: areaExits,
+            pkBlink: pkBlink,
             minX: xs.min() ?? 0,
             minY: ys.min() ?? 0,
             maxX: xs.max() ?? 0,
@@ -446,6 +452,7 @@ public struct MapLayout: Sendable, Equatable {
         rooms: [PlacedRoom],
         links: [MapLink],
         areaExits: [AreaExitMarker],
+        pkBlink: Bool,
         minX: Int,
         minY: Int,
         maxX: Int,
@@ -455,6 +462,7 @@ public struct MapLayout: Sendable, Equatable {
         self.rooms = rooms
         self.links = links
         self.areaExits = areaExits
+        self.pkBlink = pkBlink
         self.minX = minX
         self.minY = minY
         self.maxX = maxX

@@ -117,6 +117,32 @@ struct MapperCommandTests {
         #expect(listed.contains("treasure") && listed.contains("[3]"))
     }
 
+    @Test("mapper depth shows and sets (clamped) the scan depth")
+    func depth() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        #expect(await notes(mapper.handleCommand("mapper depth")).contains { $0.contains("600 rooms") })
+        _ = await mapper.handleCommand("mapper depth 120")
+        #expect(await mapper.scanDepth == 120)
+        // Below the floor (50) clamps.
+        _ = await mapper.handleCommand("mapper depth 1")
+        #expect(await mapper.scanDepth == 50)
+    }
+
+    @Test("mapper blink toggles the PK warning animation")
+    func blink() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        #expect(await mapper.pkBlink == true) // default on
+        _ = await mapper.handleCommand("mapper blink off")
+        #expect(await mapper.pkBlink == false)
+        #expect(await mapper.currentLayout().pkBlink == false) // carried on the layout
+        _ = await mapper.handleCommand("mapper blink on")
+        #expect(await mapper.pkBlink == true)
+    }
+
     @Test("help lists the commands; non-mapper input is ignored")
     func helpAndPassthrough() async throws {
         let (mapper, url) = try seeded()
