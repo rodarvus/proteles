@@ -20,13 +20,22 @@ public struct InfoPanel: View {
                 if let room = state.room {
                     roomSection(room)
                 }
+                if let status = state.status {
+                    characterSection(status)
+                }
+                if let status = state.status, let enemy = status.enemy, !enemy.isEmpty {
+                    enemySection(name: enemy, percent: status.enemypct)
+                }
+                if let stats = state.stats {
+                    statsSection(stats, max: state.maxStats)
+                }
                 if let group = state.group, group.isGrouped {
                     groupSection(group)
                 }
                 if let worth = state.worth {
                     worthSection(worth)
                 }
-                if state.room == nil, state.worth == nil, state.group == nil {
+                if isEmpty {
                     Text("Connect and log in to see room and character info.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -56,6 +65,87 @@ public struct InfoPanel: View {
         }
     }
 
+    private var isEmpty: Bool {
+        state.room == nil && state.worth == nil && state.group == nil
+            && state.status == nil && state.stats == nil
+    }
+
+    private func characterSection(_ status: CharStatus) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header("Character")
+            row("Level", String(status.level))
+            if let tnl = status.tnl {
+                row("To next level", tnl.formatted())
+            }
+            if let align = status.align {
+                alignmentSlider(align)
+            }
+        }
+    }
+
+    /// Alignment shown on a −1000…+1000 track with a coloured marker.
+    private func alignmentSlider(_ align: Int) -> some View {
+        let fraction = Swift.max(0, Swift.min(1, Double(align + 1000) / 2000))
+        return VStack(alignment: .leading, spacing: 3) {
+            row("Alignment", align.formatted())
+            Capsule()
+                .fill(.quaternary)
+                .frame(height: 6)
+                .overlay {
+                    GeometryReader { geo in
+                        Circle()
+                            .fill(alignmentColor(align))
+                            .frame(width: 10, height: 10)
+                            .position(x: geo.size.width * fraction, y: 3)
+                    }
+                }
+        }
+    }
+
+    private func alignmentColor(_ align: Int) -> Color {
+        if align >= 350 { return .blue }
+        if align <= -350 { return .red }
+        return .secondary
+    }
+
+    private func enemySection(name: String, percent: Int?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header("Combat")
+            Text(AardwolfColor.styledLine(from: name).attributedText())
+                .font(.callout)
+            if let percent {
+                let fraction = Swift.max(0, Swift.min(1, Double(percent) / 100))
+                Capsule()
+                    .fill(.quaternary)
+                    .frame(height: 5)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { geo in
+                            Capsule().fill(.red).frame(width: geo.size.width * fraction)
+                        }
+                    }
+                row("Enemy", "\(percent)%")
+            }
+        }
+    }
+
+    private func statsSection(_ stats: CharStats, max: CharMaxStats?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header("Stats")
+            statRow("Str", stats.str, max?.maxstr)
+            statRow("Int", stats.int, max?.maxint)
+            statRow("Wis", stats.wis, max?.maxwis)
+            statRow("Dex", stats.dex, max?.maxdex)
+            statRow("Con", stats.con, max?.maxcon)
+            statRow("Luck", stats.luck, max?.maxluck)
+            row("Hit roll", stats.hr.formatted())
+            row("Dam roll", stats.dr.formatted())
+        }
+    }
+
+    private func statRow(_ label: String, _ current: Int, _ maximum: Int?) -> some View {
+        row(label, maximum.map { "\(current)/\($0)" } ?? current.formatted())
+    }
+
     private func worthSection(_ worth: CharWorth) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             header("Worth")
@@ -79,10 +169,6 @@ public struct InfoPanel: View {
     @ViewBuilder
     private func memberRow(_ member: GroupInfo.Member) -> some View {
         let info = member.info
-        let hpFraction: Double = {
-            guard let cur = info?.hpCurrent, let max = info?.hpMax, max > 0 else { return 0 }
-            return Swift.max(0, Swift.min(1, Double(cur) / Double(max)))
-        }()
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(member.name)
@@ -95,17 +181,29 @@ public struct InfoPanel: View {
                 }
                 Spacer()
             }
-            Capsule()
-                .fill(.quaternary)
-                .frame(height: 4)
-                .overlay(alignment: .leading) {
-                    GeometryReader { geo in
-                        Capsule()
-                            .fill(.red)
-                            .frame(width: geo.size.width * hpFraction)
-                    }
-                }
+            memberBar(Self.fraction(info?.hp, info?.mhp), tint: .red)
+            memberBar(Self.fraction(info?.mn, info?.mmn), tint: .blue)
+            memberBar(Self.fraction(info?.mv, info?.mmv), tint: .green)
         }
+    }
+
+    private func memberBar(_ fraction: Double, tint: Color) -> some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(height: 4)
+            .overlay(alignment: .leading) {
+                GeometryReader { geo in
+                    Capsule().fill(tint).frame(width: geo.size.width * fraction)
+                }
+            }
+    }
+
+    /// Clamp `current/maximum` (both string-valued GMCP fields) to 0…1.
+    private static func fraction(_ current: String?, _ maximum: String?) -> Double {
+        guard let cur = current.flatMap({ Int($0) }),
+              let max = maximum.flatMap({ Int($0) }), max > 0
+        else { return 0 }
+        return Swift.max(0, Swift.min(1, Double(cur) / Double(max)))
     }
 
     private func header(_ title: String) -> some View {

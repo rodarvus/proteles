@@ -80,6 +80,32 @@ public struct CharStatus: Codable, Sendable, Equatable {
     }
 }
 
+/// `Char.Stats` — the trainable stats plus hit/damage roll, as Aardwolf's
+/// statmon shows them. Sent on change; values arrive as JSON numbers.
+public struct CharStats: Codable, Sendable, Equatable {
+    public let str: Int
+    public let int: Int
+    public let wis: Int
+    public let dex: Int
+    public let con: Int
+    public let luck: Int
+    /// Hit roll.
+    public let hr: Int
+    /// Damage roll.
+    public let dr: Int
+
+    public init(str: Int, int: Int, wis: Int, dex: Int, con: Int, luck: Int, hr: Int, dr: Int) {
+        self.str = str
+        self.int = int
+        self.wis = wis
+        self.dex = dex
+        self.con = con
+        self.luck = luck
+        self.hr = hr
+        self.dr = dr
+    }
+}
+
 /// `Char.Worth` — currencies and trainable resources.
 public struct CharWorth: Codable, Sendable, Equatable {
     public let gold: Int?

@@ -27,6 +27,20 @@ struct GMCPStateStoreApplyTests {
         #expect(max?.maxstr == nil)
     }
 
+    @Test("Char.Stats decodes the trainable stats + hit/damage roll")
+    func appliesStats() async {
+        let store = GMCPStateStore()
+        let message = GMCPMessage(
+            package: "char.stats",
+            json: #"{"str":200,"int":150,"wis":160,"dex":180,"con":190,"luck":120,"hr":520,"dr":480}"#
+        )
+        #expect(await store.apply(message))
+        let stats = await store.state.stats
+        #expect(stats == CharStats(
+            str: 200, int: 150, wis: 160, dex: 180, con: 190, luck: 120, hr: 520, dr: 480
+        ))
+    }
+
     @Test("Char.Status decodes level and align")
     func appliesStatus() async {
         let store = GMCPStateStore()

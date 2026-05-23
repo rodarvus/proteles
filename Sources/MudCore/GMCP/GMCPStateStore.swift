@@ -6,6 +6,7 @@ import Foundation
 public struct GMCPState: Sendable, Equatable {
     public var vitals: CharVitals?
     public var maxStats: CharMaxStats?
+    public var stats: CharStats?
     public var status: CharStatus?
     public var worth: CharWorth?
     public var base: CharBase?
@@ -39,6 +40,7 @@ public actor GMCPStateStore {
         let changed: Bool = switch message.package.lowercased() {
         case "char.vitals": set(\.vitals, from: message, as: CharVitals.self)
         case "char.maxstats": set(\.maxStats, from: message, as: CharMaxStats.self)
+        case "char.stats": set(\.stats, from: message, as: CharStats.self)
         case "char.status": set(\.status, from: message, as: CharStatus.self)
         case "char.worth": set(\.worth, from: message, as: CharWorth.self)
         case "char.base": set(\.base, from: message, as: CharBase.self)
