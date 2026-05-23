@@ -50,6 +50,11 @@ let package = Package(
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "GRDB", package: "GRDB.swift")
+            ],
+            resources: [
+                // Vendored Search-and-Destroy Lua + data (the native S&D
+                // plugin reuses its logic verbatim; see PROVENANCE.md).
+                .copy("Resources/SearchAndDestroy")
             ]
         ),
         .target(
