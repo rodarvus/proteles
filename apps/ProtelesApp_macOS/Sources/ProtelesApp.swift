@@ -59,6 +59,12 @@ struct ProtelesApp: App {
             reconnectPolicy: .standard
         )
 
+        // Register the built-in native plugins (ported from the Aardwolf
+        // package). Registration is quick and completes well before connect.
+        if let scriptEngine {
+            Task { await scriptEngine.registerNativePlugin(VitalShortcuts()) }
+        }
+
         // Profile store → WorldsModel. defaultStoreURL only fails if
         // Application Support is unavailable (effectively never on
         // macOS); fall back to a temp file so the app still launches.
@@ -168,6 +174,7 @@ struct ProtelesApp: App {
                     plugins.prepare(directory: directory) {
                         await scripts.load(forProfile: id)
                     }
+                    await plugins.refreshNative()
                 }
         }
         .windowResizability(.contentSize)

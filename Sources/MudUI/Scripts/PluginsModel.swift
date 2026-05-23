@@ -18,15 +18,28 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
     }
 }
 
+/// A built-in native (Swift) plugin shown in the Plugins window, with its
+/// live enabled state.
+public struct NativePluginRow: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let name: String
+    public let author: String
+    public let version: String
+    public let summary: String
+    public var enabled: Bool
+}
+
 /// `@Observable` model for the Plugins window: lists a world's installed
-/// `.xml` plugins, imports new ones (with a compatibility report), and
-/// removes them. File operations live here; re-syncing the live session is
-/// delegated to a `resync` closure the app supplies (so a change applies
-/// immediately).
+/// `.xml` plugins and the built-in native plugins, imports new ones (with a
+/// compatibility report), and removes/toggles them. File operations live
+/// here; re-syncing the live session is delegated to a `resync` closure the
+/// app supplies (so a change applies immediately).
 @MainActor
 @Observable
 public final class PluginsModel {
     public private(set) var installed: [InstalledPlugin] = []
+    /// Built-in native plugins registered on the session's engine.
+    public private(set) var nativePlugins: [NativePluginRow] = []
     public var selectedID: URL?
 
     private let session: SessionController
@@ -35,6 +48,28 @@ public final class PluginsModel {
 
     public init(session: SessionController) {
         self.session = session
+    }
+
+    /// Load the built-in native plugins' current enabled state from the
+    /// engine. Call when the Plugins window appears.
+    public func refreshNative() async {
+        let listing = await session.scriptEngine?.nativePluginListing() ?? []
+        nativePlugins = listing.map {
+            NativePluginRow(
+                id: $0.metadata.id,
+                name: $0.metadata.name,
+                author: $0.metadata.author,
+                version: $0.metadata.version,
+                summary: $0.metadata.summary,
+                enabled: $0.enabled
+            )
+        }
+    }
+
+    /// Enable/disable a native plugin by id; applies live to the session.
+    public func setNativeEnabled(_ enabled: Bool, id: String) async {
+        _ = await session.scriptEngine?.setNativePluginEnabled(enabled, id: id)
+        await refreshNative()
     }
 
     /// Point the model at a world's plugins directory and supply the

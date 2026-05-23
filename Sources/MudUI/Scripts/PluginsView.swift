@@ -47,20 +47,27 @@ public struct PluginsView: View {
 
     private var sidebar: some View {
         List(selection: $model.selectedID) {
-            ForEach(model.installed) { plugin in
-                PluginRow(plugin: plugin).tag(plugin.id)
+            if !model.nativePlugins.isEmpty {
+                Section("Built-in") {
+                    ForEach(model.nativePlugins) { plugin in
+                        NativePluginRowView(plugin: plugin) { enabled in
+                            Task { await model.setNativeEnabled(enabled, id: plugin.id) }
+                        }
+                    }
+                }
+            }
+            Section("Installed") {
+                ForEach(model.installed) { plugin in
+                    PluginRow(plugin: plugin).tag(plugin.id)
+                }
+                if model.installed.isEmpty {
+                    Text("Import a MUSHclient .xml plugin to add one.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-        .overlay {
-            if model.installed.isEmpty {
-                ContentUnavailableView(
-                    "No Plugins",
-                    systemImage: "puzzlepiece.extension",
-                    description: Text("Import a MUSHclient .xml plugin to get started.")
-                )
-            }
-        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: beginImport) {
@@ -164,6 +171,27 @@ private struct PluginRow: View {
         if !plugin.author.isEmpty { parts.append(plugin.author) }
         if !plugin.version.isEmpty { parts.append("v\(plugin.version)") }
         return parts.isEmpty ? plugin.fileName : parts.joined(separator: " · ")
+    }
+}
+
+/// A built-in native plugin row: name + summary, with an enable toggle.
+private struct NativePluginRowView: View {
+    let plugin: NativePluginRow
+    let onToggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "gearshape.2.fill")
+                .foregroundStyle(plugin.enabled ? Color.accentColor : .secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(plugin.name).lineLimit(1)
+                Text(plugin.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(get: { plugin.enabled }, set: onToggle))
+                .labelsHidden()
+        }
+        .padding(.vertical, 2)
     }
 }
 
