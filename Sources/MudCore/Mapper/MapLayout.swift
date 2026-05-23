@@ -230,6 +230,14 @@ public struct MapLayout: Sendable, Equatable {
             ))
         }
 
+        // Up/down stay on a single 2D plane: drawn only as a short diagonal
+        // stub indicator (paired with the room's ▲/▼ chevron), never expanded
+        // into a placed room. Matches the Aardwolf mapper's default
+        // (`show_up_down = false`).
+        if isUD {
+            stub()
+            return
+        }
         // Unknown destination (the MUD hasn't told us where it leads).
         if !usable {
             stub(unknownDest: true)

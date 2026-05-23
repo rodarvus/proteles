@@ -64,8 +64,9 @@ struct MapperCommandTests {
         await seed(mapper)
         #expect(await sends(mapper.handleCommand("mapper goto 1")).isEmpty)
         #expect(await notes(mapper.handleCommand("mapper goto 1")).contains { $0.contains("already there") })
+        // 9999 is neither a mapped room nor a known exit target → unreachable.
         #expect(await notes(mapper.handleCommand("mapper goto 9999"))
-            .contains { $0.contains("Unknown room") })
+            .contains { $0.contains("No route found") })
     }
 
     @Test("mapper where shows the room, area, and distance")

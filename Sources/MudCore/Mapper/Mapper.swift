@@ -41,6 +41,11 @@ public actor Mapper {
         graph = try store.loadGraph()
     }
 
+    /// Whether neighbouring areas render inline (vs. cross-area exits drawn as
+    /// stubs). Defaults off, matching the Aardwolf mapper's `show_other_areas`
+    /// default — each area reads as a self-contained map. Toggled from the UI.
+    public private(set) var showOtherAreas = false
+
     // MARK: - Layout publishing
 
     /// The current map laid out around the player (empty until a room is
@@ -49,12 +54,26 @@ public actor Mapper {
         guard let uid = currentRoomUID else {
             return MapLayout.build(graph: RoomGraph(), current: "")
         }
-        return MapLayout.build(
+        return buildLayout(for: uid)
+    }
+
+    /// Build the layout around `uid` with the live terrain palette + the
+    /// current `showOtherAreas` setting.
+    private func buildLayout(for uid: String) -> MapLayout {
+        MapLayout.build(
             graph: graph,
             current: uid,
+            showOtherAreas: showOtherAreas,
             terrainColours: terrainColours,
             environments: environments
         )
+    }
+
+    /// Toggle whether other areas render inline, then republish the layout.
+    public func setShowOtherAreas(_ value: Bool) {
+        guard value != showOtherAreas else { return }
+        showOtherAreas = value
+        publishLayout()
     }
 
     /// Subscribe to layout updates (no backfill — read ``currentLayout()``
@@ -77,7 +96,7 @@ public actor Mapper {
     /// or area change). No-op when there are no subscribers.
     private func publishLayout() {
         guard !layoutSubscribers.isEmpty, let uid = currentRoomUID else { return }
-        let layout = MapLayout.build(graph: graph, current: uid)
+        let layout = buildLayout(for: uid)
         for continuation in layoutSubscribers.values {
             continuation.yield(layout)
         }
@@ -281,7 +300,11 @@ public actor Mapper {
         let verb = allowPortals ? "goto" : "walkto"
         guard !uid.isEmpty else { return [Self.note("Usage: mapper \(verb) <room>")] }
         guard let src = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
-        guard let room = graph.rooms[uid] else { return [Self.note("Unknown room: \(uid)")] }
+        // Note: we don't require the destination to be a *fully mapped* room.
+        // An unvisited room (a known exit's target that we've never entered) is
+        // still routable — the path ends with the known exit into it — matching
+        // the Aardwolf mapper, which lets you click an unmapped room to walk
+        // there. The pathfinder returns nil if it isn't reachable at all.
         let options = Pathfinder.Options(
             level: level, tier: tier, allowPortals: allowPortals, allowRecalls: allowPortals
         )
@@ -289,7 +312,8 @@ public actor Mapper {
             return [Self.note("No route found to \(uid).")]
         }
         if path.isEmpty { return [Self.note("You're already there.")] }
-        var effects: [ScriptEffect] = [Self.note("Walking to \(room.name) [\(uid)] — \(path.count) step(s).")]
+        let name = graph.rooms[uid]?.name ?? "room \(uid)"
+        var effects: [ScriptEffect] = [Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s).")]
         effects += Speedwalk.commands(path).map { ScriptEffect.send($0) }
         return effects
     }

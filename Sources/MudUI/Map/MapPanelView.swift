@@ -14,7 +14,6 @@ public struct MapPanelView: View {
     @State private var pan: CGSize = .zero
     @State private var panStart: CGSize = .zero
     @State private var hovered: PlacedRoom?
-    @State private var hoverPoint: CGPoint = .zero
 
     public init(model: MapPanelModel) {
         self.model = model
@@ -59,15 +58,14 @@ public struct MapPanelView: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let point):
-                    hoverPoint = point
                     hovered = room(at: point, layout: layout, geometry: geometry)
                 case .ended:
                     hovered = nil
                 }
             }
             .contextMenu { contextMenu }
-            .overlay(alignment: .topLeading) { tooltip }
             .overlay(alignment: .top) { header(layout) }
+            .overlay(alignment: .bottomLeading) { infoBar }
             .overlay(alignment: .bottomTrailing) { toolbar }
             .onChange(of: layout.current) {
                 // Recenter on the new current room.
@@ -219,6 +217,7 @@ public struct MapPanelView: View {
                     }
                 }
                 Spacer(minLength: 4)
+                if current.isPK { PKBadge() }
                 Text(current.uid).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 5))
@@ -226,25 +225,37 @@ public struct MapPanelView: View {
             .padding(8)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            // A soft red ring when standing in a PK room — contained to the
+            // map panel, not an app-wide alarm.
+            .overlay {
+                if current.isPK {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(MapPalette.pk.opacity(0.8), lineWidth: 1.5)
+                }
+            }
             .padding(8)
         }
     }
 
+    /// Hover info shown in a fixed strip pinned to the bottom edge, so it
+    /// never covers the room under the cursor (the v1 floating tooltip did).
     @ViewBuilder
-    private var tooltip: some View {
+    private var infoBar: some View {
         if let room = hovered {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(room.name).font(.caption.weight(.semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(room.name).font(.caption.weight(.semibold)).lineLimit(1)
+                    Text(room.uid).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
                 if let area = room.areaName { label("Area", area) }
                 if !room.exits.isEmpty { label("Exits", room.exits.joined(separator: ", ")) }
                 if let terrain = room.terrain, !terrain.isEmpty { label("Terrain", terrain) }
                 if let note = room.note, !note.isEmpty { label("Note", note) }
             }
             .padding(8)
-            .frame(maxWidth: 220, alignment: .leading)
+            .frame(maxWidth: 230, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             .shadow(radius: 6)
-            .offset(x: min(hoverPoint.x + 12, 140), y: min(hoverPoint.y + 12, 360))
+            .padding(8)
             .allowsHitTesting(false)
         }
     }
@@ -276,16 +287,31 @@ public struct MapPanelView: View {
             toolbarButton("minus") { setZoom(zoom / 1.25) }
             Divider().frame(width: 28)
             toolbarButton("scope") { recenter() }
+            Divider().frame(width: 28)
+            toolbarButton(
+                model.showOtherAreas ? "square.on.square" : "square",
+                tint: model.showOtherAreas ? .accentColor : nil,
+                help: "Show neighbouring areas"
+            ) { model.toggleShowOtherAreas() }
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .padding(10)
     }
 
-    private func toolbarButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func toolbarButton(
+        _ symbol: String,
+        tint: Color? = nil,
+        help: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).frame(width: 28, height: 28).contentShape(Rectangle())
+            Image(systemName: symbol)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .foregroundStyle(tint ?? .primary)
         }
         .buttonStyle(.plain)
+        .help(help ?? "")
     }
 
     // MARK: - Interaction helpers
@@ -380,5 +406,25 @@ private struct PulseRing: View {
             .opacity(on ? 0.25 : 0.7)
             .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: on)
             .onAppear { on = true }
+    }
+}
+
+/// A gently pulsing "⚔ PK" pill shown in the header when the current room is
+/// a player-kill room — the Aardwolf mapper's title-blink warning, reimagined
+/// as a contained badge (no app-wide alarm).
+private struct PKBadge: View {
+    @State private var on = false
+
+    var body: some View {
+        Text("⚔ PK")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(MapPalette.pk, in: Capsule())
+            .opacity(on ? 1.0 : 0.45)
+            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
+            .help("You are in a player-kill room.")
     }
 }

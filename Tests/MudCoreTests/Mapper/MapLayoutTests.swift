@@ -53,15 +53,18 @@ struct MapLayoutTests {
         #expect(placed(layout, "5")?.point == GridPoint(x: -1, y: 0))
     }
 
-    @Test("Up renders to the NE cell, down to the SW")
-    func upDownDiagonals() {
+    @Test("Up/down are 2D indicators only — chevron + stub, never placed rooms")
+    func upDownIndicators() {
         let g = graph(["1": ["u": "2", "d": "3"], "2": ["d": "1"], "3": ["u": "1"]])
         let layout = MapLayout.build(graph: g, current: "1")
-        #expect(placed(layout, "2")?.point == GridPoint(x: 1, y: -1)) // NE
-        #expect(placed(layout, "3")?.point == GridPoint(x: -1, y: 1)) // SW
+        // The destination rooms are NOT placed (single 2D plane).
+        #expect(placed(layout, "2") == nil)
+        #expect(placed(layout, "3") == nil)
         // The current room advertises both vertical exits for its chevrons.
         #expect(placed(layout, "1")?.hasUp == true)
         #expect(placed(layout, "1")?.hasDown == true)
+        // Both render as up/down stub indicators.
+        #expect(layout.links.count(where: { $0.isUpDown && $0.isStub }) == 2)
     }
 
     @Test("A cell collision becomes a stub, not a duplicate room")

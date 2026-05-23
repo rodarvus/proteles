@@ -13,8 +13,12 @@ import SwiftUI
 @Observable
 public final class MapPanelModel {
     public private(set) var layout: MapLayout = .build(graph: RoomGraph(), current: "")
+    /// Whether neighbouring areas render inline. Mirrors the mapper's setting;
+    /// off by default (each area is self-contained), matching Aardwolf.
+    public private(set) var showOtherAreas = false
 
     private let session: SessionController
+    private var mapper: Mapper?
     private var bindTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
 
@@ -35,6 +39,8 @@ public final class MapPanelModel {
 
     private func bind(to mapper: Mapper) async {
         streamTask?.cancel()
+        self.mapper = mapper
+        await mapper.setShowOtherAreas(showOtherAreas)
         layout = await mapper.currentLayout()
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in
@@ -42,6 +48,14 @@ public final class MapPanelModel {
                 self?.layout = newLayout
             }
         }
+    }
+
+    /// Toggle whether neighbouring areas render inline (pushes to the mapper,
+    /// which republishes the layout).
+    public func toggleShowOtherAreas() {
+        showOtherAreas.toggle()
+        let value = showOtherAreas
+        Task { await mapper?.setShowOtherAreas(value) }
     }
 
     // MARK: - Actions (reuse the `mapper` command surface)
