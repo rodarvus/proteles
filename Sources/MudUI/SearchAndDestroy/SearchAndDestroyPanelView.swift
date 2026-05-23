@@ -36,7 +36,7 @@ public struct SearchAndDestroyPanelView: View {
             Divider()
             List {
                 ForEach(snd.targets) { target in
-                    row(target)
+                    targetRow(target)
                         .listRowInsets(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10))
                         .listRowBackground(target.current ? SnDPalette.currentRow : Color.clear)
                 }
@@ -69,21 +69,58 @@ public struct SearchAndDestroyPanelView: View {
         return "\(snd.targets.count) targets · \(alive) left"
     }
 
-    // MARK: - Toolbar (render-only; actions wired later)
+    // MARK: - Toolbar
 
     private var toolbar: some View {
         HStack(spacing: 6) {
-            button("⚔ xcp", prominent: true)
-            button("Next →")
-            button("Refresh")
+            // The original miniwindow's action buttons → S&D aliases.
+            commandButton(
+                "⚔ xcp",
+                command: "xcp",
+                prominent: true,
+                help: "Get the current campaign/quest target"
+            )
+            commandButton("Next →", command: "nx", help: "Go to the next target")
+            commandButton("Refresh", command: "xgui ref", help: "Refresh the target list")
             Spacer()
-            button("⚙︎")
+            gearMenu
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(SnDPalette.toolbar)
     }
 
-    private func button(_ label: String, prominent: Bool = false) -> some View {
+    private func commandButton(
+        _ label: String,
+        command: String,
+        prominent: Bool = false,
+        help: String
+    ) -> some View {
+        Button { model.run(command) } label: {
+            buttonLabel(label, prominent: prominent)
+        }
+        .buttonStyle(.plain)
+        .disabled(!model.isInteractive)
+        .help(help)
+    }
+
+    private var gearMenu: some View {
+        Menu {
+            Button("Go to Room 1") { model.run("go") }
+            Button("Quick-Scan") { model.run("qs") }
+            Button("Hunt Trick") { model.run("ht") }
+            Divider()
+            Button("Import SnDdb.db…") { model.requestImport() }
+        } label: {
+            buttonLabel("⚙︎")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(!model.isInteractive)
+        .help("More actions")
+    }
+
+    private func buttonLabel(_ label: String, prominent: Bool = false) -> some View {
         Text(label)
             .font(.caption.weight(.semibold))
             .foregroundStyle(prominent ? Color.black.opacity(0.85) : .primary)
@@ -95,6 +132,21 @@ public struct SearchAndDestroyPanelView: View {
     }
 
     // MARK: - Target row
+
+    /// A target row, clickable when interactive — a click re-targets it via
+    /// `xcp <index>` (the original miniwindow's clickable-link behaviour).
+    @ViewBuilder
+    private func targetRow(_ target: SearchAndDestroyModel.Target) -> some View {
+        if model.isInteractive {
+            Button { model.selectTarget(target.index) } label: {
+                row(target)
+            }
+            .buttonStyle(.plain)
+            .help("Go to target \(target.index)")
+        } else {
+            row(target)
+        }
+    }
 
     private func row(_ target: SearchAndDestroyModel.Target) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
