@@ -190,3 +190,36 @@ struct LinePipelineLifecycleTests {
         TelnetCommand.iac, TelnetCommand.se
     ]
 }
+
+@Suite("LinePipeline — server ECHO toggle")
+struct LinePipelineEchoTests {
+    @Test("WILL ECHO sets serverWillEcho true; WONT ECHO sets it false")
+    func echoToggle() throws {
+        var pipeline = LinePipeline()
+        let iac = TelnetCommand.iac
+        // IAC WILL ECHO (option 1) → server is taking over echo.
+        let will = try pipeline.consume([iac, TelnetCommand.will, TelnetOption.echo])
+        #expect(will.serverWillEcho == true)
+        // IAC WONT ECHO → server stops echoing.
+        let wont = try pipeline.consume([iac, TelnetCommand.wont, TelnetOption.echo])
+        #expect(wont.serverWillEcho == false)
+    }
+
+    @Test("Unrelated negotiation leaves serverWillEcho nil")
+    func unrelatedNegotiation() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume([TelnetCommand.iac, TelnetCommand.will, TelnetOption.gmcp])
+        #expect(output.serverWillEcho == nil)
+    }
+}
+
+@Suite("SessionController — input echo line")
+struct SessionControllerInputEchoTests {
+    @Test("A typed command echoes as a dimmed line")
+    func dimmedEcho() {
+        let line = SessionController.inputEchoLine("north")
+        #expect(line.text == "north")
+        #expect(line.runs.count == 1)
+        #expect(line.runs[0].style.foreground == .rgb(red: 140, green: 140, blue: 140))
+    }
+}

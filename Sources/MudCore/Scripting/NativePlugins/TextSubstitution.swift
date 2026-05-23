@@ -63,7 +63,7 @@ public struct TextSubstitution: NativePlugin {
     // MARK: - Commands
 
     public mutating func handleCommand(_ input: String) -> [ScriptEffect]? {
-        let trimmed = input.trimmingCharacters(in: .whitespaces)
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let split = trimmed.split(separator: " ", maxSplits: 1)
         guard let head = split.first.map({ $0.lowercased() }) else { return nil }
         let rest = split.count > 1 ? String(split[1]).trimmingCharacters(in: .whitespaces) : ""

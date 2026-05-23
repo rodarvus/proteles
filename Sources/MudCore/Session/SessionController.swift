@@ -80,7 +80,7 @@ public actor SessionController {
     /// reconnect guard) can read it synchronously.
     public private(set) var state: State = .disconnected
 
-    private var pipeline = LinePipeline()
+    var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
     private var stateForwardTask: Task<Void, Never>?
     /// Drives the script engine's timers: sleeps until the next deadline,
@@ -95,6 +95,11 @@ public actor SessionController {
     /// rules) and enabled flags. Set via ``attachNativePluginStore(_:)`` when
     /// a world loads; written through when a plugin's state changes.
     var nativePluginStore: NativePluginStore?
+
+    /// True while the server is echoing (it sent `WILL ECHO`, e.g. a
+    /// password prompt) — local echo of typed input is suppressed until it
+    /// sends `WONT ECHO`.
+    private var serverEcho = false
 
     /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
     /// so library/test callers opt in explicitly; the app sets
@@ -137,9 +142,9 @@ public actor SessionController {
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
     /// when autologin is not configured or has completed.
-    private var autologin: AutologinState?
+    var autologin: AutologinState?
 
-    private struct AutologinState {
+    struct AutologinState {
         var plan: AutologinPlan
         var phase: Phase
 
@@ -323,12 +328,30 @@ public actor SessionController {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
+        // Locally echo what the user typed (dimmed), so input is visible —
+        // notably while writing a note. Suppressed when the server is
+        // echoing (password prompts) and for the bare prompt-refresh Enter.
+        if !serverEcho, !command.isEmpty {
+            await scrollbackStore.append(Self.inputEchoLine(command))
+        }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.expandInput(command))
             await persistVariablesIfDirty()
         } else {
             try await sendLine(command)
         }
+    }
+
+    /// Build a dimmed scrollback line echoing a user-typed command.
+    static func inputEchoLine(_ command: String) -> Line {
+        let length = (command as NSString).length
+        let runs = length > 0
+            ? [StyledRun(
+                utf16Range: 0..<length,
+                style: StyleAttributes(foreground: .rgb(red: 140, green: 140, blue: 140))
+            )]
+            : []
+        return Line(id: LineID(0), text: command, runs: runs)
     }
 
     /// Send a single line to the MUD (raw text + `\r\n`), bypassing alias
@@ -516,6 +539,12 @@ public actor SessionController {
         for response in output.responses {
             try? await connection?.send(response)
         }
+        // Track the server's ECHO toggle (password prompts) so we don't
+        // locally echo typed input while the server is echoing.
+        if let serverWillEcho = output.serverWillEcho {
+            serverEcho = serverWillEcho
+        }
+
         // The server enabled GMCP — send our handshake once so it starts
         // streaming Char/Comm/Room modules.
         if output.enabledGMCP {
@@ -551,43 +580,6 @@ public actor SessionController {
         for packet in GMCPMessage.aardwolfHandshake(clientVersion: MudCore.version) {
             try? await connection?.send(packet)
         }
-    }
-
-    /// Drive the prompt-driven (Diku-style) autologin sequence. Called
-    /// after each processed chunk with the lines it produced.
-    ///
-    /// Prompts arrive without a trailing newline, so they sit in
-    /// ``LinePipeline/pendingLineText`` rather than appearing as a
-    /// ``Line``. We scan both the freshly emitted lines (in case a world
-    /// terminates its prompts) and the pending buffer.
-    private func advanceAutologin(newLines: [Line]) async {
-        guard var state = autologin else { return }
-
-        switch state.phase {
-        case .awaitingUsername:
-            guard sees(state.plan.usernamePrompt, in: newLines) else { return }
-            // Credentials bypass alias expansion and quit detection.
-            try? await sendLine(state.plan.username)
-            // Skip the password wait entirely when there's nothing to
-            // send; some characters have no password.
-            state.phase = state.plan.password.isEmpty ? .done : .awaitingPassword
-        case .awaitingPassword:
-            guard sees(state.plan.passwordPrompt, in: newLines) else { return }
-            try? await sendLine(state.plan.password)
-            state.phase = .done
-        case .done:
-            break
-        }
-
-        autologin = state.phase == .done ? nil : state
-    }
-
-    /// True if `needle` appears in any of `lines` or in the pipeline's
-    /// current un-terminated pending text.
-    private func sees(_ needle: String, in lines: [Line]) -> Bool {
-        guard !needle.isEmpty else { return false }
-        if pipeline.pendingLineText.contains(needle) { return true }
-        return lines.contains { $0.text.contains(needle) }
     }
 
     private func flushOnDisconnect() async {

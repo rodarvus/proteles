@@ -39,19 +39,26 @@ public struct LinePipeline {
         /// True when this call replied `DO GMCP`, i.e. the server may now
         /// start sending GMCP. The caller should send its GMCP handshake.
         public var enabledGMCP: Bool
+        /// Set when the server toggled the telnet ECHO option this call:
+        /// `true` on `WILL ECHO` (it's taking over echo — e.g. a password
+        /// prompt, so the client should stop local-echoing), `false` on
+        /// `WONT ECHO`. `nil` when unchanged.
+        public var serverWillEcho: Bool?
 
         public init(
             lines: [Line] = [],
             responses: [[UInt8]] = [],
             activatedCompression: Bool = false,
             gmcp: [GMCPMessage] = [],
-            enabledGMCP: Bool = false
+            enabledGMCP: Bool = false,
+            serverWillEcho: Bool? = nil
         ) {
             self.lines = lines
             self.responses = responses
             self.activatedCompression = activatedCompression
             self.gmcp = gmcp
             self.enabledGMCP = enabledGMCP
+            self.serverWillEcho = serverWillEcho
         }
     }
 
@@ -217,6 +224,11 @@ public struct LinePipeline {
                 && negotiationPolicy.acceptedWillOptions.contains(TelnetOption.gmcp)
             if acceptedGMCP {
                 output.enabledGMCP = true
+            }
+            // Track the server's ECHO toggle so the host can suppress local
+            // echo while the server echoes (password prompts).
+            if option == TelnetOption.echo, verb == .will || verb == .wont {
+                output.serverWillEcho = verb == .will
             }
         case .subnegotiation(let option, let payload):
             if option == TelnetOption.gmcp, let message = GMCPMessage(subnegotiationPayload: payload) {

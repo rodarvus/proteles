@@ -21,7 +21,10 @@ extension Line {
                 )
             }
             if style.bold {
-                result[range].font = .body.bold()
+                // Bold via presentation intent (not an absolute font) so it
+                // inherits the view's base font — keeping monospaced text
+                // monospaced (the map/chat align by column).
+                result[range].inlinePresentationIntent = .stronglyEmphasized
             }
             if style.underline {
                 result[range].underlineStyle = .single
