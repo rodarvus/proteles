@@ -58,12 +58,22 @@ public final class ScriptsModel {
         // The per-profile world-data dir: the lsqlite3 sandbox root + the
         // GetInfo(66) plugins use to find the mapper DB / keep their own DBs.
         // Attach it before loading the mapper + plugins.
-        if let dir = try? MapperStore.worldDataDirectory(forProfile: id) {
-            await session.attachWorldDataDirectory(dir.path)
+        let worldDataDir = try? MapperStore.worldDataDirectory(forProfile: id)
+        if let worldDataDir {
+            await session.attachWorldDataDirectory(worldDataDir.path)
         }
         // Attach the per-world live map (GMCP feeds it once connected).
         if let mapper = Self.makeMapper(forProfile: id) {
             await session.attachMapper(mapper)
+        }
+        // Attach the native Search-and-Destroy host: its own sandboxed runtime
+        // + curated bindings, pointed at the same world-data dir (where it
+        // finds the mapper DB and keeps its SnDdb.db). Its triggers/aliases/
+        // timers then run live and it publishes its model to the S&D panel.
+        if let worldDataDir, let host = try? SearchAndDestroyHost() {
+            await host.configure(directory: worldDataDir.path)
+            try? await host.load()
+            await session.attachSearchAndDestroy(host)
         }
         // Then load this world's MUSHclient .xml plugins (after the script
         // reset above, so their triggers/timers survive).

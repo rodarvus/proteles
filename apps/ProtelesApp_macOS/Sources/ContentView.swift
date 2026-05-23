@@ -1,7 +1,9 @@
+import AppKit
 import MudCore
 import MudOutputView_macOS
 import MudUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     let session: SessionController
@@ -61,6 +63,13 @@ struct ContentView: View {
                 gmcp = snapshot
             }
         }
+        .task {
+            // Feed Search-and-Destroy's published window model to the panel.
+            for await json in session.publishedModels {
+                snd.update(json: json)
+            }
+        }
+        .onAppear { wireSearchAndDestroy() }
         .task { await launch() }
     }
 
@@ -83,6 +92,33 @@ struct ContentView: View {
             case .chat: ChatView(model: chat)
             case .hunt: SearchAndDestroyPanelView(model: snd)
             }
+        }
+    }
+
+    /// Wire the S&D panel's actions to the live session: toolbar/row commands
+    /// run through S&D's aliases, and the gear's "Import SnDdb.db…" opens a
+    /// file picker and merges the chosen database into this world's store.
+    private func wireSearchAndDestroy() {
+        snd.onCommand = { command in
+            Task { try? await session.send(command) }
+        }
+        snd.onImport = { importSearchAndDestroyDatabase() }
+    }
+
+    /// Pick an existing `SnDdb.db` and incrementally merge it into the active
+    /// profile's S&D database (adds areas/mobs/history we don't already have).
+    private func importSearchAndDestroyDatabase() {
+        guard let profileID = worlds.activeProfileID else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.database]
+        panel.allowsOtherFileTypes = true
+        panel.message = "Choose a Search & Destroy database (SnDdb.db) to import."
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        Task.detached {
+            guard let url = try? SearchAndDestroyStore.defaultStoreURL(forProfile: profileID),
+                  let store = try? SearchAndDestroyStore(url: url)
+            else { return }
+            _ = try? store.importIncremental(from: source)
         }
     }
 
