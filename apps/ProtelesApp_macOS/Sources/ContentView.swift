@@ -9,7 +9,7 @@ struct ContentView: View {
     let scripts: ScriptsModel
     @Bindable var layout: LayoutModel
     let chat: ChatModel
-    let map: MapModel
+    let map: MapPanelModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
@@ -78,7 +78,7 @@ struct ContentView: View {
             Divider()
             switch layout.selectedPanel {
             case .info: InfoPanel(state: gmcp)
-            case .map: MapView(model: map)
+            case .map: MapPanelView(model: map)
             case .chat: ChatView(model: chat)
             }
         }

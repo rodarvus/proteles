@@ -103,6 +103,27 @@ public extension SessionController {
     /// stream then feeds it room/area/sector updates.
     func attachMapper(_ mapper: Mapper) {
         self.mapper = mapper
+        for continuation in mapperAttachmentSubscribers.values {
+            continuation.yield(mapper)
+        }
+    }
+
+    /// Stream of attached mappers — yields the current one immediately (if
+    /// any) and again on each later attach. The map panel uses this to
+    /// bind/rebind when a world loads.
+    func mapperAttachments() -> AsyncStream<Mapper> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<Mapper>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        mapperAttachmentSubscribers[id] = continuation
+        if let mapper { continuation.yield(mapper) }
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeMapperAttachmentSubscriber(id) }
+        }
+        return stream
+    }
+
+    private func removeMapperAttachmentSubscriber(_ id: UUID) {
+        mapperAttachmentSubscribers[id] = nil
     }
 
     /// Write a native plugin's current serialized state to the attached

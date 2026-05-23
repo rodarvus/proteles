@@ -36,8 +36,8 @@ struct ProtelesApp: App {
     /// The active world's installed MUSHclient plugins (Plugins window).
     @State private var plugins: PluginsModel
 
-    /// The captured ASCII map (docked Map panel).
-    @State private var map: MapModel
+    /// The graphical GMCP map (docked Map panel).
+    @State private var map: MapPanelModel
 
     /// Main-window dock layout (which live panel is shown).
     @State private var layout = LayoutModel()
@@ -87,7 +87,7 @@ struct ProtelesApp: App {
         _chat = State(initialValue: ChatModel(store: session.chatStore))
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
-        _map = State(initialValue: MapModel(store: session.mapStore))
+        _map = State(initialValue: MapPanelModel(session: session))
 
         if let persistence {
             let store = session.scrollbackStore

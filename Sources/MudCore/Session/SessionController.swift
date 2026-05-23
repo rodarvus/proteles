@@ -100,6 +100,11 @@ public actor SessionController {
     /// `room.info`/`room.area`/`room.sectors` from the GMCP stream.
     public internal(set) var mapper: Mapper?
 
+    /// Subscribers notified each time a ``Mapper`` is attached (a world
+    /// loads), so the map panel can (re)bind to the new one. The
+    /// subscribe/yield logic lives in the +Scripting extension.
+    var mapperAttachmentSubscribers: [UUID: AsyncStream<Mapper>.Continuation] = [:]
+
     /// True while the server is echoing (it sent `WILL ECHO`, e.g. a
     /// password prompt) — local echo of typed input is suppressed until it
     /// sends `WONT ECHO`.

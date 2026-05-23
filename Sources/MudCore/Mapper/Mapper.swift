@@ -32,9 +32,50 @@ public actor Mapper {
     /// Areas we've already requested, so we don't spam `request area`.
     private var requestedAreas: Set<String> = []
 
+    /// Layout subscribers (the map panel). Each gets a fresh ``MapLayout``
+    /// whenever the current room, graph, or area colours change.
+    private var layoutSubscribers: [UUID: AsyncStream<MapLayout>.Continuation] = [:]
+
     public init(store: MapperStore) throws {
         self.store = store
         graph = try store.loadGraph()
+    }
+
+    // MARK: - Layout publishing
+
+    /// The current map laid out around the player (empty until a room is
+    /// known) — the UI reads this for backfill before streaming updates.
+    public func currentLayout() -> MapLayout {
+        guard let uid = currentRoomUID else {
+            return MapLayout.build(graph: RoomGraph(), current: "")
+        }
+        return MapLayout.build(graph: graph, current: uid)
+    }
+
+    /// Subscribe to layout updates (no backfill — read ``currentLayout()``
+    /// first), mirroring ``MapStore``/``ChatStore``.
+    public func subscribeLayout() -> AsyncStream<MapLayout> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<MapLayout>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        layoutSubscribers[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeLayoutSubscriber(id) }
+        }
+        return stream
+    }
+
+    private func removeLayoutSubscriber(_ id: UUID) {
+        layoutSubscribers[id] = nil
+    }
+
+    /// Recompute and broadcast the layout to subscribers (called after a room
+    /// or area change). No-op when there are no subscribers.
+    private func publishLayout() {
+        guard !layoutSubscribers.isEmpty, let uid = currentRoomUID else { return }
+        let layout = MapLayout.build(graph: graph, current: uid)
+        for continuation in layoutSubscribers.values {
+            continuation.yield(layout)
+        }
     }
 
     /// Feed one GMCP message. Returns GMCP packet payloads to send back
@@ -118,6 +159,7 @@ public actor Mapper {
                 requests.append("request area")
             }
         }
+        publishLayout()
         return requests
     }
 
@@ -167,6 +209,7 @@ public actor Mapper {
         )
         graph.areas[uid] = area
         try? store.upsert(area)
+        publishLayout()
     }
 
     private struct SectorsPayload: Decodable {
@@ -297,5 +340,6 @@ public actor Mapper {
     /// Reload the in-memory graph from the store (e.g. after an import).
     public func reload() throws {
         graph = try store.loadGraph()
+        publishLayout()
     }
 }
