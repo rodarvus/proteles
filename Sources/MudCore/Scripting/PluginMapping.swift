@@ -54,13 +54,21 @@ enum PluginMapping {
         let secs = Double(attributes["second"] ?? "") ?? 0
         let seconds = hours * 3600 + minutes * 60 + secs
         guard seconds > 0 else { return nil }
+        let name = nonEmpty(attributes["name"])
         let body = trimmedSend(send)
-        let isScript = scriptSendTo.contains(attributes["send_to"] ?? "")
+        let action: TimerAction = if let function = nonEmpty(attributes["script"]) {
+            // MUSHclient calls a timer's script function with the timer name.
+            .script("\(function)(\(luaString(name ?? "")))")
+        } else if scriptSendTo.contains(attributes["send_to"] ?? "") {
+            .script(body)
+        } else {
+            .send(body)
+        }
         return MudTimer(
-            label: nonEmpty(attributes["name"]),
+            label: name,
             group: nonEmpty(attributes["group"]),
             schedule: .every(seconds),
-            action: isScript ? .script(body) : .send(body),
+            action: action,
             enabled: attributes["enabled"] != "n"
         )
     }

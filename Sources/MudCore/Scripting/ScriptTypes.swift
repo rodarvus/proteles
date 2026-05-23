@@ -82,6 +82,15 @@ public enum ScriptEffect: Sendable, Equatable {
     /// native panel to render — the inverse of GMCP-in (e.g. Search-and-
     /// Destroy's window state). The host decodes + forwards it to the UI.
     case publishModel(String)
+    /// Enable/disable a named trigger (MUSHclient `EnableTrigger`). Consumed
+    /// by a plugin host that owns its own automation engines (e.g. the
+    /// Search-and-Destroy host, whose Lua gates its flow this way).
+    case enableTrigger(name: String, on: Bool)
+    /// Enable/disable a named timer (MUSHclient `EnableTimer`).
+    case enableTimer(name: String, on: Bool)
+    /// Enable/disable every trigger and timer in a named group (MUSHclient
+    /// `EnableGroup`).
+    case enableGroup(name: String, on: Bool)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

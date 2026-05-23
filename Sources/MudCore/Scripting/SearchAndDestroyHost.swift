@@ -25,6 +25,17 @@ public actor SearchAndDestroyHost {
     /// not the shared `ScriptEngine`), populated by ``load()``.
     public private(set) var automations: MUSHclientPlugin?
 
+    // S&D's own automation engines (pure value types). S&D runs on a dedicated
+    // runtime with curated bindings, so it can't share `ScriptEngine`'s engines
+    // — the host drives matching itself and runs fired scripts on `runtime`.
+    private var triggers = TriggerEngine()
+    private var aliases = AliasEngine()
+    private var timers = TimerEngine()
+    /// Name → engine id, so S&D's `EnableTrigger`/`EnableTimer` (by name) can
+    /// toggle the right rule.
+    private var triggerIDsByName: [String: UUID] = [:]
+    private var timerIDsByName: [String: UUID] = [:]
+
     public init() throws {
         runtime = try LuaRuntime()
     }
@@ -82,11 +93,124 @@ public actor SearchAndDestroyHost {
     /// reads it. Idempotent; also runs as part of ``load()``.
     public func loadAutomations() throws {
         guard let xml = SearchAndDestroyAssets.pluginXML else { throw HostError.assetsMissing }
+        let plugin: MUSHclientPlugin
         do {
-            automations = try MUSHclientPluginLoader.parse(xml: SearchAndDestroyXML.normalise(xml))
+            plugin = try MUSHclientPluginLoader.parse(xml: SearchAndDestroyXML.normalise(xml))
         } catch {
             throw HostError.loadFailed(String(describing: error))
         }
+        automations = plugin
+        seedEngines(from: plugin)
+    }
+
+    /// Load S&D's automations into the host's engines. Patterns that don't
+    /// compile (a PCRE construct ICU rejects) are skipped, best-effort, so one
+    /// odd trigger can't disable the whole plugin.
+    private func seedEngines(from plugin: MUSHclientPlugin) {
+        triggers = TriggerEngine()
+        aliases = AliasEngine()
+        timers = TimerEngine()
+        triggerIDsByName.removeAll()
+        timerIDsByName.removeAll()
+
+        for trigger in plugin.triggers {
+            guard (try? triggers.add(trigger)) != nil else { continue }
+            if let name = trigger.name { triggerIDsByName[name] = trigger.id }
+        }
+        for alias in plugin.aliases {
+            try? aliases.add(alias)
+        }
+        for timer in plugin.timers {
+            guard let id = try? timers.add(timer) else { continue }
+            if let name = timer.label { timerIDsByName[name] = id }
+        }
+    }
+
+    // MARK: - Dispatch (the session drives these)
+
+    /// Run an incoming MUD line through S&D's triggers, returning the outward
+    /// effects (sends/echoes/published model). Enable/disable effects S&D's
+    /// Lua emitted are applied to the host's own engines, not returned.
+    public func process(_ line: String) async -> [ScriptEffect] {
+        var out: [ScriptEffect] = []
+        for firing in triggers.process(line) {
+            out += await applyFiring(send: firing.send, script: firing.script, match: firing.match)
+        }
+        return out
+    }
+
+    /// Offer a typed command to S&D's aliases. Returns the resulting effects,
+    /// or `nil` if no S&D alias matched (so the caller sends it normally).
+    public func expandCommand(_ input: String) async -> [ScriptEffect]? {
+        let firings = aliases.match(input)
+        guard !firings.isEmpty else { return nil }
+        var out: [ScriptEffect] = []
+        for firing in firings {
+            guard let send = firing.send else { continue }
+            switch firing.target {
+            case .script:
+                await out += consume(runScript(send, match: firing.match))
+            case .world: out.append(.send(send))
+            case .execute: out.append(.execute(send))
+            case .output: out.append(.echo(send))
+            }
+        }
+        return out
+    }
+
+    /// Fire any of S&D's timers that are due at `now` (e.g. the one-shot
+    /// `tim_init_plugin` bootstrap and the navigation tick timers).
+    public func fireTimers(at now: Date = Date()) async -> [ScriptEffect] {
+        var out: [ScriptEffect] = []
+        for firing in timers.due(at: now) {
+            out += await applyFiring(send: firing.send, script: firing.script, match: nil)
+        }
+        return out
+    }
+
+    private func applyFiring(send: String?, script: String?, match: TriggerMatch?) async -> [ScriptEffect] {
+        var out: [ScriptEffect] = []
+        if let send, !send.isEmpty { out.append(.send(send)) }
+        if let script, !script.isEmpty {
+            await out += consume(runScript(script, match: match))
+        }
+        return out
+    }
+
+    private func runScript(_ script: String, match: TriggerMatch?) async -> [ScriptEffect] {
+        do {
+            return try await runtime.runScript(
+                script,
+                matches: match?.captures ?? [],
+                named: match?.named ?? [:]
+            )
+        } catch {
+            return []
+        }
+    }
+
+    /// Apply S&D's host-internal enable/disable effects to the host's engines
+    /// and capture the latest published model; return the remaining outward
+    /// effects (sends/echoes/publishModel) for the session to apply.
+    private func consume(_ effects: [ScriptEffect]) -> [ScriptEffect] {
+        var out: [ScriptEffect] = []
+        for effect in effects {
+            switch effect {
+            case .enableTrigger(let name, let on):
+                if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
+            case .enableTimer(let name, let on):
+                if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
+            case .enableGroup(let name, let on):
+                triggers.setGroupEnabled(on, group: name)
+                timers.setGroupEnabled(on, group: name)
+            case .publishModel(let json):
+                model = json
+                out.append(effect)
+            default:
+                out.append(effect)
+            }
+        }
+        return out
     }
 
     /// Whether a global Lua function of `name` is defined (for tests / sanity).
@@ -162,10 +286,11 @@ public actor SearchAndDestroyHost {
     end
     function BroadcastPlugin(msg, text) proteles.broadcast(msg, text); return 0 end
 
-    -- Timers / automations (the real ones are registered natively) -----------
-    function EnableTimer(name, flag) return 0 end
-    function EnableTrigger(name, flag) return 0 end
-    function EnableGroup(name, flag) return 0 end
+    -- Timers / automations: S&D gates its CP/GQ flow by toggling trigger
+    -- groups, so these drive the host's own engines (booleanised first).
+    function EnableTimer(name, flag) proteles.enableTimer(name, flag and true or false); return 0 end
+    function EnableTrigger(name, flag) proteles.enableTrigger(name, flag and true or false); return 0 end
+    function EnableGroup(name, flag) proteles.enableGroup(name, flag and true or false); return 0 end
     function AddTimer(...) return 0 end
     function DeleteTimer(...) return 0 end
     function DoAfterSpecial(...) return 0 end

@@ -146,6 +146,7 @@ public actor LuaRuntime {
         case mapperCall
         case sqliteAllowed
         case publish
+        case enableTrigger, enableTimer, enableGroup
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -373,6 +374,9 @@ public actor LuaRuntime {
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
         setHostFunction("publish", .publish)
+        setHostFunction("enableTrigger", .enableTrigger)
+        setHostFunction("enableTimer", .enableTimer)
+        setHostFunction("enableGroup", .enableGroup)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -398,7 +402,7 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .mapperCall, .publish:
+             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -472,12 +476,18 @@ public actor LuaRuntime {
     }
 
     /// Set the `matches` (integer-keyed, 0-based) and `named` globals from
-    /// trigger captures.
+    /// trigger captures. Named captures are *also* placed on the `matches`
+    /// table by name — MUSHclient's wildcards table carries both numbered and
+    /// named keys, which plugins read as `wildcards.<name>`.
     func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
-        lua_createtable(state, Int32(captures.count), 0)
+        lua_createtable(state, Int32(captures.count), Int32(named.count))
         for (index, value) in captures.enumerated() {
             lua_pushstring(state, value)
             lua_rawseti(state, -2, Int32(index))
+        }
+        for (key, value) in named {
+            lua_pushstring(state, value)
+            lua_setfield(state, -2, key)
         }
         clua_setglobal(state, "matches")
 

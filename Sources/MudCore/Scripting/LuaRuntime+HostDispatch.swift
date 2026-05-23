@@ -53,8 +53,21 @@ extension LuaRuntime {
         switch function {
         case .mapperCall: recordMapperCall(arguments)
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .enableTrigger:
+            effects.append(.enableTrigger(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
+        case .enableTimer:
+            effects.append(.enableTimer(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
+        case .enableGroup:
+            effects.append(.enableGroup(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
         default: recordOutputEffect(function, arguments)
         }
+    }
+
+    /// A Lua boolean argument (the curated bindings normalise truthy/falsy to
+    /// a real boolean before the call), defaulting to `false`.
+    nonisolated static func argBool(_ arguments: [LuaValue], _ index: Int) -> Bool {
+        guard index < arguments.count else { return false }
+        return arguments[index].booleanValue ?? false
     }
 
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)

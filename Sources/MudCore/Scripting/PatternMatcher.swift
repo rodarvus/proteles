@@ -10,17 +10,21 @@ struct PatternMatcher {
     }
 
     private let regex: NSRegularExpression
-    private let names: [String]
+    /// (ICU group name → original name). ICU rejects names with underscores or
+    /// a leading digit (PCRE allows them, and Aardwolf plugins like
+    /// Search-and-Destroy use `(?<mob_name>…)` heavily), so every named group
+    /// is rewritten to a safe `gN` and mapped back here.
+    private let nameMapping: [(icu: String, original: String)]
 
     init(pattern: TriggerPattern, caseSensitive: Bool) throws {
-        let source = pattern.regexSource()
+        let (source, mapping) = Self.sanitizeNamedGroups(pattern.regexSource())
         var options: NSRegularExpression.Options = []
         if !caseSensitive { options.insert(.caseInsensitive) }
         guard let regex = try? NSRegularExpression(pattern: source, options: options) else {
             throw MatchError.invalidPattern(source)
         }
         self.regex = regex
-        names = Self.capturedGroupNames(in: source)
+        nameMapping = mapping
     }
 
     /// First match of the pattern in `line`, or `nil`.
@@ -36,24 +40,42 @@ struct PatternMatcher {
             captures.append(groupRange.location == NSNotFound ? "" : text.substring(with: groupRange))
         }
         var named: [String: String] = [:]
-        for name in names {
-            let namedRange = result.range(withName: name)
-            named[name] = namedRange.location == NSNotFound ? "" : text.substring(with: namedRange)
+        for entry in nameMapping {
+            let namedRange = result.range(withName: entry.icu)
+            named[entry.original] = namedRange.location == NSNotFound
+                ? "" : text.substring(with: namedRange)
         }
         return TriggerMatch(whole: captures.first ?? "", captures: captures, named: named)
     }
 
-    /// Names of `(?<name>…)` capture groups in a regex source.
+    /// Matches a named-group opener `(?<name>` / `(?P<name>`. The name class
+    /// excludes `=`/`!`, so lookbehinds `(?<=…)`/`(?<!…)` are left alone.
     private static let namePattern = try? NSRegularExpression(
         pattern: #"\(\?P?<([A-Za-z_][A-Za-z0-9_]*)>"#
     )
 
-    private static func capturedGroupNames(in source: String) -> [String] {
-        guard let namePattern else { return [] }
+    /// Rewrite every `(?<name>` to an ICU-safe `(?<gN>`, returning the new
+    /// source and the `gN → name` mapping so captures can be reported under
+    /// their original names. Sources with no named groups pass through.
+    static func sanitizeNamedGroups(_ source: String) -> (String, [(icu: String, original: String)]) {
+        guard let namePattern else { return (source, []) }
         let text = source as NSString
-        let range = NSRange(location: 0, length: text.length)
-        return namePattern.matches(in: source, range: range).map {
-            text.substring(with: $0.range(at: 1))
+        let full = NSRange(location: 0, length: text.length)
+        let matches = namePattern.matches(in: source, range: full)
+        guard !matches.isEmpty else { return (source, []) }
+
+        var result = ""
+        var cursor = 0
+        var mapping: [(icu: String, original: String)] = []
+        for (index, match) in matches.enumerated() {
+            let icu = "g\(index)"
+            let original = text.substring(with: match.range(at: 1))
+            result += text.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            result += "(?<\(icu)>"
+            cursor = match.range.location + match.range.length
+            mapping.append((icu, original))
         }
+        result += text.substring(from: cursor)
+        return (result, mapping)
     }
 }
