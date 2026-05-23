@@ -144,6 +144,7 @@ public actor LuaRuntime {
         case echoAnsi
         case colourNote
         case mapperCall
+        case sqliteAllowed
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -190,6 +191,9 @@ public actor LuaRuntime {
     /// Function refs created this run that no handler/export claimed; freed
     /// at the end of the run so transient callbacks don't leak registry slots.
     private nonisolated(unsafe) var transientRefs: [Int32] = []
+    /// Directory `sqlite3.open` may touch (the per-profile plugin-data dir).
+    /// `nil` = file access closed (in-memory still allowed).
+    nonisolated(unsafe) var sqliteDirectory: String?
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before the runtime is usable —
@@ -207,6 +211,7 @@ public actor LuaRuntime {
         }
         installProtelesAPI()
         installModuleLoader()
+        installSQLite()
     }
 
     deinit {
@@ -365,6 +370,7 @@ public actor LuaRuntime {
         setHostFunction("echoAnsi", .echoAnsi)
         setHostFunction("colourNote", .colourNote)
         setHostFunction("mapperCall", .mapperCall)
+        setHostFunction("sqliteAllowed", .sqliteAllowed)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -404,7 +410,7 @@ public actor LuaRuntime {
             return moduleSourceValue(arguments)
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected:
+        case .info, .pluginID, .isConnected, .sqliteAllowed:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)

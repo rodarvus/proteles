@@ -30,11 +30,22 @@ let package = Package(
                 .define("LUA_USE_MACOSX")
             ]
         ),
+        // The vendored `lsqlite3` Lua↔SQLite binding (Tiago Dionizio / Doug
+        // Currie, MIT). Lets MUSHclient-compat plugins read the mapper DB and
+        // keep their own SQLite stores; sandboxed to a per-profile dir at
+        // runtime. Links the system SQLite (same one GRDB uses).
+        .target(
+            name: "CLSQLite3",
+            dependencies: ["CLua"],
+            exclude: ["LICENSE.txt"],
+            linkerSettings: [.linkedLibrary("sqlite3")]
+        ),
         .target(
             name: "MudCore",
             dependencies: [
                 "CZlib",
                 "CLua",
+                "CLSQLite3",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Algorithms", package: "swift-algorithms"),

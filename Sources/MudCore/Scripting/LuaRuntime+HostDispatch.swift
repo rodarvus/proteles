@@ -12,6 +12,7 @@ extension LuaRuntime {
         case .info: [infoValue(arguments)]
         case .pluginID: [.string(pluginContext.pluginID)]
         case .isConnected: [.boolean(connected)]
+        case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
         default: []
         }
     }
