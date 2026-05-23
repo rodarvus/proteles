@@ -15,6 +15,16 @@ by a native SwiftUI panel).
 - `constants.lua`       — S&D's `<include>`d constants.
 - `wait.lua`            — coroutine async helper S&D `require`s.
 
+## Proteles edits (plumbing, not logic)
+
+`core.lua` is otherwise verbatim. The one intentional edit is a small
+`[Proteles bridge]` block at the top of `xg_draw_window`: it publishes the
+current model as JSON (`proteles.publish`) for the native SwiftUI panel and
+`return`s, skipping the MUSHclient `Window*` drawing (which the native panel
+replaces). It lives inside `core.lua` because it must read S&D's display
+*locals* (`main_target_list`, `current_activity`, …). Search/campaign/gquest
+logic is untouched.
+
 LICENSING: upstream S&D ships no explicit licence; redistribution terms are a
 deferred decision (tracked with the GPLv3/starter-DB question). Vendored here
 for development only.

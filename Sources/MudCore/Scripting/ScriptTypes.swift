@@ -78,6 +78,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// The host runs it and delivers any resulting broadcasts (e.g. the
     /// 500/501 path results) back through `OnPluginBroadcast`.
     case mapperCall(function: String, args: [String])
+    /// A plugin published a structured snapshot (JSON) of its model for a
+    /// native panel to render — the inverse of GMCP-in (e.g. Search-and-
+    /// Destroy's window state). The host decodes + forwards it to the UI.
+    case publishModel(String)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

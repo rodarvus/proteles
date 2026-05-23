@@ -50,10 +50,10 @@ extension LuaRuntime {
     /// Route an effect-recording host call to the right recorder (mapper
     /// calls have a distinct shape; everything else is an inert output effect).
     nonisolated func recordEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
-        if case .mapperCall = function {
-            recordMapperCall(arguments)
-        } else {
-            recordOutputEffect(function, arguments)
+        switch function {
+        case .mapperCall: recordMapperCall(arguments)
+        case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        default: recordOutputEffect(function, arguments)
         }
     }
 

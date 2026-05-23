@@ -5483,6 +5483,32 @@ function xg_create_window(name, line, wildcards)
 end
 
 function xg_draw_window()
+    -- [Proteles bridge] publish the current model to the native panel. Runs in
+    -- core.lua's scope so it can read the display locals (main_target_list,
+    -- current_activity, …); the original Window* drawing below is a no-op here.
+    if proteles and proteles.publish and json then
+        local targets = {}
+        if type(main_target_list) == "table" then
+            for _, t in ipairs(main_target_list) do
+                targets[#targets + 1] = {
+                    name = t.name or t.mob,
+                    room = t.room_name or t.roomName or t.room,
+                    area = t.arid or t.area,
+                    dead = t.is_dead,
+                }
+            end
+        end
+        local ok, encoded = pcall(json.encode, {
+            version = current_sd_version,
+            activity = current_activity,
+            player_on_cp = player_on_cp,
+            player_on_gq = player_on_gq,
+            target_count = #targets,
+            targets = targets,
+        })
+        if ok and encoded then proteles.publish(encoded) end
+        return -- the native panel renders the model; skip the MUSHclient drawing
+    end
     WindowRectOp(win, miniwin.rect_fill, 0, 0, 0, 0, win_bgcolor) -- Clear the window, which is the first step in updating it
     WindowRectOp(win, 2, 0, 0, 0, 17, 0x000000) -- Draw title bar background and set color (almost black, "17" is height)
     WindowRectOp(win, 4, 0, 0, 0, 17, 0xE0E0E0, 0x909090) -- Draw title bar border (left/top = light grey, right/bottom = darker grey, "17" is height)

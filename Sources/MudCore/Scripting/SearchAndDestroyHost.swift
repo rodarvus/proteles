@@ -17,6 +17,8 @@ public actor SearchAndDestroyHost {
     }
 
     private let runtime: LuaRuntime
+    /// The latest JSON model S&D published (via the `xg_draw_window` bridge).
+    public private(set) var model: String?
 
     public init() throws {
         runtime = try LuaRuntime()
@@ -54,7 +56,10 @@ public actor SearchAndDestroyHost {
         })
         await runtime.registerModule("movewindow", source: Self.movewindowStub)
 
-        // Curated host API (globals S&D calls), then the script itself.
+        // Curated host API (globals S&D calls), then the script itself. S&D's
+        // `xg_draw_window` carries a small [Proteles bridge] block that
+        // publishes its model (it must live in core.lua's scope to read the
+        // display locals); we just capture the published JSON in `run`.
         do {
             _ = try await runtime.run(Self.bindings)
             _ = try await runtime.run(core)
@@ -69,11 +74,15 @@ public actor SearchAndDestroyHost {
     }
 
     /// Run a Lua chunk in S&D's runtime, returning the effects its output
-    /// calls produced (Note/ColourNote/Hyperlink/Send/…) — how S&D surfaces
-    /// results until the native UI bridge lands.
+    /// calls produced (Note/ColourNote/Hyperlink/Send/…). Also captures the
+    /// latest published model snapshot into ``model``.
     @discardableResult
     public func run(_ script: String) async throws -> [ScriptEffect] {
-        try await runtime.run(script)
+        let effects = try await runtime.run(script)
+        for effect in effects {
+            if case .publishModel(let json) = effect { model = json }
+        }
+        return effects
     }
 
     /// Evaluate a Lua expression to a string (`tostring`), or nil on error.

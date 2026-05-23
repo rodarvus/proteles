@@ -145,6 +145,7 @@ public actor LuaRuntime {
         case colourNote
         case mapperCall
         case sqliteAllowed
+        case publish
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -371,6 +372,7 @@ public actor LuaRuntime {
         setHostFunction("colourNote", .colourNote)
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
+        setHostFunction("publish", .publish)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -396,7 +398,7 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .mapperCall:
+             .mapperCall, .publish:
             recordEffect(function, arguments)
             return []
         case .call:

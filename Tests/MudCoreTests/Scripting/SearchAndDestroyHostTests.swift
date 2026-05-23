@@ -44,4 +44,20 @@ struct SearchAndDestroyHostTests {
         #expect(text.contains("Town Square"))
         #expect(text.contains("Market"))
     }
+
+    @Test("xg_draw_window publishes a JSON model snapshot to the host (S2)")
+    func publishesModel() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        #expect(await host.model == nil) // nothing published yet
+
+        // A redraw publishes the current model, read from core.lua's own
+        // scope — the default `current_activity` local is "init".
+        try await host.run("xg_draw_window()")
+        let json = try #require(await host.model)
+        #expect(json.contains("\"activity\""))
+        #expect(json.contains("init")) // the in-scope local value, not a global
+        #expect(json.contains("\"targets\""))
+        #expect(json.contains("\"target_count\""))
+    }
 }
