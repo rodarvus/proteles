@@ -116,4 +116,21 @@ struct MapperTests {
         #expect(await reopened.graph.rooms["42"]?.name == "Home")
         #expect(await reopened.graph.rooms["42"]?.exits["s"]?.to == "43")
     }
+
+    @Test("Map view toggles persist per profile and restore on reopen")
+    func togglesPersist() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-toggles-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let mapper = try Mapper(store: MapperStore(url: url))
+            #expect(await mapper.showOtherAreas == false) // default
+            await mapper.setShowOtherAreas(true)
+            await mapper.setShowAreaExits(true)
+        }
+        // A fresh Mapper over the same file restores both toggles.
+        let reopened = try Mapper(store: MapperStore(url: url))
+        #expect(await reopened.showOtherAreas == true)
+        #expect(await reopened.showAreaExits == true)
+    }
 }

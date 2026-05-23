@@ -39,6 +39,18 @@ public actor Mapper {
     public init(store: MapperStore) throws {
         self.store = store
         graph = try store.loadGraph()
+        // Restore persisted UI preferences (per-profile, in proteles_meta).
+        showOtherAreas = Self.persistedFlag(store, Self.showOtherAreasKey)
+        showAreaExits = Self.persistedFlag(store, Self.showAreaExitsKey)
+    }
+
+    private static let showOtherAreasKey = "ui.show_other_areas"
+    private static let showAreaExitsKey = "ui.show_area_exits"
+
+    /// Read a persisted boolean preference (`"1"` = true), defaulting to false.
+    private static func persistedFlag(_ store: MapperStore, _ key: String) -> Bool {
+        guard let value = try? store.meta(forKey: key) else { return false }
+        return value == "1"
     }
 
     /// Whether neighbouring areas render inline (vs. cross-area exits drawn as
@@ -74,17 +86,19 @@ public actor Mapper {
         )
     }
 
-    /// Toggle whether other areas render inline, then republish the layout.
+    /// Toggle whether other areas render inline, persist it, and republish.
     public func setShowOtherAreas(_ value: Bool) {
         guard value != showOtherAreas else { return }
         showOtherAreas = value
+        try? store.setMeta(value ? "1" : "0", forKey: Self.showOtherAreasKey)
         publishLayout()
     }
 
-    /// Toggle the area-exit boundary markers, then republish the layout.
+    /// Toggle the area-exit boundary markers, persist it, and republish.
     public func setShowAreaExits(_ value: Bool) {
         guard value != showAreaExits else { return }
         showAreaExits = value
+        try? store.setMeta(value ? "1" : "0", forKey: Self.showAreaExitsKey)
         publishLayout()
     }
 

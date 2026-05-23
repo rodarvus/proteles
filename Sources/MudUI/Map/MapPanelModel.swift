@@ -56,8 +56,9 @@ public final class MapPanelModel {
     private func bind(to mapper: Mapper) async {
         streamTask?.cancel()
         self.mapper = mapper
-        await mapper.setShowOtherAreas(showOtherAreas)
-        await mapper.setShowAreaExits(showAreaExits)
+        // Adopt the mapper's persisted (per-profile) preferences.
+        showOtherAreas = await mapper.showOtherAreas
+        showAreaExits = await mapper.showAreaExits
         layout = await mapper.currentLayout()
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in

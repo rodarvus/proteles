@@ -214,6 +214,25 @@ public final class MapperStore: Sendable {
         }
     }
 
+    // MARK: - Metadata (proteles_meta key/value)
+
+    /// Read a Proteles metadata value (e.g. a persisted UI preference).
+    public func meta(forKey key: String) throws -> String? {
+        try read { db in
+            try String.fetchOne(db, sql: "SELECT value FROM proteles_meta WHERE key = ?", arguments: [key])
+        }
+    }
+
+    /// Write a Proteles metadata value.
+    public func setMeta(_ value: String, forKey key: String) throws {
+        try write { db in
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO proteles_meta (key, value) VALUES (?, ?)",
+                arguments: [key, value]
+            )
+        }
+    }
+
     // MARK: - Import
 
     /// What an incremental import added.
