@@ -158,6 +158,12 @@ public actor SearchAndDestroyHost {
         return out
     }
 
+    /// The next instant any enabled S&D timer is due, or nil if none — so the
+    /// session's timer loop can include S&D's deadlines.
+    public func nextTimerDeadline() -> Date? {
+        timers.nextDeadline()
+    }
+
     /// Fire any of S&D's timers that are due at `now` (e.g. the one-shot
     /// `tim_init_plugin` bootstrap and the navigation tick timers).
     public func fireTimers(at now: Date = Date()) async -> [ScriptEffect] {

@@ -70,11 +70,17 @@ public actor SessionController {
     public nonisolated let connectionStates: AsyncStream<State>
     private let connectionStatesContinuation: AsyncStream<State>.Continuation
 
+    /// JSON model snapshots a plugin published (`proteles.publish`, e.g.
+    /// Search-and-Destroy's window state) — the UI subscribes and feeds its
+    /// panel model. Newest-only buffering: a late subscriber sees the latest.
+    public nonisolated let publishedModels: AsyncStream<String>
+    nonisolated let publishedModelsContinuation: AsyncStream<String>.Continuation
+
     /// The current network connection, or `nil` between sessions. A fresh
     /// instance is created per ``connect(to:autologin:)`` because
     /// ``NetworkConnection`` finishes its byte stream on disconnect and
     /// can't be reused.
-    private var connection: NetworkConnection?
+    var connection: NetworkConnection?
 
     /// Mirror of the active connection's state, kept so callers (and the
     /// reconnect guard) can read it synchronously.
@@ -86,7 +92,7 @@ public actor SessionController {
     /// Drives the script engine's timers: sleeps until the next deadline,
     /// fires the due timers, then loops. Restarted whenever timers change.
     var timerTask: Task<Void, Never>?
-    private var recorder: SessionRecorder?
+    var recorder: SessionRecorder?
     /// Per-world persistence for scoped script/plugin variables. Set via
     /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes
     /// only) after each Lua batch so plugin variables survive relaunches.
@@ -100,6 +106,12 @@ public actor SessionController {
     /// `room.info`/`room.area`/`room.sectors` from the GMCP stream.
     public internal(set) var mapper: Mapper?
 
+    /// The live Search-and-Destroy plugin host. Set via
+    /// ``attachSearchAndDestroy(_:)`` when a world loads; incoming lines,
+    /// typed S&D commands, and timers are routed through it, and the model it
+    /// publishes is forwarded to ``publishedModels``.
+    public internal(set) var searchAndDestroy: SearchAndDestroyHost?
+
     /// Per-profile world-data dir (`GetInfo(66)` + lsqlite3 sandbox root).
     var worldDataDirectory: String?
 
@@ -110,7 +122,7 @@ public actor SessionController {
     /// True while the server is echoing (it sent `WILL ECHO`, e.g. a
     /// password prompt) — local echo of typed input is suppressed until it
     /// sends `WONT ECHO`.
-    private var serverEcho = false
+    var serverEcho = false
 
     /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
     /// so library/test callers opt in explicitly; the app sets
@@ -148,7 +160,7 @@ public actor SessionController {
 
     /// Whether the GMCP handshake has been sent for the current
     /// connection (sent once, when the server enables GMCP).
-    private var gmcpHandshakeSent = false
+    var gmcpHandshakeSent = false
 
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
@@ -204,6 +216,11 @@ public actor SessionController {
         connectionStates = stream
         connectionStatesContinuation = continuation
         continuation.yield(.disconnected)
+        let (models, modelsContinuation) = AsyncStream<String>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        publishedModels = models
+        publishedModelsContinuation = modelsContinuation
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
@@ -348,6 +365,11 @@ public actor SessionController {
         // Native `mapper …` commands are handled in-app, not sent to the MUD.
         if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
             await applyScriptEffects(mapper.handleCommand(command))
+            return
+        }
+        // Search-and-Destroy's own commands (xcp/nx/qs/…) are intercepted by
+        // its aliases before the normal path.
+        if await handleSearchAndDestroyCommand(command) {
             return
         }
         if let scriptEngine {
@@ -519,82 +541,5 @@ public actor SessionController {
         recorder = nil
         autologin = nil
         connection = nil
-    }
-
-    private func processChunk(_ wireBytes: [UInt8]) async {
-        // Tee to the recorder before doing any parser work — we want
-        // the *wire* bytes on disk so a replay re-runs the full
-        // protocol stack (MCCP2 included) deterministically.
-        try? recorder?.record(wireBytes)
-
-        let output: LinePipeline.Output
-        do {
-            output = try pipeline.consume(wireBytes)
-        } catch {
-            // Corrupt MCCP stream — drop the session. Future phases
-            // will surface a user-visible error rather than bail
-            // silently.
-            await disconnect()
-            return
-        }
-
-        // Negotiation replies go out before line appends so the server
-        // sees them promptly.
-        for response in output.responses {
-            try? await connection?.send(response)
-        }
-        // Track the server's ECHO toggle (password prompts) so we don't
-        // locally echo typed input while the server is echoing.
-        if let serverWillEcho = output.serverWillEcho {
-            serverEcho = serverWillEcho
-        }
-
-        // The server enabled GMCP — send our handshake once so it starts
-        // streaming Char/Comm/Room modules.
-        if output.enabledGMCP {
-            await sendGMCPHandshake()
-        }
-        // Process this chunk's GMCP *before* its lines, so state (vitals,
-        // comm.channel, …) is current when triggers and native plugins see
-        // the lines — e.g. Chat Echo needs the comm.channel for a line
-        // cached before deciding whether to gag that line from the main
-        // window.
-        for message in output.gmcp {
-            await gmcpState.apply(message)
-            await chatStore.ingest(message)
-            if let mapper {
-                for packet in await mapper.ingest(package: message.package, json: message.json) {
-                    try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
-                }
-            }
-            if let scriptEngine {
-                await applyScriptEffects(
-                    scriptEngine.applyGMCP(package: message.package, json: message.json)
-                )
-            }
-        }
-        for line in output.lines {
-            await appendLineThroughScripts(line)
-        }
-
-        await advanceAutologin(newLines: output.lines)
-        await persistVariablesIfDirty()
-    }
-
-    /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,
-    /// then the config/request batch). Sent at most once per connection.
-    private func sendGMCPHandshake() async {
-        guard !gmcpHandshakeSent else { return }
-        gmcpHandshakeSent = true
-        for packet in GMCPMessage.aardwolfHandshake(clientVersion: MudCore.version) {
-            try? await connection?.send(packet)
-        }
-    }
-
-    private func flushOnDisconnect() async {
-        let trailing = pipeline.flush()
-        for line in trailing {
-            await scrollbackStore.append(line)
-        }
     }
 }

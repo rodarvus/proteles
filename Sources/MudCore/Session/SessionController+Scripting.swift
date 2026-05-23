@@ -8,6 +8,7 @@ public extension SessionController {
     internal func appendLineThroughScripts(_ line: Line) async {
         guard let scriptEngine else {
             await scrollbackStore.append(line)
+            await applySearchAndDestroyLine(line.text)
             return
         }
         let disposition = await scriptEngine.process(line)
@@ -15,6 +16,36 @@ public extension SessionController {
             await scrollbackStore.append(disposition.replacement ?? line)
         }
         await applyScriptEffects(disposition.effects)
+        // S&D matches the raw line independently of the user's scripts (it runs
+        // on its own runtime), so feed it the original text regardless of gag.
+        await applySearchAndDestroyLine(line.text)
+    }
+
+    /// Run a received line through Search-and-Destroy's triggers and apply the
+    /// effects it produced (sends, echoes, a re-published model). No-op when no
+    /// S&D host is attached.
+    private func applySearchAndDestroyLine(_ text: String) async {
+        guard let searchAndDestroy else { return }
+        await applyScriptEffects(searchAndDestroy.process(text))
+    }
+
+    /// Offer a typed command to Search-and-Destroy's aliases first. Returns
+    /// `true` if S&D handled it (effects applied), so the caller skips the
+    /// normal alias/verbatim path. No-op (false) without an S&D host.
+    func handleSearchAndDestroyCommand(_ command: String) async -> Bool {
+        guard let searchAndDestroy,
+              let effects = await searchAndDestroy.expandCommand(command)
+        else { return false }
+        await applyScriptEffects(effects)
+        await persistVariablesIfDirty()
+        return true
+    }
+
+    /// Attach the live Search-and-Destroy host (already configured + loaded)
+    /// and start its timer loop. Call when a world loads.
+    func attachSearchAndDestroy(_ host: SearchAndDestroyHost) {
+        searchAndDestroy = host
+        restartTimerLoop()
     }
 
     /// Apply the effects a script produced: sends go to the MUD, echoes/notes
@@ -62,6 +93,8 @@ public extension SessionController {
             await mapStore.update(map)
         case .mapperCall(let function, let args):
             await applyMapperCall(function: function, args: args)
+        case .publishModel(let json):
+            publishedModelsContinuation.yield(json)
         default:
             break
         }
@@ -262,13 +295,14 @@ public extension SessionController {
     /// in-flight sleep. The loop exits on its own when no timers remain.
     internal func restartTimerLoop() {
         timerTask?.cancel()
-        guard let scriptEngine else {
+        // Run while either the user's script engine or the S&D host has timers.
+        guard scriptEngine != nil || searchAndDestroy != nil else {
             timerTask = nil
             return
         }
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let deadline = await scriptEngine.nextTimerDeadline() else { return }
+                guard let deadline = await self?.nextTimerDeadline() else { return }
                 let delay = deadline.timeIntervalSinceNow
                 if delay > 0 {
                     try? await Task.sleep(for: .seconds(delay))
@@ -279,11 +313,22 @@ public extension SessionController {
         }
     }
 
+    /// The earliest deadline across the user's timers and S&D's timers.
+    private func nextTimerDeadline() async -> Date? {
+        let engine = await scriptEngine?.nextTimerDeadline()
+        let snd = await searchAndDestroy?.nextTimerDeadline()
+        return [engine, snd].compactMap(\.self).min()
+    }
+
     /// Fire the timers due at `now` and apply their effects. Factored out so
     /// tests can drive timer firing deterministically without real sleeping.
     internal func applyDueTimers(at now: Date = Date()) async {
-        guard let scriptEngine else { return }
-        await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+        if let scriptEngine {
+            await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+        }
+        if let searchAndDestroy {
+            await applyScriptEffects(searchAndDestroy.fireTimers(at: now))
+        }
     }
 
     /// Render an ANSI-SGR string into a single ``Line`` with styled runs, by
