@@ -36,8 +36,11 @@ struct ProtelesApp: App {
     /// The active world's installed MUSHclient plugins (Plugins window).
     @State private var plugins: PluginsModel
 
-    /// The captured ASCII map (Map window).
+    /// The captured ASCII map (docked Map panel).
     @State private var map: MapModel
+
+    /// Main-window dock layout (which live panel is shown).
+    @State private var layout = LayoutModel()
 
     init() {
         // Scrollback persistence.
@@ -94,9 +97,16 @@ struct ProtelesApp: App {
 
     var body: some Scene {
         WindowGroup("Proteles") {
-            ContentView(session: session, worlds: worlds, scripts: scripts)
-                .frame(minWidth: 800, minHeight: 500)
-                .navigationTitle("Proteles")
+            ContentView(
+                session: session,
+                worlds: worlds,
+                scripts: scripts,
+                layout: layout,
+                chat: chat,
+                map: map
+            )
+            .frame(minWidth: 940, minHeight: 500)
+            .navigationTitle("Proteles")
         }
         .windowResizability(.contentSize)
         .commands {
@@ -113,7 +123,7 @@ struct ProtelesApp: App {
                     )
                 }
             }
-            ProtelesCommands(session: session, worlds: worlds, scripts: scripts)
+            ProtelesCommands(session: session, worlds: worlds, scripts: scripts, layout: layout)
             CommandGroup(after: .pasteboard) {
                 Button("Copy with Colour Codes") {
                     NSApp.sendAction(
@@ -164,11 +174,6 @@ struct ProtelesApp: App {
         }
         .windowResizability(.contentSize)
 
-        Window("Chat", id: ProtelesApp.chatWindowID) {
-            ChatView(model: chat)
-                .frame(minWidth: 420, minHeight: 300)
-        }
-
         Window("Scripts", id: ProtelesApp.scriptsWindowID) {
             ScriptsView(model: scripts)
         }
@@ -188,18 +193,11 @@ struct ProtelesApp: App {
                 }
         }
         .windowResizability(.contentSize)
-
-        Window("Map", id: ProtelesApp.mapWindowID) {
-            MapView(model: map)
-        }
-        .windowResizability(.contentSize)
     }
 
     static let worldsWindowID = "worlds"
-    static let chatWindowID = "chat"
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
-    static let mapWindowID = "map"
 }
 
 /// Session + worlds commands, extracted so they can use
@@ -209,6 +207,7 @@ private struct ProtelesCommands: Commands {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
+    @Bindable var layout: LayoutModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -241,11 +240,6 @@ private struct ProtelesCommands: Commands {
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
 
-            Button("Chat…") {
-                openWindow(id: ProtelesApp.chatWindowID)
-            }
-            .keyboardShortcut("J", modifiers: [.command, .shift])
-
             Button("Scripts…") {
                 openWindow(id: ProtelesApp.scriptsWindowID)
             }
@@ -256,10 +250,16 @@ private struct ProtelesCommands: Commands {
             }
             .keyboardShortcut("P", modifiers: [.command, .shift])
 
-            Button("Map…") {
-                openWindow(id: ProtelesApp.mapWindowID)
-            }
-            .keyboardShortcut("B", modifiers: [.command, .shift])
+            Divider()
+
+            // Live panels live in the main-window dock (not separate windows,
+            // which could fall behind the game window).
+            Button("Info Panel") { layout.show(.info) }
+                .keyboardShortcut("I", modifiers: [.command, .shift])
+            Button("Map Panel") { layout.show(.map) }
+                .keyboardShortcut("B", modifiers: [.command, .shift])
+            Button("Chat Panel") { layout.show(.chat) }
+                .keyboardShortcut("J", modifiers: [.command, .shift])
         }
     }
 }

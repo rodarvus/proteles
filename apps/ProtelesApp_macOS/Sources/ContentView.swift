@@ -7,10 +7,12 @@ struct ContentView: View {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
+    @Bindable var layout: LayoutModel
+    let chat: ChatModel
+    let map: MapModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
-    @State private var showInfo = true
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -28,22 +30,24 @@ struct ContentView: View {
                 }
                 StatusBarView(state: connectionState, gmcp: gmcp)
             }
-            .frame(maxWidth: .infinity)
+            // Keep the vertical MUD output comfortably wide (~100+ cols)
+            // regardless of the dock.
+            .frame(minWidth: 640, maxWidth: .infinity)
 
-            if showInfo {
+            if layout.dockVisible {
                 Divider()
-                InfoPanel(state: gmcp)
-                    .frame(width: 240)
+                dock
+                    .frame(minWidth: 300, idealWidth: 340, maxWidth: 560)
             }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    showInfo.toggle()
+                    layout.toggleDock()
                 } label: {
                     Image(systemName: "sidebar.right")
                 }
-                .help("Toggle the info panel")
+                .help("Toggle the panel dock")
             }
         }
         .task {
@@ -57,6 +61,27 @@ struct ContentView: View {
             }
         }
         .task { await launch() }
+    }
+
+    /// The right-hand dock: a panel picker over the selected live panel.
+    /// Single column so the output keeps its width; collapsible/resizable.
+    private var dock: some View {
+        VStack(spacing: 0) {
+            Picker("Panel", selection: $layout.selectedPanel) {
+                ForEach(LayoutModel.Panel.allCases) { panel in
+                    Label(panel.title, systemImage: panel.systemImage).tag(panel)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(6)
+            Divider()
+            switch layout.selectedPanel {
+            case .info: InfoPanel(state: gmcp)
+            case .map: MapView(model: map)
+            case .chat: ChatView(model: chat)
+            }
+        }
     }
 
     /// Load profiles, then either guide a first-time user to the Worlds

@@ -33,8 +33,7 @@ public struct MapView: View {
                 }
             }
         }
-        .frame(minWidth: 360, minHeight: 320)
-        .navigationTitle("Map")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await model.start() }
     }
 }
