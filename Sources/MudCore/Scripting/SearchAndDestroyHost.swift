@@ -22,6 +22,25 @@ public actor SearchAndDestroyHost {
         runtime = try LuaRuntime()
     }
 
+    /// Point S&D at its data directory — `GetInfo(66)` (where it finds the
+    /// mapper DB as `<WorldName>.db` and keeps its own `SnDdb.db`) and the
+    /// lsqlite3 sandbox root. Call before ``load()`` (S&D captures the DB
+    /// paths from `GetInfo(66)` at load time).
+    public func configure(directory: String) async {
+        let suffixed = directory.hasSuffix("/") ? directory : directory + "/"
+        var context = PluginContext.default
+        context.pluginID = Self.pluginID
+        context.pluginName = "Search_and_Destroy"
+        context.appDirectory = suffixed // GetInfo(66)
+        context.worldDirectory = suffixed
+        context.pluginDirectory = suffixed // GetInfo(60)
+        await runtime.setPluginContext(context)
+        await runtime.setSQLiteDirectory(directory)
+    }
+
+    /// S&D's well-known MUSHclient plugin id.
+    public static let pluginID = "30000000537461726C696E67"
+
     /// Register S&D's modules + curated bindings and load its `core.lua`.
     /// Throws if the vendored script is missing or fails to compile/run.
     public func load() async throws {
@@ -47,6 +66,19 @@ public actor SearchAndDestroyHost {
     /// Whether a global Lua function of `name` is defined (for tests / sanity).
     public func functionExists(_ name: String) async -> Bool {
         await (try? runtime.string("type(\(name))")) == "function"
+    }
+
+    /// Run a Lua chunk in S&D's runtime, returning the effects its output
+    /// calls produced (Note/ColourNote/Hyperlink/Send/…) — how S&D surfaces
+    /// results until the native UI bridge lands.
+    @discardableResult
+    public func run(_ script: String) async throws -> [ScriptEffect] {
+        try await runtime.run(script)
+    }
+
+    /// Evaluate a Lua expression to a string (`tostring`), or nil on error.
+    public func evaluate(_ expression: String) async -> String? {
+        try? await runtime.string(expression)
     }
 
     // MARK: - Curated bindings
