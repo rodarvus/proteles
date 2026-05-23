@@ -507,15 +507,16 @@ public actor SessionController {
         for response in output.responses {
             try? await connection?.send(response)
         }
-        for line in output.lines {
-            await appendLineThroughScripts(line)
-        }
-
         // The server enabled GMCP — send our handshake once so it starts
         // streaming Char/Comm/Room modules.
         if output.enabledGMCP {
             await sendGMCPHandshake()
         }
+        // Process this chunk's GMCP *before* its lines, so state (vitals,
+        // comm.channel, …) is current when triggers and native plugins see
+        // the lines — e.g. Chat Echo needs the comm.channel for a line
+        // cached before deciding whether to gag that line from the main
+        // window.
         for message in output.gmcp {
             await gmcpState.apply(message)
             await chatStore.ingest(message)
@@ -524,6 +525,9 @@ public actor SessionController {
                     scriptEngine.applyGMCP(package: message.package, json: message.json)
                 )
             }
+        }
+        for line in output.lines {
+            await appendLineThroughScripts(line)
         }
 
         await advanceAutologin(newLines: output.lines)
