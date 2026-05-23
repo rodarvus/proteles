@@ -4,35 +4,40 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-22)
+## Current status (2026-05-23)
 
-**Phases 0–5 complete; Phase 6's core compatibility loop complete** —
-shipped as `v0.0.6`. Each phase ≈ one patch release (Phase N → `v0.0.N`).
+**Phases 0–6 complete (shipped through `v0.0.6`); mapper + lsqlite3 +
+Search-and-Destroy landed on `main` since (unreleased).** Read **PLAN.md**
+for the full status table + decision log (D-01…D-29).
 
-Phase 5 (scripting foundation): vendored Lua 5.1 (`CLua`) + sandbox +
-`proteles.*`; pure value-type `TriggerEngine`/`AliasEngine`/`TimerEngine`;
-live `proteles.gmcp` + `gmcp.*` events; per-world `ScriptStore`; the Scripts
-editor window (`Sources/MudUI/Scripts/`, ⌘⇧T).
+Done and live: connect/telnet/MCCP2/ANSI/scrollback; prompt-driven autologin
++ autoreconnect; GMCP + status HUD + chat capture; command history/completion;
+the scripting foundation (Lua 5.1 `CLua` + sandbox + `proteles.*`; value-type
+`TriggerEngine`/`AliasEngine`/`TimerEngine`; live `proteles.gmcp` + events;
+per-world `ScriptStore`; Scripts editor ⌘⇧T); the MUSHclient compat path
+(`mush.lua` shim, scoped vars + `PluginContext`, controlled `require`/`dofile`
++ helper libs, `MUSHclientPluginLoader`, plugin host + GMCP→`OnPluginBroadcast`
+bridge, per-plugin `setfenv` environments, Plugins window ⌘⇧P); the
+**native-plugin host** + 5 ported plugins (VitalShortcuts, NoteMode,
+TextSubstitution, ChatEcho, AsciiMap); the **native graphical mapper** (GRDB
+MUSHclient-superset schema, fan-out BFS layout, Dijkstra pathfinding,
+`mapper …` commands, incremental import, `CallPlugin` bridge); **lsqlite3**
+(sandboxed `sqlite3` global); and **Search-and-Destroy vendored natively**
+(its Lua logic verbatim on a dedicated runtime with curated bindings, native
+SwiftUI panel, `SnDdb.db` import). Live panels are docked in the main window
+(Info/Map/Chat/S&D).
 
-Phase 6 (MUSHclient compatibility): the `mush.lua` Tier-1 world API on top
-of `proteles.*`; scoped per-plugin variables + `PluginContext`
-(`GetInfo`/`GetPluginID`); controlled `require`/`dofile` + bundled helper
-libs (`gmcphelper` re-pointed at native GMCP, plus pure helpers); the
-`MUSHclientPluginLoader` XML parser; the plugin host with lifecycle
-callbacks + the GMCP→`OnPluginBroadcast` bridge; and app-level loading
-(a world's `.xml` plugins under `…/plugins/<profileID>/` load on connect).
-All in `Sources/MudCore/Scripting/`, validated end-to-end. Also fixed the
-trigger multi-fire bug (#5).
-
-**Remaining Phase-6 breadth:** per-plugin Lua environments (`setfenv` —
-plugins currently share one global table), `json`/`serialize`/
-`aardwolf_colors`, the migration CLI, hand-ported core plugins. See
-`docs/PLUGIN_COMPATIBILITY.md`. Deferred: Scripts-editor UX rework (#4) and
-`MacroEngine` → Phase 7.
+**Next:** Phase 7 — Preferences UI, MacroEngine + Scripts-editor UX rework
+(#4), themes, notifications, logging, more native ports; harden the lsqlite3
+sandbox (`sqlite3_set_authorizer` to deny `ATTACH` — current guard is
+open-path only). Deferred: starter map DB (#6, gated on GPLv3 call), live-MUD
+lsqlite3 validation (#7 stage D), S&D licensing (no upstream license).
 
 The pattern to keep: **pure, value-type engines in MudCore** (decide),
-**`ScriptEngine` actor** (orchestrate Lua), **`SessionController`** (apply
-effects/sends) — so logic stays unit-testable without UI/network/Lua.
+**`ScriptEngine` / `SearchAndDestroyHost` / `Mapper` actors** (orchestrate
+Lua/state), **`SessionController`** (apply effects/sends) — so logic stays
+unit-testable without UI/network/Lua. Search-and-Destroy runs on its OWN
+dedicated `LuaRuntime` with curated bindings, NOT the generic mush shim.
 
 ## Reference submodules — ALWAYS research them
 
@@ -126,8 +131,8 @@ path outside the repo, e.g.
 
 ## Workflow conventions
 
-- **Porting the Aardwolf MUSHclient package (the plugin list, PLAN.md
-  §7.6):** for every plugin we tackle — whether it becomes a native app
+- **Porting the Aardwolf MUSHclient package (PLAN.md §7 + §11):** for every
+  plugin we tackle — whether it becomes a native app
   *feature* or a native Proteles *plugin* — PROPOSE a plan first (analysis,
   trade-offs, options) and wait for the user's approval. Do NOT implement
   the port directly. None of these plugins run through the Lua shim; the
