@@ -239,6 +239,18 @@ public extension SessionController {
     /// Render an ANSI-SGR string into a single ``Line`` with styled runs, by
     /// running it through the ``ANSIParser`` (used by the shim's `AnsiNote`,
     /// e.g. `AnsiNote(ColoursToANSI(text))`).
+    /// Build a dimmed scrollback line echoing a user-typed command.
+    static func inputEchoLine(_ command: String) -> Line {
+        let length = (command as NSString).length
+        let runs = length > 0
+            ? [StyledRun(
+                utf16Range: 0..<length,
+                style: StyleAttributes(foreground: .rgb(red: 140, green: 140, blue: 140))
+            )]
+            : []
+        return Line(id: LineID(0), text: command, runs: runs)
+    }
+
     /// Frame an Aardwolf telnet-option toggle: `IAC SB 102 <option>
     /// <1=on|2=off> IAC SE`.
     static func aardwolfTelnetBytes(option: Int, on: Bool) -> [UInt8] {

@@ -15,7 +15,10 @@ public enum Speedwalk {
     /// standalone.
     static let runnable: Set<String> = ["n", "s", "e", "w", "u", "d"]
 
-    public static func build(_ path: [PathStep], prefix: String = "run", stackChar: String = ";") -> String {
+    /// The speedwalk as discrete commands to send in order — e.g.
+    /// `["run 3n2e", "enter portal", "run e"]`. Proteles has no client-side
+    /// `;` stacking, so the command surface sends these one at a time.
+    public static func commands(_ path: [PathStep], prefix: String = "run") -> [String] {
         // Run-length compress consecutive runnable dirs.
         struct Run { var dir: String; var count: Int }
         var runs: [Run] = []
@@ -28,8 +31,8 @@ public enum Speedwalk {
             }
         }
 
-        // Assemble: runnable runs accumulate into a `prefix <runs>` segment;
-        // anything else is its own segment. Segments join with `stackChar`.
+        // Runnable runs accumulate into a `prefix <runs>` segment; anything
+        // else (diagonals, custom commands) is its own segment.
         var segments: [String] = []
         var move = ""
         func flushMove() {
@@ -46,7 +49,13 @@ public enum Speedwalk {
             }
         }
         flushMove()
-        return segments.joined(separator: stackChar)
+        return segments
+    }
+
+    /// The speedwalk as one string, segments joined by `stackChar` (for
+    /// display / tests).
+    public static func build(_ path: [PathStep], prefix: String = "run", stackChar: String = ";") -> String {
+        commands(path, prefix: prefix).joined(separator: stackChar)
     }
 }
 

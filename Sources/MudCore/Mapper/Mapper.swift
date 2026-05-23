@@ -24,6 +24,11 @@ public actor Mapper {
     public private(set) var environments: [String: String] = [:]
     public private(set) var terrainColours: [String: Int] = [:]
 
+    /// Character level/tier, from `char.status`/`char.base`, used to gate
+    /// level-locked exits and the portal/recall tier bonus.
+    public private(set) var level = 0
+    public private(set) var tier = 0
+
     /// Areas we've already requested, so we don't spam `request area`.
     private var requestedAreas: Set<String> = []
 
@@ -40,6 +45,12 @@ public actor Mapper {
         case "room.info": return ingestRoomInfo(json)
         case "room.area": ingestArea(json); return []
         case "room.sectors": ingestSectors(json); return []
+        case "char.status":
+            if let value = Self.decodeInt(json, key: "level") { level = value }
+            return []
+        case "char.base":
+            if let value = Self.decodeInt(json, key: "tier") { tier = value }
+            return []
         default: return []
         }
     }
@@ -183,6 +194,102 @@ public actor Mapper {
             rows.append(MapperStore.Environment(uid: key, name: sector.name, color: sector.color))
         }
         try? store.replaceEnvironments(rows)
+    }
+
+    static func decodeInt(_ json: String, key: String) -> Int? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        else { return nil }
+        if let value = object[key] as? Int { return value }
+        if let value = object[key] as? Double { return Int(value) }
+        if let value = object[key] as? String { return Int(value) }
+        return nil
+    }
+
+    // MARK: - Commands
+
+    /// Handle a `mapper …` command, returning the effects to apply (sends +
+    /// notes). Covers the Search-and-Destroy contract (`goto`/`walkto`/
+    /// `where`) plus core search. Returns `[]` if the input isn't a `mapper`
+    /// command.
+    public func handleCommand(_ input: String) -> [ScriptEffect] {
+        let parts = input.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
+        guard parts.first?.lowercased() == "mapper" else { return [] }
+        let rest = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
+        let split = rest.split(separator: " ", maxSplits: 1)
+        let sub = split.first.map { $0.lowercased() } ?? ""
+        let arg = split.count > 1 ? split[1].trimmingCharacters(in: .whitespaces) : ""
+
+        switch sub {
+        case "goto": return route(to: arg, allowPortals: true)
+        case "walkto": return route(to: arg, allowPortals: false)
+        case "where": return whereRoom(arg)
+        case "find", "list": return find(arg)
+        case "", "help": return helpOutput()
+        default: return [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
+        }
+    }
+
+    private func route(to uid: String, allowPortals: Bool) -> [ScriptEffect] {
+        let verb = allowPortals ? "goto" : "walkto"
+        guard !uid.isEmpty else { return [Self.note("Usage: mapper \(verb) <room>")] }
+        guard let src = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+        guard let room = graph.rooms[uid] else { return [Self.note("Unknown room: \(uid)")] }
+        let options = Pathfinder.Options(
+            level: level, tier: tier, allowPortals: allowPortals, allowRecalls: allowPortals
+        )
+        guard let path = Pathfinder(graph: graph).path(from: src, to: uid, options: options) else {
+            return [Self.note("No route found to \(uid).")]
+        }
+        if path.isEmpty { return [Self.note("You're already there.")] }
+        var effects: [ScriptEffect] = [Self.note("Walking to \(room.name) [\(uid)] — \(path.count) step(s).")]
+        effects += Speedwalk.commands(path).map { ScriptEffect.send($0) }
+        return effects
+    }
+
+    private func whereRoom(_ uid: String) -> [ScriptEffect] {
+        guard let target = uid.isEmpty ? currentRoomUID : uid, let room = graph.rooms[target] else {
+            return [Self.note("Unknown room.")]
+        }
+        var line = "Room \(target): \(room.name) — \(areaName(room.area))"
+        if let src = currentRoomUID, src != target {
+            let options = Pathfinder.Options(level: level, tier: tier)
+            if let path = Pathfinder(graph: graph).path(from: src, to: target, options: options) {
+                line += " (\(path.count) step(s) away)"
+            }
+        }
+        return [Self.note(line)]
+    }
+
+    private func find(_ text: String) -> [ScriptEffect] {
+        guard !text.isEmpty else { return [Self.note("Usage: mapper find <text>")] }
+        let needle = text.lowercased()
+        let matches = graph.rooms.values
+            .filter { !$0.uid.hasPrefix("*") && $0.name.lowercased().contains(needle) }
+            .sorted { $0.uid < $1.uid }
+            .prefix(20)
+        guard !matches.isEmpty else { return [Self.note("No rooms matching '\(text)'.")] }
+        var effects: [ScriptEffect] = [Self.note("Rooms matching '\(text)':")]
+        for room in matches {
+            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(areaName(room.area))"))
+        }
+        return effects
+    }
+
+    private func helpOutput() -> [ScriptEffect] {
+        [
+            "mapper goto <room>   — speedwalk to a room (portals allowed)",
+            "mapper walkto <room> — walk to a room (no portals)",
+            "mapper where [room]  — show a room and its distance",
+            "mapper find <text>   — search rooms by name"
+        ].map { Self.note($0) }
+    }
+
+    private func areaName(_ key: String?) -> String {
+        key.flatMap { graph.areas[$0]?.name } ?? key ?? "?"
+    }
+
+    private static func note(_ text: String) -> ScriptEffect {
+        .colourNote([NoteSegment(text: text, foreground: "#7FB0FF")])
     }
 
     // MARK: - Lifecycle

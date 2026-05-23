@@ -338,24 +338,17 @@ public actor SessionController {
         if !serverEcho, !command.isEmpty {
             await scrollbackStore.append(Self.inputEchoLine(command))
         }
+        // Native `mapper …` commands are handled in-app, not sent to the MUD.
+        if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
+            await applyScriptEffects(mapper.handleCommand(command))
+            return
+        }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.expandInput(command))
             await persistVariablesIfDirty()
         } else {
             try await sendLine(command)
         }
-    }
-
-    /// Build a dimmed scrollback line echoing a user-typed command.
-    static func inputEchoLine(_ command: String) -> Line {
-        let length = (command as NSString).length
-        let runs = length > 0
-            ? [StyledRun(
-                utf16Range: 0..<length,
-                style: StyleAttributes(foreground: .rgb(red: 140, green: 140, blue: 140))
-            )]
-            : []
-        return Line(id: LineID(0), text: command, runs: runs)
     }
 
     /// Send a single line to the MUD (raw text + `\r\n`), bypassing alias
