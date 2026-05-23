@@ -99,6 +99,12 @@ public extension SessionController {
         await scriptEngine.applyNativePluginEnabled(document.enabled)
     }
 
+    /// Attach the per-world live map. Call when a world loads; the GMCP
+    /// stream then feeds it room/area/sector updates.
+    func attachMapper(_ mapper: Mapper) {
+        self.mapper = mapper
+    }
+
     /// Write a native plugin's current serialized state to the attached
     /// store (after a command mutated it).
     func persistNativePluginState(id: String) async {

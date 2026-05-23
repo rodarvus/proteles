@@ -173,6 +173,33 @@ public final class MapperStore: Sendable {
         }
     }
 
+    /// One terrain environment row (code → name/colour).
+    public struct Environment: Sendable, Equatable {
+        public var uid: String
+        public var name: String?
+        public var color: Int?
+
+        public init(uid: String, name: String?, color: Int?) {
+            self.uid = uid
+            self.name = name
+            self.color = color
+        }
+    }
+
+    /// Replace the whole `environments` table, mirroring the mapper's
+    /// `update_gmcp_sectors`.
+    public func replaceEnvironments(_ environments: [Environment]) throws {
+        try write { db in
+            try db.execute(sql: "DELETE FROM environments")
+            for env in environments {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO environments (uid, name, color) VALUES (?, ?, ?)",
+                    arguments: [env.uid, env.name, env.color]
+                )
+            }
+        }
+    }
+
     /// Set or clear a room's note (the `bookmarks` table).
     public func setNote(_ note: String?, uid: String) throws {
         try write { db in

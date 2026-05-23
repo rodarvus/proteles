@@ -55,6 +55,10 @@ public final class ScriptsModel {
         if let nativeURL = try? NativePluginStore.defaultStoreURL(forProfile: id) {
             await session.attachNativePluginStore(NativePluginStore(url: nativeURL))
         }
+        // Attach the per-world live map (GMCP feeds it once connected).
+        if let mapper = Self.makeMapper(forProfile: id) {
+            await session.attachMapper(mapper)
+        }
         // Then load this world's MUSHclient .xml plugins (after the script
         // reset above, so their triggers/timers survive).
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
@@ -175,6 +179,14 @@ public final class ScriptsModel {
     }
 
     // MARK: - Private
+
+    /// Open (or create) the per-world map store and load its graph.
+    private static func makeMapper(forProfile id: UUID) -> Mapper? {
+        guard let url = try? MapperStore.defaultStoreURL(forProfile: id),
+              let store = try? MapperStore(url: url)
+        else { return nil }
+        return try? Mapper(store: store)
+    }
 
     private func refresh() async {
         guard let store else { return }

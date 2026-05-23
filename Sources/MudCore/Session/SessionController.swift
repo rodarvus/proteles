@@ -96,6 +96,10 @@ public actor SessionController {
     /// a world loads; written through when a plugin's state changes.
     var nativePluginStore: NativePluginStore?
 
+    /// The live map. Set via ``attachMapper(_:)`` when a world loads; fed
+    /// `room.info`/`room.area`/`room.sectors` from the GMCP stream.
+    public internal(set) var mapper: Mapper?
+
     /// True while the server is echoing (it sent `WILL ECHO`, e.g. a
     /// password prompt) — local echo of typed input is suppressed until it
     /// sends `WONT ECHO`.
@@ -558,6 +562,11 @@ public actor SessionController {
         for message in output.gmcp {
             await gmcpState.apply(message)
             await chatStore.ingest(message)
+            if let mapper {
+                for packet in await mapper.ingest(package: message.package, json: message.json) {
+                    try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
+                }
+            }
             if let scriptEngine {
                 await applyScriptEffects(
                     scriptEngine.applyGMCP(package: message.package, json: message.json)
