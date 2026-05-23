@@ -51,7 +51,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MudCoreTests",
-            dependencies: ["MudCore"],
+            dependencies: [
+                "MudCore",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
             resources: [
                 .copy("Fixtures")
             ]

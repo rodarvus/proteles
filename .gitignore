@@ -28,3 +28,6 @@ apps/ProtelesApp_iOS/Proteles.entitlements
 *.swp
 *.swo
 .netrc
+
+# Live MUSHclient install copied for reference (large binary DBs); not repo content
+MUSHclient-live-from-windows/
