@@ -20,6 +20,11 @@ public actor SearchAndDestroyHost {
     /// The latest JSON model S&D published (via the `xg_draw_window` bridge).
     public private(set) var model: String?
 
+    /// S&D's triggers/aliases/timers, parsed from the vendored plugin XML.
+    /// These drive the host's own matching (S&D runs on its dedicated runtime,
+    /// not the shared `ScriptEngine`), populated by ``load()``.
+    public private(set) var automations: MUSHclientPlugin?
+
     public init() throws {
         runtime = try LuaRuntime()
     }
@@ -63,6 +68,22 @@ public actor SearchAndDestroyHost {
         do {
             _ = try await runtime.run(Self.bindings)
             _ = try await runtime.run(core)
+        } catch {
+            throw HostError.loadFailed(String(describing: error))
+        }
+
+        try loadAutomations()
+    }
+
+    /// Parse S&D's triggers/aliases/timers from the vendored plugin XML into
+    /// ``automations``. The XML carries PCRE regexes with `(?<name>…)` groups
+    /// that aren't valid XML attribute content, so it's normalised first
+    /// (``SearchAndDestroyXML``) before the shared ``MUSHclientPluginLoader``
+    /// reads it. Idempotent; also runs as part of ``load()``.
+    public func loadAutomations() throws {
+        guard let xml = SearchAndDestroyAssets.pluginXML else { throw HostError.assetsMissing }
+        do {
+            automations = try MUSHclientPluginLoader.parse(xml: SearchAndDestroyXML.normalise(xml))
         } catch {
             throw HostError.loadFailed(String(describing: error))
         }
