@@ -39,6 +39,9 @@ struct ProtelesApp: App {
     /// The graphical GMCP map (docked Map panel).
     @State private var map: MapPanelModel
 
+    /// The Search-and-Destroy panel model (docked S&D panel).
+    @State private var snd = SnDPanelModel()
+
     /// Main-window dock layout (which live panel is shown).
     @State private var layout = LayoutModel()
 
@@ -103,7 +106,8 @@ struct ProtelesApp: App {
                 scripts: scripts,
                 layout: layout,
                 chat: chat,
-                map: map
+                map: map,
+                snd: snd
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")

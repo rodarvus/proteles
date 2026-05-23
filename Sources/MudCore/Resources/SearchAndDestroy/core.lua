@@ -5489,20 +5489,32 @@ function xg_draw_window()
     if proteles and proteles.publish and json then
         local targets = {}
         if type(main_target_list) == "table" then
-            for _, t in ipairs(main_target_list) do
+            for i, t in ipairs(main_target_list) do
+                local express, current = false, false
+                pcall(function() express = is_express_target(t) and true or false end)
+                pcall(function() current = target_matches_current_target(t, i) and true or false end)
                 targets[#targets + 1] = {
-                    name = t.name or t.mob,
+                    index = i,
+                    mob = t.mob or t.name,
                     room = t.room_name or t.roomName or t.room,
                     area = t.arid or t.area,
-                    dead = t.is_dead,
+                    location = t.location,
+                    link_type = t.link_type,
+                    qty = tonumber(t.qty),
+                    duplicates = tonumber(t.duplicates),
+                    dup_index = tonumber(t.index),
+                    unlikely = t.unlikely and true or false,
+                    express = express,
+                    current = current,
+                    dead = (t.is_dead == "yes"),
                 }
             end
         end
         local ok, encoded = pcall(json.encode, {
             version = current_sd_version,
             activity = current_activity,
-            player_on_cp = player_on_cp,
-            player_on_gq = player_on_gq,
+            player_on_cp = (player_on_cp == "yes"),
+            player_on_gq = (player_on_gq == "yes"),
             target_count = #targets,
             targets = targets,
         })

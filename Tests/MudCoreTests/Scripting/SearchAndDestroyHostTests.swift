@@ -59,5 +59,12 @@ struct SearchAndDestroyHostTests {
         #expect(json.contains("init")) // the in-scope local value, not a global
         #expect(json.contains("\"targets\""))
         #expect(json.contains("\"target_count\""))
+
+        // The published JSON decodes into the typed model (S3).
+        let model = try #require(SearchAndDestroyModel.decode(json))
+        #expect(model.activity == "init")
+        #expect(model.activityLabel == "—")
+        #expect(model.targets.isEmpty)
+        #expect(model.targetCount == 0)
     }
 }

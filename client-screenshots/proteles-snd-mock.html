@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Proteles — Search &amp; Destroy panel mock</title>
+<style>
+  :root{--panel:#161617;--text:#e8e8ea;--muted:#8a8a90;--accent:#ff5000;
+    --likely:#7ed957;--unlikely:#6f6f76;--express:#f4c430;--dead:#5a5a60;--cur:#ff2d92;}
+  html,body{margin:0;background:#0e0e10;color:var(--text);font:13px -apple-system,"SF Pro Text",system-ui,sans-serif;}
+  .wrap{display:flex;gap:26px;padding:26px;flex-wrap:wrap;align-items:flex-start;}
+  .caption{color:var(--muted);max-width:330px;line-height:1.5;}
+  .caption h1{font-size:15px;color:var(--text);margin:0 0 6px;} .caption h2{font-size:13px;color:var(--text);margin:14px 0 4px;}
+  .panel{width:360px;height:560px;background:var(--panel);border:1px solid #000;border-radius:12px;overflow:hidden;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;}
+  .header{padding:9px 11px;display:flex;align-items:center;gap:8px;background:linear-gradient(#202024,#1a1a1c);border-bottom:1px solid #000;}
+  .badge{font-size:11px;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:5px;background:#3a1c0c;color:var(--accent);}
+  .titles{line-height:1.2;min-width:0;} .sub{color:var(--muted);font-size:11px;}
+  .timer{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--express);font-weight:600;}
+  .toolbar{display:flex;gap:6px;padding:7px 10px;border-bottom:1px solid #000;background:#121213;}
+  .btn{font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid #2c2c30;background:#1d1d20;color:var(--text);cursor:pointer;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#1a0a00;}
+  .btn .k{color:var(--muted);font-weight:400;}
+  .list{flex:1;overflow:auto;padding:4px 0;}
+  .quest{margin:6px 10px;padding:8px 10px;border-radius:8px;background:#12251f;border:1px solid #1e3a30;}
+  .quest .q{color:var(--likely);font-weight:700;} .quest .where{color:var(--muted);font-size:11px;}
+  .row{display:flex;align-items:baseline;gap:7px;padding:4px 11px;cursor:pointer;border-left:3px solid transparent;}
+  .row:hover{background:#ffffff0d;}
+  .row.cur{background:#2a1020;border-left-color:var(--cur);}
+  .idx{color:var(--muted);font-variant-numeric:tabular-nums;width:18px;text-align:right;flex:none;}
+  .mob{font-weight:600;}
+  .loc{color:var(--muted);font-size:11px;}
+  .tag{font-size:10px;font-weight:700;padding:0 5px;border-radius:4px;flex:none;}
+  .t-unlikely{color:var(--unlikely);} .t-express{background:#3a2e08;color:var(--express);}
+  .qty{color:var(--express);font-weight:700;font-variant-numeric:tabular-nums;}
+  .dup{color:var(--muted);font-size:11px;}
+  .dead .mob,.dead .loc{color:var(--dead);text-decoration:line-through;}
+  .legend{display:grid;grid-template-columns:auto 1fr;gap:5px 9px;margin-top:6px;align-items:center;}
+  .sw{width:13px;height:13px;border-radius:3px;}
+</style></head><body><div class="wrap">
+  <div class="panel">
+    <div class="header">
+      <span class="badge">CAMPAIGN</span>
+      <div class="titles"><div>Search &amp; Destroy</div><div class="sub">level 201 · 9 targets, 4 left</div></div>
+      <span class="timer">28:14</span>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary">⚔ xcp</button>
+      <button class="btn">Next →</button>
+      <button class="btn">Refresh</button>
+      <button class="btn" style="margin-left:auto">⚙︎</button>
+    </div>
+    <div class="list">
+      <div class="quest"><div class="q">▶ a shadowy assassin</div><div class="where">'The Dark Alley' (newthalos) — click to go</div></div>
+      <div class="row cur"><span class="idx">1)</span><span class="mob">a city guard</span><span class="loc">— 'Gate House' (aylor)</span></div>
+      <div class="row"><span class="idx">2)</span><span class="dup">(1/3)</span><span class="mob">a sewer rat</span><span class="loc">— aylor</span></div>
+      <div class="row"><span class="idx">3)</span><span class="tag t-express">EXPRESS</span><span class="mob">the gatekeeper</span><span class="loc">— 'North Gate' (aylor)</span></div>
+      <div class="row"><span class="idx">4)</span><span class="tag t-unlikely">UNLIKELY</span><span class="mob">a wandering merchant</span><span class="loc">— mesolar</span></div>
+      <div class="row dead"><span class="idx">5)</span><span class="mob">a temple acolyte</span><span class="loc">— 'Shrine' (chakra)</span><span class="tag" style="color:var(--dead)">[Dead]</span></div>
+      <div class="row"><span class="idx">6)</span><span class="qty">3×</span><span class="mob">a dune crawler</span><span class="loc">— desert</span></div>
+      <div class="row"><span class="idx">7)</span><span class="mob">an iron golem</span><span class="loc">— 'Forge' (dungeon)</span></div>
+    </div>
+  </div>
+  <div class="caption">
+    <h1>Search &amp; Destroy — native panel (proposed)</h1>
+    <p>The S&amp;D miniwindow, reimagined as a native SwiftUI dock panel fed by S&amp;D's
+    own logic (via the S2 model publish). Same information, native feel.</p>
+    <h2>Header</h2>
+    <p>Activity badge (Campaign / Global Quest / Quest / Idle), level, target count + remaining,
+    and the campaign/quest timer.</p>
+    <h2>Actions</h2>
+    <p>Native buttons for S&amp;D's commands (xcp, next, refresh, settings) — drive the same Lua.</p>
+    <h2>Target list</h2>
+    <p>Each row: index, optional <span style="color:var(--muted)">(dup)</span> /
+    <span class="qty">qty×</span>, mob name, location; tags for
+    <span style="color:var(--express)">Express</span> /
+    <span style="color:var(--unlikely)">Unlikely</span> / [Dead]. The
+    <b style="color:var(--cur)">current target</b> is highlighted. Click a row →
+    <code>mapper goto</code> there (S5). A pinned quest target sits on top when questing.</p>
+    <h2>Legend</h2>
+    <div class="legend">
+      <span class="sw" style="background:#2a1020;border:1px solid var(--cur)"></span><span>Current target</span>
+      <span class="sw" style="background:#3a2e08"></span><span>Express target</span>
+      <span class="sw" style="background:#1d1d20"></span><span>Normal target</span>
+      <span class="sw" style="background:#161617;border:1px solid var(--dead)"></span><span>Dead / Unlikely (dimmed)</span>
+    </div>
+  </div>
+</div></body></html>

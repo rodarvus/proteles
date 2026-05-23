@@ -10,6 +10,7 @@ struct ContentView: View {
     @Bindable var layout: LayoutModel
     let chat: ChatModel
     let map: MapPanelModel
+    let snd: SnDPanelModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
@@ -80,6 +81,7 @@ struct ContentView: View {
             case .info: InfoPanel(state: gmcp)
             case .map: MapPanelView(model: map)
             case .chat: ChatView(model: chat)
+            case .hunt: SearchAndDestroyPanelView(model: snd)
             }
         }
     }

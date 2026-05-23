@@ -15,7 +15,7 @@ import SwiftUI
 public final class LayoutModel {
     /// A dockable live panel.
     public enum Panel: String, CaseIterable, Identifiable, Sendable {
-        case info, map, chat
+        case info, map, chat, hunt
 
         public var id: String {
             rawValue
@@ -26,6 +26,7 @@ public final class LayoutModel {
             case .info: "Info"
             case .map: "Map"
             case .chat: "Chat"
+            case .hunt: "S&D"
             }
         }
 
@@ -34,6 +35,7 @@ public final class LayoutModel {
             case .info: "info.circle"
             case .map: "map"
             case .chat: "bubble.left.and.bubble.right"
+            case .hunt: "scope"
             }
         }
     }
