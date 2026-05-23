@@ -27,6 +27,8 @@ public actor ScriptEngine {
     private var triggers = TriggerEngine()
     private var aliases = AliasEngine()
     private var timers = TimerEngine()
+    /// Native (Swift) plugins folded into the same pipeline as Lua plugins.
+    private var nativePlugins = NativePluginRegistry()
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
     private var loadedPluginIDs: [String] = []
@@ -165,6 +167,31 @@ public actor ScriptEngine {
         return effects
     }
 
+    // MARK: - Native plugins
+
+    /// Register a native (Swift) plugin. Returns its `install()` effects so
+    /// the host can apply them (typically empty at app-setup time).
+    @discardableResult
+    public func registerNativePlugin(_ plugin: any NativePlugin, enabled: Bool = true) -> [ScriptEffect] {
+        nativePlugins.register(plugin, enabled: enabled)
+    }
+
+    /// Enable/disable a native plugin by id (re-enabling re-runs `install()`).
+    @discardableResult
+    public func setNativePluginEnabled(_ enabled: Bool, id: String) -> [ScriptEffect] {
+        nativePlugins.setEnabled(enabled, id: id)
+    }
+
+    /// Registered native plugins' metadata + enabled state (Plugins window).
+    public func nativePluginListing() -> [(metadata: NativePluginMetadata, enabled: Bool)] {
+        nativePlugins.listing
+    }
+
+    /// Route a `CallPlugin`-style call to a native plugin by id.
+    public func callNativePlugin(id: String, function: String, arguments: [LuaValue]) -> [LuaValue] {
+        nativePlugins.call(id: id, function: function, arguments: arguments)
+    }
+
     // MARK: - Bulk load
 
     /// Load a persisted ``ScriptDocument`` into the live engines. Invalid
@@ -289,7 +316,12 @@ public actor ScriptEngine {
 
     private func expandInput(_ input: String, depth: Int) async -> [ScriptEffect] {
         let firings = aliases.match(input)
-        guard !firings.isEmpty else { return [.send(input)] }
+        guard !firings.isEmpty else {
+            // No user alias matched — offer the command to native plugins
+            // before sending it verbatim.
+            if let effects = nativePlugins.handleCommand(input) { return effects }
+            return [.send(input)]
+        }
 
         var effects: [ScriptEffect] = []
         for firing in firings {
@@ -342,6 +374,10 @@ public actor ScriptEngine {
                 ))
             }
         }
+        // Fold native plugins' reactions to the same line.
+        let native = nativePlugins.onLine(line)
+        if native.gag { disposition.gag = true }
+        disposition.effects.append(contentsOf: native.effects)
         return disposition
     }
 
@@ -371,6 +407,7 @@ public actor ScriptEngine {
             .string("GMCP"),
             .string(package)
         ]))
+        effects.append(contentsOf: nativePlugins.onGMCP(package: package, json: json))
         return effects
     }
 
