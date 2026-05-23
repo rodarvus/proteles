@@ -35,15 +35,17 @@ struct AsciiMapTests {
         #expect(plugin.onLine(line("A goblin arrives.")).gag == false)
     }
 
-    @Test("connect enables the map telnet-option and requests a map")
+    @Test("connect enables the map telnet-option but sends NO game command")
     func connectEnablesMap() {
         let plugin = AsciiMap()
         let effects = plugin.connect()
-        #expect(effects.contains(.aardwolfTelnet(option: 4, on: true)))
-        #expect(effects.contains(.send("map")))
+        #expect(effects == [.aardwolfTelnet(option: 4, on: true)])
+        // Crucially, no `map` (or any) command pre-login — that would break
+        // auto-login by being consumed as the name/password.
+        #expect(!effects.contains(.send("map")))
     }
 
-    @Test("room.info triggers a map refresh")
+    @Test("room.info triggers a map refresh (the post-login request)")
     func refreshesOnRoomChange() {
         var plugin = AsciiMap()
         #expect(plugin.onGMCP(package: "room.info", json: "{}") == [.send("map")])

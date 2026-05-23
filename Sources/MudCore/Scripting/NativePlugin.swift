@@ -88,8 +88,12 @@ public protocol NativePlugin: Sendable {
     /// is registered or re-enabled. Default: no effects.
     mutating func install() -> [ScriptEffect]
 
-    /// Run when the session connects (≈ `OnPluginConnect`). Use it to send
-    /// enabling handshakes (e.g. Aardwolf telnet options). Default: none.
+    /// Run when the session connects (≈ `OnPluginConnect`). Fires on TCP
+    /// connect — *before* auto-login — so use it only for out-of-band setup
+    /// (telnet sub-negotiations, GMCP). Do NOT emit `.send`/`.execute` here:
+    /// a game command sent pre-login is consumed as the name/password and
+    /// breaks login. Defer game commands to a post-login signal (e.g. the
+    /// first `room.info`). Default: none.
     mutating func connect() -> [ScriptEffect]
 
     /// Handle a typed command. Return `nil` to leave the input unhandled

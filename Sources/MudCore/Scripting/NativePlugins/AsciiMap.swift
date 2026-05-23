@@ -33,8 +33,12 @@ public struct AsciiMap: NativePlugin {
     public init() {}
 
     public func connect() -> [ScriptEffect] {
-        // Enable the map stream, then ask for an initial map.
-        [.aardwolfTelnet(option: Self.telnetOptionMap, on: true), .send("map")]
+        // Enable the map stream (telnet sub-negotiation — out-of-band, safe
+        // during the login prompts). The first `map` request is deferred to
+        // the first room.info so we never inject a game command before
+        // login completes (which would be eaten as the name/password and
+        // break auto-login).
+        [.aardwolfTelnet(option: Self.telnetOptionMap, on: true)]
     }
 
     public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
