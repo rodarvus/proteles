@@ -16,6 +16,8 @@ public final class MapPanelModel {
     /// Whether neighbouring areas render inline. Mirrors the mapper's setting;
     /// off by default (each area is self-contained), matching Aardwolf.
     public private(set) var showOtherAreas = false
+    /// Whether to mark exits leaving the current area. Off by default.
+    public private(set) var showAreaExits = false
 
     private let session: SessionController
     private var mapper: Mapper?
@@ -41,6 +43,7 @@ public final class MapPanelModel {
         streamTask?.cancel()
         self.mapper = mapper
         await mapper.setShowOtherAreas(showOtherAreas)
+        await mapper.setShowAreaExits(showAreaExits)
         layout = await mapper.currentLayout()
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in
@@ -56,6 +59,13 @@ public final class MapPanelModel {
         showOtherAreas.toggle()
         let value = showOtherAreas
         Task { await mapper?.setShowOtherAreas(value) }
+    }
+
+    /// Toggle the area-exit boundary markers.
+    public func toggleShowAreaExits() {
+        showAreaExits.toggle()
+        let value = showAreaExits
+        Task { await mapper?.setShowAreaExits(value) }
     }
 
     // MARK: - Actions (reuse the `mapper` command surface)

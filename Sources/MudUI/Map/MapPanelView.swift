@@ -50,6 +50,9 @@ public struct MapPanelView: View {
                     for room in layout.rooms {
                         draw(room, in: context, geometry: geometry)
                     }
+                    for marker in layout.areaExits {
+                        draw(marker, in: context, geometry: geometry)
+                    }
                 }
                 pulse(for: layout, geometry: geometry)
             }
@@ -171,6 +174,36 @@ public struct MapPanelView: View {
                 .foregroundColor(style.glyphColour)
             context.draw(text, at: centre)
         }
+    }
+
+    /// Draw an area-exit boundary marker: a thick gold bar across the room's
+    /// edge in the exit direction, with the destination area's name beside it.
+    private func draw(_ marker: AreaExitMarker, in context: GraphicsContext, geometry: MapGeometry) {
+        guard let delta = MapLayout.gridDelta[marker.dir] else { return }
+        let centre = geometry.screen(marker.from)
+        let half = geometry.room / 2
+        let mag = max(
+            (CGFloat(delta.x) * CGFloat(delta.x) + CGFloat(delta.y) * CGFloat(delta.y)).squareRoot(),
+            0.0001
+        )
+        let outX = CGFloat(delta.x) / mag
+        let outY = CGFloat(delta.y) / mag
+        // Bar centred just outside the room edge, perpendicular to the exit.
+        let edge = CGPoint(x: centre.x + outX * (half + 2), y: centre.y + outY * (half + 2))
+        let halfBar = half * 0.9
+        var bar = Path()
+        bar.move(to: CGPoint(x: edge.x - outY * halfBar, y: edge.y + outX * halfBar))
+        bar.addLine(to: CGPoint(x: edge.x + outY * halfBar, y: edge.y - outX * halfBar))
+        context.stroke(
+            bar,
+            with: .color(MapPalette.areaExit),
+            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+        )
+
+        let labelPoint = CGPoint(x: centre.x + outX * (half + 11), y: centre.y + outY * (half + 11))
+        let text = Text(marker.area).font(.system(size: 8.5, weight: .semibold))
+            .foregroundColor(MapPalette.areaExit)
+        context.draw(text, at: labelPoint)
     }
 
     /// Fill a room with thin diagonal hatch lines (used for unvisited rooms),
@@ -318,6 +351,12 @@ public struct MapPanelView: View {
                 tint: model.showOtherAreas ? .accentColor : nil,
                 help: "Show neighbouring areas"
             ) { model.toggleShowOtherAreas() }
+            Divider().frame(width: 28)
+            toolbarButton(
+                "arrow.up.left.and.arrow.down.right",
+                tint: model.showAreaExits ? .accentColor : nil,
+                help: "Mark exits to other areas"
+            ) { model.toggleShowAreaExits() }
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .padding(10)

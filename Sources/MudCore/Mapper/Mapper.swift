@@ -46,6 +46,10 @@ public actor Mapper {
     /// default — each area reads as a self-contained map. Toggled from the UI.
     public private(set) var showOtherAreas = false
 
+    /// Whether to mark exits that leave the current area with a boundary
+    /// marker (Aardwolf's `SHOW_AREA_EXITS`, default off). Toggled from the UI.
+    public private(set) var showAreaExits = false
+
     // MARK: - Layout publishing
 
     /// The current map laid out around the player (empty until a room is
@@ -64,6 +68,7 @@ public actor Mapper {
             graph: graph,
             current: uid,
             showOtherAreas: showOtherAreas,
+            showAreaExits: showAreaExits,
             terrainColours: terrainColours,
             environments: environments
         )
@@ -73,6 +78,13 @@ public actor Mapper {
     public func setShowOtherAreas(_ value: Bool) {
         guard value != showOtherAreas else { return }
         showOtherAreas = value
+        publishLayout()
+    }
+
+    /// Toggle the area-exit boundary markers, then republish the layout.
+    public func setShowAreaExits(_ value: Bool) {
+        guard value != showAreaExits else { return }
+        showAreaExits = value
         publishLayout()
     }
 

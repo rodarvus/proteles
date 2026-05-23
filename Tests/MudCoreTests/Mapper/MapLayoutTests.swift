@@ -156,6 +156,25 @@ struct MapLayoutTests {
         #expect(layout.isEmpty)
     }
 
+    @Test("Area-exit markers: one per neighbouring area, off unless requested")
+    func areaExitMarkers() {
+        // Current area "aylor" room 1 has a north exit into "elsewhere" (room 2).
+        let g = graph(
+            ["1": ["n": "2", "e": "3"], "2": ["s": "1"], "3": ["w": "1"]],
+            areaByUID: ["1": "aylor", "2": "elsewhere", "3": "aylor"],
+            areaNames: ["aylor": "Aylor", "elsewhere": "Far Away"]
+        )
+        // Off by default.
+        #expect(MapLayout.build(graph: g, current: "1").areaExits.isEmpty)
+        // On: a single marker toward "Far Away", on room 1's north edge.
+        let layout = MapLayout.build(graph: g, current: "1", showAreaExits: true)
+        #expect(layout.areaExits.count == 1)
+        let marker = layout.areaExits.first
+        #expect(marker?.dir == "n")
+        #expect(marker?.area == "Far Away")
+        #expect(marker?.destUID == "2")
+    }
+
     @Test("Terrain resolves to an ANSI colour index (by name and by env id)")
     func terrainColour() {
         var graph = RoomGraph()

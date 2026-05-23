@@ -79,6 +79,18 @@ public struct MapLink: Sendable, Equatable {
     public let isUnknownDestination: Bool
 }
 
+/// A boundary marker for an exit that leaves the current area, drawn as a
+/// highlighted bar on the edge of `from` in direction `dir` (Aardwolf's
+/// `SHOW_AREA_EXITS`). One per neighbouring area, on the nearest boundary
+/// room. `area` is the destination area's display name (for the label).
+public struct AreaExitMarker: Sendable, Equatable {
+    public let from: GridPoint
+    public let dir: String
+    public let area: String
+    /// Destination room uid (the boundary room is clickable to walk there).
+    public let destUID: String
+}
+
 /// A laid-out map: rooms placed on an integer grid by a fan-out BFS from the
 /// current room, plus the connectors between them. A faithful port of the
 /// Aardwolf `aardmapper.lua` `draw_room` algorithm (grid placement +
@@ -92,6 +104,9 @@ public struct MapLayout: Sendable, Equatable {
     public let current: String
     public let rooms: [PlacedRoom]
     public let links: [MapLink]
+    /// Boundary markers for exits leaving the current area (empty unless
+    /// `showAreaExits` was requested).
+    public let areaExits: [AreaExitMarker]
     /// Bounding box of placed rooms, in grid units (origin = current room).
     public let minX: Int
     public let minY: Int
@@ -126,15 +141,64 @@ public struct MapLayout: Sendable, Equatable {
         maxDepth: Int = 60,
         maxRooms: Int = 600,
         showOtherAreas: Bool = true,
+        showAreaExits: Bool = false,
         terrainColours: [String: Int] = [:],
         environments: [String: String] = [:]
     ) -> MapLayout {
         guard graph.rooms[current] != nil else {
-            return MapLayout(current: current, rooms: [], links: [], minX: 0, minY: 0, maxX: 0, maxY: 0)
+            return MapLayout(
+                current: current,
+                rooms: [],
+                links: [],
+                areaExits: [],
+                minX: 0,
+                minY: 0,
+                maxX: 0,
+                maxY: 0
+            )
         }
         let currentArea = graph.rooms[current]?.area
         let palette = TerrainPalette(colours: terrainColours, environments: environments)
+        let (rooms, links) = fanOut(
+            graph: graph,
+            current: current,
+            currentArea: currentArea,
+            palette: palette,
+            maxDepth: maxDepth,
+            maxRooms: maxRooms,
+            showOtherAreas: showOtherAreas
+        )
+        let areaExits = showAreaExits
+            ? collectAreaExits(rooms: rooms, graph: graph, currentArea: currentArea)
+            : []
+        let xs = rooms.map(\.point.x)
+        let ys = rooms.map(\.point.y)
+        return MapLayout(
+            current: current,
+            rooms: rooms,
+            links: links,
+            areaExits: areaExits,
+            minX: xs.min() ?? 0,
+            minY: ys.min() ?? 0,
+            maxX: xs.max() ?? 0,
+            maxY: ys.max() ?? 0
+        )
+    }
 
+    // swiftlint:disable function_parameter_count
+    /// The fan-out BFS itself: place rooms ring-by-ring from `current` and
+    /// build the connectors between them. Split out of ``build`` to keep each
+    /// within the body-length budget.
+    private static func fanOut(
+        graph: RoomGraph,
+        current: String,
+        currentArea: String?,
+        palette: TerrainPalette,
+        maxDepth: Int,
+        maxRooms: Int,
+        showOtherAreas: Bool
+    ) -> (rooms: [PlacedRoom], links: [MapLink]) {
+        // swiftlint:enable function_parameter_count
         var placed: [String: GridPoint] = [:] // uid → where it was drawn (dedupe)
         var occupied: [GridPoint: String] = [GridPoint.zero: current] // cell → uid
         var planned: [String: GridPoint] = [current: .zero] // uid → reserved cell
@@ -180,18 +244,33 @@ public struct MapLayout: Sendable, Equatable {
             frontier = next
             depth += 1
         }
+        return (rooms, links)
+    }
 
-        let xs = rooms.map(\.point.x)
-        let ys = rooms.map(\.point.y)
-        return MapLayout(
-            current: current,
-            rooms: rooms,
-            links: links,
-            minX: xs.min() ?? 0,
-            minY: ys.min() ?? 0,
-            maxX: xs.max() ?? 0,
-            maxY: ys.max() ?? 0
-        )
+    /// One boundary marker per neighbouring area, on the nearest current-area
+    /// room with a known exit leaving the zone (Aardwolf's `SHOW_AREA_EXITS`).
+    private static func collectAreaExits(
+        rooms: [PlacedRoom], graph: RoomGraph, currentArea: String?
+    ) -> [AreaExitMarker] {
+        var markers: [AreaExitMarker] = []
+        var seenAreas: Set<String> = []
+        for placed in rooms {
+            guard placed.relation == .current || placed.relation == .sameArea,
+                  let room = graph.rooms[placed.uid] else { continue }
+            for dir in room.exits.keys.sorted() {
+                guard gridDelta[dir] != nil, let exit = room.exits[dir],
+                      let dest = graph.rooms[exit.to], let destArea = dest.area,
+                      destArea != currentArea, seenAreas.insert(destArea).inserted
+                else { continue }
+                markers.append(AreaExitMarker(
+                    from: placed.point,
+                    dir: dir,
+                    area: graph.areas[destArea]?.name ?? destArea,
+                    destUID: exit.to
+                ))
+            }
+        }
+        return markers
     }
 
     // MARK: - Exit placement (mirrors draw_room's per-exit decision tree)
@@ -366,6 +445,7 @@ public struct MapLayout: Sendable, Equatable {
         current: String,
         rooms: [PlacedRoom],
         links: [MapLink],
+        areaExits: [AreaExitMarker],
         minX: Int,
         minY: Int,
         maxX: Int,
@@ -374,6 +454,7 @@ public struct MapLayout: Sendable, Equatable {
         self.current = current
         self.rooms = rooms
         self.links = links
+        self.areaExits = areaExits
         self.minX = minX
         self.minY = minY
         self.maxX = maxX

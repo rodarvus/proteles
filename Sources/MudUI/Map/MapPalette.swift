@@ -31,6 +31,8 @@ enum MapPalette {
     static let unknownBorder = Color(red: 0.69, green: 0.42, blue: 0.42)
     /// PK danger marker (border + corner pip).
     static let pk = Color(red: 0.89, green: 0.23, blue: 0.23)
+    /// Area-exit boundary marker (gateway to a neighbouring zone).
+    static let areaExit = Color(red: 0.96, green: 0.80, blue: 0.30)
 
     static func style(for room: PlacedRoom) -> Style {
         var (fill, glyph) = fillAndGlyph(for: room.kind)
