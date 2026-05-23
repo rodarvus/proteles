@@ -42,6 +42,8 @@ public extension SessionController {
                 await scrollbackStore.append(Self.ansiLine(ansi))
             case .setAutomationsSuspended(let suspended):
                 await scriptEngine?.setSuspended(suspended)
+            case .persistPluginState(let id):
+                await persistNativePluginState(id: id)
             }
         }
     }
@@ -66,6 +68,33 @@ public extension SessionController {
         variableStore = store
         try? await store.load()
         await scriptEngine.loadVariables(store.scopes)
+    }
+
+    /// Attach a per-world native-plugin store and hydrate the engine's
+    /// native plugins from it (their saved state + enabled flags). Call when
+    /// a world loads.
+    func attachNativePluginStore(_ store: NativePluginStore) async {
+        guard let scriptEngine else { return }
+        nativePluginStore = store
+        try? await store.load()
+        let document = await store.document
+        await scriptEngine.restoreNativePluginStates(document.state)
+        await scriptEngine.applyNativePluginEnabled(document.enabled)
+    }
+
+    /// Write a native plugin's current serialized state to the attached
+    /// store (after a command mutated it).
+    func persistNativePluginState(id: String) async {
+        guard let nativePluginStore, let scriptEngine else { return }
+        let data = await scriptEngine.nativePluginState(id: id)
+        try? await nativePluginStore.setState(data, id: id)
+    }
+
+    /// Toggle a native plugin and persist the new enabled flag.
+    func setNativePluginEnabled(_ enabled: Bool, id: String) async {
+        guard let scriptEngine else { return }
+        _ = await scriptEngine.setNativePluginEnabled(enabled, id: id)
+        try? await nativePluginStore?.setEnabled(enabled, id: id)
     }
 
     /// Persist any variable scopes mutated since the last call to the

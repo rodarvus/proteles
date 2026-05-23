@@ -50,6 +50,11 @@ public final class ScriptsModel {
         if let variableURL = try? VariableStore.defaultStoreURL(forProfile: id) {
             await session.attachVariableStore(VariableStore(url: variableURL))
         }
+        // Hydrate the native plugins' per-world state (e.g. #sub/#gag rules)
+        // and enabled flags.
+        if let nativeURL = try? NativePluginStore.defaultStoreURL(forProfile: id) {
+            await session.attachNativePluginStore(NativePluginStore(url: nativeURL))
+        }
         // Then load this world's MUSHclient .xml plugins (after the script
         // reset above, so their triggers/timers survive).
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {

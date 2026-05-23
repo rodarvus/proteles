@@ -208,6 +208,21 @@ public actor ScriptEngine {
         suspended = value
     }
 
+    /// A native plugin's serialized state (for persistence).
+    public func nativePluginState(id: String) -> Data? {
+        nativePlugins.persistentState(id: id)
+    }
+
+    /// Restore saved per-world state into registered native plugins.
+    public func restoreNativePluginStates(_ states: [String: Data]) {
+        nativePlugins.restore(states: states)
+    }
+
+    /// Apply persisted enabled/disabled flags to registered native plugins.
+    public func applyNativePluginEnabled(_ enabledByID: [String: Bool]) {
+        nativePlugins.applyEnabled(enabledByID)
+    }
+
     // MARK: - Bulk load
 
     /// Load a persisted ``ScriptDocument`` into the live engines. Invalid

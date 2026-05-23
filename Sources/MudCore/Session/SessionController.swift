@@ -87,6 +87,10 @@ public actor SessionController {
     /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes
     /// only) after each Lua batch so plugin variables survive relaunches.
     var variableStore: VariableStore?
+    /// Per-world persistence for native-plugin state (e.g. `#sub`/`#gag`
+    /// rules) and enabled flags. Set via ``attachNativePluginStore(_:)`` when
+    /// a world loads; written through when a plugin's state changes.
+    var nativePluginStore: NativePluginStore?
 
     /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
     /// so library/test callers opt in explicitly; the app sets

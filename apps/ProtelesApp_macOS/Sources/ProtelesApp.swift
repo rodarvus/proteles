@@ -65,6 +65,7 @@ struct ProtelesApp: App {
             Task {
                 await scriptEngine.registerNativePlugin(VitalShortcuts())
                 await scriptEngine.registerNativePlugin(NoteMode())
+                await scriptEngine.registerNativePlugin(TextSubstitution())
             }
         }
 

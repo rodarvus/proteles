@@ -88,9 +88,10 @@ public final class PluginsModel {
         }
     }
 
-    /// Enable/disable a native plugin by id; applies live to the session.
+    /// Enable/disable a native plugin by id; applies live and persists the
+    /// flag to the world's native-plugin store.
     public func setNativeEnabled(_ enabled: Bool, id: String) async {
-        _ = await session.scriptEngine?.setNativePluginEnabled(enabled, id: id)
+        await session.setNativePluginEnabled(enabled, id: id)
         await refreshNative()
     }
 

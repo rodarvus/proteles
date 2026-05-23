@@ -107,6 +107,14 @@ public protocol NativePlugin: Sendable {
     /// Synchronous callable entry points for `CallPlugin(id, fn, …)` from
     /// other plugins (the "usable by other plugins" surface). Default: none.
     func call(_ function: String, _ arguments: [LuaValue]) -> [LuaValue]
+
+    /// The plugin's serialized state to persist per world (e.g. a user's
+    /// substitution rules). `nil` means nothing to persist. Default: nil.
+    var persistentState: Data? { get }
+
+    /// Restore state previously produced by ``persistentState`` (called when
+    /// a world loads). Default: no-op.
+    mutating func restore(from data: Data)
 }
 
 public extension NativePlugin {
@@ -133,6 +141,12 @@ public extension NativePlugin {
     func call(_: String, _: [LuaValue]) -> [LuaValue] {
         []
     }
+
+    var persistentState: Data? {
+        nil
+    }
+
+    mutating func restore(from _: Data) {}
 }
 
 /// Holds the registered native plugins and folds session events across the
@@ -217,5 +231,31 @@ public struct NativePluginRegistry: Sendable {
             return []
         }
         return entry.plugin.call(function, arguments)
+    }
+
+    // MARK: - Persistence
+
+    /// A plugin's serialized state by id (`nil` if unknown or no state).
+    public func persistentState(id: String) -> Data? {
+        entries.first { $0.plugin.metadata.id == id }?.plugin.persistentState
+    }
+
+    /// Restore saved state into the matching registered plugins (by id).
+    public mutating func restore(states: [String: Data]) {
+        for index in entries.indices {
+            if let data = states[entries[index].plugin.metadata.id] {
+                entries[index].plugin.restore(from: data)
+            }
+        }
+    }
+
+    /// Apply persisted enabled/disabled flags (ids absent from the map keep
+    /// their registration-time default).
+    public mutating func applyEnabled(_ enabledByID: [String: Bool]) {
+        for index in entries.indices {
+            if let enabled = enabledByID[entries[index].plugin.metadata.id] {
+                entries[index].enabled = enabled
+            }
+        }
     }
 }

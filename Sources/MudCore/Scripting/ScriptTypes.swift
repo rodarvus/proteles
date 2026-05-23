@@ -63,6 +63,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// lines pass through untouched (no triggers/native reactions), and
     /// timers don't fire. Backs the native Note-mode plugin.
     case setAutomationsSuspended(Bool)
+    /// Persist the named native plugin's current state to the per-world
+    /// store (emitted by a plugin after a command mutates its state, e.g.
+    /// adding a `#sub` rule).
+    case persistPluginState(id: String)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`
