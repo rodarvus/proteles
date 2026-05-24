@@ -138,12 +138,15 @@ public final class MapPanelModel {
                 defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                 do {
                     let summary = try await mapper.importMap(from: url)
-                    importAlert = ImportAlert(title: "Map Imported", message: Self.summaryMessage(summary))
+                    let message = Self.summaryMessage(summary)
+                    importAlert = ImportAlert(title: "Map Imported", message: message)
+                    // Also echo to the main output so the result is visible even
+                    // when the import was triggered from the menu / another tab.
+                    await session.echoSystemNote("[Mapper] Import: \(message)")
                 } catch {
-                    importAlert = ImportAlert(
-                        title: "Import Failed",
-                        message: "Couldn't import that file. It may not be a mapper database."
-                    )
+                    let message = "Couldn't import that file. It may not be a mapper database."
+                    importAlert = ImportAlert(title: "Import Failed", message: message)
+                    await session.echoSystemNote("[Mapper] Import failed — \(message)")
                 }
             }
         #endif

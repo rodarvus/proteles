@@ -48,6 +48,13 @@ public extension SessionController {
         restartTimerLoop()
     }
 
+    /// Print a system note to the main output (used by UI flows like database
+    /// import to report results where the user is actually looking, mirroring
+    /// how the reference mapper prints its Notes to the output).
+    func echoSystemNote(_ text: String) async {
+        await applyScriptEffects([.note(text: text, foreground: "cyan", background: nil)])
+    }
+
     /// Force a Search-and-Destroy campaign/quest detection pass (its
     /// `do_cp_info`). Used by the panel's "Scan now" and the post-connect
     /// auto-scan. No-op without an S&D host.

@@ -114,17 +114,37 @@ struct ContentView: View {
     /// Pick an existing `SnDdb.db` and incrementally merge it into the active
     /// profile's S&D database (adds areas/mobs/history we don't already have).
     private func importSearchAndDestroyDatabase() {
-        guard let profileID = worlds.activeProfileID else { return }
+        guard let profileID = worlds.activeProfileID else {
+            Task { await session.echoSystemNote("[S&D] Connect to a world first, then import.") }
+            return
+        }
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.database]
-        panel.allowsOtherFileTypes = true
+        // SQLite .db files don't conform to UTType.database (public.database),
+        // which greys them out; match by extension like the mapper picker.
+        panel.allowedContentTypes = [UTType(filenameExtension: "db") ?? .data]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
         panel.message = "Choose a Search & Destroy database (SnDdb.db) to import."
+        panel.prompt = "Import"
         guard panel.runModal() == .OK, let source = panel.url else { return }
-        Task.detached {
-            guard let url = try? SearchAndDestroyStore.defaultStoreURL(forProfile: profileID),
-                  let store = try? SearchAndDestroyStore(url: url)
-            else { return }
-            _ = try? store.importIncremental(from: source)
+        let accessing = source.startAccessingSecurityScopedResource()
+        Task {
+            defer { if accessing { source.stopAccessingSecurityScopedResource() } }
+            do {
+                let url = try SearchAndDestroyStore.defaultStoreURL(forProfile: profileID)
+                let store = try SearchAndDestroyStore(url: url)
+                let summary = try store.importIncremental(from: source)
+                await session.echoSystemNote(
+                    summary.isEmpty
+                        ? "[S&D] Import: nothing new — already had everything in that file."
+                        : "[S&D] Import: added \(summary.mobs) mobs, \(summary.areas) areas, "
+                        + "\(summary.keywords) keywords, \(summary.history) history rows."
+                )
+            } catch {
+                await session.echoSystemNote(
+                    "[S&D] Import failed — that file may not be a Search & Destroy database."
+                )
+            }
         }
     }
 
