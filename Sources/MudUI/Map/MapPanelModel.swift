@@ -23,6 +23,23 @@ public final class MapPanelModel {
     /// Whether to mark exits leaving the current area. Off by default.
     public private(set) var showAreaExits = false
 
+    /// Which map is shown: the graphical GMCP layout or the server's captured
+    /// ASCII map (`<MAPSTART>…<MAPEND>`, via the AsciiMap plugin).
+    public enum ViewMode: String, CaseIterable, Identifiable, Sendable {
+        case graphical, ascii
+        public var id: String {
+            rawValue
+        }
+
+        public var title: String {
+            self == .graphical ? "Graphical" : "ASCII"
+        }
+    }
+
+    public var viewMode: ViewMode = .graphical
+    /// The latest server ASCII map (styled lines), mirrored from `MapStore`.
+    public private(set) var asciiMap: [Line] = []
+
     /// Result of the most recent import, shown in an alert (nil = none).
     public var importAlert: ImportAlert?
 
@@ -37,9 +54,15 @@ public final class MapPanelModel {
     private var mapper: Mapper?
     private var bindTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+    private var asciiTask: Task<Void, Never>?
 
     public init(session: SessionController) {
         self.session = session
+    }
+
+    /// Switch between the graphical and ASCII map views.
+    public func setViewMode(_ mode: ViewMode) {
+        viewMode = mode
     }
 
     /// Begin mirroring the attached mapper's layout, rebinding on world load.
@@ -48,6 +71,14 @@ public final class MapPanelModel {
     /// and the panel's `onAppear`.
     public func start() {
         guard bindTask == nil else { return }
+        // Mirror the server's captured ASCII map (independent of the mapper).
+        asciiTask = Task { [weak self] in
+            guard let self else { return }
+            asciiMap = await session.mapStore.map
+            for await lines in await session.mapStore.subscribe() {
+                asciiMap = lines
+            }
+        }
         bindTask = Task { [weak self] in
             guard let self else { return }
             for await mapper in await session.mapperAttachments() {
