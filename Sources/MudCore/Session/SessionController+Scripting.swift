@@ -81,8 +81,13 @@ public extension SessionController {
     internal func applyScriptEffects(_ effects: [ScriptEffect]) async {
         for effect in effects {
             switch effect {
-            case .send(let command), .execute(let command), .sendNoEcho(let command):
+            case .send(let command), .sendNoEcho(let command):
                 try? await sendLine(command)
+            case .execute(let command):
+                // Re-parse through the command pipeline (native mapper / aliases),
+                // like MUSHclient's Execute — not a raw send. S&D navigation
+                // (Execute("mapper goto <id>")) relies on this.
+                try? await dispatchCommand(command)
             case .echo(let text):
                 await scrollbackStore.append(Line(id: LineID(0), text: text))
             case .note(let text, let foreground, let background):

@@ -88,6 +88,30 @@ struct SearchAndDestroyDispatchTests {
         })
     }
 
+    @Test("EnableTriggerGroup drives the group enable (CP/GQ state machine)")
+    func enableTriggerGroupBound() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // S&D toggles its campaign/GQ trigger groups via EnableTriggerGroup,
+        // not EnableGroup — it must route to the same enableGroup effect.
+        #expect(await host.functionExists("EnableTriggerGroup"))
+        let effects = try await host.run("EnableTriggerGroup('trg_campaign', true)")
+        #expect(effects.contains(.enableGroup(name: "trg_campaign", on: true)))
+    }
+
+    @Test("Previously-missing world globals are defined (can't abort a firing)")
+    func missingGlobalsStubbed() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        for name in [
+            "EnableTriggerGroup", "EnableTimerGroup", "EnableAlias", "AddTriggerEx",
+            "SetTriggerOption", "GetTriggerList", "GetTriggerInfo", "GetVariableList",
+            "GetPluginVariable", "SetClipboard"
+        ] {
+            #expect(await host.functionExists(name), "\(name) should be defined")
+        }
+    }
+
     @Test("MUSHclient colour built-ins S&D calls are bound (no nil-call error)")
     func colourBuiltinsBound() async throws {
         let host = try SearchAndDestroyHost()

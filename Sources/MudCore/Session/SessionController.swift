@@ -362,6 +362,16 @@ public actor SessionController {
         if !serverEcho, !command.isEmpty {
             await scrollbackStore.append(Self.inputEchoLine(command))
         }
+        try await dispatchCommand(command)
+    }
+
+    /// Route a command through the in-app pipeline (native `mapper …` → S&D
+    /// aliases → user aliases → MUD), without the user-input echo. Used by
+    /// typed input (after echo) and by a plugin's `Execute`, which re-parses
+    /// the command as if typed — MUSHclient's `Execute` semantics. This is
+    /// what makes S&D's navigation (`do_mapper_goto` → `Execute("mapper goto
+    /// <id>")`) reach the native mapper instead of being sent raw to the MUD.
+    func dispatchCommand(_ command: String) async throws {
         // Native `mapper …` commands are handled in-app, not sent to the MUD.
         if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
             await applyScriptEffects(mapper.handleCommand(command))

@@ -118,8 +118,27 @@ extension SearchAndDestroyHost {
     function EnableTimer(name, flag) proteles.enableTimer(name, flag and true or false); return 0 end
     function EnableTrigger(name, flag) proteles.enableTrigger(name, flag and true or false); return 0 end
     function EnableGroup(name, flag) proteles.enableGroup(name, flag and true or false); return 0 end
+    -- S&D arms/disarms its CP/GQ state machine with EnableTriggerGroup (NOT
+    -- EnableGroup) — the spine of campaign/global-quest detection. Route both
+    -- group forms to the same engine path.
+    function EnableTriggerGroup(name, flag) proteles.enableGroup(name, flag and true or false); return 0 end
+    function EnableTimerGroup(name, flag) proteles.enableGroup(name, flag and true or false); return 0 end
     function AddTimer(...) return 0 end
     function DeleteTimer(...) return 0 end
+    -- Missing-but-called globals: stub to no-ops so a call can't abort a firing
+    -- (these gate secondary features — dynamic scan/consider triggers, a
+    -- GQ-check alias edge, diagnostics — wired for real in a follow-up).
+    function EnableAlias(name, flag) return 0 end
+    function AddTriggerEx(...) return 0 end
+    function AddTrigger(...) return 0 end
+    function AddAlias(...) return 0 end
+    function SetTriggerOption(...) return 0 end
+    function DeleteTrigger(...) return 0 end
+    function GetTriggerList() return {} end
+    function GetTriggerInfo(...) return nil end
+    function GetVariableList() return {} end
+    function GetPluginVariable(...) return nil end
+    function SetClipboard(...) return 0 end
 
     -- MUSHclient send-target constants (mushclient/OtherTypes.h). S&D passes
     -- e.g. sendto.script to DoAfterSpecial; without this it indexes a nil
