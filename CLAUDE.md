@@ -80,11 +80,11 @@ Instead:
      the programmatic API plugins call). The reference mapper DB uses **FTS**
      tables (`rooms_lookup*`) for room/area-name search — don't reimplement
      `find`/`where` by guessing.
-   - Search-and-Destroy: the `search-and-destroy/` submodule (beta) AND,
-     importantly, the version the user **actually runs**, vendored live at
-     `MUSHclient-live-from-windows/worlds/plugins/Search-and-Destroy-V2/`
-     (its own `Search_and_Destroy_v2.xml` + WinkleGold_* companions). When the
-     two differ, the live V2 is the source of truth for what the user sees.
+   - Search-and-Destroy: the `search-and-destroy/` submodule is the canonical
+     reference — it is the version the user runs and the one we vendored
+     (`Sources/MudCore/Resources/SearchAndDestroy/core.lua`). **Ignore** the
+     `Search-and-Destroy-V2` and `WinkleGold_*` directories under
+     `MUSHclient-live-from-windows/` — the user does NOT run those.
    - MUSHclient world-API semantics: `mushclient/` (`MUSHclient.cpp`).
 
 2. **Use the live database copies the user provided** (don't fabricate rows
@@ -93,8 +93,7 @@ Instead:
      (tables: rooms, exits, areas, bookmarks, environments, terrain, storage,
      rooms_lookup* FTS).
    - S&D DB: `MUSHclient-live-from-windows/SnDdb.db`
-     (tables: area, mobs, mob_keyword_exceptions, history) — plus the V2
-     folder's own `SnDdb.db`/`Aardwolf.db` copies.
+     (tables: area, mobs, mob_keyword_exceptions, history).
    Query them with `sqlite3` to confirm real schema, column names, and data
    shapes before writing code or tests against them.
 
