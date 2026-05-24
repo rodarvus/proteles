@@ -59,6 +59,12 @@ extension LuaRuntime {
             effects.append(.enableTimer(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
         case .enableGroup:
             effects.append(.enableGroup(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
+        case .doAfter:
+            effects.append(.scheduleAfter(
+                seconds: Self.argDouble(arguments, 0),
+                isScript: Self.argBool(arguments, 2),
+                body: Self.argString(arguments, 1)
+            ))
         default: recordOutputEffect(function, arguments)
         }
     }
@@ -68,6 +74,12 @@ extension LuaRuntime {
     nonisolated static func argBool(_ arguments: [LuaValue], _ index: Int) -> Bool {
         guard index < arguments.count else { return false }
         return arguments[index].booleanValue ?? false
+    }
+
+    /// A Lua number argument, defaulting to 0.
+    nonisolated static func argDouble(_ arguments: [LuaValue], _ index: Int) -> Double {
+        guard index < arguments.count else { return 0 }
+        return arguments[index].numberValue ?? 0
     }
 
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)

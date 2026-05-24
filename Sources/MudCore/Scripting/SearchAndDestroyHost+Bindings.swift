@@ -1,0 +1,207 @@
+import Foundation
+
+/// The curated MUSHclient API S&D runs against (split out of the actor to
+/// keep its body within the type-length budget). Globals over `proteles.*`:
+/// output/comms/vars map to real primitives; the miniwindow + a few options
+/// are stubs (replaced by the native panel).
+extension SearchAndDestroyHost {
+    /// The MUSHclient API S&D uses, defined as globals over `proteles.*`.
+    /// Output/comms/vars/timers map to real primitives; the miniwindow + a few
+    /// options are stubs (replaced by native UI / wired in later stages).
+    static let bindings = """
+    -- Lua 5.1 module system (the sandbox removes it; some vendored helper libs
+    -- like `wait`/`check` declare themselves with `module(..., package.seeall)`).
+    package = package or { loaded = {}, path = "", cpath = "" }
+    package.seeall = function(m) setmetatable(m, { __index = _G }) end
+    function module(name, ...)
+      local m = package.loaded[name]
+      if m == nil then m = {}; package.loaded[name] = m end
+      m._NAME = name; m._M = m
+      if name and not name:find("%.") then _G[name] = m end
+      for _, modifier in ipairs({...}) do modifier(m) end
+      setfenv(2, m)  -- the calling chunk's environment becomes the module
+    end
+
+    -- Output + comms ---------------------------------------------------------
+    function Send(s) proteles.send(s); return 0 end
+    function SendNoEcho(s) proteles.sendNoEcho(s); return 0 end
+    function Execute(s) proteles.execute(s); return 0 end
+    function Note(...) proteles.echo(table.concat({...}, "\\t")) end
+    function ColourNote(...) proteles.colourNote(...) end
+    function ColourTell(...) proteles.colourNote(...) end
+    function AnsiNote(s) proteles.echoAnsi(s) end
+    function Tell(s) proteles.echo(tostring(s)) end
+    function Hyperlink(action, text) proteles.echo(tostring(text)) end  -- native links: later
+
+    -- Colour helpers (MUSHclient world built-ins S&D calls for miniwindow
+    -- colours; the native panel uses its own palette, so these only need to
+    -- be present + non-nil. ColourNameToRGB returns a BGR int; we parse the
+    -- common "#RRGGBB"/name forms loosely and otherwise default).
+    function ColourNameToRGB(name)
+      if type(name) == "string" then
+        local r, g, b = name:match("^#(%x%x)(%x%x)(%x%x)$")
+        if r then return tonumber(b .. g .. r, 16) end
+      end
+      return 0
+    end
+    function RGBColourToName(rgb)
+      local n = tonumber(rgb) or 0
+      local b = math.floor(n / 65536) % 256
+      local g = math.floor(n / 256) % 256
+      local r = n % 256
+      return string.format("#%02x%02x%02x", r, g, b)
+    end
+    function GetNormalColour(which) return 0 end
+
+    -- Variables / identity ---------------------------------------------------
+    function GetVariable(name) return proteles.getVar(name) end
+    function SetVariable(name, value) proteles.setVar(name, tostring(value)); return 0 end
+    function DeleteVariable(name) proteles.deleteVar(name); return 0 end
+    function GetPluginID() return proteles.pluginID() end
+    function GetInfo(n) return proteles.info(n) end
+    function WorldName() return proteles.info(2) or "Aardwolf" end
+    function GetPluginInfo(id, n)
+      if n == 1 then return "Search_and_Destroy"
+      elseif n == 19 then return "5.99"
+      elseif n == 20 then return proteles.info(60)
+      else return nil end
+    end
+
+    -- Connection state --------------------------------------------------------
+    function IsConnected() return proteles.isConnected() end
+
+    -- GMCP handler shim: S&D's gmcp(path)/send_gmcp_packet route through
+    -- CallPlugin to the GMCP-handler plugin id; we answer from the runtime's
+    -- live `proteles.gmcp` table. `gmcpdata_as_string` returns the value at a
+    -- dotted path serialised as a Lua literal (what S&D's gmcp() loadstrings).
+    local function snd_gmcp_path(s)
+      local node = proteles.gmcp
+      if s ~= nil and s ~= "" then
+        for key in tostring(s):gmatch("[^%.]+") do
+          if type(node) ~= "table" then return nil end
+          node = node[key]
+        end
+      end
+      return node
+    end
+    local function snd_lua_literal(v)
+      local t = type(v)
+      if t == "table" then
+        local parts = {}
+        for k, val in pairs(v) do
+          local key = type(k) == "number" and ("[" .. k .. "]")
+            or ("[" .. string.format("%q", tostring(k)) .. "]")
+          parts[#parts + 1] = key .. "=" .. snd_lua_literal(val)
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+      elseif t == "string" then return string.format("%q", v)
+      elseif t == "number" or t == "boolean" then return tostring(v)
+      else return "nil" end
+    end
+    function gmcpdata_as_string(s) return snd_lua_literal(snd_gmcp_path(s)) end
+    function Send_GMCP_Packet(s) proteles.sendGMCP(tostring(s)); return 0 end
+
+    -- Inter-plugin ------------------------------------------------------------
+    function CallPlugin(id, fn, ...)
+      if id == "b6eae87ccedd84f510b74714" then proteles.mapperCall(fn, ...); return 0 end
+      if id == "3e7dedbe37e44942dd46d264" then  -- GMCP handler
+        if fn == "gmcpdata_as_string" then return 0, gmcpdata_as_string(...) end
+        if fn == "Send_GMCP_Packet" then return Send_GMCP_Packet(...) end
+        return 0
+      end
+      return 0, proteles.call(fn, ...)
+    end
+    function BroadcastPlugin(msg, text) proteles.broadcast(msg, text); return 0 end
+
+    -- Timers / automations: S&D gates its CP/GQ flow by toggling trigger
+    -- groups, so these drive the host's own engines (booleanised first).
+    function EnableTimer(name, flag) proteles.enableTimer(name, flag and true or false); return 0 end
+    function EnableTrigger(name, flag) proteles.enableTrigger(name, flag and true or false); return 0 end
+    function EnableGroup(name, flag) proteles.enableGroup(name, flag and true or false); return 0 end
+    function AddTimer(...) return 0 end
+    function DeleteTimer(...) return 0 end
+
+    -- MUSHclient send-target constants (mushclient/OtherTypes.h). S&D passes
+    -- e.g. sendto.script to DoAfterSpecial; without this it indexes a nil
+    -- global and the calling chunk (e.g. cp_info_end) aborts.
+    sendto = {
+      world = 0, command = 1, output = 2, status = 3, notepad = 4,
+      appendtonotepad = 5, logfile = 6, replacenotepad = 7, commandqueue = 8,
+      variable = 9, execute = 10, speedwalk = 11, script = 12, immediate = 13,
+      scriptafteromit = 14,
+    }
+
+    -- Deferred actions → one-shot timers on the host's own timer engine.
+    -- script/scriptafteromit run the text as Lua here; otherwise it's sent to
+    -- the MUD. S&D uses these for do_cp_check, area scans, navigation, etc.
+    function DoAfterSpecial(seconds, text, sendtoValue)
+      local isScript = (sendtoValue == 12 or sendtoValue == 14)
+      proteles.doAfter(tonumber(seconds) or 0, tostring(text), isScript)
+      return 0
+    end
+    function DoAfter(seconds, text)
+      proteles.doAfter(tonumber(seconds) or 0, tostring(text), false)
+      return 0
+    end
+    function SetStatus(...) end
+    function GetOption(...) return 0 end
+    function GetAlphaOption(...) return "" end
+    function SetOption(...) return 0 end
+
+    -- Plugin discovery / misc (stubs — single-plugin curated runtime) --------
+    function IsPluginInstalled(id) return false end
+    function PluginSupports(id, fn) return false end
+    function GetPluginList() return {} end
+    function EnablePlugin(id, flag) return 0 end
+    function Replace(...) return 0 end
+    function Repaint() end
+    function Redraw() end
+    function SetCursor(...) return 0 end
+    function Sound(...) return 0 end
+    function PlaySound(...) return 0 end
+    function Hash(s) return tostring(s) end
+    function FixupHTML(s) return tostring(s) end
+    function GetUniqueNumber() return 0 end
+    function version_check(...) return true end
+
+    -- String helper -----------------------------------------------------------
+    function Trim(s) if s == nil then return "" end return (tostring(s):gsub("^%s*(.-)%s*$", "%1")) end
+
+    -- Bit ops (MUSHclient exposes `bit`; used by hotspot flag tests) ----------
+    if bit == nil then
+      bit = { band = function(a, b) return 0 end, bor = function(a, b) return 0 end }
+    end
+
+    -- Miniwindow: stubbed (replaced by the native SwiftUI panel). Drawing is a
+    -- no-op; geometry queries return 0; `WindowInfo`-style reads return 0.
+    local function noop() return 0 end
+    for _, name in ipairs({
+      "WindowCreate","WindowShow","WindowDelete","WindowResize","WindowPosition",
+      "WindowRectOp","WindowCircleOp","WindowLine","WindowText","WindowFont",
+      "WindowAddHotspot","WindowDeleteHotspot","WindowMoveHotspot","WindowDragHandler",
+      "WindowScrollwheelHandler","WindowMenu","WindowSetPixel","WindowImage",
+      "WindowLoadImageMemory","WindowDrawImageAlpha","WindowDeleteAllHotspots",
+      "WindowTextWidth","WindowFontInfo","WindowInfo","WindowHotspotInfo",
+      "WindowFontList","WindowImageInfo","WindowGetImageAlpha","WindowBlendImage",
+      "WindowMergeImageAlpha","WindowFilter","WindowGradient","WindowPolygon",
+      "WindowArc","WindowBezier","WindowRectangle","WindowCircle","WindowEllipse",
+      "BroadcastPlugin"
+    }) do
+      if _G[name] == nil then _G[name] = noop end
+    end
+    function WindowInfo(win, n) return 0 end
+    function WindowTextWidth(win, font, text) return 0 end
+    function WindowFontInfo(win, font, n) return 0 end
+    """
+
+    /// A no-op `movewindow` (the dragging helper) — the native panel handles
+    /// placement, so plugins that `require "movewindow"` get a quiet stub.
+    static let movewindowStub = """
+    local M = {}
+    function M.install(win, ...) return { window_left = 0, window_top = 0, width = 0, height = 0 } end
+    function M.save_state(...) end
+    function M.add_drag_handler(...) end
+    function M.add_to_menu(...) end
+    return M
+    """
+}

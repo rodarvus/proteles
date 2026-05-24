@@ -91,6 +91,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Enable/disable every trigger and timer in a named group (MUSHclient
     /// `EnableGroup`).
     case enableGroup(name: String, on: Bool)
+    /// Schedule a one-shot deferred action after `seconds` (MUSHclient
+    /// `DoAfter`/`DoAfterSpecial`). `isScript` runs `body` as Lua in the
+    /// owning plugin's runtime; otherwise `body` is sent to the MUD. Consumed
+    /// by a plugin host that owns its own timer engine (e.g. Search-and-
+    /// Destroy, which defers `do_cp_check`, area scans, etc. this way).
+    case scheduleAfter(seconds: Double, isScript: Bool, body: String)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

@@ -107,10 +107,8 @@ public actor LuaRuntime {
     nonisolated(unsafe) let state: OpaquePointer
 
     /// Side effects recorded by `proteles.*` calls during the current run.
-    /// `nonisolated(unsafe)` because the C host-function dispatch appends to
-    /// it synchronously inside `lua_pcall` (same actor executor), and `run`
-    /// reads/clears it around that call. Module-internal for the GMCP
-    /// projection extension.
+    /// `nonisolated(unsafe)`: the C dispatch appends synchronously inside
+    /// `lua_pcall` (same actor executor) and `run` reads/clears it around that.
     nonisolated(unsafe) var effects: [ScriptEffect] = []
 
     /// The `proteles.*` functions exposed to scripts; the rawValue is the
@@ -146,7 +144,7 @@ public actor LuaRuntime {
         case mapperCall
         case sqliteAllowed
         case publish
-        case enableTrigger, enableTimer, enableGroup
+        case enableTrigger, enableTimer, enableGroup, doAfter
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -377,6 +375,7 @@ public actor LuaRuntime {
         setHostFunction("enableTrigger", .enableTrigger)
         setHostFunction("enableTimer", .enableTimer)
         setHostFunction("enableGroup", .enableGroup)
+        setHostFunction("doAfter", .doAfter)
         // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
         // state, populated by ``applyGMCP`` as messages arrive — e.g.
         // `proteles.gmcp.char.vitals.hp`. Starts empty.
@@ -402,7 +401,7 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup:
+             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter:
             recordEffect(function, arguments)
             return []
         case .call:

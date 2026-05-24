@@ -27,6 +27,16 @@ public extension SessionController {
     private func applySearchAndDestroyLine(_ text: String) async {
         guard let searchAndDestroy else { return }
         await applyScriptEffects(searchAndDestroy.process(text))
+        await rearmTimerLoopIfSnDScheduled()
+    }
+
+    /// If S&D scheduled a `DoAfter`/`DoAfterSpecial` one-shot during the last
+    /// dispatch, restart the timer loop so it fires (the loop exits when no
+    /// timers remain, so a deferral scheduled while idle wouldn't otherwise run).
+    internal func rearmTimerLoopIfSnDScheduled() async {
+        if await searchAndDestroy?.takeDidScheduleTimer() == true {
+            restartTimerLoop()
+        }
     }
 
     /// Offer a typed command to Search-and-Destroy's aliases first. Returns
@@ -37,6 +47,7 @@ public extension SessionController {
               let effects = await searchAndDestroy.expandCommand(command)
         else { return false }
         await applyScriptEffects(effects)
+        await rearmTimerLoopIfSnDScheduled()
         await persistVariablesIfDirty()
         return true
     }
@@ -61,6 +72,7 @@ public extension SessionController {
     func scanSearchAndDestroy() async {
         guard let searchAndDestroy else { return }
         await applyScriptEffects(searchAndDestroy.scanForActivity())
+        await rearmTimerLoopIfSnDScheduled()
         await persistVariablesIfDirty()
     }
 
@@ -344,6 +356,7 @@ public extension SessionController {
         }
         if let searchAndDestroy {
             await applyScriptEffects(searchAndDestroy.fireTimers(at: now))
+            await rearmTimerLoopIfSnDScheduled()
         }
     }
 

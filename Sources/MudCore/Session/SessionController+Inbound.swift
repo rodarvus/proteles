@@ -60,6 +60,7 @@ extension SessionController {
                 await applyScriptEffects(
                     searchAndDestroy.applyGMCP(package: message.package, json: message.json)
                 )
+                await rearmTimerLoopIfSnDScheduled()
             }
         }
         for line in output.lines {
