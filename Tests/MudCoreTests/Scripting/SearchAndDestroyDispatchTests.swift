@@ -59,6 +59,35 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.expandCommand("snd history") != nil)
     }
 
+    @Test("scanForActivity drives S&D's do_cp_info (sends 'cp info')")
+    func scanForActivityRunsCpInfo() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        let effects = await host.scanForActivity()
+        // do_cp_info enables its scrape triggers and SendNoEcho("cp info");
+        // the cp-info end line then sets current_activity = "cp" + publishes.
+        #expect(effects.contains { effect in
+            if case .sendNoEcho(let cmd) = effect { return cmd.contains("cp info") }
+            if case .send(let cmd) = effect { return cmd.contains("cp info") }
+            return false
+        })
+    }
+
+    @Test("Network self-update is stubbed (no download_file side effects)")
+    func downloadStubbed() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // download_file is overridden to a no-op, so calling it (and the
+        // update entry points) produces no effects / no error note.
+        let effects = try await host.run(
+            "download_file('https://example.com/x', function() end); check_for_updates()"
+        )
+        #expect(!effects.contains { effect in
+            if case .note(let text, _, _) = effect { return text.contains("download") }
+            return false
+        })
+    }
+
     @Test("GMCP feeds S&D's runtime and its gmcp() accessor reads it back")
     func gmcpProjection() async throws {
         let host = try SearchAndDestroyHost()

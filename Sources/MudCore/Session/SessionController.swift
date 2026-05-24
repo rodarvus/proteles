@@ -511,9 +511,19 @@ public actor SessionController {
         state = newState
         connectionStatesContinuation.yield(newState)
         syncTimerLoop(to: newState)
-        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap).
+        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap), and
+        // once connected, after S&D has had time to initialise, run a
+        // best-effort campaign/quest scan so an already-running campaign is
+        // detected without the player re-requesting it. The panel's "Scan now"
+        // is the reliable fallback if init takes longer.
         if let searchAndDestroy {
-            Task { await searchAndDestroy.setConnected(newState == .connected) }
+            Task { [weak self] in
+                await searchAndDestroy.setConnected(newState == .connected)
+                guard newState == .connected else { return }
+                try? await Task.sleep(for: .seconds(3))
+                guard await self?.state == .connected else { return }
+                await self?.scanSearchAndDestroy()
+            }
         }
         // Keep scripts' `proteles.isConnected` in sync and drive plugin
         // connect/disconnect lifecycle callbacks.

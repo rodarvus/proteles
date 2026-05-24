@@ -48,6 +48,15 @@ public extension SessionController {
         restartTimerLoop()
     }
 
+    /// Force a Search-and-Destroy campaign/quest detection pass (its
+    /// `do_cp_info`). Used by the panel's "Scan now" and the post-connect
+    /// auto-scan. No-op without an S&D host.
+    func scanSearchAndDestroy() async {
+        guard let searchAndDestroy else { return }
+        await applyScriptEffects(searchAndDestroy.scanForActivity())
+        await persistVariablesIfDirty()
+    }
+
     /// Apply the effects a script produced: sends go to the MUD, echoes/notes
     /// to the scrollback.
     internal func applyScriptEffects(_ effects: [ScriptEffect]) async {

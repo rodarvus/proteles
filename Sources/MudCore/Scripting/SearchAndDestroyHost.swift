@@ -79,11 +79,37 @@ public actor SearchAndDestroyHost {
         do {
             _ = try await runtime.run(Self.bindings)
             _ = try await runtime.run(core)
+            _ = try await runtime.run(Self.postLoadOverrides)
         } catch {
             throw HostError.loadFailed(String(describing: error))
         }
 
         try loadAutomations()
+    }
+
+    /// Neutralise S&D's network self-update path. `download_file` checks an
+    /// `async` HTTP helper we don't provide and otherwise emits a visible
+    /// "Error on file download" note on startup (via `check_for_updates`).
+    /// Override it (and the update entry points) to quiet no-ops — Proteles
+    /// vendors S&D; it isn't self-updating.
+    private static let postLoadOverrides = """
+    if type(download_file) == "function" then download_file = function() end end
+    if type(check_for_updates) == "function" then check_for_updates = function() end end
+    if type(force_update_check) == "function" then force_update_check = function() end end
+    if type(download_sounds) == "function" then download_sounds = function() end end
+    """
+
+    /// Force a campaign/quest detection pass — run S&D's `do_cp_info()` (sends
+    /// `cp info`, enables the scrape triggers, and on the end-of-info line sets
+    /// `current_activity = "cp"` + publishes). Used by the panel's "Scan now"
+    /// and a best-effort auto-scan after connect, so an *already-running*
+    /// campaign is detected without the player re-requesting it (S&D otherwise
+    /// only auto-detects on the grant line or from cached area data).
+    public func scanForActivity() async -> [ScriptEffect] {
+        let effects = await (try? runtime.run(
+            "if type(do_cp_info) == 'function' then do_cp_info() end"
+        )) ?? []
+        return consume(effects)
     }
 
     /// Parse S&D's triggers/aliases/timers from the vendored plugin XML into

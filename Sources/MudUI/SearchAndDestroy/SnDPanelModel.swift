@@ -21,6 +21,11 @@ public final class SnDPanelModel {
     /// Wired by the app; `nil` hides the affordance's effect.
     @ObservationIgnored public var onImport: (@MainActor () -> Void)?
 
+    /// Force a campaign/quest detection pass (S&D's `do_cp_info`). Wired by
+    /// the app to the session; lets the player detect an already-running
+    /// campaign that wasn't auto-detected on the grant line.
+    @ObservationIgnored public var onScan: (@MainActor () -> Void)?
+
     public init(model: SearchAndDestroyModel? = nil) {
         self.model = model
     }
@@ -54,5 +59,10 @@ public final class SnDPanelModel {
     /// Trigger the SnDdb.db import flow, if wired.
     public func requestImport() {
         onImport?()
+    }
+
+    /// Force a campaign/quest detection pass, if wired.
+    public func scan() {
+        onScan?()
     }
 }

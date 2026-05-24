@@ -103,6 +103,7 @@ struct ContentView: View {
             Task { try? await session.send(command) }
         }
         snd.onImport = { importSearchAndDestroyDatabase() }
+        snd.onScan = { Task { await session.scanSearchAndDestroy() } }
     }
 
     /// Pick an existing `SnDdb.db` and incrementally merge it into the active

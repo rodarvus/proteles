@@ -16,16 +16,34 @@ public struct SearchAndDestroyPanelView: View {
             if let snd = model.model, snd.activity != nil, snd.activity != "init" {
                 content(snd)
             } else {
-                ContentUnavailableView(
-                    "No Hunt Active",
-                    systemImage: "scope",
-                    description: Text(
-                        "Start a campaign or quest — targets appear here as Search & Destroy finds them."
-                    )
-                )
+                emptyState
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Empty state (still offers Scan + Import)
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            ContentUnavailableView(
+                "No Hunt Active",
+                systemImage: "scope",
+                description: Text(
+                    "Start a campaign or quest — targets appear here as Search & Destroy finds them. "
+                        + "Already on one? Scan to detect it."
+                )
+            )
+            if model.isInteractive {
+                HStack(spacing: 8) {
+                    Button("Scan for Campaign/Quest") { model.scan() }
+                        .buttonStyle(.borderedProminent)
+                    Button("Import SnDdb.db…") { model.requestImport() }
+                        .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding()
     }
 
     private func content(_ snd: SearchAndDestroyModel) -> some View {
