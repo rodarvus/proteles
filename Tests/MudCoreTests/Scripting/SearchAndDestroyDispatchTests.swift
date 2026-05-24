@@ -88,6 +88,17 @@ struct SearchAndDestroyDispatchTests {
         })
     }
 
+    @Test("MUSHclient colour built-ins S&D calls are bound (no nil-call error)")
+    func colourBuiltinsBound() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        #expect(await host.functionExists("ColourNameToRGB"))
+        #expect(await host.functionExists("RGBColourToName"))
+        #expect(await host.functionExists("GetNormalColour"))
+        // Round-trips a #RRGGBB colour through the (BGR) int form.
+        #expect(await host.evaluate("RGBColourToName(ColourNameToRGB(\"#102030\"))") == "#102030")
+    }
+
     @Test("GMCP feeds S&D's runtime and its gmcp() accessor reads it back")
     func gmcpProjection() async throws {
         let host = try SearchAndDestroyHost()

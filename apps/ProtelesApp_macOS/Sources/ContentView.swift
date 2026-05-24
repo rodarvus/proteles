@@ -69,7 +69,12 @@ struct ContentView: View {
                 snd.update(json: json)
             }
         }
-        .onAppear { wireSearchAndDestroy() }
+        .onAppear {
+            wireSearchAndDestroy()
+            // Bind the mapper at the app root so it's live regardless of which
+            // dock tab is shown (e.g. for a menu-triggered map import).
+            map.start()
+        }
         .task { await launch() }
     }
 

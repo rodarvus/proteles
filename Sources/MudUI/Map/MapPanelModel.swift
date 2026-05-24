@@ -43,8 +43,11 @@ public final class MapPanelModel {
     }
 
     /// Begin mirroring the attached mapper's layout, rebinding on world load.
+    /// Idempotent — safe to call from both the app root (so the mapper binds
+    /// regardless of which dock tab is shown, e.g. for a menu-triggered import)
+    /// and the panel's `onAppear`.
     public func start() {
-        bindTask?.cancel()
+        guard bindTask == nil else { return }
         bindTask = Task { [weak self] in
             guard let self else { return }
             for await mapper in await session.mapperAttachments() {
@@ -114,7 +117,13 @@ public final class MapPanelModel {
     /// refreshes and a summary alert is shown.
     public func importDatabase() {
         #if os(macOS)
-            guard let mapper else { return }
+            guard let mapper else {
+                importAlert = ImportAlert(
+                    title: "Connect First",
+                    message: "Connect to a world, then import — the map database is per-world."
+                )
+                return
+            }
             let panel = NSOpenPanel()
             panel.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             panel.allowedContentTypes = [UTType(filenameExtension: "db") ?? .data]

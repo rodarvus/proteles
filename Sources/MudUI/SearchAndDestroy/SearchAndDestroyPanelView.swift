@@ -30,17 +30,13 @@ public struct SearchAndDestroyPanelView: View {
                 "No Hunt Active",
                 systemImage: "scope",
                 description: Text(
-                    "Start a campaign or quest — targets appear here as Search & Destroy finds them. "
-                        + "Already on one? Scan to detect it."
+                    "Start a campaign or quest — targets appear here automatically as "
+                        + "Search & Destroy detects it."
                 )
             )
             if model.isInteractive {
-                HStack(spacing: 8) {
-                    Button("Scan for Campaign/Quest") { model.scan() }
-                        .buttonStyle(.borderedProminent)
-                    Button("Import SnDdb.db…") { model.requestImport() }
-                        .buttonStyle(.bordered)
-                }
+                Button("Import SnDdb.db…") { model.requestImport() }
+                    .buttonStyle(.bordered)
             }
         }
         .padding()
@@ -127,6 +123,7 @@ public struct SearchAndDestroyPanelView: View {
             Button("Quick-Scan") { model.run("qs") }
             Button("Hunt Trick") { model.run("ht") }
             Divider()
+            Button("Re-check Campaign/Quest") { model.scan() }
             Button("Import SnDdb.db…") { model.requestImport() }
         } label: {
             buttonLabel("⚙︎")

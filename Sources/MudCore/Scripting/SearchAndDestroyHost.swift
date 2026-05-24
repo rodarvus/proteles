@@ -97,6 +97,20 @@ public actor SearchAndDestroyHost {
     if type(check_for_updates) == "function" then check_for_updates = function() end end
     if type(force_update_check) == "function" then force_update_check = function() end end
     if type(download_sounds) == "function" then download_sounds = function() end end
+
+    -- Auto-detect an already-running campaign: MUSHclient S&D learns it's on a
+    -- cp from the grant line or cached area data, so a campaign already in
+    -- progress at connect goes unseen. Hook the tail of init_plugin to run
+    -- do_cp_info() once, after init completes, when no activity is known yet.
+    if type(init_plugin) == "function" and type(do_cp_info) == "function" then
+      local __snd_orig_init_plugin = init_plugin
+      init_plugin = function()
+        __snd_orig_init_plugin()
+        if init_called == 2 and (current_activity == "init" or current_activity == "none") then
+          do_cp_info()
+        end
+      end
+    end
     """
 
     /// Force a campaign/quest detection pass — run S&D's `do_cp_info()` (sends
@@ -321,6 +335,26 @@ public actor SearchAndDestroyHost {
     function AnsiNote(s) proteles.echoAnsi(s) end
     function Tell(s) proteles.echo(tostring(s)) end
     function Hyperlink(action, text) proteles.echo(tostring(text)) end  -- native links: later
+
+    -- Colour helpers (MUSHclient world built-ins S&D calls for miniwindow
+    -- colours; the native panel uses its own palette, so these only need to
+    -- be present + non-nil. ColourNameToRGB returns a BGR int; we parse the
+    -- common "#RRGGBB"/name forms loosely and otherwise default).
+    function ColourNameToRGB(name)
+      if type(name) == "string" then
+        local r, g, b = name:match("^#(%x%x)(%x%x)(%x%x)$")
+        if r then return tonumber(b .. g .. r, 16) end
+      end
+      return 0
+    end
+    function RGBColourToName(rgb)
+      local n = tonumber(rgb) or 0
+      local b = math.floor(n / 65536) % 256
+      local g = math.floor(n / 256) % 256
+      local r = n % 256
+      return string.format("#%02x%02x%02x", r, g, b)
+    end
+    function GetNormalColour(which) return 0 end
 
     -- Variables / identity ---------------------------------------------------
     function GetVariable(name) return proteles.getVar(name) end
