@@ -15,8 +15,8 @@ import Foundation
 /// should send (e.g. `"request area"` when a room's area name isn't known
 /// yet), keeping the actor free of networking.
 public actor Mapper {
-    private let store: MapperStore
-    public private(set) var graph: RoomGraph
+    let store: MapperStore
+    public internal(set) var graph: RoomGraph
     /// The uid of the room the player is currently in (nil until known).
     public private(set) var currentRoomUID: String?
     /// Terrain environment code → name, and terrain name → packed colour,
@@ -165,7 +165,7 @@ public actor Mapper {
 
     /// Recompute and broadcast the layout to subscribers (called after a room
     /// or area change). No-op when there are no subscribers.
-    private func publishLayout() {
+    func publishLayout() {
         guard !layoutSubscribers.isEmpty, let uid = currentRoomUID else { return }
         let layout = buildLayout(for: uid)
         for continuation in layoutSubscribers.values {
@@ -341,183 +341,6 @@ public actor Mapper {
         if let value = object[key] as? Double { return Int(value) }
         if let value = object[key] as? String { return Int(value) }
         return nil
-    }
-
-    // MARK: - Commands
-
-    /// Handle a `mapper …` command, returning the effects to apply (sends +
-    /// notes). Covers the Search-and-Destroy contract (`goto`/`walkto`/
-    /// `where`) plus core search. Returns `[]` if the input isn't a `mapper`
-    /// command.
-    public func handleCommand(_ input: String) -> [ScriptEffect] {
-        let parts = input.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-        guard parts.first?.lowercased() == "mapper" else { return [] }
-        let rest = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
-        let split = rest.split(separator: " ", maxSplits: 1)
-        let sub = split.first.map { $0.lowercased() } ?? ""
-        let arg = split.count > 1 ? split[1].trimmingCharacters(in: .whitespaces) : ""
-
-        switch sub {
-        case "goto": return route(to: arg, allowPortals: true)
-        case "walkto": return route(to: arg, allowPortals: false)
-        case "where": return whereRoom(arg)
-        case "find", "list": return find(arg)
-        case "", "help": return helpOutput()
-        default: return handleSecondaryCommand(sub, arg)
-        }
-    }
-
-    /// Notes/bookmarks + view-config subcommands, split out of
-    /// ``handleCommand(_:)`` to keep each within the complexity budget.
-    private func handleSecondaryCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
-        switch sub {
-        case "note", "addnote": noteCommand(arg)
-        case "notes", "bookmarks": listNotes()
-        case "depth": depthCommand(arg)
-        case "blink": blinkCommand(arg)
-        default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
-        }
-    }
-
-    // MARK: - Notes / bookmarks
-
-    /// Set or clear a room's note (the `bookmarks` table), then republish the
-    /// layout so the panel's note marker updates. `uid` defaults to the
-    /// current room. Empty `text` clears the note. Called directly by the UI
-    /// (note text can contain anything, so it doesn't round-trip a command).
-    @discardableResult
-    public func setNote(_ text: String, uid: String? = nil) -> Bool {
-        guard let target = uid ?? currentRoomUID, var room = graph.rooms[target] else { return false }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        room.notes = trimmed.isEmpty ? nil : trimmed
-        graph[target] = room
-        try? store.setNote(room.notes, uid: target)
-        publishLayout()
-        return true
-    }
-
-    /// `mapper note [text]` — set the current room's note (empty clears it).
-    private func noteCommand(_ text: String) -> [ScriptEffect] {
-        guard let uid = currentRoomUID, graph.rooms[uid] != nil else {
-            return [Self.note("Your current location is unknown.")]
-        }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        _ = setNote(trimmed, uid: uid)
-        if trimmed.isEmpty {
-            return [Self.note("Cleared the note for this room.")]
-        }
-        return [Self.note("Noted [\(uid)]: \(trimmed)")]
-    }
-
-    /// `mapper notes` / `mapper bookmarks` — list every room that has a note.
-    private func listNotes() -> [ScriptEffect] {
-        let noted = graph.rooms.values
-            .filter { !($0.notes ?? "").isEmpty }
-            .sorted { $0.uid < $1.uid }
-            .prefix(50)
-        guard !noted.isEmpty else { return [Self.note("No room notes yet.")] }
-        var effects: [ScriptEffect] = [Self.note("Room notes:")]
-        for room in noted {
-            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(room.notes ?? "")"))
-        }
-        return effects
-    }
-
-    private func route(to uid: String, allowPortals: Bool) -> [ScriptEffect] {
-        let verb = allowPortals ? "goto" : "walkto"
-        guard !uid.isEmpty else { return [Self.note("Usage: mapper \(verb) <room>")] }
-        guard let src = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
-        // Note: we don't require the destination to be a *fully mapped* room.
-        // An unvisited room (a known exit's target that we've never entered) is
-        // still routable — the path ends with the known exit into it — matching
-        // the Aardwolf mapper, which lets you click an unmapped room to walk
-        // there. The pathfinder returns nil if it isn't reachable at all.
-        let options = Pathfinder.Options(
-            level: level, tier: tier, allowPortals: allowPortals, allowRecalls: allowPortals
-        )
-        guard let path = Pathfinder(graph: graph).path(from: src, to: uid, options: options) else {
-            return [Self.note("No route found to \(uid).")]
-        }
-        if path.isEmpty { return [Self.note("You're already there.")] }
-        let name = graph.rooms[uid]?.name ?? "room \(uid)"
-        var effects: [ScriptEffect] = [Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s).")]
-        effects += Speedwalk.commands(path).map { ScriptEffect.send($0) }
-        return effects
-    }
-
-    private func whereRoom(_ uid: String) -> [ScriptEffect] {
-        guard let target = uid.isEmpty ? currentRoomUID : uid, let room = graph.rooms[target] else {
-            return [Self.note("Unknown room.")]
-        }
-        var line = "Room \(target): \(room.name) — \(areaName(room.area))"
-        if let src = currentRoomUID, src != target {
-            let options = Pathfinder.Options(level: level, tier: tier)
-            if let path = Pathfinder(graph: graph).path(from: src, to: target, options: options) {
-                line += " (\(path.count) step(s) away)"
-            }
-        }
-        return [Self.note(line)]
-    }
-
-    private func find(_ text: String) -> [ScriptEffect] {
-        guard !text.isEmpty else { return [Self.note("Usage: mapper find <text>")] }
-        let needle = text.lowercased()
-        let matches = graph.rooms.values
-            .filter { !$0.uid.hasPrefix("*") && $0.name.lowercased().contains(needle) }
-            .sorted { $0.uid < $1.uid }
-            .prefix(20)
-        guard !matches.isEmpty else { return [Self.note("No rooms matching '\(text)'.")] }
-        var effects: [ScriptEffect] = [Self.note("Rooms matching '\(text)':")]
-        for room in matches {
-            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(areaName(room.area))"))
-        }
-        return effects
-    }
-
-    /// `mapper depth [rooms]` — show or set how far the map draws.
-    private func depthCommand(_ arg: String) -> [ScriptEffect] {
-        let trimmed = arg.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else {
-            return [Self.note("Map scan depth: \(scanDepth) rooms.")]
-        }
-        guard let value = Int(trimmed) else {
-            let range = "\(Self.scanDepthRange.lowerBound)–\(Self.scanDepthRange.upperBound)"
-            return [Self.note("Usage: mapper depth <rooms> (\(range))")]
-        }
-        setScanDepth(value)
-        return [Self.note("Map scan depth set to \(scanDepth) rooms.")]
-    }
-
-    /// `mapper blink [on|off]` — toggle the PK warning animation.
-    private func blinkCommand(_ arg: String) -> [ScriptEffect] {
-        switch arg.lowercased() {
-        case "on": setPKBlink(true); return [Self.note("PK warning blink: on.")]
-        case "off": setPKBlink(false); return [Self.note("PK warning blink: off.")]
-        case "": return [Self
-                .note("PK warning blink is \(pkBlink ? "on" : "off"). Use 'mapper blink on|off'.")]
-        default: return [Self.note("Usage: mapper blink on|off")]
-        }
-    }
-
-    private func helpOutput() -> [ScriptEffect] {
-        [
-            "mapper goto <room>   — speedwalk to a room (portals allowed)",
-            "mapper walkto <room> — walk to a room (no portals)",
-            "mapper where [room]  — show a room and its distance",
-            "mapper find <text>   — search rooms by name",
-            "mapper note [text]   — note the current room (empty clears it)",
-            "mapper notes         — list rooms that have notes",
-            "mapper depth [n]     — how many rooms to draw outward",
-            "mapper blink [on|off]— toggle the PK-room warning animation"
-        ].map { Self.note($0) }
-    }
-
-    private func areaName(_ key: String?) -> String {
-        key.flatMap { graph.areas[$0]?.name } ?? key ?? "?"
-    }
-
-    private static func note(_ text: String) -> ScriptEffect {
-        .colourNote([NoteSegment(text: text, foreground: "#7FB0FF")])
     }
 
     // MARK: - Lifecycle

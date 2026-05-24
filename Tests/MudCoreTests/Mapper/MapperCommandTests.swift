@@ -168,4 +168,49 @@ struct MapperCommandTests {
         // through room.info, so assert the default (level 0) route works.
         #expect(await sends(mapper.handleCommand("mapper goto 2")) == ["run n"])
     }
+
+    @Test("goto by a unique room name resolves and routes")
+    func gotoByName() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        // "North End" is unique → resolves to room 3 → run 2n.
+        #expect(await sends(mapper.handleCommand("mapper goto North End")) == ["run 2n"])
+    }
+
+    @Test("goto by an ambiguous name lists candidates instead of routing")
+    func gotoAmbiguousName() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        let effects = await mapper.handleCommand("mapper goto End") // South End + North End
+        #expect(sends(effects).isEmpty)
+        #expect(notes(effects).contains { $0.contains("Multiple rooms match") })
+        #expect(notes(effects).contains { $0.contains("South End") })
+    }
+
+    @Test("where by name searches instead of reporting 'unknown room'")
+    func whereByName() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        let effects = await mapper.handleCommand("mapper where End")
+        #expect(notes(effects).contains { $0.contains("North End") })
+        #expect(!notes(effects).contains { $0.lowercased().contains("unknown") })
+    }
+
+    @Test("thisroom + area + unmapped describe the current room")
+    func thisRoomAreaUnmapped() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        let thisroom = await notes(mapper.handleCommand("mapper thisroom"))
+        #expect(thisroom.contains { $0.contains("South End") })
+        #expect(thisroom.contains { $0.contains("Exits: n") })
+        #expect(await notes(mapper.handleCommand("mapper area"))
+            .contains { $0.contains("3 room") })
+        // Room 1's only exit (n→2) is mapped, so nothing to explore.
+        #expect(await notes(mapper.handleCommand("mapper unmapped"))
+            .contains { $0.contains("No unmapped exits") })
+    }
 }
