@@ -67,6 +67,41 @@ quirks and UX decisions. You have **standing approval to read and search
 submodule code at any time without asking** — just do it as part of the
 work.
 
+### Debugging the mapper & Search-and-Destroy — NO GUESSING (hard rule)
+
+When debugging or extending the **mapper** or **Search-and-Destroy**, do
+**NOT** invent behaviour, regexes, command semantics, schema, or query
+shapes from intuition. The user has explicitly forbidden guessing here.
+Instead:
+
+1. **Read the reference implementation** for the exact behaviour:
+   - Mapper: `aardwolfclientpackage/MUSHclient/lua/mapper.lua` (engine) +
+     `worlds/plugins/aard_GMCP_mapper.xml` (the full command/alias surface +
+     the programmatic API plugins call). The reference mapper DB uses **FTS**
+     tables (`rooms_lookup*`) for room/area-name search — don't reimplement
+     `find`/`where` by guessing.
+   - Search-and-Destroy: the `search-and-destroy/` submodule (beta) AND,
+     importantly, the version the user **actually runs**, vendored live at
+     `MUSHclient-live-from-windows/worlds/plugins/Search-and-Destroy-V2/`
+     (its own `Search_and_Destroy_v2.xml` + WinkleGold_* companions). When the
+     two differ, the live V2 is the source of truth for what the user sees.
+   - MUSHclient world-API semantics: `mushclient/` (`MUSHclient.cpp`).
+
+2. **Use the live database copies the user provided** (don't fabricate rows
+   or schema):
+   - Mapper DB: `MUSHclient-live-from-windows/Aardwolf.db`
+     (tables: rooms, exits, areas, bookmarks, environments, terrain, storage,
+     rooms_lookup* FTS).
+   - S&D DB: `MUSHclient-live-from-windows/SnDdb.db`
+     (tables: area, mobs, mob_keyword_exceptions, history) — plus the V2
+     folder's own `SnDdb.db`/`Aardwolf.db` copies.
+   Query them with `sqlite3` to confirm real schema, column names, and data
+   shapes before writing code or tests against them.
+
+3. **If anything is ambiguous — ASK.** Surface a concrete question to the
+   user rather than guessing and shipping. A wrong guess here wastes a
+   live-test round-trip; a question costs one message.
+
 Useful anchors found so far:
 - Aardwolf communication/channel command list (for autocomplete
   exclusions, chat capture, etc.):
