@@ -30,7 +30,7 @@ struct SearchAndDestroyCampaignTests {
         // Feed the MUD's cp info response, line by line, as the session would.
         var published: [ScriptEffect] = []
         for line in Self.cpInfoOutput {
-            published += await host.process(line)
+            published += await host.process(line).effects
         }
 
         // cp_info_end (fired by the trailing blank line) sets current_activity
@@ -42,6 +42,22 @@ struct SearchAndDestroyCampaignTests {
         let model = await (host.model).flatMap(SearchAndDestroyModel.decode)
         #expect(model?.activity == "cp", "published model activity should be 'cp'")
         #expect(model?.playerOnCP == true)
+    }
+
+    @Test("cp check scrape output is gagged from the window (omit_from_output)")
+    func cpCheckLinesAreGagged() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // `trg_cp_check_gag_dead` is enabled by default with omit_from_output —
+        // a real recorded trailer line must be gagged from the window. This
+        // proves S&D's gag now reaches the session (process returns gag=true).
+        let trailer = await host.process(
+            "Note: Dead means that the target is dead, not that you have killed it."
+        )
+        #expect(trailer.gag, "the cp-check trailer must be gagged")
+        // An ordinary game line is never gagged.
+        let normal = await host.process("A goblin hits you.")
+        #expect(!normal.gag)
     }
 
     @Test("cp_info_end no longer throws (sendto is defined; DoAfterSpecial works)")

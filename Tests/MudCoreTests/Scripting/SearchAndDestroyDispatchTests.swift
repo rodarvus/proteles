@@ -190,7 +190,7 @@ struct SearchAndDestroyDispatchTests {
         try await host.load()
         // An empty line matches nothing → no effects; arbitrary game lines must
         // also stay well-behaved (no throw / crash).
-        #expect(await host.process("").isEmpty)
+        #expect(await host.process("").effects.isEmpty)
         _ = await host.process("You receive 5 experience points.")
     }
 }

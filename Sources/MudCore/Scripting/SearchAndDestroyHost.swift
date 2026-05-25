@@ -175,14 +175,19 @@ public actor SearchAndDestroyHost {
     // MARK: - Dispatch (the session drives these)
 
     /// Run an incoming MUD line through S&D's triggers, returning the outward
-    /// effects (sends/echoes/published model). Enable/disable effects S&D's
-    /// Lua emitted are applied to the host's own engines, not returned.
-    public func process(_ line: String) async -> [ScriptEffect] {
+    /// effects (sends/echoes/published model) and whether any matched trigger
+    /// gags the line (`omit_from_output` — S&D's cp info/check scrape triggers
+    /// all set it, so its internal command output never reaches the window).
+    /// Enable/disable effects S&D's Lua emitted are applied to the host's own
+    /// engines, not returned.
+    public func process(_ line: String) async -> (effects: [ScriptEffect], gag: Bool) {
         var out: [ScriptEffect] = []
+        var gag = false
         for firing in triggers.process(line) {
+            if firing.gag { gag = true }
             out += await applyFiring(send: firing.send, script: firing.script, match: firing.match)
         }
-        return out
+        return (out, gag)
     }
 
     /// Offer a typed command to S&D's aliases. Returns the resulting effects,

@@ -7,27 +7,34 @@ public extension SessionController {
     /// afterwards so echoes land just below the line that produced them.
     internal func appendLineThroughScripts(_ line: Line) async {
         guard let scriptEngine else {
-            await scrollbackStore.append(line)
-            await applySearchAndDestroyLine(line.text)
+            // S&D matches the raw line on its own runtime; its scrape triggers
+            // gag their own command output (cp info/check) from the window.
+            let sndGag = await applySearchAndDestroyLine(line.text)
+            if !sndGag { await scrollbackStore.append(line) }
             return
         }
         let disposition = await scriptEngine.process(line)
-        if !disposition.gag {
+        // S&D matches the raw line independently of the user's scripts (its own
+        // runtime), so feed it the original text regardless of the user gag —
+        // and let *its* gag suppress the line too (cp info/check scrape output).
+        let sndGag = await applySearchAndDestroyLine(line.text)
+        if !disposition.gag, !sndGag {
             await scrollbackStore.append(disposition.replacement ?? line)
         }
         await applyScriptEffects(disposition.effects)
-        // S&D matches the raw line independently of the user's scripts (it runs
-        // on its own runtime), so feed it the original text regardless of gag.
-        await applySearchAndDestroyLine(line.text)
     }
 
     /// Run a received line through Search-and-Destroy's triggers and apply the
-    /// effects it produced (sends, echoes, a re-published model). No-op when no
+    /// effects it produced (sends, echoes, a re-published model). Returns
+    /// whether S&D gagged the line (`omit_from_output`). No-op (false) when no
     /// S&D host is attached.
-    private func applySearchAndDestroyLine(_ text: String) async {
-        guard let searchAndDestroy else { return }
-        await applyScriptEffects(searchAndDestroy.process(text))
+    @discardableResult
+    private func applySearchAndDestroyLine(_ text: String) async -> Bool {
+        guard let searchAndDestroy else { return false }
+        let result = await searchAndDestroy.process(text)
+        await applyScriptEffects(result.effects)
         await rearmTimerLoopIfSnDScheduled()
+        return result.gag
     }
 
     /// If S&D scheduled a `DoAfter`/`DoAfterSpecial` one-shot during the last
