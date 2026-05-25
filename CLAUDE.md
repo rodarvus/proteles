@@ -4,15 +4,15 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-24)
+## Current status (2026-05-25)
 
-**Phases 0–6 complete (shipped through `v0.0.6`); mapper + lsqlite3 +
-Search-and-Destroy + their full parity landed on `main` since (unreleased,
-~27 commits ahead of `v0.0.6`).** Read **PLAN.md** for the full status table +
-decision log (D-01…D-30).
+**Phases 0–6 complete and shipped as `v0.1.0` — the first tagged release that
+includes the native mapper, lsqlite3, and Search-and-Destroy with live
+campaign/quest detection verified against the user's live MUD.** Read
+**PLAN.md** for the full status table + decision log (D-01…D-31).
 
-**Mapper + S&D parity is now functionally complete (pending the user's live
-verification):** the full `aard_GMCP_mapper` command surface
+**Mapper + S&D parity is functionally complete and live-verified:** the full
+`aard_GMCP_mapper` command surface
 (goto/walkto/where/find/findpath/portals/portal/fullportal/delete-portal/purge,
 cexit/cexits/fullcexit, notes/area/thisroom/unmapped, purgeroom/purgezone,
 reset/backup, room flags) is native against the read-compatible DB; S&D runs
@@ -21,6 +21,22 @@ parity in the curated bindings (EnableTriggerGroup — the live-campaign blocker
 DoAfterSpecial; AddTriggerEx/SetTriggerOption; EnableAlias; colour/sendto/
 trigger_flag constants) + `Execute("mapper goto")` re-entering the command
 pipeline to drive the native mapper. See D-30.
+
+**Debugging S&D — use the session transcript (D-31).** Every connect
+auto-writes a timestamped, human-readable `.log` (`SessionTranscript`) beside
+the binary `.jsonl` recording, under
+`~/Library/Application Support/com.proteles.ProtelesApp/recordings/`. It logs
+RECV/SEND/INPUT/NOTE/GMCP with ms timestamps — the local events the wire
+recording can't see. When live behaviour diverges from a passing unit test,
+**read a captured transcript first** rather than guessing. The S&D
+campaign-detection saga (six failed guess-fixes) was solved in one pass once
+the transcript existed: root cause was `gmkw`'s `math.random(2 +
+round_banker(len*0.5), len)` reversing for short single-word mobs (e.g.
+"a dog" → `math.random(4,3)`, which Lua 5.1 rejects), and a Lua error discards
+*all* effects accumulated in that chunk (so the panel publish silently
+vanished). Latent upstream-script footguns like this get a curated-binding
+shim (we clamp `math.random`, parallel to the `os.clock` wall-time override) —
+**never** a `core.lua` edit.
 
 Done and live: connect/telnet/MCCP2/ANSI/scrollback; prompt-driven autologin
 + autoreconnect; GMCP + status HUD + chat capture; command history/completion;

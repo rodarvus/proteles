@@ -3,9 +3,10 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: pre-release, but daily-usable.** Connect, play, script, map, and
-> run the Aardwolf plugin ecosystem today. There's no signed download yet —
-> build it from source (below). The design lives in **[PLAN.md](PLAN.md)**.
+> **Status: `v0.1.0` — first tagged release, daily-usable.** Connect, play,
+> script, map, and run the Aardwolf plugin ecosystem today. There's no signed
+> download yet — build it from source (below). The design lives in
+> **[PLAN.md](PLAN.md)**.
 
 ---
 
@@ -57,6 +58,13 @@ for the modern Mac — no Wine, no VM, no emulator.
 - Detects campaigns/quests, finds + navigates to targets (`xcp`, `nx`, `xrt`,
   `go`, …), scans, and keeps its own `SnDdb.db` (import via **Databases ▸
   Import Search & Destroy Database**).
+
+**Session recording**
+- Every connect auto-records two files under `~/Library/Application
+  Support/com.proteles.ProtelesApp/recordings/`: a replayable binary capture
+  (`.jsonl`, raw wire bytes) and a **human-readable, timestamped transcript**
+  (`.log`) that logs local events the wire capture can't — typed input, sends,
+  script/echo output, and GMCP — for after-the-fact debugging.
 
 TLS is deferred to post-1.0 (issue #3) — the client is plain telnet for now.
 
@@ -115,7 +123,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~698 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~731 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -126,7 +134,7 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-30).
+  the append-only decision log (D-01…D-31).
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
 

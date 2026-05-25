@@ -105,12 +105,9 @@ struct SearchAndDestroyCampaignTests {
         s:close()
         """)
 
-        var notes: [String] = []
         func feed(_ lines: [String]) async {
             for line in lines {
-                for effect in await host.process(line).effects {
-                    if case .echo(let text) = effect { notes.append(text) }
-                }
+                _ = await host.process(line)
             }
         }
         _ = await host.scanForActivity()
@@ -128,14 +125,13 @@ struct SearchAndDestroyCampaignTests {
             "Note: Dead means that the target is dead, not that you have killed it.",
             ""
         ])
-        let dbg = notes.filter { $0.hasPrefix("[SnD-DBG]") }
-        #expect(dbg.contains { $0.contains("cp_check_end") }, "cp_check_end must fire on the cp-check blank")
-        #expect(
-            dbg.contains { $0.contains("build_main_target_list") },
-            "build_main_target_list must run (it crashed on math.random for the 3-letter mob)"
-        )
+        // Pre-fix, build_main_target_list crashed on math.random for the
+        // 3-letter mob and the publish was lost; the model must now carry the
+        // built target list (proof the whole chain completed).
         let model = await host.model.flatMap(SearchAndDestroyModel.decode)
         #expect(model?.playerOnCP == true, "the campaign must be detected and published")
+        #expect((model?.targetCount ?? 0) > 0, "build_main_target_list must populate the target list")
+        #expect(model?.targets.isEmpty == false, "the published model must carry targets")
     }
 
     @Test("auto-detects an in-progress campaign on connect (no manual cp)")
@@ -278,30 +274,6 @@ struct SearchAndDestroyCampaignTests {
         // An ordinary game line is never gagged.
         let normal = await host.process("A goblin hits you.")
         #expect(!normal.gag)
-    }
-
-    @Test("the [SnD-DBG] trace fires during a cp scrape (debug instrumentation is live)")
-    func debugTraceEmitsNotes() async throws {
-        let host = try SearchAndDestroyHost()
-        try await host.load()
-        // do_cp_info → cp_info_line → cp_info_end are all wrapped to emit a
-        // `[SnD-DBG]` Note, captured here as `.echo` effects. This proves the
-        // tracing reaches the live trigger/timer call path (it's how we debug
-        // campaign detection from the session transcript).
-        var notes: [String] = []
-        func collect(_ effects: [ScriptEffect]) {
-            for effect in effects {
-                if case .echo(let text) = effect { notes.append(text) }
-            }
-        }
-        await collect(host.scanForActivity())
-        for line in Self.cpInfoOutput {
-            await collect(host.process(line).effects)
-        }
-        let dbg = notes.filter { $0.hasPrefix("[SnD-DBG]") }
-        #expect(dbg.contains { $0.contains("do_cp_info") }, "do_cp_info should be traced")
-        #expect(dbg.contains { $0.contains("cp_info_line") }, "cp_info_line should be traced")
-        #expect(dbg.contains { $0.contains("cp_info_end") }, "cp_info_end should be traced")
     }
 
     @Test("cp_info_end no longer throws (sendto is defined; DoAfterSpecial works)")

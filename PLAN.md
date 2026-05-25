@@ -5,9 +5,9 @@
 > project evolves; the **Decision Log** (§13) is append-only history and is
 > never edited, only superseded.
 
-**Last rewritten:** 2026-05-23 · **Latest release:** `v0.0.6` ·
-**HEAD:** native graphical mapper + lsqlite3 + Search-and-Destroy vendored
-(unreleased, on `main`).
+**Last rewritten:** 2026-05-25 · **Latest release:** `v0.1.0` (mapper +
+lsqlite3 + Search-and-Destroy, with live campaign/quest detection verified) ·
+**HEAD:** `v0.1.0` on `main`.
 
 ---
 
@@ -28,15 +28,16 @@ run the large Search-and-Destroy plugin natively.
 | Scripting foundation (triggers/aliases/timers, Lua, events, RPC) | ✅ shipped |
 | MUSHclient compat shim + XML loader + per-plugin envs | ✅ shipped |
 | Native-plugin host + 5 ported plugins | ✅ shipped |
-| Native graphical mapper + Dijkstra pathfinding + DB import | ✅ on `main` |
-| Full `mapper …` command surface (goto/where/portals/cexits/findpath/purge/…) | ✅ on `main` |
-| lsqlite3 (sandboxed `sqlite3`) for plugins | ✅ on `main` |
-| Search-and-Destroy live (campaign/quest detect, navigation, scan, DB import) | ✅ on `main` |
+| Native graphical mapper + Dijkstra pathfinding + DB import | ✅ shipped (`v0.1.0`) |
+| Full `mapper …` command surface (goto/where/portals/cexits/findpath/purge/…) | ✅ shipped (`v0.1.0`) |
+| lsqlite3 (sandboxed `sqlite3`) for plugins | ✅ shipped (`v0.1.0`) |
+| Search-and-Destroy live (campaign/quest detect, navigation, scan, DB import) | ✅ shipped (`v0.1.0`) |
+| Session recording (replayable `.jsonl`) + timestamped transcript (`.log`) | ✅ shipped (`v0.1.0`) |
 | Preferences UI, themes, notifications, logging, macros | ⬜ Phase 7 |
 | Signing/notarization/updater/release | ⬜ Phase 8 |
 | iOS/iPad port | ⬜ Phase 9 |
 
-~698 tests across ~155 suites; four gates green (`swift build`,
+~731 tests across ~159 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
@@ -487,6 +488,7 @@ instead.
 | D-28 | 2026-05-23 | **Search-and-Destroy vendored natively:** reuse its `core.lua` logic verbatim on a *dedicated* Lua runtime with curated bindings (not the generic mush shim); parse its triggers/aliases/timers from XML and run them on the host's own engines; native SwiftUI panel fed by a published JSON model (`proteles.publish`, inverse of GMCP-in); `SnDdb.db` import. Required shared fixes: `PatternMatcher` rewrites ICU-incompatible named groups to `gN`; `setMatchGlobals` puts named captures on the `matches` table; `PluginMapping.timer` honours `script=`; a tolerant XML normaliser escapes `<`/`>` only inside attribute values (S&D's `match=` regexes use `(?<name>)` + lookbehinds that XMLParser rejects) | adopted |
 | D-29 | 2026-05-23 | **Mapper `CallPlugin` bridge:** the native mapper answers `CallPlugin(<mapperID>, fn, …)` (get_current_room/getkeyword/override_continents/find) and delivers results back to plugins via `OnPluginBroadcast` (500/501/502), so plugins that depend on the mapper (S&D) work against the native one | adopted |
 | D-30 | 2026-05-24 | **S&D parity = glue, not re-implementation.** S&D runs its own commands (xcp/nx/xrt/go/scan/consider) verbatim; we only (a) reach MUSHclient world-API parity in the curated bindings — incl. `EnableTriggerGroup` (the live-campaign blocker), `DoAfterSpecial`, `AddTriggerEx`/`SetTriggerOption` (runtime triggers added to the host's own engine), `EnableAlias`, colour/`sendto`/`trigger_flag` constants — and (b) route S&D's `Execute("mapper goto <id>")` back through Proteles' command pipeline so it drives the **native** mapper. S&D's navigation thus needs no area data of ours: its hardcoded `areaDefaultStartRooms` (323 areas) resolves `xrt <area>` → room id → `mapper goto`. The mapper's own `aard_GMCP_mapper` command surface (goto/walkto/where/find/findpath/portals/cexits/purge/notes/reset/backup/room-flags) is reimplemented natively against the read-compatible DB. **NO GUESSING rule** (CLAUDE.md): mapper/S&D work reads the reference + the live `Aardwolf.db`/`SnDdb.db`, never intuition | adopted |
+| D-31 | 2026-05-25 | **Observability before guessing; clamp Lua footguns in the curated bindings.** Six attempts to fix S&D campaign detection each passed synthetic unit tests but failed live — the tests didn't capture the live runtime's behaviour. Built a **timestamped session transcript** (`SessionTranscript`, a `.log` paired with the binary recording) logging local events the wire capture can't (input/sends/notes/GMCP). One captured transcript located the true root cause in one pass: the chain fired correctly, but `build_main_target_list` → `gmkw` computed `math.random(2 + round_banker(len*0.5), len)`, whose lower bound exceeds the upper for short single-word mob names (e.g. "a dog" → "dog" → `math.random(4,3)`), which Lua 5.1 rejects as "interval is empty" — and **a Lua error discards every effect accumulated in that chunk**, so the panel publish silently vanished. Fix: clamp a reversed `math.random` interval in S&D's curated bindings (parallel to the `os.clock` wall-time override), `core.lua` left verbatim. Lesson: when synthetic tests pass but live fails, **add observability first**; latent upstream-script footguns get a curated-binding shim, never a core.lua edit | adopted |
 
 ---
 
