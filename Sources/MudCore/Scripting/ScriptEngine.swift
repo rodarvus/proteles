@@ -54,8 +54,7 @@ public actor ScriptEngine {
     /// (runs in the shared globals).
     var automationOwners: [UUID: String] = [:]
 
-    /// Max `.execute` re-expansions before bailing (MUSHclient's value).
-    private static let maxExecuteDepth = 20
+    private static let maxExecuteDepth = 20 // max .execute re-expansions (MUSHclient)
 
     /// The well-known id of the Aardwolf GMCP-handler plugin. Native GMCP is
     /// handled in Swift, but plugins gate `OnPluginBroadcast` on this id, so
@@ -513,6 +512,18 @@ public actor ScriptEngine {
             if !allow { blocked = true }
         }
         return (blocked, effects)
+    }
+
+    /// Re-fire a GMCP `OnPluginBroadcast(1, handlerID, "GMCP", package)` for a
+    /// package already in `proteles.gmcp` (no re-apply) — nudges a plugin loaded
+    /// *after* its trigger package arrived (dinv inits on a char.base-while-active).
+    public func deliverGMCPBroadcast(package: String) async -> [ScriptEffect] {
+        await fireCallbackOnAll("OnPluginBroadcast", [
+            .number(1),
+            .string(Self.gmcpHandlerID),
+            .string("GMCP"),
+            .string(package)
+        ])
     }
 
     /// Deliver a mapper broadcast (e.g. 500 `found_paths`, 501 `unfound_paths`)

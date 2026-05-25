@@ -51,6 +51,9 @@ struct DinvLoadTests {
         #expect(errors.isEmpty, "dinv load/init raised Lua errors: \(errors)")
 
         // The command surface responds (no crash); `dinv help` should output.
+        // (The per-character DB opens inside dinv's `inv.init.atActive`
+        // wait.make coroutine, which yields on MUD probe responses — validated
+        // live, not here; this asserts the load + command surface only.)
         let help = await engine.expandInput("dinv help")
         #expect(luaErrors(help).isEmpty, "dinv help raised: \(luaErrors(help))")
         #expect(!help.isEmpty, "dinv help produced no output")

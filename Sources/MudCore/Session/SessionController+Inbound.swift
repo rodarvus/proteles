@@ -82,6 +82,20 @@ extension SessionController {
             await applyScriptEffects(searchAndDestroy.applyGMCP(package: message.package, json: message.json))
             await rearmTimerLoopIfSnDScheduled()
         }
+        // Load the armed dinv once the character is active (its init keys off the
+        // first char.base broadcast it sees while active — see D-32).
+        if armedDinvShouldLoad(for: message) { await loadPendingDinv() }
+    }
+
+    /// True when dinv is armed-but-unloaded and `message` is an active
+    /// `char.status` (Aardwolf state 3 = "Active"/ready — parsed leniently).
+    private func armedDinvShouldLoad(for message: GMCPMessage) -> Bool {
+        guard !dinvLoaded, pendingDinvStateDirectory != nil,
+              message.package.lowercased() == "char.status",
+              let data = message.json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return (object["state"] as? Int) == 3 || (object["state"] as? String) == "3"
     }
 
     /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,

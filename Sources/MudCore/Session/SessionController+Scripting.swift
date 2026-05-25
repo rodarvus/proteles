@@ -208,10 +208,26 @@ public extension SessionController {
     /// per-profile world-data dir, which is also the lsqlite3 sandbox root, so
     /// dinv's per-character `dinv.db` lands inside the sandbox. No-op without a
     /// script engine or the bundled assets.
-    func loadBundledDinv(stateDirectory: String) async {
-        guard let scriptEngine, let xml = DinvAssets.pluginXML,
+    ///
+    /// **Armed, not loaded immediately:** dinv inits on the first `char.base`
+    /// broadcast it sees *while the character is active*, and only then opens
+    /// its DB and initializes its modules. If loaded at connect time, the
+    /// `char.base` broadcasts that arrive during login (state ≠ active) latch
+    /// its "GMCP initialized" flag and init never runs. So we record the state
+    /// dir and load on the first active `char.status` (see ``loadPendingDinv``).
+    func armBundledDinv(stateDirectory: String) {
+        pendingDinvStateDirectory = stateDirectory
+    }
+
+    /// Load dinv now that the character is active (called from the GMCP path).
+    /// After install, replay a `char.base` broadcast so dinv — freshly loaded
+    /// with its init flag clear — catches it while active and initializes.
+    func loadPendingDinv() async {
+        guard !dinvLoaded, let stateDirectory = pendingDinvStateDirectory,
+              let scriptEngine, let xml = DinvAssets.pluginXML,
               let plugin = try? MUSHclientPluginLoader.parse(xml: xml)
         else { return }
+        dinvLoaded = true
         await scriptEngine.registerModules(DinvAssets.modules)
         let suffixed = stateDirectory.hasSuffix("/") ? stateDirectory : stateDirectory + "/"
         let context = PluginContext(
@@ -224,6 +240,7 @@ public extension SessionController {
             stateDirectory: suffixed
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        await applyScriptEffects(scriptEngine.deliverGMCPBroadcast(package: "char.base"))
         await persistVariablesIfDirty()
         restartTimerLoop()
     }

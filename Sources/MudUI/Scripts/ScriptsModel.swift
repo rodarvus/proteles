@@ -82,8 +82,9 @@ public final class ScriptsModel {
         }
         // The vendored dinv inventory manager (verbatim via the compat shim);
         // its per-character DB lives under the world-data dir (the sqlite root).
+        // Armed here; loaded once the character is active (D-32).
         if let worldDataDir {
-            await session.loadBundledDinv(stateDirectory: worldDataDir.path)
+            await session.armBundledDinv(stateDirectory: worldDataDir.path)
         }
     }
 

@@ -63,34 +63,29 @@ public actor SessionController {
     /// transitions for the UI to observe.
     ///
     /// The underlying ``NetworkConnection`` is a *one-shot* object —
-    /// recreated for every ``connect(to:autologin:)`` — so its own state
-    /// stream can't be observed across reconnects. The controller
-    /// re-publishes each connection's transitions here, giving the view
-    /// layer one stable stream for the whole app session.
+    /// recreated per ``connect(to:autologin:)``, so its own state stream can't
+    /// be observed across reconnects; the controller re-publishes each
+    /// connection's transitions here as one stable app-session stream.
     public nonisolated let connectionStates: AsyncStream<State>
     private let connectionStatesContinuation: AsyncStream<State>.Continuation
 
-    /// JSON model snapshots a plugin published (`proteles.publish`, e.g.
-    /// Search-and-Destroy's window state) — the UI subscribes and feeds its
-    /// panel model. Newest-only buffering: a late subscriber sees the latest.
+    /// JSON model snapshots a plugin published (`proteles.publish`, e.g. S&D's
+    /// window state) — the UI subscribes and feeds its panel. Newest-only.
     public nonisolated let publishedModels: AsyncStream<String>
     nonisolated let publishedModelsContinuation: AsyncStream<String>.Continuation
 
-    /// The current network connection, or `nil` between sessions. A fresh
-    /// instance is created per ``connect(to:autologin:)`` because
-    /// ``NetworkConnection`` finishes its byte stream on disconnect and
-    /// can't be reused.
+    /// The current network connection, or `nil` between sessions. Fresh per
+    /// ``connect(to:autologin:)`` — ``NetworkConnection`` finishes its byte
+    /// stream on disconnect and can't be reused.
     var connection: NetworkConnection?
 
-    /// Mirror of the active connection's state, kept so callers (and the
-    /// reconnect guard) can read it synchronously.
+    /// Mirror of the active connection's state, for synchronous reads.
     public private(set) var state: State = .disconnected
 
     var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
     private var stateForwardTask: Task<Void, Never>?
-    /// Drives the script engine's timers: sleeps until the next deadline,
-    /// fires the due timers, then loops. Restarted whenever timers change.
+    /// Drives the script timers (sleep→fire→loop); restarted when timers change.
     var timerTask: Task<Void, Never>?
     /// Drains the mapper's system-note stream (delayed cexit results) to output.
     var mapperNotesTask: Task<Void, Never>?
@@ -98,6 +93,10 @@ public actor SessionController {
     /// Re-entrancy guard for the `OnPluginSend` hook (a plugin may re-send,
     /// re-entering the hook); caps pathological loops.
     var pluginSendDepth = 0
+    /// Vendored dinv's state dir, armed at world-load; loaded lazily on the
+    /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
+    var pendingDinvStateDirectory: String?
+    var dinvLoaded = false
     /// Timestamped debug transcript paired with ``recorder`` (`.log` beside the
     /// `.jsonl`): logs local events the wire capture omits (input/sends/notes/GMCP).
     var transcript: SessionTranscript?
@@ -596,5 +595,6 @@ public actor SessionController {
         transcript = nil
         autologin = nil
         connection = nil
+        dinvLoaded = false // reloads on the next active char.status (e.g. reconnect)
     }
 }

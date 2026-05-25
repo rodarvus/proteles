@@ -90,30 +90,40 @@ public extension LuaRuntime {
     error_desc = error_desc or {}
 
     -- Output ----------------------------------------------------------------
+    -- MUSHclient line model: Tell/ColourTell APPEND to the current output line
+    -- (no newline); Note/ColourNote/AnsiNote/print FLUSH it. Plugins build
+    -- tagged rows like `ColourTell(prefix) .. AnsiNote(message)` expecting one
+    -- line. We buffer Tell text as a leading prefix and prepend it on flush, so
+    -- a tag + message land on the same line. (No pending ⇒ behaviour is the
+    -- plain Note/ColourNote, preserving the common single-call case.)
+    local __pending = ""
+    function Tell(text) __pending = __pending .. (text == nil and "" or tostring(text)) end
+    -- ColourTell(fore, back, text, ...): append each triple's text (the tag's
+    -- own colour isn't carried onto the buffered prefix yet).
+    function ColourTell(...)
+      local a, n = {...}, select("#", ...)
+      for i = 3, n, 3 do __pending = __pending .. (a[i] == nil and "" or tostring(a[i])) end
+    end
     function Note(text)
-      proteles.echo(text == nil and "" or tostring(text))
+      proteles.echo(__pending .. (text == nil and "" or tostring(text))); __pending = ""
     end
-
-    -- ColourNote(fore, back, text, fore2, back2, text2, ...): each (fore,
-    -- back, text) triple becomes a styled segment on one line. Colours are
-    -- coerced to strings ("" = default) and the whole triple list is handed
-    -- to the host, which renders one styled run per segment.
+    -- ColourNote(fore, back, text, ...): each triple → a styled segment on one
+    -- line. A pending Tell prefix leads as a default-colour segment.
     function ColourNote(...)
-      local args = {...}
-      local n = select("#", ...)
+      local a, n = {...}, select("#", ...)
       local coerced = {}
-      for i = 1, n do
-        local v = args[i]
-        coerced[i] = (v == nil) and "" or tostring(v)
+      if __pending ~= "" then
+        coerced[1], coerced[2], coerced[3] = "", "", __pending
+        __pending = ""
       end
-      proteles.colourNote(unpack(coerced, 1, n))
+      for i = 1, n do coerced[#coerced + 1] = (a[i] == nil) and "" or tostring(a[i]) end
+      proteles.colourNote(unpack(coerced, 1, #coerced))
     end
-    ColourTell = ColourNote
-    function Tell(text)
-      proteles.echo(text == nil and "" or tostring(text))
+    -- Render ANSI-SGR text in colour (often `AnsiNote(ColoursToANSI(text))`),
+    -- flushing any pending Tell prefix onto the same line.
+    function AnsiNote(text)
+      proteles.echoAnsi(__pending .. (text == nil and "" or tostring(text))); __pending = ""
     end
-    -- Render ANSI-SGR text in colour (often `AnsiNote(ColoursToANSI(text))`).
-    function AnsiNote(text) proteles.echoAnsi(text == nil and "" or tostring(text)) end
 
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end
