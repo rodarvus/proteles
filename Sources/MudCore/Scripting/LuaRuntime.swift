@@ -145,7 +145,7 @@ public actor LuaRuntime {
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup
+        case addTrigger, setTriggerGroup, enableAlias
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -379,6 +379,7 @@ public actor LuaRuntime {
         setHostFunction("doAfter", .doAfter)
         setHostFunction("addTrigger", .addTrigger)
         setHostFunction("setTriggerGroup", .setTriggerGroup)
+        setHostFunction("enableAlias", .enableAlias)
         // `proteles.gmcp`: live Lua-readable view of the latest GMCP state
         // (filled by ``applyGMCP``, e.g. `proteles.gmcp.char.vitals.hp`).
         lua_createtable(state, 0, 0)
@@ -394,16 +395,15 @@ public actor LuaRuntime {
         lua_setfield(state, -2, name)
     }
 
-    /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*`
-    /// function is called from Lua. Records the corresponding effect.
-    /// `nonisolated` (and reaches `effects` via `nonisolated(unsafe)`)
-    /// because it runs inside `lua_pcall` on the actor's executor.
+    /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*` function
+    /// is called from Lua; records the effect. `nonisolated` (reaching `effects`
+    /// via `nonisolated(unsafe)`) since it runs inside `lua_pcall` on the executor.
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
-             .addTrigger, .setTriggerGroup:
+             .addTrigger, .setTriggerGroup, .enableAlias:
             recordEffect(function, arguments)
             return []
         case .call:

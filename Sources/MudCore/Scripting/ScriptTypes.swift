@@ -88,6 +88,8 @@ public enum ScriptEffect: Sendable, Equatable {
     case enableTrigger(name: String, on: Bool)
     /// Enable/disable a named timer (MUSHclient `EnableTimer`).
     case enableTimer(name: String, on: Bool)
+    /// Enable/disable a named alias (MUSHclient `EnableAlias`).
+    case enableAlias(name: String, on: Bool)
     /// Enable/disable every trigger and timer in a named group (MUSHclient
     /// `EnableGroup`).
     case enableGroup(name: String, on: Bool)

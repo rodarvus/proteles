@@ -35,6 +35,7 @@ public actor SearchAndDestroyHost {
     /// toggle the right rule.
     private var triggerIDsByName: [String: UUID] = [:]
     private var timerIDsByName: [String: UUID] = [:]
+    private var aliasIDsByName: [String: UUID] = [:]
     /// Set when a `DoAfter`/`DoAfterSpecial` one-shot is scheduled, so the
     /// session knows to re-arm its timer loop. Cleared by ``takeDidScheduleTimer``.
     private var didScheduleTimer = false
@@ -155,13 +156,15 @@ public actor SearchAndDestroyHost {
         timers = TimerEngine()
         triggerIDsByName.removeAll()
         timerIDsByName.removeAll()
+        aliasIDsByName.removeAll()
 
         for trigger in plugin.triggers {
             guard (try? triggers.add(trigger)) != nil else { continue }
             if let name = trigger.name { triggerIDsByName[name] = trigger.id }
         }
         for alias in plugin.aliases {
-            try? aliases.add(alias)
+            guard (try? aliases.add(alias)) != nil else { continue }
+            if let name = alias.name { aliasIDsByName[name] = alias.id }
         }
         for timer in plugin.timers {
             guard let id = try? timers.add(timer) else { continue }
@@ -284,13 +287,8 @@ public actor SearchAndDestroyHost {
     /// if it's an outward effect the session should apply.
     private func applyHostInternalEffect(_ effect: ScriptEffect) -> Bool {
         switch effect {
-        case .enableTrigger(let name, let on):
-            if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
-        case .enableTimer(let name, let on):
-            if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
-        case .enableGroup(let name, let on):
-            triggers.setGroupEnabled(on, group: name)
-            timers.setGroupEnabled(on, group: name)
+        case .enableTrigger, .enableTimer, .enableAlias, .enableGroup:
+            applyEnableEffect(effect)
         case .scheduleAfter(let seconds, let isScript, let body):
             scheduleOneShot(after: seconds, isScript: isScript, body: body)
         case .addTrigger(let name, let pattern, let flags, let script):
@@ -301,6 +299,23 @@ public actor SearchAndDestroyHost {
             return false
         }
         return true
+    }
+
+    /// Apply a name-based enable/disable to the matching engine.
+    private func applyEnableEffect(_ effect: ScriptEffect) {
+        switch effect {
+        case .enableTrigger(let name, let on):
+            if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
+        case .enableTimer(let name, let on):
+            if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
+        case .enableAlias(let name, let on):
+            if let id = aliasIDsByName[name] { aliases.setEnabled(on, id: id) }
+        case .enableGroup(let name, let on):
+            triggers.setGroupEnabled(on, group: name)
+            timers.setGroupEnabled(on, group: name)
+        default:
+            break
+        }
     }
 
     /// MUSHclient AddTrigger flag bits (mushclient/flags.h).

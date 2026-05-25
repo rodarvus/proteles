@@ -57,6 +57,8 @@ extension LuaRuntime {
             effects.append(.enableTrigger(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
         case .enableTimer:
             effects.append(.enableTimer(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
+        case .enableAlias:
+            effects.append(.enableAlias(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
         case .enableGroup:
             effects.append(.enableGroup(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
         case .doAfter:

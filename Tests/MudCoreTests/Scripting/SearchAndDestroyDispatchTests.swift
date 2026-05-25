@@ -153,6 +153,13 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.evaluate("tostring(testfired)") == "false")
     }
 
+    @Test("EnableAlias records a host-internal enable effect")
+    func enableAliasRecorded() async throws {
+        let runtime = try LuaRuntime()
+        let effects = try await runtime.run("proteles.enableAlias('a_test', true)")
+        #expect(effects.contains(.enableAlias(name: "a_test", on: true)))
+    }
+
     @Test("MUSHclient colour built-ins S&D calls are bound (no nil-call error)")
     func colourBuiltinsBound() async throws {
         let host = try SearchAndDestroyHost()
