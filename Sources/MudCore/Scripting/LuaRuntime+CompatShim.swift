@@ -258,6 +258,12 @@ public extension LuaRuntime {
       if name == "enable_timers" or name == "enable_triggers" then return 1 end
       return 0
     end
+    -- String-valued world/plugin options. We don't persist these yet; return a
+    -- blank string (the MUSHclient default for an unset alpha option) and accept
+    -- writes as eOK so plugins that read/write them (e.g. autobypass on reload)
+    -- don't error.
+    function GetAlphaOption(name) return "" end
+    function SetAlphaOption(name, value) return error_code.eOK end
     -- Convert a plain (literal/wildcard) match to a regex, like MUSHclient's
     -- MakeRegularExpression — escape regex metacharacters so wait.match treats
     -- its text literally.

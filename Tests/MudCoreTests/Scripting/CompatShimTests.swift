@@ -88,6 +88,15 @@ struct CompatShimTests {
         #expect(try await lua.number("error_code.eOK") == 0)
     }
 
+    @Test("GetAlphaOption returns a blank string; SetAlphaOption returns eOK")
+    func alphaOptions() async throws {
+        let lua = try await shimmed()
+        // Plugins (e.g. autobypass on reload) read/write string options; the
+        // stubs must not error — unset reads are "" and writes are eOK.
+        #expect(try await lua.string("GetAlphaOption('anything')").isEmpty)
+        #expect(try await lua.number("SetAlphaOption('k', 'v')") == 0)
+    }
+
     @Test("Send_GMCP_Packet produces a sendGMCP effect")
     func sendGMCPPacket() async throws {
         let lua = try await shimmed()
