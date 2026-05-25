@@ -4,23 +4,85 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-25)
+## Current status (2026-05-26)
 
 **Phases 0–6 complete and shipped as `v0.1.0` — the first tagged release that
 includes the native mapper, lsqlite3, and Search-and-Destroy with live
 campaign/quest detection verified against the user's live MUD.** Read
 **PLAN.md** for the full status table + decision log (D-01…D-32).
 
-**In progress (unreleased, on `main`): the dinv inventory manager, run verbatim
-through the generic `mush.lua` compat shim (D-32 — not a bespoke host; dinv has
-no miniwindow).** Vendored under `Resources/dinv`; loads + `dinv help` works.
-Closing its API surface added reusable shim infrastructure: a comprehensive
-`utils` library, a real `AddAlias` dynamic-alias path, the `OnPluginSend` hook
-(dinv's `dbot.execute` framework), gmcphelper scalar-stringification, and
-Windows-path (`\`→`/`) normalization at the fs/sqlite boundary. **Next: validate
-dinv's `build`/refresh coroutine flow LIVE via the session transcript** (the
-full init-active DB-open depends on the real login/GMCP sequence — same
-discipline as the S&D saga: read the transcript, don't guess).
+### NEXT SESSION — start here: implement the aardwolfclientpackage plugins
+
+**Decision (2026-05-26): pause dinv; pivot to implementing the
+`aardwolfclientpackage` MUSHclient plugins as a deliberate effort, starting
+with `aard_GMCP_handler` (dinv's hard dependency — see below).** The 43 plugin
+XMLs live in `aardwolfclientpackage/MUSHclient/worlds/plugins/`. The first
+batch that matters for the Aardwolf core experience (and that other plugins
+depend on):
+- **`aard_GMCP_handler.xml`** — provides the `sendgmcp *` alias
+  (`GMCP_Alias` → `Send_GMCP_Packet(wildcards[1])`, e.g.
+  `sendgmcp config prompt` → a real GMCP packet) AND *synthesises* `config`
+  GMCP packets from triggers (e.g. "You will now see prompts." →
+  `OnPluginTelnetSubnegotiation(201, 'config { "prompt":"YES" }')`). The whole
+  package assumes this handler is loaded. **dinv blocks on it.**
+- Then per the existing parity work: `aard_GMCP_mapper` (already native),
+  `aard_prompt_fixer`, `aard_chat_echo`, `aard_channels_fiendish`,
+  `aard_vital_shortcuts`, `aard_note_mode`, `aard_text_substitution`,
+  `aard_ASCII_map` (the last five already have *native* ports — decide
+  native-port vs. shim-verbatim per plugin, per the §7/§11 workflow: PROPOSE a
+  plan first and wait for approval).
+
+Per CLAUDE.md workflow: for each plugin, PROPOSE a plan (native feature vs.
+native Proteles plugin vs. shim-verbatim; trade-offs) and wait for approval
+before implementing.
+
+### PAUSED: dinv inventory manager (unreleased, on `main`)
+
+Run verbatim through the generic `mush.lua` compat shim (D-32 — not a bespoke
+host; dinv has no miniwindow). Vendored under `Resources/dinv`. **Init now
+works end-to-end** (loads, opens its per-character SQLite DB, runs
+`inv.items.build`) — the blocker was that GMCP-broadcast callbacks didn't run
+through `consumeRegistrations`, so a `wait.time` resume timer scheduled from
+`OnPluginBroadcast` was dropped and the init coroutine hung. Fixed in
+`fireCallbackOnAll` (commit "consume registrations from OnPluginBroadcast").
+
+`dinv build` still fails. The live transcript
+(`session-20260525-233529.log`) pinpointed **three remaining blockers**, in
+priority order — *do not re-derive these, they're confirmed from the wire +
+reference*:
+1. **`aard_GMCP_handler` dependency (the big one).** dinv does
+   `Execute("sendgmcp config prompt")`/`invmon` and spins for a `config` GMCP
+   reply. `sendgmcp` is NOT a MUD command — it's an alias from
+   `aard_GMCP_handler.xml`. Without it the literal text hits the MUD ("That is
+   not a command.") and the reply never comes → 5s timeouts (prompt, invmon,
+   pagesize). **This is why we're doing aard_GMCP_handler first.**
+2. **`SetEchoInput` missing from the shim** (we have `GetEchoInput`). dinv's
+   `dbot.execute` path calls `SetEchoInput(false)` (dinv_dbot.lua:2554) → the
+   wait-coroutine dies. Trivial shim add.
+3. **`DoAfterSpecial` missing from the *generic* shim** — it exists only in
+   S&D's curated bindings (`SearchAndDestroyHost+Bindings.swift`). dinv uses it
+   in 5 places incl. the execute-queue's deferred re-arm → coroutine dies.
+   Trivial shim add (mirror the S&D impl).
+
+Cascade: #2/#3 kill coroutines in the `dbot.execute` command-queue/fence
+framework and #1 starves config detection, so commands pile up, `fence()`
+blocks its full 30s, then a flood of `echo { DINV fence N }` dumps at once;
+inventory discovery reports "resource is in use" + "timeout"; build ends with 0
+items. Resume dinv AFTER aard_GMCP_handler lands, then add `SetEchoInput` +
+`DoAfterSpecial` to `LuaRuntime+CompatShim.swift`, then re-test live.
+
+**Still on `main`: temporary dinv init-chain debug instrumentation** —
+`DinvAssets.debugTraceSource` (the `[dinv-DBG]` entry/exit markers + forced
+`dbot.debug`), installed in `SessionController.loadPendingDinv` before the
+`char.base` broadcast. dinv is also still armed-to-load on connect
+(`ScriptsModel.load` → `armBundledDinv`), so every live session emits the
+`[dinv-DBG]` trace + dinv's timeouts. **Strip the trace (and consider gating
+the dinv arming) when dinv work resumes** — it served its purpose.
+
+Reusable shim infra already added closing dinv's API surface: a comprehensive
+`utils` library; a real `AddAlias` dynamic-alias path; the `OnPluginSend` hook;
+gmcphelper scalar-stringification; Windows-path (`\`→`/`) normalization;
+`IsTrigger`/`IsTimer`/`IsAlias` existence checks; `runInPluginEnvironment`.
 
 **Mapper + S&D parity is functionally complete and live-verified:** the full
 `aard_GMCP_mapper` command surface
