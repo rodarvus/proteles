@@ -83,6 +83,47 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.activity == "cp")
     }
 
+    @Test("a new campaign after completing one is still detected (group re-enable)")
+    func newCampaignAfterCompletionDetected() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        await host.setConnected(true)
+        _ = await host.applyGMCP(
+            package: "char.status",
+            json: #"{"level":8,"state":3,"pos":"Standing"}"#
+        )
+        for i in 1...4 {
+            _ = await host.fireTimers(at: Date().addingTimeInterval(Double(i) * 0.6))
+        }
+
+        func feedCampaign() async {
+            for line in [
+                "The targets for this campaign are:",
+                "Find and kill 1 * a pink fairy armadillo (Aardwolf Zoological Park)",
+                ""
+            ] {
+                _ = await host.process(line)
+            }
+        }
+        func onCP() async -> Bool {
+            await host.model.flatMap(SearchAndDestroyModel.decode)?.playerOnCP == true
+        }
+
+        await feedCampaign()
+        #expect(await onCP(), "first campaign should be detected")
+
+        // Complete it → do_cp_complete → player_not_on_cp → disables trg_campaign.
+        _ = await host.process("CONGRATULATIONS! You have completed your campaign.")
+        #expect(await !onCP(), "completing clears the campaign")
+
+        // Request a NEW campaign: do_cp_info re-enables trg_cp_info_targets. In
+        // MUSHclient an individual enable overrides a group disable; our group
+        // gate used to keep it dead, so the new campaign went undetected.
+        _ = await host.scanForActivity()
+        await feedCampaign()
+        #expect(await onCP(), "a new campaign after completing one must be detected")
+    }
+
     @Test("gmcp() stringifies scalar leaves so is_character_ready works")
     func gmcpScalarIsString() async throws {
         let host = try SearchAndDestroyHost()

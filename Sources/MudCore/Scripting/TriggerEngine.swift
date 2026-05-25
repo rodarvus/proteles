@@ -186,7 +186,6 @@ public struct TriggerEngine {
 
     private var triggers: [Trigger] = []
     private var matchers: [UUID: PatternMatcher] = [:]
-    private var disabledGroups: Set<String> = []
 
     public init() {}
 
@@ -221,9 +220,16 @@ public struct TriggerEngine {
         triggers[index].enabled = enabled
     }
 
-    /// Enable or disable every trigger in a group.
+    /// Enable or disable every trigger in a group — MUSHclient semantics: it
+    /// bulk-sets each member's individual `enabled` flag (it is *not* a separate
+    /// gate). So a later `EnableTrigger(name, true)` re-arms one member even
+    /// after its group was disabled — which S&D relies on (it disables the
+    /// `trg_campaign` group on cp-complete, then re-enables the entry trigger
+    /// for the next campaign).
     public mutating func setGroupEnabled(_ enabled: Bool, group: String) {
-        if enabled { disabledGroups.remove(group) } else { disabledGroups.insert(group) }
+        for index in triggers.indices where triggers[index].group == group {
+            triggers[index].enabled = enabled
+        }
     }
 
     /// Test `line` against every active trigger in order, returning the
@@ -234,7 +240,6 @@ public struct TriggerEngine {
 
         for trigger in triggers {
             guard trigger.enabled else { continue }
-            if let group = trigger.group, disabledGroups.contains(group) { continue }
             guard let match = matchers[trigger.id]?.match(line) else { continue }
 
             firings.append(TriggerFiring(

@@ -100,7 +100,6 @@ public struct TimerEngine {
 
     private var timers: [MudTimer] = []
     private var nextFire: [UUID: Date] = [:]
-    private var disabledGroups: Set<String> = []
     private let calendar: Calendar
 
     /// - Parameter calendar: used only for ``TimerSchedule/atTimeOfDay``.
@@ -136,9 +135,12 @@ public struct TimerEngine {
         timers[index].enabled = enabled
     }
 
-    /// Enable or disable every timer in a group.
+    /// Enable/disable every timer in a group (MUSHclient bulk-sets each member's
+    /// individual `enabled` flag; an individual enable later overrides).
     public mutating func setGroupEnabled(_ enabled: Bool, group: String) {
-        if enabled { disabledGroups.remove(group) } else { disabledGroups.insert(group) }
+        for index in timers.indices where timers[index].group == group {
+            timers[index].enabled = enabled
+        }
     }
 
     /// The earliest fire instant among the active timers, or `nil` when none
@@ -192,9 +194,7 @@ public struct TimerEngine {
     // MARK: - Private
 
     private func isActive(_ timer: MudTimer) -> Bool {
-        guard timer.enabled else { return false }
-        if let group = timer.group, disabledGroups.contains(group) { return false }
-        return true
+        timer.enabled
     }
 
     private func firstFire(for schedule: TimerSchedule, now: Date) -> Date {

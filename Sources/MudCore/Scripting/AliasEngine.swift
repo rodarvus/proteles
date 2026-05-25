@@ -90,7 +90,6 @@ public struct AliasEngine {
 
     private var aliases: [Alias] = []
     private var matchers: [UUID: PatternMatcher] = [:]
-    private var disabledGroups: Set<String> = []
 
     public init() {}
 
@@ -121,8 +120,12 @@ public struct AliasEngine {
         aliases[index].enabled = enabled
     }
 
+    /// Enable/disable every alias in a group (MUSHclient bulk-sets each
+    /// member's individual `enabled` flag; an individual enable later overrides).
     public mutating func setGroupEnabled(_ enabled: Bool, group: String) {
-        if enabled { disabledGroups.remove(group) } else { disabledGroups.insert(group) }
+        for index in aliases.indices where aliases[index].group == group {
+            aliases[index].enabled = enabled
+        }
     }
 
     /// Match `input` against the aliases in order. Empty result means no
@@ -133,7 +136,6 @@ public struct AliasEngine {
 
         for alias in aliases {
             guard alias.enabled else { continue }
-            if let group = alias.group, disabledGroups.contains(group) { continue }
             guard let match = matchers[alias.id]?.match(input) else { continue }
 
             firings.append(AliasFiring(
