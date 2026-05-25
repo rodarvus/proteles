@@ -269,24 +269,84 @@ public actor SearchAndDestroyHost {
     private func consume(_ effects: [ScriptEffect]) -> [ScriptEffect] {
         var out: [ScriptEffect] = []
         for effect in effects {
-            switch effect {
-            case .enableTrigger(let name, let on):
-                if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
-            case .enableTimer(let name, let on):
-                if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
-            case .enableGroup(let name, let on):
-                triggers.setGroupEnabled(on, group: name)
-                timers.setGroupEnabled(on, group: name)
-            case .scheduleAfter(let seconds, let isScript, let body):
-                scheduleOneShot(after: seconds, isScript: isScript, body: body)
-            case .publishModel(let json):
+            if case .publishModel(let json) = effect {
                 model = json
                 out.append(effect)
-            default:
+            } else if !applyHostInternalEffect(effect) {
                 out.append(effect)
             }
         }
         return out
+    }
+
+    /// Apply a host-internal automation effect (enable/timer/dynamic-trigger)
+    /// to the host's own engines. Returns `true` if it was consumed, `false`
+    /// if it's an outward effect the session should apply.
+    private func applyHostInternalEffect(_ effect: ScriptEffect) -> Bool {
+        switch effect {
+        case .enableTrigger(let name, let on):
+            if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
+        case .enableTimer(let name, let on):
+            if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
+        case .enableGroup(let name, let on):
+            triggers.setGroupEnabled(on, group: name)
+            timers.setGroupEnabled(on, group: name)
+        case .scheduleAfter(let seconds, let isScript, let body):
+            scheduleOneShot(after: seconds, isScript: isScript, body: body)
+        case .addTrigger(let name, let pattern, let flags, let script):
+            addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script)
+        case .setTriggerGroup(let name, let group):
+            setDynamicTriggerGroup(name: name, group: group)
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// MUSHclient AddTrigger flag bits (mushclient/flags.h).
+    private enum TriggerFlag {
+        static let enabled = 0x01
+        static let omitFromOutput = 0x04
+        static let ignoreCase = 0x10
+        static let regularExpression = 0x20
+    }
+
+    /// Register a trigger at runtime into the host's TriggerEngine (S&D's
+    /// scan/consider matchers via `AddTriggerEx`). The script name becomes the
+    /// MUSHclient-style call `fn(name, matches[0], matches)`.
+    private func addDynamicTrigger(name: String, pattern: String, flags: Int, script: String) {
+        let isRegex = flags & TriggerFlag.regularExpression != 0
+        let call = script.isEmpty ? nil
+            : "\(script)(\(Self.luaString(name)), matches[0], matches)"
+        let trigger = Trigger(
+            name: name,
+            pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
+            caseSensitive: flags & TriggerFlag.ignoreCase == 0,
+            enabled: flags & TriggerFlag.enabled != 0,
+            gag: flags & TriggerFlag.omitFromOutput != 0,
+            script: call
+        )
+        if let existing = triggerIDsByName[name] { triggers.remove(id: existing) }
+        guard (try? triggers.add(trigger)) != nil else { return }
+        triggerIDsByName[name] = trigger.id
+    }
+
+    /// Set a runtime trigger's group (so `EnableTriggerGroup` toggles it).
+    private func setDynamicTriggerGroup(name: String, group: String) {
+        guard let id = triggerIDsByName[name],
+              var trigger = triggers.allTriggers.first(where: { $0.id == id })
+        else { return }
+        trigger.group = group
+        triggers.remove(id: id)
+        if (try? triggers.add(trigger)) != nil { triggerIDsByName[name] = trigger.id }
+    }
+
+    /// A Lua string literal (escaped) for embedding a trigger name in a call.
+    private static func luaString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     /// Add a one-shot timer (MUSHclient `DoAfter`/`DoAfterSpecial`) to S&D's
@@ -316,14 +376,13 @@ public actor SearchAndDestroyHost {
     }
 
     /// Run a Lua chunk in S&D's runtime, returning the effects its output
-    /// calls produced (Note/ColourNote/Hyperlink/Send/…). Also captures the
-    /// latest published model snapshot into ``model``.
+    /// calls produced (Note/ColourNote/Hyperlink/Send/…). Host-internal effects
+    /// (enable/timer/addTrigger/publish) are applied via ``consume`` so the
+    /// engine state mirrors a real firing; the raw effects are still returned.
     @discardableResult
     public func run(_ script: String) async throws -> [ScriptEffect] {
         let effects = try await runtime.run(script)
-        for effect in effects {
-            if case .publishModel(let json) = effect { model = json }
-        }
+        _ = consume(effects)
         return effects
     }
 

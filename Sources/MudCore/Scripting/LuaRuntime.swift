@@ -145,6 +145,7 @@ public actor LuaRuntime {
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
+        case addTrigger, setTriggerGroup
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -376,16 +377,16 @@ public actor LuaRuntime {
         setHostFunction("enableTimer", .enableTimer)
         setHostFunction("enableGroup", .enableGroup)
         setHostFunction("doAfter", .doAfter)
-        // `proteles.gmcp` is a live, Lua-readable view of the latest GMCP
-        // state, populated by ``applyGMCP`` as messages arrive — e.g.
-        // `proteles.gmcp.char.vitals.hp`. Starts empty.
+        setHostFunction("addTrigger", .addTrigger)
+        setHostFunction("setTriggerGroup", .setTriggerGroup)
+        // `proteles.gmcp`: live Lua-readable view of the latest GMCP state
+        // (filled by ``applyGMCP``, e.g. `proteles.gmcp.char.vitals.hp`).
         lua_createtable(state, 0, 0)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
     }
 
-    /// Set `proteles[name]` (table assumed on top of the stack) to a C
-    /// closure routing to `id`.
+    /// Set `proteles[name]` (table on stack top) to a C closure routing to `id`.
     private nonisolated func setHostFunction(_ name: String, _ id: HostFunction) {
         lua_pushlightuserdata(state, Unmanaged.passUnretained(self).toOpaque())
         lua_pushinteger(state, lua_Integer(id.rawValue))
@@ -401,7 +402,8 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter:
+             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
+             .addTrigger, .setTriggerGroup:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -474,10 +476,9 @@ public actor LuaRuntime {
         }
     }
 
-    /// Set the `matches` (integer-keyed, 0-based) and `named` globals from
-    /// trigger captures. Named captures are *also* placed on the `matches`
-    /// table by name — MUSHclient's wildcards table carries both numbered and
-    /// named keys, which plugins read as `wildcards.<name>`.
+    /// Set the `matches` (0-based) + `named` globals from trigger captures.
+    /// Named captures also go on `matches` by name (MUSHclient's wildcards
+    /// table carries both, read as `wildcards.<name>`).
     func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
         lua_createtable(state, Int32(captures.count), Int32(named.count))
         for (index, value) in captures.enumerated() {

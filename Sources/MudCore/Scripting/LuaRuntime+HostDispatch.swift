@@ -65,6 +65,18 @@ extension LuaRuntime {
                 isScript: Self.argBool(arguments, 2),
                 body: Self.argString(arguments, 1)
             ))
+        case .addTrigger:
+            effects.append(.addTrigger(
+                name: Self.argString(arguments, 0),
+                pattern: Self.argString(arguments, 1),
+                flags: Int(Self.argDouble(arguments, 2)),
+                script: Self.argString(arguments, 3)
+            ))
+        case .setTriggerGroup:
+            effects.append(.setTriggerGroup(
+                name: Self.argString(arguments, 0),
+                group: Self.argString(arguments, 1)
+            ))
         default: recordOutputEffect(function, arguments)
         }
     }

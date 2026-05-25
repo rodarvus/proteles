@@ -97,6 +97,14 @@ public enum ScriptEffect: Sendable, Equatable {
     /// by a plugin host that owns its own timer engine (e.g. Search-and-
     /// Destroy, which defers `do_cp_check`, area scans, etc. this way).
     case scheduleAfter(seconds: Double, isScript: Bool, body: String)
+    /// Register a trigger at runtime (MUSHclient `AddTriggerEx`). `flags` is the
+    /// MUSHclient bitfield (Enabled/OmitFromOutput/IgnoreCase/RegularExpression);
+    /// `script` is the handler function name. Consumed by a plugin host that
+    /// owns its own trigger engine (Search-and-Destroy's scan/consider).
+    case addTrigger(name: String, pattern: String, flags: Int, script: String)
+    /// Set a runtime trigger's group (MUSHclient `SetTriggerOption(.,"group",.)`),
+    /// so `EnableTriggerGroup` can toggle it.
+    case setTriggerGroup(name: String, group: String)
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

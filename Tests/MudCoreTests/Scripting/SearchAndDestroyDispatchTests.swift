@@ -132,6 +132,27 @@ struct SearchAndDestroyDispatchTests {
         }
     }
 
+    @Test("AddTriggerEx registers a live trigger that fires + obeys its group")
+    func dynamicTriggerFires() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Register a runtime trigger (group "scan") like S&D's scan/consider setup.
+        _ = try await host.run("""
+        testfired = false
+        function on_test(name, line, w) testfired = true end
+        AddTriggerEx("t_test", "^ping$", "", trigger_flag.Enabled + trigger_flag.RegularExpression,
+                     -1, 0, "", "on_test", sendto.script, 100)
+        SetTriggerOption("t_test", "group", "scan")
+        """)
+        // A matching line fires the handler.
+        _ = await host.process("ping")
+        #expect(await host.evaluate("tostring(testfired)") == "true")
+        // Disabling its group stops it firing (EnableTriggerGroup drives the engine).
+        _ = try await host.run("EnableTriggerGroup('scan', false); testfired = false")
+        _ = await host.process("ping")
+        #expect(await host.evaluate("tostring(testfired)") == "false")
+    }
+
     @Test("MUSHclient colour built-ins S&D calls are bound (no nil-call error)")
     func colourBuiltinsBound() async throws {
         let host = try SearchAndDestroyHost()

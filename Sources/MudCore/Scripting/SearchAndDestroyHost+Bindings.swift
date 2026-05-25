@@ -129,10 +129,22 @@ extension SearchAndDestroyHost {
     -- (these gate secondary features — dynamic scan/consider triggers, a
     -- GQ-check alias edge, diagnostics — wired for real in a follow-up).
     function EnableAlias(name, flag) return 0 end
-    function AddTriggerEx(...) return 0 end
-    function AddTrigger(...) return 0 end
+    -- Runtime trigger registration → the host's own TriggerEngine. S&D uses
+    -- this for its scan/consider matchers. AddTriggerEx args (MUSHclient):
+    -- (name, match, response, flags, colour, wildcard, sound, script, send_to, seq)
+    function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, send_to, seq)
+      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "")
+      return 0
+    end
+    function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
+      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "")
+      return 0
+    end
     function AddAlias(...) return 0 end
-    function SetTriggerOption(...) return 0 end
+    function SetTriggerOption(name, option, value)
+      if option == "group" then proteles.setTriggerGroup(name, tostring(value)) end
+      return 0
+    end
     function DeleteTrigger(...) return 0 end
     function GetTriggerList() return {} end
     function GetTriggerInfo(...) return nil end
