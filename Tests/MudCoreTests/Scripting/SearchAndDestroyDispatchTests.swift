@@ -88,6 +88,26 @@ struct SearchAndDestroyDispatchTests {
         })
     }
 
+    @Test("xrt <area> resolves via areaDefaultStartRooms and routes the mapper")
+    func xrtRoutesThroughMapper() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Feed char data so tier_level() (used by the vidblain check on the
+        // goto path) has level/tier — present live, absent in a bare test.
+        _ = await host.applyGMCP(package: "char.status", json: #"{"level":"150"}"#)
+        _ = await host.applyGMCP(package: "char.base", json: #"{"tier":"0"}"#)
+        // xrt adaldar → get_start_room → areaDefaultStartRooms["adaldar"].start
+        // (34400) → do_mapper_goto → Execute("mapper goto 34400"). The .execute
+        // re-enters the command pipeline → the native mapper walks there.
+        #expect(await host.evaluate("get_start_room('adaldar', false)") == "34400")
+        let effects = await host.expandCommand("xrt adaldar")
+        #expect(effects != nil)
+        #expect(effects?.contains { effect in
+            if case .execute(let cmd) = effect { return cmd == "mapper goto 34400" }
+            return false
+        } == true)
+    }
+
     @Test("EnableTriggerGroup drives the group enable (CP/GQ state machine)")
     func enableTriggerGroupBound() async throws {
         let host = try SearchAndDestroyHost()
