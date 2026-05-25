@@ -162,8 +162,6 @@ struct ProtelesApp: App {
             CommandMenu("Databases") {
                 Button("Import Map Database…") { map.importDatabase() }
                 Button("Import Search & Destroy Database…") { snd.requestImport() }
-                Text("Import an existing Aardwolf.db (map) so navigation and "
-                    + "Search & Destroy can resolve rooms. Connect to a world first.")
             }
         }
 
