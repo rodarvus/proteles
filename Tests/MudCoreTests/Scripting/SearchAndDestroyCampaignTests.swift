@@ -44,6 +44,17 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.playerOnCP == true)
     }
 
+    @Test("os.clock is wall time (so the cp-check debounce doesn't misfire)")
+    func osClockIsWallTime() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // macOS Lua's os.clock is CPU time (~0 in an idle test); the override
+        // makes it wall seconds, so S&D's `last_cp_check` 1s debounce behaves.
+        let clock = await host.evaluate("tostring(os.clock())")
+        let value = Double(clock ?? "0") ?? 0
+        #expect(value > 1_000_000_000, "os.clock should be wall-clock epoch seconds, got \(clock ?? "nil")")
+    }
+
     @Test("cp check scrape output is gagged from the window (omit_from_output)")
     func cpCheckLinesAreGagged() async throws {
         let host = try SearchAndDestroyHost()

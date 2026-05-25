@@ -86,8 +86,12 @@ public enum PluginImporter {
     /// Helper libraries Proteles bundles for `require`.
     private static let bundledLibraries: Set<String> = [
         "gmcphelper", "serialize", "json", "aardwolf_colors",
-        "tprint", "copytable", "commas", "pairsbykeys"
+        "tprint", "copytable", "commas", "pairsbykeys", "wait", "check"
     ]
+
+    /// Libraries we register as inert stubs so `require` succeeds, but whose
+    /// real (network/background) behaviour isn't provided.
+    private static let stubbedLibraries: Set<String> = ["async"]
 
     public static func analyze(_ plugin: MUSHclientPlugin) -> PluginImportReport {
         let script = plugin.script
@@ -126,6 +130,12 @@ public enum PluginImporter {
         for library in requiredLibraries(in: script) {
             if bundledLibraries.contains(library) {
                 findings.append(.init(severity: .ok, message: "Requires `\(library)` — bundled"))
+            } else if stubbedLibraries.contains(library) {
+                findings.append(.init(
+                    severity: .warning,
+                    message: "Requires `\(library)` — stubbed; the plugin loads, but its "
+                        + "network/background features won't run"
+                ))
             } else {
                 findings.append(.init(
                     severity: .warning,

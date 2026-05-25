@@ -27,7 +27,20 @@ public extension LuaRuntime {
         // "wait"` work. They run on the programmatic-automation API above.
         registerModule("wait", source: SearchAndDestroyAssets.lua("wait") ?? "")
         registerModule("check", source: SearchAndDestroyAssets.lua("check") ?? "")
+        // `async` is the Aardwolf HTTP/background-thread helper (LuaSocket +
+        // SSL + llthreads). Proteles has no network helper, so we register an
+        // inert stub: `require "async"` succeeds (a plugin's script loads and
+        // its non-network commands work) and any `async.*(...)` is a no-op.
+        registerModule("async", source: Self.asyncStubSource)
     }
+
+    /// Inert `async` module: every field is a no-op function, so plugins that
+    /// `require "async"` load and their network calls quietly do nothing.
+    internal nonisolated static let asyncStubSource = """
+    local function noop() return nil end
+    async = setmetatable({}, { __index = function() return noop end })
+    return async
+    """
 
     /// Call a global Lua function by name (e.g. a plugin lifecycle callback
     /// like `OnPluginInstall`), returning the effects it recorded. A no-op

@@ -269,9 +269,11 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper) // current room = 1
-        // `mapper cexit enter portal` sends the command and arms the recorder.
+        // `mapper cexit enter portal` re-enters the command pipeline (Execute,
+        // so a stacked `;` splits) and arms the recorder.
         let effects = await mapper.handleCommand("mapper cexit enter portal")
-        #expect(sends(effects) == ["enter portal"])
+        let executes = effects.compactMap { if case .execute(let cmd) = $0 { cmd } else { nil } }
+        #expect(executes == ["enter portal"])
         // Arriving in a different room (room 3) before the sample fires.
         _ = await mapper.ingest(
             package: "room.info",

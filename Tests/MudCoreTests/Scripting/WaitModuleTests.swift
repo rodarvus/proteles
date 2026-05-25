@@ -36,6 +36,31 @@ struct WaitModuleTests {
     </muclient>
     """
 
+    @Test("require \"async\" loads as an inert stub (plugin script doesn't abort)")
+    func asyncStubLoads() async throws {
+        // The autobypass case: a plugin that `require "async"` (HTTP helper we
+        // can't provide) must still load and define its alias function, with
+        // async.* calls becoming harmless no-ops — not abort the whole script
+        // and leave the alias undefined.
+        let xml = """
+        <muclient>
+        <plugin id="com.test.asyncuser" name="AsyncUser"/>
+        <script><![CDATA[
+        require "async"
+        function go_alias() Send("loaded; async.request is " .. type(async.request)) end
+        ]]></script>
+        <aliases><alias match="go" enabled="y" script="go_alias" send_to="12"/></aliases>
+        </muclient>
+        """
+        let parsed = try MUSHclientPluginLoader.parse(xml: xml)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+        let effects = await engine.expandInput("go")
+        // The alias function exists (script didn't abort) and async.request is
+        // a callable no-op.
+        #expect(effects.contains(.send("loaded; async.request is function")))
+    }
+
     @Test("require \"wait\" loads (no 'module not found')")
     func waitRequires() async throws {
         let parsed = try MUSHclientPluginLoader.parse(xml: plugin)

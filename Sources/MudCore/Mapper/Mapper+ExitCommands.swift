@@ -219,7 +219,10 @@ extension Mapper {
             await self?.finalizeCexit(generation: generation)
         }
         return [
-            .send(dir),
+            // Re-enter the command pipeline (MUSHclient's `Execute`/
+            // ExecuteWithWaits) so a stacked cexit like `open south;s` splits
+            // into `open south` then `s` instead of being sent raw.
+            .execute(dir),
             Self.note(
                 "CEXIT: wait for confirmation before moving. "
                     + "This should take about \(Mapper.cexitDelaySeconds) seconds."

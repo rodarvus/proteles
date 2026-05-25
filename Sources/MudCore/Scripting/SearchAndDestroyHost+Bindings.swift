@@ -228,6 +228,13 @@ extension SearchAndDestroyHost {
       bit = { band = function(a, b) return 0 end, bor = function(a, b) return 0 end }
     end
 
+    -- os.clock(): on Windows MUSHclient this is WALL time since program start;
+    -- on macOS Lua it's CPU time, which barely advances in an idle client and
+    -- so wrongly debounces S&D's 1-second `last_cp_check`/`last_gq_check`
+    -- guards (campaign detection then fails or needs several manual `cp check`s,
+    -- and an in-progress campaign isn't detected at login). Use wall seconds.
+    os.clock = function() return os.time() end
+
     -- Miniwindow: stubbed (replaced by the native SwiftUI panel). Drawing is a
     -- no-op; geometry queries return 0; `WindowInfo`-style reads return 0.
     local function noop() return 0 end
