@@ -44,6 +44,38 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.playerOnCP == true)
     }
 
+    @Test("auto-detects an in-progress campaign on connect (no manual cp)")
+    func autoDetectsCampaignOnConnect() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        await host.setConnected(true)
+        // Ready state so init_plugin's gate (current_character_state in 3/8/9/11)
+        // passes; otherwise it just re-requests char and never completes init.
+        _ = await host.applyGMCP(
+            package: "char.status",
+            json: #"{"level":4,"state":3,"pos":"Standing"}"#
+        )
+        // tim_init_plugin (0.5s) runs twice → init completes → the
+        // setup_scan_con_triggers hook schedules do_cp_info, which then fires.
+        // (Before the fix, the hook gated on core.lua locals it couldn't see,
+        // so do_cp_info never ran and an in-progress campaign went undetected.)
+        for i in 1...6 {
+            _ = await host.fireTimers(at: Date().addingTimeInterval(Double(i) * 0.6))
+        }
+        // The auto do_cp_info armed the cp-info scrape with no manual `cp` typed;
+        // feeding the MUD's cp info response must now detect the campaign.
+        for line in [
+            "The targets for this campaign are:",
+            "Find and kill 1 * a screaming child (The Land of the Beer Goblins)",
+            "Find and kill 1 * a beer goblin scout (The Land of the Beer Goblins)",
+            ""
+        ] {
+            _ = await host.process(line)
+        }
+        let model = await host.model.flatMap(SearchAndDestroyModel.decode)
+        #expect(model?.playerOnCP == true, "campaign should be auto-detected on connect")
+    }
+
     @Test("gmcp() stringifies scalar leaves so is_character_ready works")
     func gmcpScalarIsString() async throws {
         let host = try SearchAndDestroyHost()

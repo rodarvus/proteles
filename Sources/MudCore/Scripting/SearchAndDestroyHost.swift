@@ -103,16 +103,17 @@ public actor SearchAndDestroyHost {
     if type(download_sounds) == "function" then download_sounds = function() end end
 
     -- Auto-detect an already-running campaign: MUSHclient S&D learns it's on a
-    -- cp from the grant line or cached area data, so a campaign already in
-    -- progress at connect goes unseen. Hook the tail of init_plugin to run
-    -- do_cp_info() once, after init completes, when no activity is known yet.
-    if type(init_plugin) == "function" and type(do_cp_info) == "function" then
-      local __snd_orig_init_plugin = init_plugin
-      init_plugin = function()
-        __snd_orig_init_plugin()
-        if init_called == 2 and (current_activity == "init" or current_activity == "none") then
-          do_cp_info()
-        end
+    -- cp from the grant line, so a campaign already in progress at connect goes
+    -- unseen. `setup_scan_con_triggers()` runs exactly once, when init finishes
+    -- (`init_called == 2`), so wrapping it is a reliable "init complete" signal
+    -- — and unlike `init_called`/`current_activity` (core.lua locals invisible
+    -- to this chunk) it's a global we can hook. Schedule one do_cp_info shortly
+    -- after, so an in-progress campaign is detected without a manual `cp`.
+    if type(setup_scan_con_triggers) == "function" and type(do_cp_info) == "function" then
+      local __snd_orig_setup = setup_scan_con_triggers
+      setup_scan_con_triggers = function(...)
+        __snd_orig_setup(...)
+        DoAfterSpecial(1.0, "do_cp_info()", sendto.script)
       end
     end
     """
