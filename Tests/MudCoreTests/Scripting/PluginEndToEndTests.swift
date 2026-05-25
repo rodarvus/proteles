@@ -120,6 +120,36 @@ struct PluginEndToEndTests {
         #expect(disposition.effects.contains(.echo("B reacts")))
     }
 
+    @Test("OnPluginSend blocks a prefixed send and re-sends the bare command")
+    func onPluginSendBypass() async throws {
+        // Mirrors dinv's dbot.execute bypass: a DINV_BYPASS-prefixed line is
+        // stripped + re-sent bare, and the prefixed original is dropped (false).
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.send.hook" name="SendHook"/>
+        <script><![CDATA[
+        function OnPluginSend(msg)
+          local _, _, bare = string.find(msg, "DINV_BYPASS (.*)")
+          if bare then SendNoEcho(bare); return false end
+          return true
+        end
+        ]]></script>
+        </muclient>
+        """)
+        let engine = try ScriptEngine()
+        _ = await engine.loadPlugin(plugin)
+
+        // A prefixed command is blocked, and the bare command comes back as a send.
+        let bypass = await engine.fireOnPluginSend("DINV_BYPASS wear sword")
+        #expect(bypass.blocked)
+        #expect(bypass.effects.contains(.sendNoEcho("wear sword")))
+
+        // A plain command is allowed (not blocked), no extra effects.
+        let plain = await engine.fireOnPluginSend("look")
+        #expect(!plain.blocked)
+        #expect(plain.effects.isEmpty)
+    }
+
     @Test("AddAlias on install registers a runtime alias that fires on input")
     func dynamicAliasFires() async throws {
         // dinv's regen pattern: register a `sleep` alias at install whose

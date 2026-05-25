@@ -68,20 +68,14 @@ extension LuaRuntime {
                 isScript: Self.argBool(arguments, 2),
                 body: Self.argString(arguments, 1)
             ))
-        case .addTrigger:
-            effects.append(.addTrigger(
-                name: Self.argString(arguments, 0),
-                pattern: Self.argString(arguments, 1),
-                flags: Int(Self.argDouble(arguments, 2)),
-                script: Self.argString(arguments, 3)
-            ))
-        case .addAlias:
-            effects.append(.addAlias(
-                name: Self.argString(arguments, 0),
-                pattern: Self.argString(arguments, 1),
-                flags: Int(Self.argDouble(arguments, 2)),
-                script: Self.argString(arguments, 3)
-            ))
+        case .addTrigger, .addAlias:
+            let name = Self.argString(arguments, 0)
+            let pattern = Self.argString(arguments, 1)
+            let flags = Int(Self.argDouble(arguments, 2))
+            let script = Self.argString(arguments, 3)
+            effects.append(function == .addAlias
+                ? .addAlias(name: name, pattern: pattern, flags: flags, script: script)
+                : .addTrigger(name: name, pattern: pattern, flags: flags, script: script))
         case .setTriggerGroup:
             effects.append(.setTriggerGroup(
                 name: Self.argString(arguments, 0),

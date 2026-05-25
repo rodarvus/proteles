@@ -87,6 +87,37 @@ public extension LuaRuntime {
         return effects
     }
 
+    /// Call a plugin's `OnPluginSend(text)` and capture its return. MUSHclient
+    /// semantics: returning **false blocks** the send; anything else (true, nil,
+    /// no return) allows it. Returns the recorded effects (the plugin may
+    /// re-send/register) plus the allow decision. Missing callback or error ⇒
+    /// allow (never silently swallow a user's command).
+    func callPluginSend(_ pluginID: String, _ text: String) -> (effects: [ScriptEffect], allow: Bool) {
+        effects.removeAll(keepingCapacity: true)
+        defer { releaseTransientRefs() }
+        guard let envRef = pluginEnvs[pluginID] else { return (effects, true) }
+        lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [env]
+        lua_getfield(state, -1, "OnPluginSend") // [env, fn]
+        lua_remove(state, -2) // [fn]
+        guard lua_type(state, -1) == LUA_TFUNCTION else {
+            clua_pop(state, 1)
+            return (effects, true)
+        }
+        luaPushValue(state, .string(text))
+        if lua_pcall(state, 1, 1, 0) != 0 {
+            effects.append(.note(
+                text: "Lua callback error in OnPluginSend: \(Self.popMessage(state))",
+                foreground: "red",
+                background: nil
+            ))
+            return (effects, true)
+        }
+        // Only an explicit `false` blocks; a nil/absent result allows.
+        let allow = lua_type(state, -1) == LUA_TNIL || lua_toboolean(state, -1) != 0
+        clua_pop(state, 1)
+        return (effects, allow)
+    }
+
     // MARK: - Private
 
     /// Compile `source`, set its environment to `pluginID`'s env, and run it.

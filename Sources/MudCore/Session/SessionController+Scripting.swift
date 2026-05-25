@@ -99,7 +99,7 @@ public extension SessionController {
         for effect in effects {
             switch effect {
             case .send(let command), .sendNoEcho(let command):
-                try? await sendLine(command)
+                await sendCommandThroughPlugins(command)
             case .execute(let command):
                 // Re-parse through the command pipeline (native mapper / aliases),
                 // like MUSHclient's Execute — not a raw send. S&D navigation
@@ -130,6 +130,24 @@ public extension SessionController {
                 await applyControlEffect(effect)
             }
         }
+    }
+
+    /// Send a command to the MUD, first offering it to plugins' `OnPluginSend`
+    /// (MUSHclient's send hook). If any plugin blocks it (returns false), the
+    /// raw send is suppressed — the plugin handled it (dinv strips its
+    /// `DINV_BYPASS` prefix and re-sends the bare command). The hook's own
+    /// effects are applied, re-entrancy-guarded so a re-sending plugin can't
+    /// loop. With no script engine, sends straight to the MUD.
+    private func sendCommandThroughPlugins(_ command: String) async {
+        guard let scriptEngine, pluginSendDepth < 8 else {
+            try? await sendLine(command)
+            return
+        }
+        pluginSendDepth += 1
+        defer { pluginSendDepth -= 1 }
+        let (blocked, effects) = await scriptEngine.fireOnPluginSend(command)
+        if !effects.isEmpty { await applyScriptEffects(effects) }
+        if !blocked { try? await sendLine(command) }
     }
 
     /// Apply the non-scrollback "control" effects (engine suspension,

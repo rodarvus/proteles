@@ -496,6 +496,25 @@ public actor ScriptEngine {
         return effects
     }
 
+    /// Offer a command about to be sent to the MUD to every loaded plugin's
+    /// `OnPluginSend(text)` (MUSHclient's send hook). Returns whether the send
+    /// is `blocked` (any plugin returned false) and any effects the callbacks
+    /// produced (registrations consumed; sends/notes returned for the host to
+    /// apply). dinv's `dbot.execute` framework relies on this: it sends a
+    /// `DINV_BYPASS …`-prefixed line, and `OnPluginSend` strips the prefix,
+    /// re-sends the bare command, and returns false to drop the prefixed one.
+    public func fireOnPluginSend(_ text: String) async -> (blocked: Bool, effects: [ScriptEffect]) {
+        guard !suspended else { return (false, []) }
+        var effects: [ScriptEffect] = []
+        var blocked = false
+        for id in loadedPluginIDs {
+            let (raw, allow) = await runtime.callPluginSend(id, text)
+            effects.append(contentsOf: consumeRegistrations(raw, owner: id))
+            if !allow { blocked = true }
+        }
+        return (blocked, effects)
+    }
+
     /// Deliver a mapper broadcast (e.g. 500 `found_paths`, 501 `unfound_paths`)
     /// to every plugin's `OnPluginBroadcast`, as if the native mapper had
     /// called `BroadcastPlugin(id, text)`.

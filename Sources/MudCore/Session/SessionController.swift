@@ -92,16 +92,16 @@ public actor SessionController {
     /// Drives the script engine's timers: sleeps until the next deadline,
     /// fires the due timers, then loops. Restarted whenever timers change.
     var timerTask: Task<Void, Never>?
-    /// Drains the attached mapper's system-note stream (delayed cexit
-    /// confirmations/failures) and echoes each to the output view.
+    /// Drains the mapper's system-note stream (delayed cexit results) to output.
     var mapperNotesTask: Task<Void, Never>?
     var recorder: SessionRecorder?
+    /// Re-entrancy guard for the `OnPluginSend` hook (a plugin may re-send,
+    /// re-entering the hook); caps pathological loops.
+    var pluginSendDepth = 0
     /// Timestamped debug transcript paired with ``recorder`` (`.log` beside the
     /// `.jsonl`): logs local events the wire capture omits (input/sends/notes/GMCP).
     var transcript: SessionTranscript?
-    /// Per-world persistence for scoped script/plugin variables. Set via
-    /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes
-    /// only) after each Lua batch so plugin variables survive relaunches.
+    /// Per-world persistence for scoped script/plugin variables (write-through).
     var variableStore: VariableStore?
     /// Per-world persistence for native-plugin state (e.g. `#sub`/`#gag`
     /// rules) and enabled flags. Set via ``attachNativePluginStore(_:)`` when
