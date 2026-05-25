@@ -44,6 +44,25 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.playerOnCP == true)
     }
 
+    @Test("gmcp() stringifies scalar leaves so is_character_ready works")
+    func gmcpScalarIsString() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Aardwolf sends char.status.state as a JSON *number*; S&D compares it
+        // to the string "3" (is_character_ready). Without stringifying, xcp/go/
+        // nx wrongly print "You can't run there while you're ready!".
+        _ = await host.applyGMCP(
+            package: "char.status",
+            json: #"{"level":201,"state":3,"pos":"Standing","enemy":""}"#
+        )
+        #expect(await host.evaluate(#"gmcp("char.status.state")"#) == "3")
+        #expect(await host.evaluate(#"type(gmcp("char.status.state"))"#) == "string")
+        // The navigation guard now passes for a ready character.
+        #expect(await host.evaluate("tostring(is_character_ready())") == "true")
+        // A numeric field is still usable as a number.
+        #expect(await host.evaluate(#"tostring(tonumber(gmcp("char.status.level")))"#) == "201")
+    }
+
     @Test("os.clock is wall time (so the cp-check debounce doesn't misfire)")
     func osClockIsWallTime() async throws {
         let host = try SearchAndDestroyHost()

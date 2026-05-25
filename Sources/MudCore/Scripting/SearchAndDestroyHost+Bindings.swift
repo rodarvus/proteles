@@ -105,7 +105,16 @@ extension SearchAndDestroyHost {
       elseif t == "number" or t == "boolean" then return tostring(v)
       else return "nil" end
     end
-    function gmcpdata_as_string(s) return snd_lua_literal(snd_gmcp_path(s)) end
+    -- gmcphelper convention: a scalar leaf comes back as a STRING. Aardwolf
+    -- sends e.g. `char.status.state` as a JSON number, but S&D compares it to
+    -- "3" (`is_character_ready`); code that needs a number tonumber()s it. So
+    -- quote scalar leaves; tables serialise as a Lua literal.
+    function gmcpdata_as_string(s)
+      local v = snd_gmcp_path(s)
+      local t = type(v)
+      if t == "number" or t == "boolean" then return string.format("%q", tostring(v)) end
+      return snd_lua_literal(v)
+    end
     function Send_GMCP_Packet(s) proteles.sendGMCP(tostring(s)); return 0 end
 
     -- Inter-plugin ------------------------------------------------------------
