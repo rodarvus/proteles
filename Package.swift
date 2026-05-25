@@ -54,7 +54,10 @@ let package = Package(
             resources: [
                 // Vendored Search-and-Destroy Lua + data (the native S&D
                 // plugin reuses its logic verbatim; see PROVENANCE.md).
-                .copy("Resources/SearchAndDestroy")
+                .copy("Resources/SearchAndDestroy"),
+                // Vendored dinv inventory manager (MIT; run verbatim through
+                // the MUSHclient compat shim — see Resources/dinv/PROVENANCE.md).
+                .copy("Resources/dinv")
             ]
         ),
         .target(

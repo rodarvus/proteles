@@ -1,0 +1,2167 @@
+
+dbot.changelog = {}
+
+
+dbot.changelog[3.0102] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix "dinv migrate" silently discarding all migrated data
+           on the post-migration reload.  Migration writes straight to
+           SQLite, leaving the in-memory tables holding pre-migrate
+           (usually empty) state.  The reload used dbot.reload(), a full
+           plugin reload whose unload-time OnPluginSaveState flushed that
+           stale state back over the just-migrated database -- every
+           module's save() does DELETE FROM <table> then reinserts from
+           memory, so items, caches, priorities, sets, snapshots,
+           consumables and stat bonuses were all wiped roughly a second
+           after "Migration completed successfully!" printed.  Migrate now
+           reloads via inv.reload(drlDoNotSaveState), the same in-process,
+           no-save path "dinv backup restore" already uses after swapping
+           the database file out-of-band, so the migrated database is
+           preserved and reloaded from disk.  Thanks to OneToedSloth for
+           diagnosing the bug (GitHub PR #3).]]
+  }
+}
+
+dbot.changelog[3.0101] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Stop consumables (and other frequently-acquired items)
+           from being identified twice on every refresh.  invmon
+           stubs are persisted to the items table with
+           identify_level='none' so "dinv consume display"/get can
+           find consumables before a full ID lands.  The items-table
+           template fallback (v3.0085) did not exclude those stubs,
+           so it could adopt one as a "template" -- leaving the item
+           unidentified -- and then seed it into the frequent cache.
+           A frequent-cache hit on that none-level entry then left
+           the item unidentified, so the refresh ran a full manual ID
+           anyway (the "from frequent cache" line immediately
+           followed by a second identify of the same object), and the
+           stale entry was never overwritten, so it recurred forever.
+           For in-bag consumables the redundant manual IDs are slow
+           and partly fail, making a refresh appear to hang.  Three
+           defences: lookupTemplateBySql now excludes none-level
+           rows; inv.cache.add refuses to store a none-level entry in
+           the frequent cache; and migration 4 purges any none-level
+           rows an older build already wrote to cache_frequent.]]
+  }
+}
+
+dbot.changelog[3.0100] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Add three missing migrations and drop one that is now
+           obsolete.  "dinv migrate" inherited the original eight
+           state-file imports from aard_inventory but never covered
+           the three cache state files; the custom cache in
+           particular held user-set keywords (via "dinv key") and
+           organize queries (via "dinv organize"), so migrating
+           users silently lost manually-entered data.  Now imports:
+           inv-cache-custom.state into cache_custom, inv-cache-
+           frequent.state into cache_frequent (the v3.0084 table),
+           and inv-cache-recent.state into cache_recent.  Drop
+           inv-stats-equip.state: equipBonus was a deterministic
+           per-session cache before v3.0097 stopped persisting it,
+           so importing the old equip rows just added dead writes
+           that the next inv.statBonus.save would wipe.  Each new
+           migration validates row counts independently; the old
+           combined stat-bonuses validation collapses to a direct
+           check against stat_bonuses since only spell rows live
+           there now.]]
+  }
+}
+
+dbot.changelog[3.0099] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Bump the recent-cache default ceiling from 1,000 to
+           10,000 entries so a full-inventory death actually fits.
+           The 1,000-entry ceiling let LRU prune fire during a
+           death-cascade for any player carrying more than ~1,000
+           items (common for active players): the cascade adds each
+           dropped item to the recent cache, and once the threshold
+           was crossed the cache prune evicted 20% of the oldest
+           entries, including items dropped earlier in the same
+           cascade that hadn't been picked back up yet.  v3.0098's
+           container-restore walk then found no recent-cache entry
+           for the evicted items and only "dinv refresh all"
+           recovered them.  At ~2-3 KB per entry the new 10,000-
+           entry ceiling is ~25-30 MB of Lua heap when fully
+           populated -- a brief window between death and corpse
+           retrieval; steady state stays small.  Users who want a
+           different ceiling can still set it with the existing
+           cache-size knobs.]]
+  }
+}
+
+dbot.changelog[3.0098] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Restore consumables inside dropped containers on
+           death-retrieval.  inv.items.remove deliberately skips the
+           recent-cache add for items whose name is already in the
+           frequent cache (potions, pills, scrolls, etc.) -- the
+           frequent cache has the identification template by name so
+           a duplicate per-objId entry in the recent cache normally
+           buys nothing.  But that skip also fired during the
+           container-cascade descent: when a bag with potions inside
+           was dropped (e.g., on death), the potions were removed
+           from inv.items.table and SQLite without ever entering the
+           recent cache, and the v3.0081 walk in inv.items.add could
+           not find them on retrieval -- the bag came back empty in
+           dinv's view and only "dinv refresh all" recovered.  Pass
+           a fromCascade flag through the recursive call so the
+           cascade descent caches every nested item regardless of
+           frequent-cache membership; top-level removes (consume,
+           drop, give, vault, etc.) keep the old skip so the
+           recent cache is not flooded by routine quaffs.]]
+  }
+}
+
+dbot.changelog[3.0097] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Stop inv.statBonus.get from writing the estimate-table
+           fallback into inv.statBonus.spellBonus[level].  Earlier
+           code seeded the entry with ave=estimate, max=zeros on the
+           first get(level); when inv.statBonus.setCR later observed
+           a real bonus at that level the weighted-average path
+           treated the estimate as a prior measurement and the
+           recorded average drifted away from truth over many
+           sessions.  get() now returns the estimate (for ave) or
+           zeros (for max) as a local value without touching the
+           persisted table; only setCR's real-measurement path ever
+           writes to spellBonus[level], so the first real
+           observation lands cleanly without prior pollution.  Also
+           drops the equipBonus persistence -- it's a deterministic
+           per-session cache of (levelBonus - spellBonus) that get()
+           recomputes on demand, so writing it to disk only carried
+           forward stale estimate-derived values across reloads.
+           Existing pre-fix data is left in place; players who want
+           a clean slate can run "dinv reset statBonus".  Audit H5.]]
+  }
+}
+
+dbot.changelog[3.0096] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Print a confirmation note when "dinv consume remove
+           <type>" succeeds with no itemName.  The single-item remove
+           branch already printed a "Removed X from Y consumable
+           table" note; the bulk-delete branch (fixed in v3.0087 to
+           actually persist) silently succeeded.  UX parity only.]]
+  }
+}
+
+dbot.changelog[3.0095] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist the identified row at the end of inv.items.trigger
+           .itemIdEnd.  Most callers reach itemIdEnd through
+           inv.items.identifyCR's loop which saves the item per-
+           iteration -- but inv.items.timer.idTimeout fires
+           itemIdEnd from a one-shot timer when the identify command
+           output stalls, with no surrounding loop to save.  Any
+           identifyLevel flip and the affectMod / item-specific
+           pseudo-stats added in itemIdEnd lived only in memory
+           after a timeout, and the next refresh would silently re-
+           identify the item.  Saving at the end of itemIdEnd costs
+           one extra (idempotent) write per identifyCR iteration but
+           covers the timeout path and the auction / shopkeeper
+           transient-objId cases (whose rows are deleted shortly by
+           inv.items.remove anyway).  Audit M1.]]
+  }
+}
+
+dbot.changelog[3.0094] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Make dinv_db.transaction crash-safe.  The inner callback
+           is now wrapped in pcall so a Lua error (assert, runtime
+           failure inside the closure) rolls back the open
+           transaction and re-raises the error -- the previous code
+           would leak the BEGIN, leaving SQLite in autocommit-
+           suspended state until the next explicit COMMIT or
+           ROLLBACK.  No current caller throws, so this is purely
+           defensive.  Audit M4.]]
+  }
+}
+
+dbot.changelog[3.0093] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Stop "dinv refresh" from doing a redundant config save
+           on every run.  inv.items.refreshCR called both inv.items.
+           save() (load-bearing for the orphan-prune cleanup and any
+           itemDataStats updates on already-identified items) and
+           inv.config.save() (not load-bearing -- nothing in the
+           refresh path mutates config).  The config save existed
+           only to flush inv.items.build's isBuildExecuted flag,
+           which is now persisted at its mutation site in build
+           itself.  No behavioural change; one fewer DB write per
+           refresh.]]
+  }
+}
+
+dbot.changelog[3.0092] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Add the missing migration 3 that backfills 10 affectMod
+           pseudo-stat columns (sanctuary, haste, flying, invis,
+           regeneration, detectinvis, detecthidden, detectevil,
+           detectgood, detectmagic) on items and cache_recent.  These
+           were added directly to the init_tables CREATE TABLE in
+           v3.0016 without an ALTER TABLE migration, so any database
+           first created between v3.0006 and v3.0015 was permanently
+           missing them -- "CREATE TABLE IF NOT EXISTS" is a no-op for
+           existing tables, and every identify-time INSERT that
+           referenced these columns silently failed via dinv_db.dbcheck.
+           Equipment scoring against affected items was effectively
+           random.  The migration checks column existence per-table
+           via PRAGMA table_info before each ALTER, so post-v3.0016
+           fresh installs (which already have the columns) record the
+           migration without touching the schema.]]
+  }
+}
+
+dbot.changelog[3.0091] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist the weaponSet priority after "dinv weapon
+           <priority> <damtypes>" and "dinv weapon next" mutate its
+           damtype exclusions.  inv.weapon.use cloned the source
+           priority (which saved an unmodified copy to disk) and
+           then mutated the clone's priBlock.priorities entries in
+           memory only; inv.weapon.next mutated similarly without
+           saving.  After a reload the on-disk weaponSet did not
+           match the in-memory state that had produced the equipment
+           set the player was actually wearing, so the next "weapon
+           next" would start from the wrong baseline -- cycling back
+           through damage types the player had already rotated past.
+           Both functions now call inv.priority.save() after the
+           mutations.]]
+  }
+}
+
+dbot.changelog[3.0090] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Flush in-memory state to SQLite before snapshotting the
+           database in "dinv backup create" and the automatic
+           pre-build/pre-migrate backups.  The function closed the
+           live DB handle and copied the file without first asking
+           any module to flush, so any mutation that hadn't been
+           persisted yet (lazy-seeded stat bonuses, weapon-use
+           mutations to the weaponSet priority, anything queued
+           between fini-driven saves before the per-mutation fixes
+           landed) was silently omitted from the backup -- and "dinv
+           backup restore" would roll the player to a state strictly
+           older than what was visible when the backup ran.  A new
+           inv.flush() iterates inv.modules and dbot.modules and
+           calls each module's save(); dbot.backup.create now calls
+           it before dinv_db.close().]]
+  }
+}
+
+dbot.changelog[3.0089] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Stop "dinv set wear", "dinv set display", "dinv weapon
+           use/next", and an interrupted "dinv analyze create" from
+           silently wiping or leaking analyzed sets.  inv.set.create
+           used to nil the (priorityName, level) entry up front and
+           rely on the next inv.set.save's wholesale rewrite to land
+           the freshly computed bestSet on disk -- with two problems.
+           First, if createCR was interrupted (disconnect, error)
+           between the nil and the assignment, the next fini's save
+           would DELETE FROM sets and re-INSERT without the nilled
+           level, permanently wiping the row.  Second, the happy-path
+           save only ever fired at fini, so a one-off "set wear" or
+           "weapon next" computed a new best set but never persisted
+           it -- across reload "dinv unused" flagged the worn items
+           as unused.  Switch the busy signal from "level entry is
+           nil" to "inv.set.createPkg ~= nil" (which is set before
+           createCR runs and cleared at completion in both sync and
+           async modes), leave the old set in place until createCR
+           replaces it, and save just that (priorityName, level)
+           through a new dinv_db.saveSetLevel helper as soon as
+           createCR finishes.  Same change applied to analyze.setsCR's
+           per-iteration loop so an interrupted analyze keeps every
+           level it has already computed.]]
+  }
+}
+
+dbot.changelog[3.0088] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist recent, frequent, and custom cache mutations to
+           SQLite immediately instead of only on inv.cache.fini.  The
+           inherited "save on clean disconnect" pattern was lossy on
+           crashes (matching aard_inventory's behaviour) but it also
+           let LRU evictions briefly desync from disk: an entry pruned
+           from memory still existed in cache_custom until the next
+           saveCustom, so if the user ran "dinv key foo bar" right
+           before a crash and the custom cache had pruned bar's
+           keyword entry, the pruned entry would resurrect on reload.
+           For the frequent cache, v3.0085's SQL fallback assumed the
+           cache was durable after consume add ran -- it wasn't.  New
+           per-row save/delete helpers in dinv_db (saveCacheRecent /
+           deleteCacheRecent, saveCacheFrequent / deleteCacheFrequent,
+           saveCacheCustom / deleteCacheCustom) replace the bulk
+           rewrite on every mutation; bulk save still runs on fini and
+           reset/config for wholesale rewrites.  Prune now cascades
+           through inv.cache.remove so disk reflects memory.]]
+  }
+}
+
+dbot.changelog[3.0087] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist "dinv consume remove <type>" (bulk delete with no
+           itemName) to SQLite.  The bulk path nilled inv.consume.table
+           [typeName] and returned SUCCESS without calling
+           inv.consume.save(), so the type came back from disk on the
+           next reload.  The single-item remove path was already
+           saving.  Move the save call to cover both branches.]]
+  }
+}
+
+dbot.changelog[3.0086] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist invmon stubs to SQLite even when their identifyLevel
+           is still "none".  The previous gate ("save only when the row
+           is identified") relied on an eager refresh promptly filling
+           the stub in -- but most players (including the maintainer)
+           run with refreshEagerSec=0, so the eager refresh never fires
+           and the stub stayed memory-only until the next clean restart,
+           at which point it vanished.  The container side of the same
+           event was already persisted (holding/itemsInside/totWeight),
+           so containers would "know" about an item that had no items
+           row.  v3.0085 also populates name/level/type on stubs so the
+           saved row is immediately useful to "dinv consume display"
+           and the inv.consume.get scan -- without this fix that data
+           lived only in memory.  Drop the identifyLevel guard from
+           the invmon save site; the (itemEntry ~= nil) check still
+           correctly skips actions 3/7/9 where inv.items.remove already
+           nilled the entry.]]
+  }
+}
+
+dbot.changelog[3.0085] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fall back to the SQLite items table when the in-memory
+           frequent cache misses on an invitem trigger, and populate
+           name/level/type on a true cache miss instead of leaving the
+           new row stubbed with only colorName.  v3.0084 keeps the
+           frequent cache hot across reloads but the cache can still
+           miss (pruned entry, unusual name form, never-cached item),
+           in which case the previous code wrote a near-empty row that
+           "dinv consume display" and inv.consume.get both silently
+           skipped.  Now: if the frequent cache misses we look the
+           template up by basic name in items (commas normalized on
+           both sides), clone the row onto the new objId, and seed the
+           frequent cache so the rest of a buy batch is free.  If even
+           the SQL lookup misses, we still set the three fields that
+           invitem already gave us so consume display/get can find the
+           item before the next full identify lands.  The stub seeding
+           is gated on identifyLevel=none so it doesn't overwrite an
+           entry that inv.items.add restored from cache_recent.]]
+  }
+}
+
+dbot.changelog[3.0084] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Persist the frequent-item cache to SQLite so it survives
+           plugin reloads.  v3.0014's cache-to-SQLite migration left the
+           frequent cache as in-memory only with a TODO to "query existing
+           items/cache_recent by name" as a replacement -- that fallback
+           was never written.  After every reload the cache started empty,
+           so the very first "dinv consume buy" for any item type had no
+           identification template to copy from: the {invitem} cache-miss
+           path only set colorName on the new entry, leaving level, name,
+           type, and stats unset.  "dinv consume display" (SQL COUNT
+           WHERE level=N AND name=fullName) silently ignored those rows
+           and "dinv consume" (Lua scan over inv.items.table) couldn't
+           match them either.  The fix is mechanical: a new cache_frequent
+           table mirroring cache_recent (keyed by the normalized basic
+           name in cache_key), with real saveFrequent / load wiring that
+           round-trips through dinv_db.buildItemRowInsert and
+           rowToItemEntry.  Restores the original Durel design that
+           v3.0014 inadvertently broke.]]
+  }
+}
+
+dbot.changelog[3.0083] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix "dinv priority edit" silently wiping every priority's
+           analyzed sets on disk.  Sets are lazy-loaded into memory, but
+           inv.priority.update mutated inv.set.table and saved without
+           first triggering the load.  When the in-memory table was
+           still its default empty state, the save did "DELETE FROM
+           sets" followed by inserting nothing, leaving the SQLite
+           sets table empty.  The user-visible symptom: after editing
+           any priority on a fresh plugin reload (without first running
+           a "dinv analyze", "dinv set", "dinv unused", or similar
+           command that touches sets), every analyzed equipment set
+           was gone and "dinv analyze create" had to be re-run for
+           every priority.  Add an ensureLoaded call before the
+           invalidation so the save round-trips real data.]]
+  }
+}
+
+dbot.changelog[3.0082] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Add "unused <priorityName | all>" as a query tag.  The
+           existing "dinv unused" command lists owned wearables that
+           don't appear in a priority's analyzed sets, but that filter
+           wasn't usable inside the regular query language.  The new
+           tag composes with everything else.  "dinv search wearable
+           head unused mage" lists head gear not part of any mage
+           analyzed set; "dinv put 2.bag unused all" drops everything
+           outside any analyzed priority into the second bag;
+           "~unused mage" inverts to "items used by mage".  The tag
+           does pure analyzed-sets membership lookup -- it deliberately
+           does not apply the "dinv unused" command's extra filters
+           (excluded types, ownedLocations, snapshot exclusion, keep
+           flag), so you can layer those yourself with other tags.
+           Unknown priority names are rejected; priorities with no
+           analyze data return every item with an info message.]]
+  }
+}
+
+dbot.changelog[3.0081] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix items inside containers staying unlinked after death
+           until a manual "dinv refresh all".  When a container leaves
+           the player's inventory (e.g., dropped to a corpse on death)
+           inv.items.remove recursively cascades and removes every item
+           inside the container too, caching each one in the recent-
+           items cache.  On retrieval Aardwolf only emits an invmon
+           event for the container itself; items inside stay inside
+           server-side and never re-emit, so dinv had no record of
+           them in inv.items.table or in SQLite.  Symptoms: "dinv
+           search", "dinv consume display", "dinv analyze display",
+           and "dinv usage" all reported stale or missing data after a
+           death-retrieval cycle.  When a container is restored from
+           the recent cache, dinv now walks the recent cache and re-
+           adds any item whose stored objectLocation pointed at the
+           container, recursing through nested containers.  Works
+           independently of the refresh timer, so it fixes the case
+           even for players who run with automatic refresh disabled
+           (a common configuration).  Also fixes a wrong-condition
+           typo in inv.items.displayItem that made a "missing entry"
+           warning misreport itself as "no known location".]]
+  }
+}
+
+dbot.changelog[3.0080] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix "dinv unused" omitting items inside containers and items
+           worn on the character.  The owned-location filter only matched
+           four named slots (inventory, vault, keyring, auction); items
+           inside a container have their location set to the container's
+           object id, and worn items have their location set to the wear
+           slot name (head, body, light, etc.), so neither shape passed
+           the filter.  The check now also accepts wear-loc names and
+           recursively follows container references through the chain
+           until it resolves to a named slot.  The reported case: a
+           level-210 light sitting in a Bag of Aardwolf could not be
+           reported as unused even when it was not part of any analyzed
+           equipment set.]]
+  }
+}
+
+dbot.changelog[3.0079] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Sync SQLite on every invmon event so in-memory item state
+           changes survive without a manual refresh.  The SQLite migration
+           hooked persistence into inv.items.add/remove/identify, but
+           setField/setStatField mutations driven by the invmon trigger
+           (location moves, container puts/gets, vault and keyring
+           shuffles, wear/remove) never reached disk.  The most visible
+           symptom was "dinv consume buy" leaving SQL-backed counts stale
+           until the next "dinv refresh"; less visible but equally broken:
+           every container move left objLoc, homeContainer, and container
+           holding stats out of sync between memory and disk.
+           inv.items.trigger.invmon now calls dinv_db.saveItem at the end
+           of the handler for both the moved item and (for actions 5/6)
+           the affected container, gated to skip removed items and
+           brand-new stubs.]]
+  }
+}
+
+dbot.changelog[3.0078] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Migration improvements. "dinv migrate" now also migrates
+           snapshots (previously silently skipped, leaving snapshots
+           empty after import). Load failures on individual state files
+           no longer hide behind a green "completed successfully" banner;
+           the summary now shows a yellow "completed with failures" note
+           when any category was skipped, and the original loadstring or
+           pcall error is written to migrate-errors.log alongside the
+           database so users (and future bug reports) can see exactly
+           why a file refused to load.]]
+  }
+}
+
+dbot.changelog[3.0077] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed "dinv consume display owned" showing stale counts after
+           quaffing or eating consumables. inv.items.remove now deletes the
+           matching SQLite row so the in-memory item table and the database
+           stay in sync; inv.items.add persists entries restored from the
+           recent-item cache back to the database, closing a latent gap in
+           "dinv set compare" that left the database missing a row during
+           the analysis window.]]
+  }
+}
+
+dbot.changelog[3.0076] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[New command "dinv unused <priority name | all> [nokeep]" lists owned
+           wearable items that do not appear in any analyzed equipment set.
+           Useful for identifying gear to sell, donate, or junk.  Non-equipment
+           types, snapshot-referenced items, and items outside of inventory or
+           vault or keyring or worn or auction are excluded.  Specify "nokeep"
+           to also exclude items flagged KEEP.  The "all" form lists items not
+           part of any analyzed priority and reports which priorities are
+           considered.  A specific priority requires analyze data and otherwise
+           refuses with a pointer to "dinv analyze create".]]
+  }
+}
+
+dbot.changelog[3.0075] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Improved "dinv search full" display. The detailed view now shows
+           clean, grouped output with only non-zero stats and resists instead
+           of dumping every field. Includes type-specific sections for weapons,
+           containers, portals, and spellcasting items. Also added the
+           Inflicts field to the weapon display.]]
+  }
+}
+
+dbot.changelog[3.0074] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed "dinv set wear" and "dinv store" sometimes leaving removed
+           items in inventory instead of putting them into containers. Items
+           are now routed using organize rules (first priority) before falling
+           back to homeContainer. Items with matching organize queries are sent
+           to the correct container even if they were never manually organized
+           before.]]
+  }
+}
+
+dbot.changelog[3.0073] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added auto-organize for purchased consumables. Use
+           "dinv consume autoorganize <container>" to set a default container.
+           After this, "dinv consume buy" will automatically put bought items
+           into that container unless an explicit container is specified on the
+           command line. Use "dinv consume autoorganize off" to disable.]]
+  }
+}
+
+dbot.changelog[3.0072] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added Guardian subclass support. Guardians can now dual wield
+           while wearing a shield. The set builder evaluates three options
+           (dual wield, single weapon + shield + hold, dual wield + shield)
+           and picks the highest-scoring combination. Also fixed the wear
+           conflict handler to not strip shields when a Guardian is dual
+           wielding, and fixed Soldier offhand weight check in wear conflicts.]]
+  }
+}
+
+dbot.changelog[3.0071] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed identify parsing for players with blindmode enabled.
+           Blindmode strips the border lines from identify output, which
+           prevented the start trigger from firing. Added the first content
+           line (Keywords) as an alternative start pattern.]]
+  }
+}
+
+dbot.changelog[3.0070] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added migration tool ("dinv migrate") to import data from old
+           aard_inventory plugin. Migrates items, priorities, equipment sets,
+           consumables, stat bonuses, and config. Creates a backup before
+           migration, validates row counts after insertion, and rolls back
+           on any failure. Old state files are never modified.]]
+  }
+}
+
+dbot.changelog[3.0069] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Added recommendation to enable eager refresh in README Quick Start.
+           Without it, newly acquired items are not identified until a manual
+           refresh, which can confuse new users.]]
+  }
+}
+
+dbot.changelog[3.0068] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Updated consume help text. Added documentation for the shorthand
+           syntax ("dinv consume <type>") and Food type support. Listed all
+           supported item types (Potion, Pill, Scroll, Food).]]
+  }
+}
+
+dbot.changelog[3.0067] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Updated backup help text. Removed references to on/off/auto commands
+           that no longer exist. Updated to reflect SQLite-based backup system
+           with pre-build auto-backup and manual create/list/delete/restore.]]
+  }
+}
+
+dbot.changelog[3.0066] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Rewrote README as README.md with comprehensive documentation:
+           quick start guide, key features with examples, complete command
+           reference, installation guide, aard_inventory upgrade notes,
+           update instructions, backup system, known limitations, technical
+           details, and credits. Updated LICENSE with 2026 copyright.
+           Removed old README file.]]
+  }
+}
+
+dbot.changelog[3.0065] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Update system now handles file removal. Files that exist locally
+           but are absent from the remote manifest are deleted during update.
+           Previously, removed files would stay on disk as stale leftovers.
+           Removed files are reported to the user before installation.]]
+  }
+}
+
+dbot.changelog[3.0064] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed stale function references from GMCP module header comment
+           (functions removed in earlier cleanup). Removed dead code line in
+           searchItems SQL pre-filter.]]
+  }
+}
+
+dbot.changelog[3.0063] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed global variable leaks: added "local" to multiplier in
+           inv.score.extended, retval in inv.snapshot.display and
+           inv.snapshot.wear, and totTime/timeout in
+           dbot.execute.queue.fence.]]
+  }
+}
+
+dbot.changelog[3.0062] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed eqShield checking the wielded slot instead of the shield slot
+           during set wear incompatibility removal. Could cause an unnecessary
+           extra item swap during equipment changes.]]
+  }
+}
+
+dbot.changelog[3.0061] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed "nill" typo (double 'l') in itemDataStats nil check. Worked
+           correctly by accident since undefined variables evaluate to nil
+           in Lua.]]
+  }
+}
+
+dbot.changelog[3.0060] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Seed math.random on plugin load so update temp file suffixes are
+           unpredictable. Previously used Lua's fixed default seed, producing
+           the same "random" suffix every session.]]
+  }
+}
+
+dbot.changelog[3.0059] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed custom cache pruning sort using table objects instead of objId
+           keys when checking the recent cache. Items not in the recent cache
+           were supposed to be pruned first, but the lookup always returned
+           nil so all items were pruned purely by age.]]
+  }
+}
+
+dbot.changelog[3.0058] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed typo "abilityIsAvailble" (missing 'a') in
+           dbot.ability.isAvailable. Returned nil instead of the intended
+           false value on error path.]]
+  }
+}
+
+dbot.changelog[3.0057] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed undefined error constant DRL_INTERNAL_ERROR in
+           dbot.ability.isAvailable (should be DRL_RET_INTERNAL_ERROR).
+           Same class of bug fixed in v3.0025 but this instance was missed.]]
+  }
+}
+
+dbot.changelog[3.0056] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed analyze list/display/delete not finding saved data if run
+           before any set command in a session. The set table is lazy-loaded
+           but these functions accessed it without triggering the load.]]
+  }
+}
+
+dbot.changelog[3.0055] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed crash when GMCP config message contains non-alphabetic values.
+           The parsing pattern only matched letters, causing nil dereference
+           on values with digits or underscores (e.g., "1", "prompt_hp").
+           Broadened pattern to match word characters and added nil guard.]]
+  }
+}
+
+dbot.changelog[3.0054] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed pluginVer config field corruption on save/load. The field is a
+           version table but was serialized via tostring() producing garbage
+           like "table: 0x12345678". Now uses verStr/parseVer like the other
+           version fields.]]
+  }
+}
+
+dbot.changelog[3.0053] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Plugin now aborts initialization cleanly if the SQLite database
+           fails to open, instead of cascading nil crashes through every
+           module. A single clear error message is shown.]]
+  }
+}
+
+dbot.changelog[3.0052] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed inverted loop condition in safe command queue. The "wait for
+           character to stop running" loop never executed because the condition
+           was backwards (timeout < totTime instead of totTime < timeout).
+           Commands could interfere with mapper speedwalks.]]
+  }
+}
+
+dbot.changelog[3.0051] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed endTag always nil in changelog display. The variable was never
+           extracted from the package, causing tag tracking to malfunction for
+           the "dinv version changelog" command.]]
+  }
+}
+
+dbot.changelog[3.0050] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed crash in inv.analyze.setsCR when hitting an error path. The
+           setsPkg was set to nil then immediately accessed for callback data.
+           Now saves callback data to local variable before clearing package.]]
+  }
+}
+
+dbot.changelog[3.0049] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed inv.priority.new using field description instead of field name
+           as priority key. "dinv priority create" would produce broken
+           priorities with description strings as keys instead of stat names.]]
+  }
+}
+
+dbot.changelog[3.0048] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Rewrote update system for multi-file plugin. Updates now use a
+           manifest file (dinv.manifest) that tracks per-file versions. Only
+           changed files are downloaded on update instead of re-downloading
+           the entire plugin. Downloads use randomized temp file suffixes
+           for security, and all files are renamed atomically after all
+           downloads succeed. Failed updates clean up temp files and leave
+           the current installation intact.]]
+  }
+}
+
+dbot.changelog[3.0047] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Items with failed identification are no longer incorrectly marked
+           as fully identified. If the identify output was empty, garbled, or
+           timed out without parsing name or level, the item stays at "none"
+           and will be re-identified on the next refresh. Previously these
+           items were marked "full" with empty stats, preventing re-identification.]]
+  }
+}
+
+dbot.changelog[3.0046] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed items showing "Unknown" type after "dinv build confirm". The
+           item type from invdata (available during discovery) is now set on
+           the item immediately, before the full identify command runs. Items
+           show their correct type (Weapon, Container, Potion, etc.) as soon
+           as discovery completes.]]
+  }
+}
+
+dbot.changelog[3.0045] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added completion feedback for all consume operations. Add now
+           confirms which item was added. Buy shows "Running to room..."
+           before mapper and confirms purchase sent. Use shows how many
+           items were consumed. Previously all operations ran silently.]]
+  }
+}
+
+dbot.changelog[3.0044] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added Food type support to the consume module. Food items are now
+           consumed with the "eat" command (same as pills) and removed from
+           inventory tracking after use.]]
+  }
+}
+
+dbot.changelog[3.0043] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Consume use now warns when the requested quantity exceeds the
+           10-item cap instead of silently capping. The cap is applied in
+           the entry function so the user sees the warning immediately.]]
+  }
+}
+
+dbot.changelog[3.0042] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Consume display now shows a restock tip when items have 0 available
+           count. Helps users discover the buy command when they run out.]]
+  }
+}
+
+dbot.changelog[3.0041] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Consume buy now shows which item and level was selected before
+           running to the shop. Previously the selection was silent and users
+           had no idea which item would be purchased.]]
+  }
+}
+
+dbot.changelog[3.0040] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed consume add using hardcoded objId 42 for temporary appraisal
+           placeholder. If a real item with ID 42 existed in inventory, it
+           would be silently overwritten. Now uses -1 (negative IDs are never
+           assigned by the MUD server).]]
+  }
+}
+
+dbot.changelog[3.0039] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added organize overlap detection. When running "dinv organize",
+           items that match organize queries for multiple containers now
+           produce a warning showing which containers conflict. Items are
+           still organized (first-match wins) but the user is informed of
+           ambiguous placement.]]
+  }
+}
+
+dbot.changelog[3.0038] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added SQL pre-filtering for equipment set creation. Items that are
+           overleveled or unidentified are now excluded via SQL before the
+           scoring loop. Speeds up set creation and analysis, especially for
+           large inventories with many items above the target level.]]
+  }
+}
+
+dbot.changelog[3.0037] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added hybrid SQL+Lua search. Simple search criteria (level range,
+           type, name, exact/partial string matches) are pre-filtered via SQL
+           to reduce the candidate set before Lua handles complex features
+           (keyword/flag word matching, spells, relative names, inversions on
+           word-match fields). Fully backward compatible — all existing query
+           syntax works unchanged.]]
+  }
+}
+
+dbot.changelog[3.0036] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed items not being put back into organized containers after
+           "dinv set wear". The homeContainer field was only set when items
+           were taken OUT of a container, not when put INTO one. Items
+           identified while already inside a container had no homeContainer,
+           causing them to go to main inventory instead of back to the bag.
+           Now homeContainer is set on both put and remove operations.]]
+  }
+}
+
+dbot.changelog[3.0035] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Updated backup alias to remove obsolete subcommands (on, off, auto)
+           that were removed when auto-backups were eliminated in v3.0021.]]
+  }
+}
+
+dbot.changelog[3.0034] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed consume shorthand ("dinv consume <type>") not working. The
+           XML alias patterns only matched known subcommands (add/remove/
+           display/buy/small/big). Added a catch-all alias at lower priority
+           that matches any word, enabling the shorthand to reach the CLI
+           handler.]]
+  }
+}
+
+dbot.changelog[3.0033] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added consume shorthand: "dinv consume <type>" now works as a
+           shortcut for "dinv consume big <type>". For example, "dinv consume
+           fly" will use the best available fly potion for your level.]]
+  }
+}
+
+dbot.changelog[3.0032] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Improved consume display performance. Replaced O(N*M) loop
+           (iterating entire inventory for each consumable entry) with a
+           SQL COUNT query. Significant speedup for large inventories.]]
+  }
+}
+
+dbot.changelog[3.0031] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Items are now saved incrementally during identification. Each item
+           is written to SQLite immediately after identification and cache
+           merge, so identification progress survives a crash during a long
+           refresh. The final bulk save at the end of refresh remains as a
+           consistency checkpoint.]]
+  }
+}
+
+dbot.changelog[3.0030] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed dead code: 4 spin-wait functions (old file storage vestiges),
+           dbot.normalizeMobName, dbot.pluginInfo, dbot.telnet constants,
+           dbot.gmcp.getArea/getHp/getMana/getMoves/stateIsInCombat,
+           inv.cache.clearOld, inv.tags.start (commented-out body), stale
+           dbot layout comment in dinv_regen.lua, and vestigial
+           isBackupEnabled config field. ~250 lines removed.]]
+  }
+}
+
+dbot.changelog[3.0029] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed consume module bugs. Removed references to undefined globals
+           itemLevel and roomId in inv.consume.add() (always nil, handled
+           gracefully by addCR fallback). Fixed reference to nonexistent
+           auctionNum field in error message.]]
+  }
+}
+
+dbot.changelog[3.0028] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed global variable leaks. Added "local" to noCommas in
+           dbot.tonumber(). Moved 4 continuation flags from global scope
+           to inv.items.trigger namespace to prevent global pollution.]]
+  }
+}
+
+dbot.changelog[3.0027] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Added missing "organize" field to items and cache_recent SQLite
+           tables. Organization queries assigned via "dinv organize" were
+           silently dropped on save because the field was not in the column
+           mapping. Includes schema migration for existing databases.]]
+  }
+}
+
+dbot.changelog[3.0026] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed typo in inv.reset(): "modulesNames" should be "moduleNames".
+           The empty-string guard never triggered due to the misspelling.]]
+  }
+}
+
+dbot.changelog[3.0025] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed undefined error constants. Three misspellings (DRL_MISSING_ENTRY,
+           DRL_RET_INVALID_PARAMETER, DRL_RET_INVALID_PARAMS) returned nil
+           instead of proper error codes. Fixed 10 occurrences across
+           dinv_items.lua, dinv_consume.lua, and dinv_dbot.lua.]]
+  }
+}
+
+dbot.changelog[3.0024] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed objectLocation type mismatch after SQLite load. Container IDs
+           were stored as TEXT but expected as numbers by Lua equality checks.
+           This broke container removal (items inside deleted containers were
+           not cleaned up) and location-based searches after plugin reload.]]
+  }
+}
+
+dbot.changelog[3.0023] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed note mode compatibility issue. When entering note write mode,
+           dinv sets a noteIsPending flag and creates a trigger to clear it.
+           If another plugin disabled triggers during note mode, the flag was
+           never cleared, permanently blocking dinv command execution. Now the
+           flag is cleared when the user sends any regular command (proving
+           they are no longer in note mode). Same fix applied to quitIsPending.]]
+  }
+}
+
+dbot.changelog[3.0022] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed console window briefly flashing on plugin reload. Replaced
+           os.execute() calls (which spawn a visible cmd.exe) with
+           dbot.fileExists() check and dbot.shell() (hidden window) for
+           directory creation in database and backup initialization.]]
+  }
+}
+
+dbot.changelog[3.0021] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Rewrote backup system for SQLite. Backups are now simple .db file
+           copies using Lua I/O (no more xcopy/rmdir shell commands).
+           Automatic periodic backups removed. A pre-build backup is created
+           automatically before "dinv build confirm" if the database has
+           items. Manual backup commands (create/list/delete/restore) remain
+           available. AFK and shutdown auto-backups removed.]]
+  }
+}
+
+dbot.changelog[3.0020] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed dead code from the old file-based storage system. Removed
+           the entire dbot.storage module (saveTable, loadTable, flush, init,
+           fini, fileVersion, hashChars), all stateName variables across 9
+           modules, and dbot.notify.name/dbot.wish.name state file references.
+           The "storage" module was also removed from dbot.modules.]]
+  }
+}
+
+dbot.changelog[3.0019] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Performance optimizations for SQLite operations:
+           1) Schema migration framework with version tracking.
+           2) Lazy-load equipment sets (deferred until first access,
+              removing ~6000 row reads from plugin reload).
+           3) Optimized rowToItemEntry to iterate only present columns
+              instead of all 78 column mappings per item.
+           4) Incremental item saves for organize and keyword operations
+              (single-item INSERT OR REPLACE instead of full table rewrite).]]
+  }
+}
+
+dbot.changelog[3.0018] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed critical performance issue with SQLite writes. All save
+           operations now use explicit BEGIN/COMMIT transactions instead of
+           autocommit. This reduces disk syncs from hundreds of individual
+           transactions to one per save, dramatically improving performance
+           for reload, set creation, and set display operations.]]
+  }
+}
+
+dbot.changelog[3.0017] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed crash when displaying potions/pills/scrolls after a plugin
+           reload. The spells field is a nested Lua table (array of spell
+           entries) that was being stored as a flat string in SQLite, losing
+           its structure. Added serialize/deserialize for the spells field.]]
+  }
+}
+
+dbot.changelog[3.0016] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Added 10 missing affectMod columns to the items and cache_recent
+           SQLite tables and the item column mapping. Without these columns,
+           effect pseudo-stats (sanctuary, haste, flying, invis, regeneration,
+           detectinvis, detecthidden, detectevil, detectgood, detectmagic)
+           were lost on plugin reload, breaking equipment set scoring for
+           items with beneficial effects.]]
+  }
+}
+
+dbot.changelog[3.0015] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate inventory items storage to SQLite. The main item inventory
+           table now persists in the items table using the shared item
+           serialization helpers. This completes the migration of all 14
+           state files from serialized Lua to SQLite.]]
+  }
+}
+
+dbot.changelog[3.0014] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate cache storage to SQLite. Recent cache (departed items)
+           persists in cache_recent table. Custom cache (user keywords and
+           organize queries) persists in cache_custom table. Frequent cache
+           is now in-memory only. Added shared item serialization helpers
+           in dinv_db.lua for use by both cache and items modules.]]
+  }
+}
+
+dbot.changelog[3.0013] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate equipment set storage to SQLite. Equipment sets (per
+           priority, level, and wear location) now persist in the sets table.]]
+  }
+}
+
+dbot.changelog[3.0012] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate priority storage to SQLite. Equipment priorities and their
+           level-range blocks (with all stat weights and location/damtype
+           exclusions) now persist in the priorities and priority_blocks tables.]]
+  }
+}
+
+dbot.changelog[3.0011] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate stat bonus storage to SQLite. Spell and equipment stat
+           bonuses by level now persist in the stat_bonuses table.]]
+  }
+}
+
+dbot.changelog[3.0010] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate snapshot storage to SQLite. Equipment snapshots now
+           persist in the snapshots table.]]
+  }
+}
+
+dbot.changelog[3.0009] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate consumables storage to SQLite. Consumable item tracking
+           (potions, pills, scrolls) now persists in the consumables table.]]
+  }
+}
+
+dbot.changelog[3.0008] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Migrate config, tags, notify, and wish storage to SQLite.
+           These four modules now persist their state in the config table
+           of the SQLite database instead of serialized Lua state files.]]
+  }
+}
+
+dbot.changelog[3.0007] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Hook SQLite database into plugin lifecycle. Database is opened
+           after GMCP initialization and closed on plugin shutdown.]]
+  }
+}
+
+dbot.changelog[3.0006] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added SQLite database infrastructure module (dinv_db.lua). Defines
+           schema for all persistent state tables: items, cache, priorities,
+           equipment sets, snapshots, consumables, stat bonuses, and config.
+           This is the foundation for migrating from serialized Lua files to
+           SQLite storage.]]
+  }
+}
+
+dbot.changelog[3.0005] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Split all Lua code into individual module files for maintainability.
+           dinv.xml now contains only XML structure and a bootstrap loader.
+           No functional changes.]]
+  }
+}
+
+dbot.changelog[3.0004] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Renamed plugin from aard_inventory to dinv with new plugin ID.
+           Author updated to "Durel, Rodarvus". Auto-update URLs now point
+           to the rodarvus/dinv repository.]]
+  }
+}
+
+dbot.changelog[3.0003] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added hammerswing as a priority-eligible pseudo-stat. Hammer-type
+           weapons are now tagged during identification, and hammerswing can be
+           weighted in equipment priorities for hammerswing warrior builds.]]
+  }
+}
+
+dbot.changelog[3.0002] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed incorrect equipment rankings when using fractional priority
+           weights. Score precision was truncated to 2 decimal places, causing
+           items to rank incorrectly with weights like 0.4 or 1.5.]]
+  }
+}
+
+dbot.changelog[3.0001] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a crash in inv.items.searchIdsCSV() where the query string
+           was not passed to isSearchRelative(), causing a nil parameter error.
+           This made the external plugin API non-functional.]]
+  }
+}
+
+dbot.changelog[2.0056] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed an issue where certain inputs could cause a crash with the compare and covet modes]]
+  }
+}
+
+dbot.changelog[2.0055] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug where dinv would not use gear with multiple potential
+           wearable locations (e.g., "hold, light")]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added option to only analyze/compare/covet gear every "N" levels to
+           speed up those modes.  Checking every level could take considerable time
+           in some situations.]]
+  }
+}
+
+dbot.changelog[2.0054] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed an error that prevented you from using relative names in a request
+           to use a portal.  That's what I get for "fixing" a perfectly good github
+	   pull request for cosmetic reasons.  Whoops.]]
+  }
+}
+
+dbot.changelog[2.0053] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Merged github pull request to expose a function allowing other plugins to
+           search the dinv database and retrieve a CSV string with the object IDs of
+           items matching the search.  See: inv.items.searchIdsCSV()]]
+  }
+}
+
+dbot.changelog[2.0052] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug where dinv only detected the first line of the keyword and
+           name fields in an item's identify output.  It now properly handles multi-line
+	   names and keyword lists.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[There were reports (which alas, I couldn't reproduce) that dinv
+	   sometimes choked when an academy leaflet arrived and then immediately left
+	   the inventory.  Dinv now ignores all academy leaflets so this should no
+	   longer be an issue.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[If a priority name ended in a number (e.g., psi-melee2) then dinv previously
+           misinterpreted the number as a set's target level.  That is now fixed.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[The invdata and identify commands report different names for items if the
+	   item name has a comma in it.  As a result, dinv previously failed to cache
+	   items with commas in their names.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added support for scrolls to the dinv "consume" mode.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Dinv now adds brewed pots and scribed scrolls to the cache for frequent
+	   items.  This should substantially speed up a refresh if you have many brewed
+	   and/or scribed items.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Consumable items are now added to the frequent cache when they are added
+           to the "consume" mode.  This simplifies and speeds up subsequent purchases.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Dinv now adds a slight delay when re-wearing items after using a portal.
+           The intent is to allow the mapper to use a portal and immediately start moving
+	   so that people who sit at portal landing rooms and trigger attacks are less
+           likely to catch you in the middle of a speedwalk.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Fixed typos in examples/docs.]]
+  }
+}
+
+dbot.changelog[2.0051] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a case where dinv mistakenly treated items containing "%*" in their name
+           as a formatting string during "dinv usage ..." requests causing a potential crash]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a dinv bug that mistakenly toggled bprompt when dinv toggled the main
+           prompt.  As a result, if a user disabled bprompt, using dinv could re-enable it
+	   without the user's knowledge or consent.]]
+  }
+}
+
+dbot.changelog[2.0050] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Prevent users from accidentally using "dinv portal use [query]" requests on items
+           that are not portals]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Added logging to debug very intermittent failures when accessing tables on disk]]
+  }
+}
+
+dbot.changelog[2.0049] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added @Cportal use [query]@W mode.  This is backwards compatible with the previous
+           versions which required the unique ID of the portal.  However, you now have the
+           flexibility to use "dinv portal use leadsTo qong" or "dinv portal use key wok" or
+           another other query that uniquely identifies a portal.  See "@Gdinv help portal@W" for
+           more details.]]
+  }
+}
+
+dbot.changelog[2.0048] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug where dinv could mistakenly think you still had access to dual wield
+           if you tier without logging out/in.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Updated dinv to check if you have access to a particular weapon skill before
+           choosing that weapon for an equipment set.  Note that dinv does not check if you
+           have a weapon skill practiced -- that's up to you -- but dinv will no longer
+           select a weapon for you that is not even available to you at your current mort.
+           Also, note that weapons selected during an analysis are chosen based on weapon
+           skills available at the time the analysis is created.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Tweaked set creation settings to be slightly faster and more responsive if the
+           user sends commands to the mud while the set is being created.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Updated ability checking module (e.g., "dual wield") to use aard's new gmcp class
+           information instead of relying on an asynchronous call to "showskill".]]
+  }
+}
+
+dbot.changelog[2.0047] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed bug that potentially lost item flags when identifying some rare items.  If
+           the id output had a flag line with no end space, it was mistakenly skipped.
+           NOTE: Unfortunately, regaining the "lost" flags requires either forgetting and
+           refreshing impacted items or performing a full build again.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed bug that could cause temporary hang during the remort process.  The "stats"
+           command is not available during the remort process and dinv had the potential to
+           stall and timeout if it attempted to check your stats during the remort window.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Updated regen mode to enable/disable the sleep/wake aliases when regen is enabled
+           or disabled.  This avoids a potential conflict with other plugins that sleep.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[There is the potential for a "sleep" custom exit to conflict with the sleep alias
+           enabled by the regen mode.  To work around this, use " sleep" for cexits.  The
+           regen "sleep" alias will no longer trigger if there is a space before "sleep".]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed bug where the regen mode could potentially try to wear a regen ring that was
+           too high a level for the character.]]
+  }
+}
+
+dbot.changelog[2.0046] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added preliminary @Creport@W mode to report item and set summaries to a channel.  See
+	   "dinv help report" for details.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a potential crash if a set was displayed that included a partially identified item]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug where a tempered or envenomed item's score could include credit for bonus
+           stats after the temper or envenom expired]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Dinv now avoids unnecessary warning and error messages if you attempt to access a snapshot
+           that includes items you no longer possess.  It will wear/display any available items that
+           you still have but it will not complain if you no longer have everything in the snapshot.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Clarified helpfile for @Cconsume@W mode]]
+  }
+}
+
+dbot.changelog[2.0045] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug that didn't properly handle identifying weapons that were tempered or envenomed
+           when the temper/envenom added a stat that was not previously on the weapon]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed extraneous "fence" messages that were not suppressed when the mud was running using
+           the echocommand mode]]
+  }
+}
+
+dbot.changelog[2.0044] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed bug where weapon identification did not account for temporary stats on a tempered
+	   or envenomed weapon]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Added a workaround for quivers.  Aard reports a quiver wearable location as "ready" but
+	   you can't wear anything at the "ready" location.  Instead, you must wear it as the "readied"
+           location.  Dinv now translates "ready" to "readied" as necessary.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added "@Gdinv consume display owned@W" mode to list only items in your consumable table
+           that you actually have in your inventory.  This gives you a quick summary of what you are
+           actually carrying and suppresses items if you don't have any of that item type.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed experimental "dinv auto" mode]]
+  }
+}
+
+dbot.changelog[2.0043] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a boneheaded bug I introduced in the last release.  Dinv automatically ignores
+	   containers that you don't own since you can't get items out of them anyway.  Unfortunately,
+	   dinv mistakenly also auto-ignored unowned containers as well.  Whoops.  That's fixed now.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed incompatibility with pathing on some mush installations.  For some unholy reason,
+	   some mush installs report your current directory with an absolute path and some as a relative
+	   path.  Even worse, your current directory changes as mush is running so if you do use a
+	   relative path to access dinv's data, that path may break depending on when you access it.
+	   Dinv now calculates a true full path to the dinv data directory when the plugin starts and
+	   uses that exclusively.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Added refresh start message when running in "light" notification mode]]
+  }
+}
+
+dbot.changelog[2.0042] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a dinv bug that could mistakenly skip valid equipment sets if your spellup gave stats
+           higher than the ceiling for equipment stats at the target level.  This could happen if you
+           received an imm spellup or an SH spellup when you were at a low level.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Dinv will no longer attempt to identify items in a container if the container is owned by
+           another player.  The previous dinv version could generate a lot of warnings if you ran a
+           refresh while holding someone else's container (e.g., from a CR).]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Updated "@Cdinv weapon@W" helpfile to indicate that damage type information is required
+           in order to use that mode.  Dinv has access to a weapon's damage type if you have the
+           identify wish, if dinv identified the item in Hester's room in Aylor, or if the item is
+           owned (fortunately quest weapons are owned).]]
+  }
+}
+
+dbot.changelog[2.0041] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug in how offhandDam was displayed in priority output.  Due to case insensitivity,
+	   it could appear that offhandDam was not being used or had a value of 0.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Added a reminder that invmon can be disabled if the plugin is disabled]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[The @Cstore@W mode will no longer attempt to store an item if it is already in a container]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Increased the number of allowable items to be consumed in one "dinv consume ..." command from
+	   4 to 10.  It's up to you to not quaff a bunch of pots when you don't need them :p]]
+  }
+}
+
+dbot.changelog[2.0040] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug in the @Cconsume@W mode for staves and wands that incorrectly removed the item
+	   from your inventory table after a single use.  This could require you to refresh to re-identify
+	   a partially used staff or wand.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a conflict between the "light" damage type and "light" equipment location in priorities.
+	   If you use "~light" in a priority, that refers to the damage type.  The new option "~lightEq"
+	   refers to the light equipment location.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[The @Ccovet@W mode now properly gags current bids on items.  The previous code mistakenly
+	   showed some bids when an auction item was identified.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed a warning about failing a backup if you were in combat when the backup was attempted.
+	   That case isn't actually an error and the backup will simply run later.]]
+  }
+}
+
+dbot.changelog[2.0039] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug that could repeatedly try to identify unidentified items in an ignored container]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Updated @Cignore@W mode to allow you to ignore containers that haven't been identified yet.
+           This could be helpful if someone gives you a container to hold for them and you don't want to
+           bother identifying the contents of that container.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Names in a priority are now case-insensitive.  "allPhys" and "allphys" should both work now :)]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Displays object ID for each item reported in "dinv ignore list".  This makes it easier to
+           see what is happening if you have multiple bags and are ignoring only some of them.]]
+  }
+}
+
+dbot.changelog[2.0038] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug where dinv successfully detected a missing item but failed to remove the missing
+           item from your inventory table.  This could cause refreshes to repeatedly report the issue.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed searches using the "foundAt" property.  The previous code didn't handle partial matches
+           for area names and wouldn't let you use spaces in area names so you couldn't really use foundAt.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Finally added support for quivers (sorry rangers!)]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Soldiers can now use sets that don't require light offhand weapons]]
+  }
+}
+
+dbot.changelog[2.0037] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed GMCP config support on older (r1825) mush builds that could not natively handle it]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added @Gdinv ignore list@W option to report which (if any) locations are currently ignored]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[The @Cconsume@W mode now actually ignores ignored containers]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[The @Cconsume@W mode now supports wands and staves.  Using one is interpreted as getting it
+           and holding it.]]
+  }
+}
+
+dbot.changelog[2.0036] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added support for aard's new gmcpconfig capability.  This greatly simplifies the plugin
+           initialization and no longer requires us to manually toggle prompt and invmon at startup.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added support for Winds of Fate collector case.  That case is a bit wonky.  It's a container
+           that can be placed in other containers and it has unique and variable output when it is ID'ed.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Improved error handling when accessing an unknown container by avoiding unnecessary asserts]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed unhelpful warning when accessing an unidentified container]]
+  }
+}
+
+dbot.changelog[2.0035] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Improved quality of reports generated by the @Ccompare@W and @Ccovet@W modes by eliminating
+           noise not directly related to the item under analysis]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Updated background stat checking thread to pause when the user is idle.  This should help
+	   improve estimates for each level's average spellup since we won't sample stats when the user
+	   isn't active.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Updated @Cregen@W mode to keep a swapped item in inventory instead of taking the time
+           to properly store it.  It's faster and it shouldn't bother you to have an extra item in
+           your main inventory when you are sleeping.]]
+  }
+}
+
+dbot.changelog[2.0034] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed yet another conflict between @Cregen@W mode and cexits.  This is starting
+	   to get embarassing...]]
+  }
+}
+
+dbot.changelog[2.0033] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Eliminated conflict between @Cregen@W mode and custom exits that require sleeping]]
+  }
+}
+
+dbot.changelog[2.0032] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed @Cregen@W mode bug that mistook leaving combat for waking up.  Oops.]]
+  }
+}
+
+dbot.changelog[2.0031] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed @Cregen@W mode bug that prevented you from sleeping on a piece of furniture]]
+  }
+}
+
+dbot.changelog[2.0030] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added @Cregen@W mode to auto-wear a regeneration ring when you are asleep. See the
+	   helpfile at "dinv help regen" for more details.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Corrected obsolete data in priority and consume helpfiles]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Removed overly aggressive stat timeout warning when there wasn't actually a problem]]
+  }
+}
+
+dbot.changelog[2.0029] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added support for wands and staves in the frequent item cache.  If you are buying 100 staves,
+           you really don't want to identify each one individually.  The tradeoff is that dinv will not
+           track # charges for wands and staves.  If you need to ID each staff instance to see # charges
+           there's not much point in adding it to a cache.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Switched to higher contrast font to distinguish items that are currently worn when the
+           "dinv set display <priority>" mode is used.  It could be difficult to see the difference
+           between two shades of yellow in the previous release.]]
+  }
+}
+
+dbot.changelog[2.0028] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed potential nil access when using "dinv weapon next" for an unidentified weapon]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added "dinv usage allUsed [query]" mode to show level usage of items that are used
+           by at least one analyzed priority (priorities without an analysis aren't included)]]
+  }
+}
+
+dbot.changelog[2.0027] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added option to ignore the keyring: @Gdinv ignore [on | off] keyring@W]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed support for queries using @Ctype Raw material:[whatever]@W.  For example, you
+	   can now use @Gdinv search type Raw material:Ore@W to find your ore.  If you previously had
+	   any ore you will want to run @Gdinv forget type Raw@W and then run @Gdinv refresh all@W to
+	   properly identify it.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[In some situations, a full refresh (@Gdinv refresh all@W) was required to pick up
+           changes after enchanting an item.  That is no longer the case and a basic refresh will
+           now detect changes due to solidify/illuminate/resonate.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Increased I/O access timeouts slightly to compensate for very slow systems]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Tweaked default psi-melee priority to de-emphasize primary and offhand damage.]]
+  }
+}
+
+dbot.changelog[2.0026] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added @Cignore@W mode.  See @Gdinv help ignore@W for details explaining how to mark a
+           container so that dinv will ignore the contents of that container when searching,
+           getting, putting, storing, organizing, and creating or wearing equipment sets.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Cleaned up misleading and/or scary messages if you log out before the plugin finishes
+           initializing.  You must be awake and not AFK for a few seconds to initialize.]]
+  }
+}
+
+dbot.changelog[2.0025] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added count of items matching a query when displaying query results]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added reporting for how many instances of a consumable are in your inventory
+	   when you use "dinv consume ..." to consume an item]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Improved "dinv consume display" output format and added the remaining quantity
+	   of each item to the display]]
+  }
+}
+
+dbot.changelog[2.0024] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed triggers that did not handle when the mud was in compact mode.  This could
+           result in timeouts because triggers that depended on hitting an empty line would
+           not match the compacted output.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed case where a user accessed containers before a build was complete.  The
+           previous code could assert errors if invmon tried to access unidentified items.]]
+  }
+}
+
+dbot.changelog[2.0023] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Increased fence timeout duration to better handle busy or slow connections]]
+  }
+}
+
+dbot.changelog[2.0022] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug that failed to detect when a paused note was resumed]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Highlight which items are currently worn when displaying a set]]
+  }
+}
+
+dbot.changelog[2.0021] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed another bug in the "dinv portal use" code that mistakenly looked for the
+	   "held" location instead of the "hold" location.  Many thanks to Daak for finding
+	   this and submitting the fix!]]
+  }
+}
+
+dbot.changelog[2.0020] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug that prevented the "dinv portal ..." mode from re-equipping a dualed
+	   weapon if the character doesn't have the portal wish]]
+  }
+}
+
+dbot.changelog[2.0019] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added "dinv weapon ..." mode that supports swapping weapons with specific damage types]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed bug that allowed heroonly items in non-hero equipment sets]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed conflict between searching in "id" mode and using an "id" query.  The search
+           mode that shows object IDs is now named "objid" to differentiate it from a query
+           searching for a specific ID.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Updated built-in priorities]]
+  }
+}
+
+dbot.changelog[2.0018] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed an "off-by-one" level check that bought the wrong consumable item
+           if your level exactly matched the level of the item to buy]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a bug that could allow internal fence echo commands to be visible
+           to the user if the user went to sleep or went AFK at the wrong time]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fixed a case where an item pulled from the frequent cache could have the
+           wrong location.  Instead of using the item's actual location, it used the
+           location of the first item that was put into the frequent cache.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Added support for search queries for items with spells.  For example, use
+           "dinv search spells lotus" to match black lotus potions or pills or use
+           "dinv search spells heal" for healing potions or pills.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[End tags now include a command's execution time in seconds]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Several commands now report execution time]]
+  }
+}
+
+dbot.changelog[2.0017] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed an error handling bug that didn't properly time out if you failed to run to
+           a shopkeeper in a "dinv consume buy ..." request]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added error checking on the results of all gmcp calls"
+  }
+}
+
+dbot.changelog[2.0016] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   =
+[[Added "custom" cache to provide long-term storage for custom keywords and
+           container "dinv organize ..." queries]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed a bug that prevented caching containers that had a refresh scan pending.
+           This could result in lost container organize queries in some scenarios (e.g., death).]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed a bug that could potentially lose custom keywords if refreshes were disabled"
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed bug in recovery code that handles if an item isn't at the expected location.
+           For example, if you restore a backup and no longer have a container that was in the
+           backup's inventory table, the previous code would repeatedly complain about the
+           missing container.  The fix allows the plugin to recognize the situation and recover.]]
+  }
+}
+
+dbot.changelog[2.0015] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Removed references to \"dbot\" that were echoed to the mud and confusing the imms :P"
+  }
+}
+
+dbot.changelog[2.0014] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed a race condition that could allow multiple threads to run the plugin
+	   initialization code simultaneously]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed a bug that allowed multiple automatic backups to execute simultaneously"
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed search queries that compare something with a field that isn't present.
+           If a field is not present, we use a default value of 0 for that field.]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   =
+[[Added "eager" refresh mode to allow ASAP identification of newly acquired
+           items.  The previous refresh "on" mode works the same as before.]]
+
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   =
+[[Optimized refresh code to skip notifications and checks in some cases where
+           there are no known unidentified items in your inventory]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Increased default size of recent cache from 500 entries to 1000 entries"
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Increased timeout when attempting to detect the prompt and invmon states"
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   =
+[[Made the plugin less verbose.  Some info notifications were downgraded to
+           notes and some notes were downgraded to debug messages.]]
+  }
+}
+
+dbot.changelog[2.0013] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Priority fields with negative values are now interpreted properly"
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added support for custom search queries \"worn\" and \"all\""
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Changed interpretation of an empty search string to mean \"everything not worn\""
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Search queries with the \"clan\" key now match individual words in the clan name"
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Equipment sets now check alignment before using anti-[good|neutral|evil] items"
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed priority parsing so that max[stat name] correctly gives a bonus for
+           maxing the specified stat at the target level]]
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added ability to ignore specific wearable locations in a priority"
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   =
+[[If a set does not have an item for a wearable location, wearing the set now
+           leaves whatever is at that location alone unless it conflicts with the set]]
+  }
+}
+
+dbot.changelog[2.0012] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Loosened restrictions on many dinv modes to allow their use during combat"
+  }
+}
+
+dbot.changelog[2.0011] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed broken consume check that prevented you from using potions in combat.  Ouch."
+  }
+}
+
+dbot.changelog[2.0010] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added \"dinv priority copy [name]\" and \"dinv priority paste [name]\""
+  }
+}
+
+dbot.changelog[2.0009] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added the \"@Ccreate@W\", \"@Cclone@W\", \"@Cdelete@W\", and \"@Cedit@W\" modes "  ..
+	     "to \"dinv priority ...\""
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Implemented a minimal GUI for priority creation and editing"
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Updated default priorities to have a more consistent range of values"
+  }
+}
+
+dbot.changelog[2.0008] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Updated \"dinv priority display ...\" to show all level blocks at once"
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Refactored priority framework in preparation for a priority GUI"
+  }
+}
+
+dbot.changelog[2.0007] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   =
+[[Adjusted set creation and analysis framework.  It now supports using separate equipment
+	   search "intensities" for a single set and for a full analysis of 200 sets.  This should
+	   give you the best possible results for a single set while keeping the time to do a full
+	   analysis more manageable.  Also, the resolution of a full analysis is fairly rough to
+	   begin with because it is dependent on stat bonus estimates.  It doesn't make sense to
+	   try to squeeze every possible fraction of a fraction of a percent out of the analysis
+	   when the original stat assumptions could be off by 10% or more.]]
+  }
+}
+
+dbot.changelog[2.0006] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = "Refactored update framework and removed duplicate code"
+  }
+}
+
+dbot.changelog[2.0005] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added changelog support"
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added remote file access support (dbot.remote package)"
+  }
+}
+
+dbot.changelog[2.0004] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   =
+[[Refresh code now forces your first refresh in a new session to use a full refresh scan.
+           This is necessary because items might have moved or changed outside of this client and
+           we need to know the current location of all items.  This also allows us to detect if a no-
+           save item was removed after the last session.]]
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   =
+[[Fixed incorrect return value check in the plugin update code.  The previous code could
+           send an incorrect (nil) return value in some error cases.]]
+  }
+}
+
+dbot.changelog[2.0003] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed a bug that made it appear a plugin update was in progress before it actually started"
+  }
+}
+
+dbot.changelog[2.0002] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed incorrect formatting of plugin minor version number"
+  }
+}
+
+dbot.changelog[2.0001] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Fixed update framework to support older r1825 mush builds"
+  },
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Properly handles if someone cancels a quit command"
+  }
+}
+
+dbot.changelog[2.0000] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = "Version code now realizes v1.1 ~= v1.10 :P"
+  },
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Added update capabilities"
+  }
+}
+
+dbot.changelog[1.0] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Major pieces are verified by alpha testers"
+  }
+}
+
+dbot.changelog[0.3] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Functional plugin published to github"
+  }
+}
+
+dbot.changelog[0.2] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Converted scripts into a plugin"
+  }
+}
+
+dbot.changelog[0.1] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = "Initial code base"
+  }
+}
+
+
