@@ -1,0 +1,138 @@
+import Foundation
+
+/// Programmatic automation for the shared runtime: the MUSHclient world API
+/// (`AddTimer`/`AddTriggerEx`/`EnableTrigger`/`DeleteTrigger`/…) that plugins —
+/// and helper libraries like `wait` — use to register triggers/timers at run
+/// time. The compat shim records these as ``ScriptEffect`` values; here we
+/// apply them to the engine's own ``TriggerEngine``/``TimerEngine``, owned by
+/// the calling plugin so the callbacks run in its environment.
+///
+/// Mirrors ``SearchAndDestroyHost``'s machinery, which proved the pattern.
+extension ScriptEngine {
+    /// MUSHclient `AddTrigger` flag bits (mushclient/flags.h).
+    enum TriggerFlag {
+        static let enabled = 0x01
+        static let omitFromOutput = 0x04
+        static let ignoreCase = 0x10
+        static let regularExpression = 0x20
+        static let temporary = 0x4000
+        static let oneShot = 0x8000
+    }
+
+    /// Apply the programmatic-automation effects a script produced to our own
+    /// engines, returning the remaining outward effects (sends/echoes/notes)
+    /// for the session to render.
+    func consumeRegistrations(_ effects: [ScriptEffect], owner: String?) -> [ScriptEffect] {
+        effects.filter { !applyAutomationEffect($0, owner: owner) }
+    }
+
+    /// Apply one programmatic-automation effect to the engines. Returns `true`
+    /// if consumed, `false` if it's an outward effect the session should render.
+    private func applyAutomationEffect(_ effect: ScriptEffect, owner: String?) -> Bool {
+        switch effect {
+        case .addTrigger(let name, let pattern, let flags, let script):
+            addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
+        case .scheduleAfter(let seconds, let isScript, let body):
+            scheduleOneShot(after: seconds, isScript: isScript, body: body, owner: owner)
+        case .setTriggerGroup(let name, let group):
+            setDynamicTriggerGroup(name: name, group: group)
+        case .removeTrigger(let name):
+            if let id = triggerIDsByName.removeValue(forKey: name) {
+                triggers.remove(id: id)
+                automationOwners[id] = nil
+            }
+        case .enableTrigger, .enableTimer, .enableAlias, .enableGroup:
+            applyEnableEffect(effect)
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// Apply a name-based enable/disable to the matching engine.
+    private func applyEnableEffect(_ effect: ScriptEffect) {
+        switch effect {
+        case .enableTrigger(let name, let on):
+            if let id = triggerIDsByName[name] { triggers.setEnabled(on, id: id) }
+        case .enableTimer(let name, let on):
+            if let id = timerIDsByName[name] { timers.setEnabled(on, id: id) }
+        case .enableAlias(let name, let on):
+            if let id = aliasIDsByName[name] { aliases.setEnabled(on, id: id) }
+        case .enableGroup(let name, let on):
+            triggers.setGroupEnabled(on, group: name)
+            timers.setGroupEnabled(on, group: name)
+        default:
+            break
+        }
+    }
+
+    /// Whether a one-shot was scheduled since the last check (read + cleared by
+    /// the session so it re-arms its timer loop exactly once).
+    public func takeDidScheduleTimer() -> Bool {
+        defer { didScheduleTimer = false }
+        return didScheduleTimer
+    }
+
+    // MARK: - Private
+
+    /// Register an `AddTrigger`/`AddTriggerEx` trigger. The script name becomes
+    /// the MUSHclient-style call `fn(name, matches[0], matches)` and runs in the
+    /// owning plugin's environment. Honours the Enabled/IgnoreCase/Regex/Omit/
+    /// OneShot flag bits.
+    private func addDynamicTrigger(
+        name: String,
+        pattern: String,
+        flags: Int,
+        script: String,
+        owner: String?
+    ) {
+        let isRegex = flags & TriggerFlag.regularExpression != 0
+        let call = script.isEmpty ? nil
+            : "\(script)(\(Self.luaString(name)), matches[0], matches)"
+        let trigger = Trigger(
+            name: name,
+            pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
+            caseSensitive: flags & TriggerFlag.ignoreCase == 0,
+            enabled: flags & TriggerFlag.enabled != 0,
+            oneShot: flags & TriggerFlag.oneShot != 0,
+            gag: flags & TriggerFlag.omitFromOutput != 0,
+            script: call
+        )
+        if let existing = triggerIDsByName[name] { triggers.remove(id: existing) }
+        guard (try? triggers.add(trigger)) != nil else { return }
+        triggerIDsByName[name] = trigger.id
+        automationOwners[trigger.id] = owner
+    }
+
+    /// Schedule a one-shot deferred action (`DoAfter`/`DoAfterSpecial`/the
+    /// one-shot timers `wait` builds). Runs in the owning plugin's environment.
+    private func scheduleOneShot(after seconds: Double, isScript: Bool, body: String, owner: String?) {
+        let timer = MudTimer(
+            schedule: .after(max(0, seconds)),
+            action: isScript ? .script(body) : .send(body),
+            temporary: true
+        )
+        guard (try? timers.add(timer)) != nil else { return }
+        automationOwners[timer.id] = owner
+        didScheduleTimer = true
+    }
+
+    /// Move a runtime trigger into a group (so `EnableTriggerGroup` toggles it).
+    private func setDynamicTriggerGroup(name: String, group: String) {
+        guard let id = triggerIDsByName[name],
+              var trigger = triggers.allTriggers.first(where: { $0.id == id })
+        else { return }
+        trigger.group = group
+        triggers.remove(id: id)
+        guard (try? triggers.add(trigger)) != nil else { return }
+        triggerIDsByName[name] = trigger.id
+    }
+
+    /// A Lua string literal (escaped) for embedding a name in a generated call.
+    private static func luaString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+}

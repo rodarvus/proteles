@@ -144,7 +144,7 @@ public actor LuaRuntime {
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup, enableAlias
+        case addTrigger, setTriggerGroup, enableAlias, removeTrigger
     }
 
     /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
@@ -379,9 +379,9 @@ public actor LuaRuntime {
         setHostFunction("doAfter", .doAfter)
         setHostFunction("addTrigger", .addTrigger)
         setHostFunction("setTriggerGroup", .setTriggerGroup)
+        setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
-        // `proteles.gmcp`: live Lua-readable view of the latest GMCP state
-        // (filled by ``applyGMCP``, e.g. `proteles.gmcp.char.vitals.hp`).
+        // `proteles.gmcp`: live Lua view of GMCP state (filled by `applyGMCP`).
         lua_createtable(state, 0, 0)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")

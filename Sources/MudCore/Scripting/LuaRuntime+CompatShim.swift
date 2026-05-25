@@ -20,7 +20,13 @@ public extension LuaRuntime {
     /// standard helper libraries for `require`. Idempotent.
     func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
+        _ = try run(Self.automationShimSource)
         registerModules(Self.standardHelpers)
+        // The `wait` coroutine helper (and its `check` dependency) verbatim
+        // from the Aardwolf package, so third-party plugins that `require
+        // "wait"` work. They run on the programmatic-automation API above.
+        registerModule("wait", source: SearchAndDestroyAssets.lua("wait") ?? "")
+        registerModule("check", source: SearchAndDestroyAssets.lua("check") ?? "")
     }
 
     /// Call a global Lua function by name (e.g. a plugin lifecycle callback
@@ -146,10 +152,15 @@ public extension LuaRuntime {
       proteles.broadcast(msg, text); return error_code.eOK
     end
 
-    -- Automations (name-based enable lands with the XML loader) -------------
-    function EnableTrigger(name, flag) return error_code.eOK end
-    function EnableTimer(name, flag) return error_code.eOK end
-    function EnableGroup(name, flag) return error_code.eOK end
+    -- Automations: name-based enable/disable routes to the engine. A second
+    -- arg that's false/nil/0 disables; anything else enables (MUSHclient
+    -- passes a boolean, but some plugins pass 1/0).
+    local function __on(flag) return not (flag == false or flag == nil or flag == 0) end
+    function EnableTrigger(name, flag) proteles.enableTrigger(name, __on(flag)); return error_code.eOK end
+    function EnableTimer(name, flag) proteles.enableTimer(name, __on(flag)); return error_code.eOK end
+    function EnableGroup(name, flag) proteles.enableGroup(name, __on(flag)); return error_code.eOK end
+    EnableTriggerGroup = EnableGroup
+    EnableTimerGroup = EnableGroup
 
     -- String helpers MUSHclient exposes globally ---------------------------
     function Trim(s)
@@ -157,4 +168,114 @@ public extension LuaRuntime {
       return (tostring(s):gsub("^%s*(.-)%s*$", "%1"))
     end
     """
+
+    /// The MUSHclient programmatic-automation surface (`AddTimer`/
+    /// `AddTriggerEx`/`DeleteTrigger`/…), the `bit` library (absent in Lua
+    /// 5.1), and the `module`/`package` shim — the dependencies the `wait`
+    /// coroutine helper and many third-party plugins need. Registrations route
+    /// to `proteles.*` effects, which ``ScriptEngine`` applies to its engines.
+    internal nonisolated static let automationShimSource = #"""
+    -- Bitwise ops (Lua 5.1 has none; MUSHclient exposes a global `bit`). -----
+    bit = bit or {}
+    local function _norm(x) return math.floor(tonumber(x) or 0) % 4294967296 end
+    local function _binop(a, b, f)
+      a, b = _norm(a), _norm(b)
+      local r, p = 0, 1
+      for _ = 0, 31 do
+        local ab, bb = a % 2, b % 2
+        if f(ab, bb) == 1 then r = r + p end
+        a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2
+      end
+      return r
+    end
+    function bit.bor(a, b, ...)
+      local r = _binop(a, b, function(x, y) return (x == 1 or y == 1) and 1 or 0 end)
+      if select("#", ...) > 0 then return bit.bor(r, ...) end
+      return r
+    end
+    function bit.band(a, b, ...)
+      local r = _binop(a, b, function(x, y) return (x == 1 and y == 1) and 1 or 0 end)
+      if select("#", ...) > 0 then return bit.band(r, ...) end
+      return r
+    end
+    function bit.bxor(a, b, ...)
+      local r = _binop(a, b, function(x, y) return (x ~= y) and 1 or 0 end)
+      if select("#", ...) > 0 then return bit.bxor(r, ...) end
+      return r
+    end
+    function bit.bnot(a) return (4294967295 - _norm(a)) end
+    function bit.lshift(a, n) return _norm(_norm(a) * (2 ^ _norm(n))) end
+    function bit.rshift(a, n) return math.floor(_norm(a) / (2 ^ _norm(n))) end
+
+    -- module()/package shim (the sandbox removed `package`). Mirrors Lua 5.1's
+    -- `module(name, package.seeall)` so helper libs like `wait` load. ---------
+    package = package or { loaded = {} }
+    package.loaded = package.loaded or {}
+    function package.seeall(m)
+      setmetatable(m, { __index = _G })
+    end
+    function module(name, ...)
+      local m = package.loaded[name]
+      if m == nil then m = {}; package.loaded[name] = m end
+      m._NAME = name; m._M = m
+      if name and not tostring(name):find("%.") then _G[name] = m end
+      for _, modifier in ipairs({ ... }) do modifier(m) end
+      setfenv(2, m)
+    end
+
+    -- MUSHclient flag constants (mushclient/flags.h). trigger_flag values MUST
+    -- match the host's decoder (ScriptEngine.TriggerFlag). -------------------
+    timer_flag = {
+      Enabled = 1, AtTime = 2, OneShot = 4, Active = 32, Replace = 1024,
+      TimerSpeedWalk = 8, TimerNote = 16, Temporary = 16384,
+      ActiveWhenClosed = 256,
+    }
+    trigger_flag = {
+      Enabled = 1, OmitFromLog = 2, OmitFromOutput = 4, KeepEvaluating = 8,
+      IgnoreCase = 16, RegularExpression = 32, ExpandVariables = 512,
+      Replace = 1024, LowercaseWildcard = 2048, Temporary = 16384, OneShot = 32768,
+    }
+    custom_colour = { NoChange = -1 }
+
+    local _unique = 0
+    function GetUniqueNumber() _unique = _unique + 1; return _unique end
+    -- Plugins gate the `wait` helper on these being enabled.
+    function GetOption(name)
+      if name == "enable_timers" or name == "enable_triggers" then return 1 end
+      return 0
+    end
+    -- Convert a plain (literal/wildcard) match to a regex, like MUSHclient's
+    -- MakeRegularExpression — escape regex metacharacters so wait.match treats
+    -- its text literally.
+    function MakeRegularExpression(text)
+      return "^" .. tostring(text):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?{}|\\]", "\\%0") .. "$"
+    end
+
+    -- Programmatic timers/triggers → host effects. AddTimer becomes a one-shot
+    -- deferred call to its script (the only shape `wait` uses); the response/
+    -- send-to and DeleteTimer are no-ops (one-shots expire). AddTriggerEx
+    -- registers a (one-shot) trigger whose script fires on match. -----------
+    function AddTimer(name, hour, minute, second, response, flags, script)
+      local seconds = (tonumber(hour) or 0) * 3600 + (tonumber(minute) or 0) * 60
+        + (tonumber(second) or 0)
+      if script and script ~= "" then
+        proteles.doAfter(seconds, script .. "(" .. string.format("%q", tostring(name)) .. ")", true)
+      end
+      return error_code.eOK
+    end
+    function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
+      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      return error_code.eOK
+    end
+    function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
+      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      return error_code.eOK
+    end
+    function DeleteTrigger(name) proteles.removeTrigger(tostring(name)); return error_code.eOK end
+    function DeleteTimer(name) return error_code.eOK end
+    function SetTimerOption(name, option, value) return error_code.eOK end
+    function SetTriggerOption(name, option, value) return error_code.eOK end
+    function DeleteTemporaryTriggers() return 0 end
+    function DeleteTemporaryTimers() return 0 end
+    """#
 }

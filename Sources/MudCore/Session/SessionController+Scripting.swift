@@ -22,6 +22,7 @@ public extension SessionController {
             await scrollbackStore.append(disposition.replacement ?? line)
         }
         await applyScriptEffects(disposition.effects)
+        await rearmTimerLoopIfScriptScheduled()
     }
 
     /// Run a received line through Search-and-Destroy's triggers and apply the
@@ -42,6 +43,15 @@ public extension SessionController {
     /// timers remain, so a deferral scheduled while idle wouldn't otherwise run).
     internal func rearmTimerLoopIfSnDScheduled() async {
         if await searchAndDestroy?.takeDidScheduleTimer() == true {
+            restartTimerLoop()
+        }
+    }
+
+    /// Same, for the shared script engine: a plugin's `AddTimer`/`DoAfter`
+    /// (e.g. via the `wait` helper) schedules a one-shot that must be picked up
+    /// even if the timer loop was idle.
+    internal func rearmTimerLoopIfScriptScheduled() async {
+        if await scriptEngine?.takeDidScheduleTimer() == true {
             restartTimerLoop()
         }
     }
@@ -386,6 +396,7 @@ public extension SessionController {
     internal func applyDueTimers(at now: Date = Date()) async {
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+            await rearmTimerLoopIfScriptScheduled()
         }
         if let searchAndDestroy {
             await applyScriptEffects(searchAndDestroy.fireTimers(at: now))

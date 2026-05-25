@@ -28,10 +28,19 @@ public actor ScriptEngine {
         }
     }
 
-    private let runtime: LuaRuntime
-    private var triggers = TriggerEngine()
-    private var aliases = AliasEngine()
-    private var timers = TimerEngine()
+    let runtime: LuaRuntime
+    var triggers = TriggerEngine()
+    var aliases = AliasEngine()
+    var timers = TimerEngine()
+    /// Name → id for runtime-registered (and declarative-plugin) automations,
+    /// so MUSHclient `EnableTrigger`/`DeleteTrigger`/`AddTriggerEx`-by-name and
+    /// `EnableTimer` resolve. Populated on plugin load and dynamic add.
+    var triggerIDsByName: [String: UUID] = [:]
+    var timerIDsByName: [String: UUID] = [:]
+    var aliasIDsByName: [String: UUID] = [:]
+    /// Set when a plugin scheduled a `DoAfter`/`AddTimer` one-shot, so the
+    /// session re-arms its timer loop (it idles when no timers remain).
+    var didScheduleTimer = false
     /// Native (Swift) plugins folded into the same pipeline as Lua plugins.
     private var nativePlugins = NativePluginRegistry()
     /// When true, automations are paused: typed input is sent verbatim,
@@ -43,7 +52,7 @@ public actor ScriptEngine {
     /// Trigger/alias/timer id → owning plugin id, so a fired automation's
     /// script runs in its plugin's environment. Absent ⇒ a user automation
     /// (runs in the shared globals).
-    private var automationOwners: [UUID: String] = [:]
+    var automationOwners: [UUID: String] = [:]
 
     /// Max `.execute` re-expansions before bailing (MUSHclient's value).
     private static let maxExecuteDepth = 20
@@ -283,14 +292,17 @@ public actor ScriptEngine {
         for trigger in plugin.triggers {
             try? triggers.add(trigger)
             automationOwners[trigger.id] = plugin.id
+            if let name = trigger.name { triggerIDsByName[name] = trigger.id }
         }
         for alias in plugin.aliases {
             try? aliases.add(alias)
             automationOwners[alias.id] = plugin.id
+            if let name = alias.name { aliasIDsByName[name] = alias.id }
         }
         for timer in plugin.timers {
             try? timers.add(timer)
             automationOwners[timer.id] = plugin.id
+            if let name = timer.label { timerIDsByName[name] = timer.id }
         }
         if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
         await effects.append(contentsOf: runtime.callPluginCallback(plugin.id, "OnPluginInstall"))
@@ -444,10 +456,14 @@ public actor ScriptEngine {
         matches: [String],
         named: [String: String]
     ) async -> [ScriptEffect] {
-        if let owner {
-            return await runtime.runPluginScript(script, pluginID: owner, matches: matches, named: named)
+        let raw: [ScriptEffect] = if let owner {
+            await runtime.runPluginScript(script, pluginID: owner, matches: matches, named: named)
+        } else {
+            await runScript(script, matches: matches, named: named)
         }
-        return await runScript(script, matches: matches, named: named)
+        // Apply MUSHclient programmatic automation (AddTimer/AddTriggerEx/
+        // EnableTrigger/…) to our own engines; pass the rest (sends/echoes) on.
+        return consumeRegistrations(raw, owner: owner)
     }
 
     /// Project a GMCP message into the live `proteles.gmcp` table, fire its
