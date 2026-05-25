@@ -29,6 +29,43 @@ struct PluginEndToEndTests {
     </muclient>
     """
 
+    /// A plugin whose broadcast handler kicks off a `wait.make` coroutine that
+    /// yields on `wait.time` — exactly dinv's init shape. The yield schedules a
+    /// resume timer via `AddTimer`; if the broadcast path drops that
+    /// registration, the timer never fires and the coroutine hangs forever.
+    private let waiter = """
+    <muclient>
+    <plugin id="com.test.waiter" name="Waiter" save_state="n"/>
+    <script><![CDATA[
+    require "wait"
+    function OnPluginBroadcast(msg, id, name, text)
+      if text == "char.status" then
+        wait.make(function()
+          wait.time(0.01)
+          Send("resumed")
+        end)
+      end
+    end
+    ]]></script>
+    </muclient>
+    """
+
+    @Test("A broadcast coroutine's wait.time resume timer is registered + fires")
+    func broadcastCoroutineResumes() async throws {
+        let plugin = try MUSHclientPluginLoader.parse(xml: waiter)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(plugin)
+
+        // The broadcast starts the coroutine, which yields on wait.time. The
+        // resume timer must be consumed (registered), not dropped.
+        _ = await engine.applyGMCP(package: "char.status", json: #"{"state":3}"#)
+        #expect(await engine.nextTimerDeadline() != nil, "wait.time resume timer was never registered")
+
+        // Firing the due timer resumes the coroutine, which then Sends.
+        let resumed = await engine.fireDueTimers(at: Date().addingTimeInterval(1))
+        #expect(resumed.contains(.send("resumed")), "coroutine did not resume after its timer fired")
+    }
+
     @Test("A GMCP update drives the plugin's OnPluginBroadcast end-to-end")
     func gmcpDrivesBroadcast() async throws {
         let plugin = try MUSHclientPluginLoader.parse(xml: promptish)

@@ -78,6 +78,19 @@ extension ScriptEngine {
         }
     }
 
+    /// Invoke `name` on every loaded plugin's environment, in load order,
+    /// consuming each plugin's registrations owner-scoped: a broadcast callback
+    /// may AddTimer/AddTriggerEx (dinv's init coroutine yields on wait.time → a
+    /// resume timer); returning them raw drops it and the coroutine hangs.
+    func fireCallbackOnAll(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for pluginID in loadedPluginIDs {
+            let raw = await runtime.callPluginCallback(pluginID, name, arguments)
+            effects.append(contentsOf: consumeRegistrations(raw, owner: pluginID))
+        }
+        return effects
+    }
+
     /// Run an arbitrary chunk in an already-loaded plugin's environment,
     /// returning the effects it recorded. Used to install dinv's init-chain
     /// debug instrumentation after load (the chunk just installs wrappers and

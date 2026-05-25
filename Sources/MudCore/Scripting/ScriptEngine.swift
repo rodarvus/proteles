@@ -48,7 +48,7 @@ public actor ScriptEngine {
     private var suspended = false
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
-    private var loadedPluginIDs: [String] = []
+    var loadedPluginIDs: [String] = []
     /// Trigger/alias/timer id → owning plugin id, so a fired automation's
     /// script runs in its plugin's environment. Absent ⇒ a user automation
     /// (runs in the shared globals).
@@ -332,15 +332,6 @@ public actor ScriptEngine {
     public func disconnectPlugins() async -> [ScriptEffect] {
         var effects = await fireCallbackOnAll("OnPluginSaveState")
         await effects.append(contentsOf: fireCallbackOnAll("OnPluginDisconnect"))
-        return effects
-    }
-
-    /// Invoke `name` on every loaded plugin's environment, in load order.
-    private func fireCallbackOnAll(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
-        var effects: [ScriptEffect] = []
-        for pluginID in loadedPluginIDs {
-            await effects.append(contentsOf: runtime.callPluginCallback(pluginID, name, arguments))
-        }
         return effects
     }
 
