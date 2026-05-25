@@ -30,11 +30,22 @@ public struct NativePluginRow: Identifiable, Sendable, Equatable {
     public var enabled: Bool
 }
 
-/// What's selected in the Plugins window: a built-in native plugin (by id)
-/// or an imported `.xml` plugin (by file URL).
+/// A built-in Proteles feature that started life as an Aardwolf MUSHclient
+/// plugin and is now a native host (the graphical mapper, Search-and-Destroy).
+/// Always present + active; listed so it's discoverable.
+public struct BuiltInFeatureRow: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let name: String
+    public let summary: String
+    public let commands: [String]
+}
+
+/// What's selected in the Plugins window: a built-in native plugin (by id),
+/// an imported `.xml` plugin (by file URL), or a built-in feature (by id).
 public enum PluginSelection: Hashable, Sendable {
     case native(String)
     case imported(URL)
+    case feature(String)
 }
 
 /// `@Observable` model for the Plugins window: lists a world's installed
@@ -48,6 +59,40 @@ public final class PluginsModel {
     public private(set) var installed: [InstalledPlugin] = []
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
+
+    /// Built-in features vendored from the Aardwolf package (always active).
+    public let builtInFeatures: [BuiltInFeatureRow] = [
+        BuiltInFeatureRow(
+            id: "mapper",
+            name: "Mapper",
+            summary: "Native graphical GMCP mapper (a from-scratch reimplementation of "
+                + "aard_GMCP_mapper). Auto-maps as you explore; pathfinds with portals/recalls; "
+                + "reads/writes the MUSHclient Aardwolf.db schema so it shares the file other "
+                + "plugins read. Import an existing Aardwolf.db via Databases ▸ Import Map Database.",
+            commands: [
+                "mapper goto|walkto <room|name> — speedwalk there",
+                "mapper where|find <text> — search rooms by name",
+                "mapper portals | portal | fullportal | delete portal — manage portals",
+                "mapper cexit | cexits | fullcexit — custom exits",
+                "mapper findpath <a> <b>, thisroom, unmapped, area, notes"
+            ]
+        ),
+        BuiltInFeatureRow(
+            id: "search-and-destroy",
+            name: "Search & Destroy",
+            summary: "The Search-and-Destroy campaign/quest hunter, vendored to run its own Lua "
+                + "logic verbatim on a dedicated sandboxed runtime with a native panel (the S&D "
+                + "dock tab). Detects campaigns/quests, finds + navigates to targets, and keeps "
+                + "its own SnDdb.db (import via Databases ▸ Import Search & Destroy Database).",
+            commands: [
+                "xcp — get the current campaign/quest target",
+                "nx / nx- — go to the next / previous target",
+                "xrt <area> — run to an area; go — go to room 1",
+                "qs / qw / ht — quick-scan / quick-where / hunt-trick"
+            ]
+        )
+    ]
+
     public var selection: PluginSelection?
 
     private let session: SessionController
@@ -62,6 +107,12 @@ public final class PluginsModel {
     /// native one) is selected — used by the import/remove flow.
     public var selectedImportedURL: URL? {
         if case .imported(let url) = selection { return url }
+        return nil
+    }
+
+    /// The selected built-in feature (mapper / S&D), if one is selected.
+    public var selectedFeature: BuiltInFeatureRow? {
+        if case .feature(let id) = selection { return builtInFeatures.first { $0.id == id } }
         return nil
     }
 

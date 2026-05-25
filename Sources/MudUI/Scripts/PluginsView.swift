@@ -47,8 +47,18 @@ public struct PluginsView: View {
 
     private var sidebar: some View {
         List(selection: $model.selection) {
+            Section("Core features") {
+                ForEach(model.builtInFeatures) { feature in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(feature.name).font(.body)
+                        Text("Built in · always active")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .tag(PluginSelection.feature(feature.id))
+                }
+            }
             if !model.nativePlugins.isEmpty {
-                Section("Built-in") {
+                Section("Native plugins") {
                     ForEach(model.nativePlugins) { plugin in
                         NativePluginRowView(plugin: plugin) { enabled in
                             Task { await model.setNativeEnabled(enabled, id: plugin.id) }
@@ -93,7 +103,9 @@ public struct PluginsView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let native = model.selectedNative {
+        if let feature = model.selectedFeature {
+            BuiltInFeatureDetail(feature: feature)
+        } else if let native = model.selectedNative {
             NativePluginDetail(plugin: native)
         } else if let plugin = selectedImportedPlugin {
             InstalledPluginDetail(plugin: plugin, report: model.report(for: plugin.id))
@@ -199,6 +211,37 @@ private struct NativePluginRowView: View {
 }
 
 // MARK: - Detail content
+
+/// The detail pane for a built-in core feature (mapper / S&D): what it is and
+/// its key commands. Read-only — these are always-active native hosts.
+private struct BuiltInFeatureDetail: View {
+    let feature: BuiltInFeatureRow
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 8) {
+                    Text(feature.name).font(.title2.weight(.semibold))
+                    Text("Built in").font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                }
+                Text(feature.summary).font(.callout).foregroundStyle(.secondary)
+                if !feature.commands.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Commands").font(.headline)
+                        ForEach(Array(feature.commands.enumerated()), id: \.offset) { _, command in
+                            Text(command).font(.callout.monospaced())
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+    }
+}
 
 /// The detail pane for a built-in native plugin: identity, overview, an
 /// enabled badge, and the table of commands it provides.
