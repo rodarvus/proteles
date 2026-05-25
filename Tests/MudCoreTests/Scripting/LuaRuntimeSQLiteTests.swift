@@ -19,6 +19,21 @@ struct LuaRuntimeSQLiteTests {
         #expect(effects == [.echo("Square")])
     }
 
+    @Test("ATTACH is denied by the engine authorizer (sandbox can't be escaped)")
+    func attachDenied() async throws {
+        let lua = try LuaRuntime()
+        // Even an in-memory open (always permitted) must refuse ATTACH, so a
+        // plugin can't reach another file by attaching it through SQL — the
+        // open-path guard alone wouldn't catch this.
+        let effects = try await lua.run("""
+        local db = sqlite3.open(":memory:")
+        local code = db:exec("ATTACH DATABASE ':memory:' AS evil")
+        db:close()
+        proteles.echo(code == sqlite3.OK and "attached" or "denied")
+        """)
+        #expect(effects == [.echo("denied")])
+    }
+
     @Test("sqlite3.open is denied for a file outside the allowed directory")
     func pathDeniedByDefault() async throws {
         let lua = try LuaRuntime()

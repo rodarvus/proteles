@@ -1658,10 +1658,26 @@ static int lsqlite_temp_directory(lua_State *L) {
 }
 #endif
 
+/* Proteles sandbox hardening: deny ATTACH/DETACH at the SQLite engine level.
+** The Lua wrapper (LuaRuntime+SQLite.swift) constrains sqlite3.open() to the
+** per-profile world-data dir, but that open-path guard can be bypassed by a
+** plugin running `ATTACH '<other path>' AS x` through exec/prepare/nrows. An
+** authorizer catches it regardless of the SQL entry point. Everything else is
+** permitted. */
+static int proteles_deny_attach(void *unused, int action,
+        const char *a, const char *b, const char *c, const char *d) {
+    (void)unused; (void)a; (void)b; (void)c; (void)d;
+    if (action == SQLITE_ATTACH || action == SQLITE_DETACH)
+        return SQLITE_DENY;
+    return SQLITE_OK;
+}
+
 static int lsqlite_do_open(lua_State *L, const char *filename) {
     sdb *db = newdb(L); /* create and leave in stack */
 
     if (sqlite3_open(filename, &db->db) == SQLITE_OK) {
+        /* Proteles: refuse ATTACH/DETACH on every opened connection. */
+        sqlite3_set_authorizer(db->db, proteles_deny_attach, NULL);
         /* database handle already in the stack - return it */
         return 1;
     }
