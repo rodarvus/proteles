@@ -44,6 +44,27 @@ extension LuaRuntime {
         sqliteDirectory = directory
     }
 
+    /// `proteles.fileExists(path)` — whether `path` exists, but only within the
+    /// allowed directory (the `utils.readdir`/`dbot.fileExists` backing). Paths
+    /// outside the sandbox read as "not found" rather than leaking the tree.
+    nonisolated func fileExistsAllowed(_ path: String) -> Bool {
+        guard sqliteAllows(path) else { return false }
+        return FileManager.default.fileExists(atPath: path)
+    }
+
+    /// `proteles.makeDirectory(path)` — create `path` (and intermediates) when
+    /// it sits inside the allowed directory; the backing for `utils.shellexecute`
+    /// `mkdir` so plugins (dinv) can create their per-character state dir without
+    /// a shell. Returns whether the directory exists afterwards.
+    nonisolated func makeDirectoryAllowed(_ path: String) -> Bool {
+        guard sqliteAllows(path) else { return false }
+        try? FileManager.default.createDirectory(
+            atPath: path, withIntermediateDirectories: true
+        )
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+    }
+
     /// Builds the guarded `sqlite3` global from the raw module + the host
     /// path check, then drops the raw reference.
     private static let sqliteWrapperScript = """

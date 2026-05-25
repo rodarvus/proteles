@@ -21,6 +21,7 @@ public extension LuaRuntime {
     func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
         _ = try run(Self.automationShimSource)
+        _ = try run(Self.utilsShimSource)
         registerModules(Self.standardHelpers)
         // The `wait` coroutine helper (and its `check` dependency) verbatim
         // from the Aardwolf package, so third-party plugins that `require

@@ -14,6 +14,8 @@ extension LuaRuntime {
         case .isConnected: [.boolean(connected)]
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
         case .monotonic: [.number(Date().timeIntervalSince1970)]
+        case .fileExists: [.boolean(fileExistsAllowed(Self.argString(arguments, 0)))]
+        case .makeDirectory: [.boolean(makeDirectoryAllowed(Self.argString(arguments, 0)))]
         default: []
         }
     }

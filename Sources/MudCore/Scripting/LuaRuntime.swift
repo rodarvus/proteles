@@ -145,6 +145,7 @@ public actor LuaRuntime {
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
+        case fileExists, makeDirectory
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -181,17 +182,14 @@ public actor LuaRuntime {
     nonisolated(unsafe) var dirtyVariableScopes: Set<String> = []
 
     /// Event name → registry refs of registered handler functions.
-    /// Module-internal for the GMCP projection extension.
     nonisolated(unsafe) var eventHandlers: [String: [Int32]] = [:]
-    /// Registry refs of `onBroadcast` handler functions.
-    private nonisolated(unsafe) var broadcastHandlers: [Int32] = []
+    private nonisolated(unsafe) var broadcastHandlers: [Int32] = [] // `onBroadcast` handler refs
     /// Exported callable name → registry ref (for `call`).
     private nonisolated(unsafe) var exportedFunctions: [String: Int32] = [:]
-    /// Function refs created this run that no handler/export claimed; freed
-    /// at the end of the run so transient callbacks don't leak registry slots.
+    /// Function refs created this run that no handler/export claimed; freed at
+    /// run end so transient callbacks don't leak registry slots.
     private nonisolated(unsafe) var transientRefs: [Int32] = []
-    /// Directory `sqlite3.open` may touch (the per-profile plugin-data dir).
-    /// `nil` = file access closed (in-memory still allowed).
+    /// Directory `sqlite3.open`/file helpers may touch; `nil` = closed.
     nonisolated(unsafe) var sqliteDirectory: String?
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
@@ -382,6 +380,8 @@ public actor LuaRuntime {
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
         setHostFunction("monotonic", .monotonic)
+        setHostFunction("fileExists", .fileExists)
+        setHostFunction("makeDirectory", .makeDirectory)
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
@@ -417,7 +417,7 @@ public actor LuaRuntime {
             return moduleSourceValue(arguments)
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic:
+        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)
