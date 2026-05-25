@@ -120,3 +120,28 @@ struct PluginEndToEndTests {
         #expect(disposition.effects.contains(.echo("B reacts")))
     }
 }
+
+extension PluginEndToEndTests {
+    @Test("GetPluginInfo(id, 19) returns the version (no concat-nil on install)")
+    func getPluginInfoVersion() async throws {
+        let xml = """
+        <muclient>
+        <plugin id="com.test.ver" name="Versioned" version="3.5"/>
+        <script><![CDATA[
+        function OnPluginInstall() Note("Installed v" .. GetPluginInfo(GetPluginID(), 19)) end
+        function show() Note("name=" .. GetPluginInfo(GetPluginID(), 1)) end
+        ]]></script>
+        <aliases><alias match="show" enabled="y" script="show" send_to="12"/></aliases>
+        </muclient>
+        """
+        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        let engine = try ScriptEngine()
+        let install = await engine.loadPlugin(plugin)
+        // OnPluginInstall ran without a concat-nil error and printed the version.
+        #expect(install.contains { effect in
+            if case .echo(let text) = effect { return text == "Installed v3.5" }
+            return false
+        })
+        #expect(await engine.expandInput("show").contains(.echo("name=Versioned")))
+    }
+}

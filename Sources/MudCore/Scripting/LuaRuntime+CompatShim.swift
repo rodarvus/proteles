@@ -135,8 +135,9 @@ public extension LuaRuntime {
     -- GetPluginInfo(id, 20) = the plugin's directory; resolved for the
     -- current plugin via GetInfo(60). Other infotypes/plugins return nil.
     function GetPluginInfo(id, n)
-      if id == GetPluginID() and n == 20 then return proteles.info(60) end
-      return nil
+      if id ~= GetPluginID() then return nil end
+      if n == 20 then return proteles.info(60) end -- directory
+      return proteles.info(n) -- 1 = name, 19 = version (others → nil)
     end
 
     -- GMCP ------------------------------------------------------------------

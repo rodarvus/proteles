@@ -22,6 +22,9 @@ public struct PluginContext: Sendable, Equatable {
 
     public var pluginID: String
     public var pluginName: String
+    /// The plugin's version string (from its `<plugin version="…">`); surfaced
+    /// via `GetPluginInfo(id, 19)`, which plugins print on install.
+    public var version: String
     /// Directory the plugin was loaded from (its own files live here).
     public var pluginDirectory: String
     public var worldName: String
@@ -40,6 +43,7 @@ public struct PluginContext: Sendable, Equatable {
     public init(
         pluginID: String,
         pluginName: String,
+        version: String = "",
         pluginDirectory: String = "",
         worldName: String = "Aardwolf",
         worldDirectory: String = "",
@@ -52,6 +56,7 @@ public struct PluginContext: Sendable, Equatable {
     ) {
         self.pluginID = pluginID
         self.pluginName = pluginName
+        self.version = version
         self.pluginDirectory = pluginDirectory
         self.worldName = worldName
         self.worldDirectory = worldDirectory
@@ -79,9 +84,13 @@ public struct PluginContext: Sendable, Equatable {
         return nil
     }
 
-    /// Path/identity codes.
+    /// Path/identity codes. Codes 1/19 double as `GetPluginInfo` name/version
+    /// for the current plugin (the compat shim routes them here); our `GetInfo`
+    /// doesn't otherwise use them.
     private func textInfo(_ code: Int) -> String? {
         switch code {
+        case 1: pluginName // GetPluginInfo: name
+        case 19: version // GetPluginInfo: version
         case 2: worldName // world name
         case 56, 66: appDirectory // app pathname / application directory
         case 58: logDirectory // log files directory

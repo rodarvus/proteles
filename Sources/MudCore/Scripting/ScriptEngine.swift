@@ -282,7 +282,11 @@ public actor ScriptEngine {
         _ plugin: MUSHclientPlugin,
         context: PluginContext? = nil
     ) async -> [ScriptEffect] {
-        let resolved = context ?? PluginContext(pluginID: plugin.id, pluginName: plugin.name)
+        var resolved = context ?? PluginContext(pluginID: plugin.id, pluginName: plugin.name)
+        // Carry the plugin's version so `GetPluginInfo(id, 19)` resolves (some
+        // plugins print it on install and concat-crash on a nil otherwise).
+        resolved.version = plugin.version
+        if resolved.pluginName.isEmpty { resolved.pluginName = plugin.name }
         await runtime.createPluginEnvironment(plugin.id)
         await runtime.setVariableScope(plugin.id)
         await runtime.setPluginContext(resolved)
