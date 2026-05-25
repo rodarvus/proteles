@@ -264,6 +264,26 @@ struct MapperCommandTests {
             .contains { $0.contains("No custom exits") })
     }
 
+    @Test("interactive cexit: sends the dir, records the room entered next")
+    func interactiveCexit() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room = 1
+        // `mapper cexit enter portal` sends the command and arms the recorder.
+        let effects = await mapper.handleCommand("mapper cexit enter portal")
+        #expect(sends(effects) == ["enter portal"])
+        // Arriving in a different room (room 3) records 1 —enter portal→ 3.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":3,"name":"North End","zone":"z","exits":{}}"#
+        )
+        let confirmation = await mapper.takeCexitConfirmation()
+        #expect(confirmation?.contains("'enter portal' from 1 → 3") == true)
+        // It now appears in the custom-exit list (back in room 1's exits).
+        #expect(await notes(mapper.handleCommand("mapper cexits"))
+            .contains { $0.contains("enter portal") && $0.contains("[3]") })
+    }
+
     @Test("portal edits: change name, recall toggle, level lock")
     func portalEdits() async throws {
         let (mapper, url) = try seeded()

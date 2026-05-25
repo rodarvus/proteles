@@ -32,6 +32,32 @@ public actor Mapper {
     /// Areas we've already requested, so we don't spam `request area`.
     private var requestedAreas: Set<String> = []
 
+    /// A `mapper cexit <dir>` in progress: the room we left + the command used.
+    /// Resolved on the next room change (the room we land in becomes the
+    /// destination), mirroring the reference's run-and-sample custom_exit.
+    var pendingCexit: (from: String, dir: String)?
+    private var cexitConfirmationMessage: String?
+
+    /// Pick up (and clear) a just-recorded custom-exit confirmation, so the
+    /// session can echo it after feeding a room.info.
+    public func takeCexitConfirmation() -> String? {
+        defer { cexitConfirmationMessage = nil }
+        return cexitConfirmationMessage
+    }
+
+    /// Record the pending custom exit now that we've arrived in `uid`.
+    private func recordPendingCexit(arrivedAt uid: String) {
+        guard let pending = pendingCexit else { return }
+        pendingCexit = nil
+        try? store.addCustomExit(dir: pending.dir, from: pending.from, to: uid, level: 0)
+        if var room = graph[pending.from] {
+            room.exits[pending.dir] = Exit(dir: pending.dir, to: uid)
+            graph[pending.from] = room
+        }
+        cexitConfirmationMessage =
+            "Custom exit recorded: '\(pending.dir)' from \(pending.from) → \(uid)."
+    }
+
     /// Layout subscribers (the map panel). Each gets a fresh ``MapLayout``
     /// whenever the current room, graph, or area colours change.
     private var layoutSubscribers: [UUID: AsyncStream<MapLayout>.Continuation] = [:]
@@ -199,6 +225,10 @@ public actor Mapper {
         }
         let uid = Self.uid(for: info)
         currentRoomUID = uid
+        // A `mapper cexit <dir>` resolves when we land in a different room.
+        if let pending = pendingCexit, pending.from != uid {
+            recordPendingCexit(arrivedAt: uid)
+        }
 
         // Exits: dir → destination vnum (string). Preserve any existing
         // per-exit metadata (level/weight/door) when the destination is

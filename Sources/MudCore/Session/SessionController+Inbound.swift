@@ -44,24 +44,7 @@ extension SessionController {
         // cached before deciding whether to gag that line from the main
         // window.
         for message in output.gmcp {
-            await gmcpState.apply(message)
-            await chatStore.ingest(message)
-            if let mapper {
-                for packet in await mapper.ingest(package: message.package, json: message.json) {
-                    try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
-                }
-            }
-            if let scriptEngine {
-                await applyScriptEffects(
-                    scriptEngine.applyGMCP(package: message.package, json: message.json)
-                )
-            }
-            if let searchAndDestroy {
-                await applyScriptEffects(
-                    searchAndDestroy.applyGMCP(package: message.package, json: message.json)
-                )
-                await rearmTimerLoopIfSnDScheduled()
-            }
+            await dispatchGMCP(message)
         }
         for line in output.lines {
             await appendLineThroughScripts(line)
@@ -69,6 +52,30 @@ extension SessionController {
 
         await advanceAutologin(newLines: output.lines)
         await persistVariablesIfDirty()
+    }
+
+    /// Route one GMCP message to the GMCP state, chat, mapper, script engine,
+    /// and the S&D host. Split out of ``processChunk`` for the complexity
+    /// budget.
+    private func dispatchGMCP(_ message: GMCPMessage) async {
+        await gmcpState.apply(message)
+        await chatStore.ingest(message)
+        if let mapper {
+            for packet in await mapper.ingest(package: message.package, json: message.json) {
+                try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
+            }
+            // A `mapper cexit <dir>` records on the room we land in.
+            if let note = await mapper.takeCexitConfirmation() {
+                await echoSystemNote(note)
+            }
+        }
+        if let scriptEngine {
+            await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
+        }
+        if let searchAndDestroy {
+            await applyScriptEffects(searchAndDestroy.applyGMCP(package: message.package, json: message.json))
+            await rearmTimerLoopIfSnDScheduled()
+        }
     }
 
     /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,

@@ -13,6 +13,7 @@ extension Mapper {
         case "portal": addPortalCommand(arg)
         case "fullportal": fullPortalCommand(arg)
         case "cexits": listCustomExits(arg)
+        case "cexit": customExitCommand(arg)
         case "fullcexit": fullCustomExitCommand(arg)
         default: handleMaintenanceCommand(sub, arg)
         }
@@ -122,6 +123,20 @@ extension Mapper {
             effects.append(Self.note("  \(room) [\(exit.fromuid)] — \(exit.dir) → [\(exit.touid)]"))
         }
         return effects
+    }
+
+    /// `mapper cexit <dir>` — record a custom exit interactively: send the
+    /// direction command and record the room you land in as the destination
+    /// (resolved on the next room.info, mirroring the reference's run-and-sample).
+    private func customExitCommand(_ arg: String) -> [ScriptEffect] {
+        let dir = arg.trimmingCharacters(in: .whitespaces)
+        guard !dir.isEmpty else { return [Self.note("Usage: mapper cexit <direction command>")] }
+        guard let from = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+        pendingCexit = (from: from, dir: dir)
+        return [
+            .send(dir),
+            Self.note("Custom exit: sent '\(dir)' — recording the room you arrive in…")
+        ]
     }
 
     /// `mapper fullcexit {dir} <fromuid> <touid> <level>` — add a custom exit
