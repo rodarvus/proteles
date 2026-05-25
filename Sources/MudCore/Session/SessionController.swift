@@ -92,6 +92,9 @@ public actor SessionController {
     /// Drives the script engine's timers: sleeps until the next deadline,
     /// fires the due timers, then loops. Restarted whenever timers change.
     var timerTask: Task<Void, Never>?
+    /// Drains the attached mapper's system-note stream (delayed cexit
+    /// confirmations/failures) and echoes each to the output view.
+    var mapperNotesTask: Task<Void, Never>?
     var recorder: SessionRecorder?
     /// Per-world persistence for scoped script/plugin variables. Set via
     /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes

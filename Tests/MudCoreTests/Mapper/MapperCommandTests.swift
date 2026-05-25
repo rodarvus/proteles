@@ -264,7 +264,7 @@ struct MapperCommandTests {
             .contains { $0.contains("No custom exits") })
     }
 
-    @Test("interactive cexit: sends the dir, records the room entered next")
+    @Test("interactive cexit: sends the dir, samples the room after the delay")
     func interactiveCexit() async throws {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -272,16 +272,38 @@ struct MapperCommandTests {
         // `mapper cexit enter portal` sends the command and arms the recorder.
         let effects = await mapper.handleCommand("mapper cexit enter portal")
         #expect(sends(effects) == ["enter portal"])
-        // Arriving in a different room (room 3) records 1 —enter portal→ 3.
+        // Arriving in a different room (room 3) before the sample fires.
         _ = await mapper.ingest(
             package: "room.info",
             json: #"{"num":3,"name":"North End","zone":"z","exits":{}}"#
         )
-        let confirmation = await mapper.takeCexitConfirmation()
-        #expect(confirmation?.contains("'enter portal' from 1 → 3") == true)
+        // Sample now (don't wait the real 2s): the link 1 —enter portal→ 3 is
+        // CONFIRMED and recorded.
+        let stream = await mapper.subscribeNotes()
+        await mapper.finalizeCexit(generation: 1)
+        var iterator = stream.makeAsyncIterator()
+        let confirmation = await iterator.next()
+        #expect(confirmation?.contains("Custom Exit CONFIRMED") == true)
+        #expect(confirmation?.contains("(enter portal) -> 3") == true)
         // It now appears in the custom-exit list (back in room 1's exits).
         #expect(await notes(mapper.handleCommand("mapper cexits"))
             .contains { $0.contains("enter portal") && $0.contains("[3]") })
+    }
+
+    @Test("interactive cexit: FAILS when no new room is reached in time")
+    func interactiveCexitFailure() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room = 1
+        let stream = await mapper.subscribeNotes()
+        _ = await mapper.handleCommand("mapper cexit open south")
+        // Still in room 1 when the sample fires → failure, nothing recorded.
+        await mapper.finalizeCexit(generation: 1)
+        var iterator = stream.makeAsyncIterator()
+        let note = await iterator.next()
+        #expect(note?.contains("CEXIT FAILED") == true)
+        #expect(await notes(mapper.handleCommand("mapper cexits"))
+            .contains { $0.contains("No custom exits") })
     }
 
     @Test("portal edits: change name, recall toggle, level lock")

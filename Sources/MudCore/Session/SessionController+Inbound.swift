@@ -64,10 +64,6 @@ extension SessionController {
             for packet in await mapper.ingest(package: message.package, json: message.json) {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
             }
-            // A `mapper cexit <dir>` records on the room we land in.
-            if let note = await mapper.takeCexitConfirmation() {
-                await echoSystemNote(note)
-            }
         }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))

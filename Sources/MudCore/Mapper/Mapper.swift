@@ -33,16 +33,42 @@ public actor Mapper {
     private var requestedAreas: Set<String> = []
 
     /// A `mapper cexit <dir>` in progress: the room we left + the command used.
-    /// Resolved on the next room change (the room we land in becomes the
-    /// destination), mirroring the reference's run-and-sample custom_exit.
+    /// Resolved by sampling the current room after ``cexitDelaySeconds`` (the
+    /// reference's run-and-sample custom_exit, BASE_CEXIT_DELAY = 2). The
+    /// generation token lets a later cexit supersede a still-pending one.
     var pendingCexit: (from: String, dir: String)?
-    private var cexitConfirmationMessage: String?
+    private var cexitGeneration = 0
 
-    /// Pick up (and clear) a just-recorded custom-exit confirmation, so the
-    /// session can echo it after feeding a room.info.
-    public func takeCexitConfirmation() -> String? {
-        defer { cexitConfirmationMessage = nil }
-        return cexitConfirmationMessage
+    /// How long to wait for a custom-exit move to land before sampling the
+    /// destination room (reference BASE_CEXIT_DELAY).
+    static let cexitDelaySeconds = 2
+
+    /// Subscribers to one-off system notes the mapper pushes outside the GMCP
+    /// flow (e.g. a delayed cexit confirmation/failure). The session echoes
+    /// these to the output view.
+    private var noteSubscribers: [UUID: AsyncStream<String>.Continuation] = [:]
+
+    /// Subscribe to mapper system notes. The session drains this and echoes
+    /// each note; no backfill.
+    public func subscribeNotes() -> AsyncStream<String> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .unbounded)
+        noteSubscribers[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeNoteSubscriber(id) }
+        }
+        return stream
+    }
+
+    private func removeNoteSubscriber(_ id: UUID) {
+        noteSubscribers[id] = nil
+    }
+
+    /// Push a system note to subscribers (the session echoes it).
+    func emitNote(_ text: String) {
+        for continuation in noteSubscribers.values {
+            continuation.yield(text)
+        }
     }
 
     /// Forget the current room (`mapper reset`/resetaard); the next room.info
@@ -51,17 +77,36 @@ public actor Mapper {
         currentRoomUID = nil
     }
 
-    /// Record the pending custom exit now that we've arrived in `uid`.
-    private func recordPendingCexit(arrivedAt uid: String) {
-        guard let pending = pendingCexit else { return }
+    /// Arm the timed sampling for an in-flight `mapper cexit`. Returns the
+    /// generation so the caller can schedule the finalize.
+    func beginPendingCexit(from: String, dir: String) -> Int {
+        cexitGeneration += 1
+        pendingCexit = (from: from, dir: dir)
+        return cexitGeneration
+    }
+
+    /// Sample the current room ``cexitDelaySeconds`` after a `mapper cexit`:
+    /// if we moved to a new mappable room, the link is CONFIRMED and stored;
+    /// otherwise it FAILED. Mirrors the reference's wait-then-sample. A stale
+    /// generation (a newer cexit started) is ignored.
+    func finalizeCexit(generation: Int) {
+        guard generation == cexitGeneration, let pending = pendingCexit else { return }
         pendingCexit = nil
-        try? store.addCustomExit(dir: pending.dir, from: pending.from, to: uid, level: 0)
+        let dest = currentRoomUID
+        guard let dest, dest != "-1", dest != pending.from else {
+            emitNote(
+                "CEXIT FAILED: no new room within \(Self.cexitDelaySeconds)s — "
+                    + "no custom exit recorded for '\(pending.dir)'."
+            )
+            return
+        }
+        try? store.addCustomExit(dir: pending.dir, from: pending.from, to: dest, level: 0)
         if var room = graph[pending.from] {
-            room.exits[pending.dir] = Exit(dir: pending.dir, to: uid)
+            room.exits[pending.dir] = Exit(dir: pending.dir, to: dest)
             graph[pending.from] = room
         }
-        cexitConfirmationMessage =
-            "Custom exit recorded: '\(pending.dir)' from \(pending.from) → \(uid)."
+        reloadGraphAndPublish()
+        emitNote("Custom Exit CONFIRMED: \(pending.from) (\(pending.dir)) -> \(dest)")
     }
 
     /// Layout subscribers (the map panel). Each gets a fresh ``MapLayout``
@@ -231,10 +276,6 @@ public actor Mapper {
         }
         let uid = Self.uid(for: info)
         currentRoomUID = uid
-        // A `mapper cexit <dir>` resolves when we land in a different room.
-        if let pending = pendingCexit, pending.from != uid {
-            recordPendingCexit(arrivedAt: uid)
-        }
 
         // Exits: dir → destination vnum (string). Preserve any existing
         // per-exit metadata (level/weight/door) when the destination is

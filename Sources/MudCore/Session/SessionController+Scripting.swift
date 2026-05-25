@@ -193,6 +193,13 @@ public extension SessionController {
     /// stream then feeds it room/area/sector updates.
     func attachMapper(_ mapper: Mapper) {
         self.mapper = mapper
+        mapperNotesTask?.cancel()
+        mapperNotesTask = Task { [weak self] in
+            guard let stream = await self?.mapper?.subscribeNotes() else { return }
+            for await note in stream {
+                await self?.echoSystemNote(note)
+            }
+        }
         for continuation in mapperAttachmentSubscribers.values {
             continuation.yield(mapper)
         }

@@ -211,10 +211,19 @@ extension Mapper {
         let dir = arg.trimmingCharacters(in: .whitespaces)
         guard !dir.isEmpty else { return [Self.note("Usage: mapper cexit <direction command>")] }
         guard let from = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
-        pendingCexit = (from: from, dir: dir)
+        let generation = beginPendingCexit(from: from, dir: dir)
+        // Run-and-sample: send the command, then check the destination after
+        // the cexit delay (the reference's wait.time + current_room sample).
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Mapper.cexitDelaySeconds) * 1_000_000_000)
+            await self?.finalizeCexit(generation: generation)
+        }
         return [
             .send(dir),
-            Self.note("Custom exit: sent '\(dir)' — recording the room you arrive in…")
+            Self.note(
+                "CEXIT: wait for confirmation before moving. "
+                    + "This should take about \(Mapper.cexitDelaySeconds) seconds."
+            )
         ]
     }
 
@@ -416,7 +425,7 @@ extension Mapper {
 
     /// Reload the in-memory graph from the store and republish — after a
     /// portal/purge edit so pathfinding + the panel reflect it.
-    private func reloadGraphAndPublish() {
+    func reloadGraphAndPublish() {
         graph = (try? store.loadGraph()) ?? graph
         publishLayout()
     }
