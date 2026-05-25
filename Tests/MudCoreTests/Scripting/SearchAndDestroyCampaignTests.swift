@@ -143,7 +143,7 @@ struct SearchAndDestroyCampaignTests {
         #expect(await host.evaluate(#"tostring(tonumber(gmcp("char.status.level")))"#) == "201")
     }
 
-    @Test("os.clock is wall time (so the cp-check debounce doesn't misfire)")
+    @Test("os.clock is sub-second wall time (so the cp-check debounce doesn't misfire)")
     func osClockIsWallTime() async throws {
         let host = try SearchAndDestroyHost()
         try await host.load()
@@ -152,6 +152,22 @@ struct SearchAndDestroyCampaignTests {
         let clock = await host.evaluate("tostring(os.clock())")
         let value = Double(clock ?? "0") ?? 0
         #expect(value > 1_000_000_000, "os.clock should be wall-clock epoch seconds, got \(clock ?? "nil")")
+        // Crucially it must be SUB-SECOND, not integer `os.time()` seconds.
+        // Integer resolution let a stray `do_cp_check` ~0.3s later read a full
+        // second on and escape the 1s debounce, resetting `cp_check_list`
+        // mid-scrape → "No target items". Sampling many times, at least one
+        // reading must carry a fractional part (impossible with integer seconds).
+        let probe = """
+        (function()
+          for i = 1, 200000 do
+            local c = os.clock()
+            if c ~= math.floor(c) then return "1" end
+          end
+          return "0"
+        end)()
+        """
+        let fractional = await host.evaluate(probe)
+        #expect(fractional == "1", "os.clock must have sub-second resolution, got integer seconds")
     }
 
     @Test("cp check scrape output is gagged from the window (omit_from_output)")

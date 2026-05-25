@@ -13,6 +13,7 @@ extension LuaRuntime {
         case .pluginID: [.string(pluginContext.pluginID)]
         case .isConnected: [.boolean(connected)]
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
+        case .monotonic: [.number(Date().timeIntervalSince1970)]
         default: []
         }
     }

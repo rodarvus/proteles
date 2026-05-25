@@ -144,11 +144,10 @@ public actor LuaRuntime {
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup, enableAlias, removeTrigger
+        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic
     }
 
-    /// Live connection state for `proteles.isConnected` (≈ `IsConnected`),
-    /// updated by the host on connect/disconnect.
+    /// Live connection state for `proteles.isConnected` (host-updated).
     nonisolated(unsafe) var connected = false
 
     /// Module-loader state (see `LuaRuntime+Modules`): `require` libraries
@@ -381,6 +380,7 @@ public actor LuaRuntime {
         setHostFunction("setTriggerGroup", .setTriggerGroup)
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
+        setHostFunction("monotonic", .monotonic)
         // `proteles.gmcp`: live Lua view of GMCP state (filled by `applyGMCP`).
         lua_createtable(state, 0, 0)
         lua_setfield(state, -2, "gmcp")
@@ -417,7 +417,7 @@ public actor LuaRuntime {
             return moduleSourceValue(arguments)
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected, .sqliteAllowed:
+        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)
