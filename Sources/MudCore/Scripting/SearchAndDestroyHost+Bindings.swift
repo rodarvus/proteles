@@ -150,6 +150,16 @@ extension SearchAndDestroyHost {
       scriptafteromit = 14,
     }
 
+    -- MUSHclient AddTrigger flag bits (mushclient/flags.h). S&D's scan/consider
+    -- setup does arithmetic on these (flags = trigger_flag.OmitFromOutput + …),
+    -- so they must be present + correct even though AddTriggerEx is currently
+    -- a no-op (the dynamic scan/consider triggers are wired for real next).
+    trigger_flag = {
+      Enabled = 1, OmitFromLog = 2, OmitFromOutput = 4, KeepEvaluating = 8,
+      IgnoreCase = 16, RegularExpression = 32, ExpandVariables = 512,
+      Replace = 1024, LowercaseWildcard = 2048, Temporary = 16384, OneShot = 32768,
+    }
+
     -- Deferred actions → one-shot timers on the host's own timer engine.
     -- script/scriptafteromit run the text as Lua here; otherwise it's sent to
     -- the MUD. S&D uses these for do_cp_check, area scans, navigation, etc.
