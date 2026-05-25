@@ -14,6 +14,38 @@ struct SearchAndDestroyHostTests {
         #expect(await host.functionExists("OnPluginBroadcast"))
     }
 
+    @Test("Tell/ColourTell append; print/Note flush — one line per row")
+    func tellNoteLineBuffering() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+
+        func lines(_ effects: [ScriptEffect]) -> [String] {
+            effects.compactMap { effect in
+                if case .colourNote(let segs) = effect { return segs.map(\.text).joined() }
+                return nil
+            }
+        }
+
+        // A header row built from three ColourTells + a terminating print("")
+        // must emit exactly ONE line, not four. (Pre-fix each ColourTell mapped
+        // straight to a window line and print went to stdout, shattering rows.)
+        let row = try await host.run(#"""
+        ColourTell("#808080", "", "XCP  ")
+        ColourTell("#808080", "", "Location")
+        ColourTell("#808080", "", "  Notes")
+        print("")
+        """#)
+        #expect(lines(row) == ["XCP  Location  Notes"])
+
+        // Tell appends; Note flushes the whole accumulated line.
+        let mixed = try await host.run(#"Tell("a"); Tell("b"); Note("c")"#)
+        #expect(lines(mixed) == ["abc"])
+
+        // A bare ColourNote (no pending Tell) is still its own single line.
+        let solo = try await host.run(#"ColourNote("red", "", "hi")"#)
+        #expect(lines(solo) == ["hi"])
+    }
+
     @Test("S&D's DB-backed search runs end-to-end (lsqlite3 + curated bindings)")
     func searchRunsAgainstMapperDB() async throws {
         // A world-data dir with a mapper DB (Aardwolf.db) S&D will read.

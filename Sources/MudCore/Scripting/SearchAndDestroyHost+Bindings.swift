@@ -26,11 +26,45 @@ extension SearchAndDestroyHost {
     function Send(s) proteles.send(s); return 0 end
     function SendNoEcho(s) proteles.sendNoEcho(s); return 0 end
     function Execute(s) proteles.execute(s); return 0 end
-    function Note(...) proteles.echo(table.concat({...}, "\\t")) end
-    function ColourNote(...) proteles.colourNote(...) end
-    function ColourTell(...) proteles.colourNote(...) end
-    function AnsiNote(s) proteles.echoAnsi(s) end
-    function Tell(s) proteles.echo(tostring(s)) end
+    -- Output line buffer (MUSHclient semantics): Tell/ColourTell/Hyperlink
+    -- APPEND coloured segments to the current line; Note/ColourNote/AnsiNote/
+    -- print FLUSH it as one window line. S&D builds its xcp/cp tables this way
+    -- (a row is many Tell/Hyperlink calls terminated by `print("")`), so we
+    -- accumulate flat fore,back,text triples and emit a single ColourNote on
+    -- flush — otherwise every cell lands on its own line and the table shatters.
+    local __snd_seg = {}
+    local function __snd_push(fore, back, text)
+      __snd_seg[#__snd_seg + 1] = fore or ""
+      __snd_seg[#__snd_seg + 1] = back or ""
+      __snd_seg[#__snd_seg + 1] = text == nil and "" or tostring(text)
+    end
+    local function __snd_flush()
+      proteles.colourNote(unpack(__snd_seg))
+      __snd_seg = {}
+    end
+    function Tell(s) __snd_push("", "", s) end
+    function ColourTell(...)
+      local a = {...}
+      for i = 1, #a, 3 do __snd_push(a[i], a[i + 1], a[i + 2]) end
+    end
+    -- Hyperlink(action, text, tooltip, fore, back, ...): native links come
+    -- later; keep the coloured text (so clickable cells still render in-line).
+    function Hyperlink(action, text, tooltip, fore, back) __snd_push(fore, back, text) end
+    function Note(...) __snd_push("", "", table.concat({...}, "\\t")); __snd_flush() end
+    function ColourNote(...)
+      local a = {...}
+      for i = 1, #a, 3 do __snd_push(a[i], a[i + 1], a[i + 2]) end
+      __snd_flush()
+    end
+    function print(...)
+      local n, parts = select("#", ...), {}
+      for i = 1, n do parts[i] = tostring((select(i, ...))) end
+      __snd_push("", "", table.concat(parts, "\\t")); __snd_flush()
+    end
+    function AnsiNote(s)
+      if #__snd_seg > 0 then __snd_flush() end
+      proteles.echoAnsi(s)
+    end
     -- NoteStyle sets bold/underline for following Notes; we don't carry note
     -- styles, so it's a no-op (output text is unaffected).
     function NoteStyle(...) return 0 end
@@ -38,7 +72,6 @@ extension SearchAndDestroyHost {
     -- harness + the `notes` header). The session re-feeds it through the
     -- inbound pipeline so triggers see it and it displays.
     function Simulate(s) proteles.simulate(s == nil and "" or tostring(s)); return 0 end
-    function Hyperlink(action, text) proteles.echo(tostring(text)) end  -- native links: later
 
     -- Colour helpers (MUSHclient world built-ins S&D calls for miniwindow
     -- colours; the native panel uses its own palette, so these only need to
