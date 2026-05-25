@@ -28,14 +28,15 @@ run the large Search-and-Destroy plugin natively.
 | Scripting foundation (triggers/aliases/timers, Lua, events, RPC) | ✅ shipped |
 | MUSHclient compat shim + XML loader + per-plugin envs | ✅ shipped |
 | Native-plugin host + 5 ported plugins | ✅ shipped |
-| Native graphical mapper (GMCP) + pathfinding + import | ✅ on `main` |
+| Native graphical mapper + Dijkstra pathfinding + DB import | ✅ on `main` |
+| Full `mapper …` command surface (goto/where/portals/cexits/findpath/purge/…) | ✅ on `main` |
 | lsqlite3 (sandboxed `sqlite3`) for plugins | ✅ on `main` |
-| Search-and-Destroy vendored natively (logic + UI + DB import) | ✅ on `main` |
+| Search-and-Destroy live (campaign/quest detect, navigation, scan, DB import) | ✅ on `main` |
 | Preferences UI, themes, notifications, logging, macros | ⬜ Phase 7 |
 | Signing/notarization/updater/release | ⬜ Phase 8 |
 | iOS/iPad port | ⬜ Phase 9 |
 
-~675 tests across ~154 suites; four gates green (`swift build`,
+~698 tests across ~155 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
@@ -485,6 +486,7 @@ instead.
 | D-27 | 2026-05-22 | **Live panels docked in the main window** (Info/Map/Chat/S&D via a segmented picker), not separate windows that fall behind the always-on-top game window | adopted |
 | D-28 | 2026-05-23 | **Search-and-Destroy vendored natively:** reuse its `core.lua` logic verbatim on a *dedicated* Lua runtime with curated bindings (not the generic mush shim); parse its triggers/aliases/timers from XML and run them on the host's own engines; native SwiftUI panel fed by a published JSON model (`proteles.publish`, inverse of GMCP-in); `SnDdb.db` import. Required shared fixes: `PatternMatcher` rewrites ICU-incompatible named groups to `gN`; `setMatchGlobals` puts named captures on the `matches` table; `PluginMapping.timer` honours `script=`; a tolerant XML normaliser escapes `<`/`>` only inside attribute values (S&D's `match=` regexes use `(?<name>)` + lookbehinds that XMLParser rejects) | adopted |
 | D-29 | 2026-05-23 | **Mapper `CallPlugin` bridge:** the native mapper answers `CallPlugin(<mapperID>, fn, …)` (get_current_room/getkeyword/override_continents/find) and delivers results back to plugins via `OnPluginBroadcast` (500/501/502), so plugins that depend on the mapper (S&D) work against the native one | adopted |
+| D-30 | 2026-05-24 | **S&D parity = glue, not re-implementation.** S&D runs its own commands (xcp/nx/xrt/go/scan/consider) verbatim; we only (a) reach MUSHclient world-API parity in the curated bindings — incl. `EnableTriggerGroup` (the live-campaign blocker), `DoAfterSpecial`, `AddTriggerEx`/`SetTriggerOption` (runtime triggers added to the host's own engine), `EnableAlias`, colour/`sendto`/`trigger_flag` constants — and (b) route S&D's `Execute("mapper goto <id>")` back through Proteles' command pipeline so it drives the **native** mapper. S&D's navigation thus needs no area data of ours: its hardcoded `areaDefaultStartRooms` (323 areas) resolves `xrt <area>` → room id → `mapper goto`. The mapper's own `aard_GMCP_mapper` command surface (goto/walkto/where/find/findpath/portals/cexits/purge/notes/reset/backup/room-flags) is reimplemented natively against the read-compatible DB. **NO GUESSING rule** (CLAUDE.md): mapper/S&D work reads the reference + the live `Aardwolf.db`/`SnDdb.db`, never intuition | adopted |
 
 ---
 

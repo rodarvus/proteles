@@ -4,11 +4,23 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-23)
+## Current status (2026-05-24)
 
 **Phases 0–6 complete (shipped through `v0.0.6`); mapper + lsqlite3 +
-Search-and-Destroy landed on `main` since (unreleased).** Read **PLAN.md**
-for the full status table + decision log (D-01…D-29).
+Search-and-Destroy + their full parity landed on `main` since (unreleased,
+~27 commits ahead of `v0.0.6`).** Read **PLAN.md** for the full status table +
+decision log (D-01…D-30).
+
+**Mapper + S&D parity is now functionally complete (pending the user's live
+verification):** the full `aard_GMCP_mapper` command surface
+(goto/walkto/where/find/findpath/portals/portal/fullportal/delete-portal/purge,
+cexit/cexits/fullcexit, notes/area/thisroom/unmapped, purgeroom/purgezone,
+reset/backup, room flags) is native against the read-compatible DB; S&D runs
+its own commands verbatim (xcp/nx/xrt/go/scan/consider) atop MUSHclient-API
+parity in the curated bindings (EnableTriggerGroup — the live-campaign blocker;
+DoAfterSpecial; AddTriggerEx/SetTriggerOption; EnableAlias; colour/sendto/
+trigger_flag constants) + `Execute("mapper goto")` re-entering the command
+pipeline to drive the native mapper. See D-30.
 
 Done and live: connect/telnet/MCCP2/ANSI/scrollback; prompt-driven autologin
 + autoreconnect; GMCP + status HUD + chat capture; command history/completion;
