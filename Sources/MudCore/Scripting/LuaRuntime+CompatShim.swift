@@ -200,6 +200,11 @@ public extension LuaRuntime {
     /// coroutine helper and many third-party plugins need. Registrations route
     /// to `proteles.*` effects, which ``ScriptEngine`` applies to its engines.
     internal nonisolated static let automationShimSource = #"""
+    -- Name registries so IsTrigger/IsTimer/IsAlias can answer existence
+    -- (MUSHclient object names are world-unique). Add*/Delete* keep these in
+    -- sync; dinv's de-init whacks objects by name and treats "not found" as a
+    -- successful no-op, so an accurate registry keeps it from erroring on quit.
+    local __triggerNames, __timerNames, __aliasNames = {}, {}, {}
     -- Bitwise ops (Lua 5.1 has none; MUSHclient exposes a global `bit`). -----
     bit = bit or {}
     local function _norm(x) return math.floor(tonumber(x) or 0) % 4294967296 end
@@ -322,28 +327,47 @@ public extension LuaRuntime {
       if script and script ~= "" then
         proteles.doAfter(seconds, script .. "(" .. string.format("%q", tostring(name)) .. ")", true)
       end
+      __timerNames[tostring(name)] = true
       return error_code.eOK
     end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
       proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      __triggerNames[tostring(name)] = true
       return error_code.eOK
     end
     function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
       proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      __triggerNames[tostring(name)] = true
       return error_code.eOK
     end
-    function DeleteTrigger(name) proteles.removeTrigger(tostring(name)); return error_code.eOK end
+    function DeleteTrigger(name)
+      proteles.removeTrigger(tostring(name)); __triggerNames[tostring(name)] = nil
+      return error_code.eOK
+    end
     -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
     -- engine (owner-scoped, like AddTriggerEx). `script` is the handler name.
     function AddAlias(name, match, response, flags, script)
       proteles.addAlias(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      __aliasNames[tostring(name)] = true
       return error_code.eOK
     end
     function EnableAlias(name, flag)
       proteles.enableAlias(tostring(name), not (flag == false or flag == nil or flag == 0))
       return error_code.eOK
     end
-    function DeleteTimer(name) return error_code.eOK end
+    function DeleteTimer(name) __timerNames[tostring(name)] = nil; return error_code.eOK end
+    -- Existence checks (MUSHclient world API): eOK when the named object exists,
+    -- else the type-specific not-found code. dinv's de-init wrappers branch on
+    -- these to skip deleting objects that were never instantiated.
+    function IsTrigger(name)
+      return __triggerNames[tostring(name)] and error_code.eOK or error_code.eTriggerNotFound
+    end
+    function IsTimer(name)
+      return __timerNames[tostring(name)] and error_code.eOK or error_code.eTimerNotFound
+    end
+    function IsAlias(name)
+      return __aliasNames[tostring(name)] and error_code.eOK or error_code.eAliasNotFound
+    end
     function SetTimerOption(name, option, value) return error_code.eOK end
     function SetTriggerOption(name, option, value) return error_code.eOK end
     function DeleteTemporaryTriggers() return 0 end

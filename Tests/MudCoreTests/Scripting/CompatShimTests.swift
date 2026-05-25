@@ -110,6 +110,25 @@ struct CompatShimTests {
         ])
     }
 
+    @Test("IsTrigger/IsTimer/IsAlias report existence via eOK / not-found codes")
+    func existenceChecks() async throws {
+        let lua = try await shimmed()
+        // Unknown names → type-specific not-found codes (dinv's de-init relies
+        // on this to no-op deleting objects it never instantiated).
+        #expect(try await lua.number("IsTrigger('nope')") == 30005) // eTriggerNotFound
+        #expect(try await lua.number("IsTimer('nope')") == 30017) // eTimerNotFound
+        #expect(try await lua.number("IsAlias('nope')") == 30013) // eAliasNotFound
+        // After registering, the name resolves to eOK; DeleteTrigger clears it.
+        _ = try await lua.run("AddTriggerEx('t1', '^x$', '', 0, -1, 0, '', 'fn', 12, 0)")
+        #expect(try await lua.number("IsTrigger('t1')") == 0)
+        _ = try await lua.run("DeleteTrigger('t1')")
+        #expect(try await lua.number("IsTrigger('t1')") == 30005)
+        _ = try await lua.run("AddAlias('a1', '^y$', '', 1, 'fn')")
+        #expect(try await lua.number("IsAlias('a1')") == 0)
+        _ = try await lua.run("AddTimer('m1', 0, 0, 5, '', 0, 'fn'); DeleteTimer('m1')")
+        #expect(try await lua.number("IsTimer('m1')") == 30017)
+    }
+
     @Test("GetEchoInput / clipboard stubs don't error")
     func echoAndClipboard() async throws {
         let lua = try await shimmed()
