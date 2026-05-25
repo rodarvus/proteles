@@ -9,7 +9,18 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Phases 0–6 complete and shipped as `v0.1.0` — the first tagged release that
 includes the native mapper, lsqlite3, and Search-and-Destroy with live
 campaign/quest detection verified against the user's live MUD.** Read
-**PLAN.md** for the full status table + decision log (D-01…D-31).
+**PLAN.md** for the full status table + decision log (D-01…D-32).
+
+**In progress (unreleased, on `main`): the dinv inventory manager, run verbatim
+through the generic `mush.lua` compat shim (D-32 — not a bespoke host; dinv has
+no miniwindow).** Vendored under `Resources/dinv`; loads + `dinv help` works.
+Closing its API surface added reusable shim infrastructure: a comprehensive
+`utils` library, a real `AddAlias` dynamic-alias path, the `OnPluginSend` hook
+(dinv's `dbot.execute` framework), gmcphelper scalar-stringification, and
+Windows-path (`\`→`/`) normalization at the fs/sqlite boundary. **Next: validate
+dinv's `build`/refresh coroutine flow LIVE via the session transcript** (the
+full init-active DB-open depends on the real login/GMCP sequence — same
+discipline as the S&D saga: read the transcript, don't guess).
 
 **Mapper + S&D parity is functionally complete and live-verified:** the full
 `aard_GMCP_mapper` command surface
