@@ -87,14 +87,24 @@ enum PluginMapping {
         send: String,
         name: String?
     ) -> (sendText: String?, script: String?) {
+        let body = trimmedSend(send)
+        let isScriptSend = scriptSendTo.contains(attributes["send_to"] ?? "")
         if let function = nonEmpty(attributes["script"]) {
             // MUSHclient calls script(name, line, wildcards); matches[0] is
             // the whole match and `matches` is the wildcard table.
-            return (nil, "\(function)(\(luaString(name ?? "")), matches[0], matches)")
+            let call = "\(function)(\(luaString(name ?? "")), matches[0], matches)"
+            // A trigger may have *both* a script function and a `<send>` body:
+            // MUSHclient runs the function AND dispatches the send-text per
+            // `send_to`. Dropping the body silently breaks state machines like
+            // S&D's, where `trg_cp_check_line`'s body enables the terminator
+            // trigger that ultimately builds the target list. When send_to is
+            // script (the S&D convention) append the body as Lua; otherwise
+            // run the function and send the body to the world.
+            guard !body.isEmpty else { return (nil, call) }
+            return isScriptSend ? (nil, call + "\n" + body) : (body, call)
         }
-        let body = trimmedSend(send)
         guard !body.isEmpty else { return (nil, nil) }
-        if scriptSendTo.contains(attributes["send_to"] ?? "") {
+        if isScriptSend {
             return (nil, body) // run the body as Lua
         }
         return (body, nil) // send to world (with %-substitution)
