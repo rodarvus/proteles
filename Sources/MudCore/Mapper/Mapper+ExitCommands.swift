@@ -40,8 +40,87 @@ extension Mapper {
         case "portalrecall": portalRecallCommand(arg)
         case "portallevel": portalLevelCommand(arg)
         case "lockexit": lockExitCommand(arg)
+        default: handleRoomFlagCommand(sub, arg)
+        }
+    }
+
+    /// Room-flag + maintenance subcommands (reset/backup/noportal/norecall/
+    /// ignore mismatch), split out for the complexity budget.
+    private func handleRoomFlagCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
+        switch sub {
+        case "reset", "resetaard": resetCommand()
+        case "backup": backupCommand()
+        case "noportal": setCurrentRoomFlag(\.noportal, name: "noportal", arg: arg)
+        case "norecall": setCurrentRoomFlag(\.norecall, name: "norecall", arg: arg)
+        case "ignore": ignoreMismatchCommand(arg)
         default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
         }
+    }
+
+    /// `mapper reset` (resetaard) — forget the current room and re-request it.
+    private func resetCommand() -> [ScriptEffect] {
+        clearCurrentRoom()
+        return [.sendGMCP("request room"), Self.note("Mapper position reset — re-syncing room.")]
+    }
+
+    /// `mapper backup` — copy the map database to a timestamped file beside it.
+    private func backupCommand() -> [ScriptEffect] {
+        let stamp = Self.backupTimestamp.string(from: Date())
+        let dest = store.url.deletingPathExtension().appendingPathExtension("\(stamp).bak.db")
+        do {
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.copyItem(at: store.url, to: dest)
+            return [Self.note("Map backed up to \(dest.lastPathComponent).")]
+        } catch {
+            return [Self.note("Backup failed.")]
+        }
+    }
+
+    private static let backupTimestamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
+    /// `mapper ignore mismatch [on|off]` — set the current room's
+    /// ignore-exits-mismatch flag.
+    private func ignoreMismatchCommand(_ arg: String) -> [ScriptEffect] {
+        let rest = arg.split(separator: " ", maxSplits: 1).map(String.init)
+        guard rest.first?.lowercased() == "mismatch" else {
+            return [Self.note("Usage: mapper ignore mismatch on|off")]
+        }
+        return setCurrentRoomFlag(
+            \.ignoreExitsMismatch,
+            name: "ignore mismatch",
+            arg: rest.count > 1 ? rest[1] : ""
+        )
+    }
+
+    /// Set (or show) a boolean flag on the current room (noportal/norecall/
+    /// ignore-mismatch); these feed the Pathfinder + redraw the map.
+    private func setCurrentRoomFlag(
+        _ keyPath: WritableKeyPath<Room, Bool>,
+        name: String,
+        arg: String
+    ) -> [ScriptEffect] {
+        guard let uid = currentRoomUID, var room = graph.rooms[uid] else {
+            return [Self.note("Your current location is unknown.")]
+        }
+        let on: Bool
+        switch arg.lowercased() {
+        case "on", "true", "yes": on = true
+        case "off", "false", "no": on = false
+        case "":
+            return [Self.note("\(name) for room \(uid) is \(room[keyPath: keyPath] ? "on" : "off").")]
+        default:
+            return [Self.note("Usage: mapper \(name) on|off")]
+        }
+        room[keyPath: keyPath] = on
+        graph[uid] = room
+        try? store.upsert(room)
+        publishLayout()
+        return [Self.note("\(name) \(on ? "set on" : "cleared for") room \(uid).")]
     }
 
     /// Resolve a portal reference: `#N` (1-based index into the portal list) or

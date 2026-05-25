@@ -45,6 +45,12 @@ public actor Mapper {
         return cexitConfirmationMessage
     }
 
+    /// Forget the current room (`mapper reset`/resetaard); the next room.info
+    /// re-establishes position.
+    func clearCurrentRoom() {
+        currentRoomUID = nil
+    }
+
     /// Record the pending custom exit now that we've arrived in `uid`.
     private func recordPendingCexit(arrivedAt uid: String) {
         guard let pending = pendingCexit else { return }

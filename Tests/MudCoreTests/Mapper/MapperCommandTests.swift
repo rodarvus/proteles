@@ -302,6 +302,35 @@ struct MapperCommandTests {
         #expect(list.contains { $0.contains("[recall]") && $0.contains("step") && $0.contains("L40") })
     }
 
+    @Test("room flags: noportal / norecall / ignore mismatch on the current room")
+    func roomFlags() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room = 1
+        #expect(await notes(mapper.handleCommand("mapper noportal on"))
+            .contains { $0.contains("noportal set on room 1") })
+        #expect(await notes(mapper.handleCommand("mapper norecall on"))
+            .contains { $0.contains("norecall set on room 1") })
+        #expect(await notes(mapper.handleCommand("mapper ignore mismatch on"))
+            .contains { $0.contains("ignore mismatch set on room 1") })
+        // Persisted on the room.
+        #expect(await mapper.graph.rooms["1"]?.noportal == true)
+        #expect(await mapper.graph.rooms["1"]?.norecall == true)
+    }
+
+    @Test("mapper reset clears position and re-requests the room")
+    func reset() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        let effects = await mapper.handleCommand("mapper reset")
+        #expect(effects.contains {
+            if case .sendGMCP(let payload) = $0 { return payload == "request room" }
+            return false
+        })
+        #expect(await mapper.currentRoomUID == nil)
+    }
+
     @Test("lockexit sets the level on the current room's exit")
     func lockExit() async throws {
         let (mapper, url) = try seeded()
