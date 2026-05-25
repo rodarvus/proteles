@@ -111,6 +111,11 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `script` is the handler function name. Consumed by a plugin host that
     /// owns its own trigger engine (Search-and-Destroy's scan/consider).
     case addTrigger(name: String, pattern: String, flags: Int, script: String)
+    /// Register a runtime alias (MUSHclient `AddAlias`). `flags` is the
+    /// `alias_flag` bitfield (Enabled/RegularExpression); `script` is the
+    /// handler function name. Consumed by the plugin host into its alias engine
+    /// (e.g. dinv's regen `sleep` alias).
+    case addAlias(name: String, pattern: String, flags: Int, script: String)
     /// Set a runtime trigger's group (MUSHclient `SetTriggerOption(.,"group",.)`),
     /// so `EnableTriggerGroup` can toggle it.
     case setTriggerGroup(name: String, group: String)

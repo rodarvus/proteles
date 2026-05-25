@@ -97,6 +97,42 @@ struct CompatShimTests {
         #expect(try await lua.number("SetAlphaOption('k', 'v')") == 0)
     }
 
+    @Test("AddAlias/EnableAlias map to the right effects; alias_flag values match")
+    func aliasRegistration() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        AddAlias("a1", "^sleep$", "", alias_flag.Enabled + alias_flag.RegularExpression, "fn")
+        EnableAlias("a1", false)
+        """)
+        #expect(effects == [
+            .addAlias(name: "a1", pattern: "^sleep$", flags: 1 + 128, script: "fn"),
+            .enableAlias(name: "a1", on: false)
+        ])
+    }
+
+    @Test("GetEchoInput / clipboard stubs don't error")
+    func echoAndClipboard() async throws {
+        let lua = try await shimmed()
+        #expect(try await lua.number("GetEchoInput()") == 1)
+        #expect(try await lua.string("GetClipboard()").isEmpty)
+        #expect(try await lua.number("SetClipboard('x')") == 0)
+    }
+
+    @Test("stylesToANSI(ColoursToStyles(s)) round-trips coloured text")
+    func stylesRoundTrip() async throws {
+        let lua = try await shimmed()
+        // dinv's dbot.print idiom: AnsiNote(stylesToANSI(ColoursToStyles(s))).
+        // aardwolf_colors is dofile'd into globals (as dinv does it).
+        let ansi = try await lua.string("""
+        (function()
+          dofile("aardwolf_colors.lua")
+          return stylesToANSI(ColoursToStyles("@Rred text@w"))
+        end)()
+        """)
+        #expect(ansi.contains("red text"))
+        #expect(ansi.unicodeScalars.contains("\u{1B}"))
+    }
+
     @Test("Send_GMCP_Packet produces a sendGMCP effect")
     func sendGMCPPacket() async throws {
         let lua = try await shimmed()

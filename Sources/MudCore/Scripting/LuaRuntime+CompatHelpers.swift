@@ -119,6 +119,14 @@ extension LuaRuntime {
       return table.concat(out)
     end
 
+    -- stylesToANSI: a MUSHclient style-run table → an ANSI string. We round-trip
+    -- through our own @-code helpers (StylesToColours then ColoursToANSI), which
+    -- is sufficient for the `AnsiNote(stylesToANSI(ColoursToStyles(s)))` idiom
+    -- plugins (dinv's dbot.print) use to render coloured output.
+    function stylesToANSI(styles)
+      return ColoursToANSI(StylesToColours(styles))
+    end
+
     return true
     """
 

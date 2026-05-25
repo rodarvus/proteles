@@ -249,6 +249,12 @@ public extension LuaRuntime {
       IgnoreCase = 16, RegularExpression = 32, ExpandVariables = 512,
       Replace = 1024, LowercaseWildcard = 2048, Temporary = 16384, OneShot = 32768,
     }
+    -- AddAlias flag bits (mushclient/flags.h — distinct from trigger bits).
+    alias_flag = {
+      Enabled = 1, IgnoreCase = 32, OmitFromLogFile = 64,
+      RegularExpression = 128, OmitFromOutput = 256, Temporary = 16384,
+      OneShot = 32768,
+    }
     custom_colour = { NoChange = -1 }
 
     local _unique = 0
@@ -264,6 +270,14 @@ public extension LuaRuntime {
     -- don't error.
     function GetAlphaOption(name) return "" end
     function SetAlphaOption(name, value) return error_code.eOK end
+    -- GetEchoInput: whether typed input is locally echoed. dinv reads it to
+    -- restore the prior state around its prompt reads; default on (1).
+    function GetEchoInput() return 1 end
+    -- Clipboard: not yet wired to the native pasteboard (MudCore is
+    -- platform-agnostic). Reads return empty; writes are accepted as eOK so
+    -- copy/paste features (e.g. dinv priority copy) don't error.
+    function GetClipboard() return "" end
+    function SetClipboard(text) return error_code.eOK end
     -- Convert a plain (literal/wildcard) match to a regex, like MUSHclient's
     -- MakeRegularExpression — escape regex metacharacters so wait.match treats
     -- its text literally.
@@ -292,6 +306,16 @@ public extension LuaRuntime {
       return error_code.eOK
     end
     function DeleteTrigger(name) proteles.removeTrigger(tostring(name)); return error_code.eOK end
+    -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
+    -- engine (owner-scoped, like AddTriggerEx). `script` is the handler name.
+    function AddAlias(name, match, response, flags, script)
+      proteles.addAlias(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      return error_code.eOK
+    end
+    function EnableAlias(name, flag)
+      proteles.enableAlias(tostring(name), not (flag == false or flag == nil or flag == 0))
+      return error_code.eOK
+    end
     function DeleteTimer(name) return error_code.eOK end
     function SetTimerOption(name, option, value) return error_code.eOK end
     function SetTriggerOption(name, option, value) return error_code.eOK end

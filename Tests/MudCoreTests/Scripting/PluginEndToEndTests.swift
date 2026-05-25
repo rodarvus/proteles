@@ -119,6 +119,32 @@ struct PluginEndToEndTests {
         #expect(disposition.effects.contains(.echo("A reacts")))
         #expect(disposition.effects.contains(.echo("B reacts")))
     }
+
+    @Test("AddAlias on install registers a runtime alias that fires on input")
+    func dynamicAliasFires() async throws {
+        // dinv's regen pattern: register a `sleep` alias at install whose
+        // handler runs in the plugin's env. Proves AddAlias → addDynamicAlias
+        // → owner-scoped alias firing end-to-end.
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.dyn.alias" name="DynAlias"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          AddAlias("dynSleep", "^sleep$", "",
+                   alias_flag.Enabled + alias_flag.RegularExpression, "onSleep")
+        end
+        function onSleep() proteles.echo("regen!") end
+        ]]></script>
+        </muclient>
+        """)
+        let engine = try ScriptEngine()
+        _ = await engine.loadPlugin(plugin)
+        let effects = await engine.expandInput("sleep")
+        #expect(effects.contains(.echo("regen!")))
+        // A non-matching line is untouched.
+        let none = await engine.expandInput("smile")
+        #expect(!none.contains(.echo("regen!")))
+    }
 }
 
 extension PluginEndToEndTests {

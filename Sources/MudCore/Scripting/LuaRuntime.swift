@@ -144,7 +144,7 @@ public actor LuaRuntime {
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic
+        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -377,12 +377,12 @@ public actor LuaRuntime {
         setHostFunction("enableGroup", .enableGroup)
         setHostFunction("doAfter", .doAfter)
         setHostFunction("addTrigger", .addTrigger)
+        setHostFunction("addAlias", .addAlias)
         setHostFunction("setTriggerGroup", .setTriggerGroup)
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
         setHostFunction("monotonic", .monotonic)
-        // `proteles.gmcp`: live Lua view of GMCP state (filled by `applyGMCP`).
-        lua_createtable(state, 0, 0)
+        lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
     }
@@ -403,7 +403,7 @@ public actor LuaRuntime {
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
-             .addTrigger, .setTriggerGroup, .enableAlias:
+             .addTrigger, .addAlias, .setTriggerGroup, .enableAlias:
             recordEffect(function, arguments)
             return []
         case .call:

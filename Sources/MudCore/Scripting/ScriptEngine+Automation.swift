@@ -19,6 +19,16 @@ extension ScriptEngine {
         static let oneShot = 0x8000
     }
 
+    /// MUSHclient `AddAlias` flag bits (mushclient/flags.h — note these differ
+    /// from the trigger bits: `eIgnoreAliasCase = 0x20`,
+    /// `eAliasRegularExpression = 0x80`).
+    enum AliasFlag {
+        static let enabled = 0x01
+        static let ignoreCase = 0x20
+        static let regularExpression = 0x80
+        static let temporary = 0x4000
+    }
+
     /// Apply the programmatic-automation effects a script produced to our own
     /// engines, returning the remaining outward effects (sends/echoes/notes)
     /// for the session to render.
@@ -32,6 +42,8 @@ extension ScriptEngine {
         switch effect {
         case .addTrigger(let name, let pattern, let flags, let script):
             addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
+        case .addAlias(let name, let pattern, let flags, let script):
+            addDynamicAlias(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
         case .scheduleAfter(let seconds, let isScript, let body):
             scheduleOneShot(after: seconds, isScript: isScript, body: body, owner: owner)
         case .setTriggerGroup(let name, let group):
@@ -102,6 +114,35 @@ extension ScriptEngine {
         guard (try? triggers.add(trigger)) != nil else { return }
         triggerIDsByName[name] = trigger.id
         automationOwners[trigger.id] = owner
+    }
+
+    /// Register an `AddAlias` alias. Like ``addDynamicTrigger`` but on the alias
+    /// engine: the script name becomes the MUSHclient call
+    /// `fn(name, line, wildcards)` (`.script` target) and runs in the owning
+    /// plugin's environment (e.g. dinv's regen `sleep` alias). Honours the
+    /// Enabled/IgnoreCase/Regex flag bits.
+    private func addDynamicAlias(
+        name: String,
+        pattern: String,
+        flags: Int,
+        script: String,
+        owner: String?
+    ) {
+        let isRegex = flags & AliasFlag.regularExpression != 0
+        let call = script.isEmpty ? nil
+            : "\(script)(\(Self.luaString(name)), matches[0], matches)"
+        let alias = Alias(
+            name: name,
+            pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
+            caseSensitive: flags & AliasFlag.ignoreCase == 0,
+            enabled: flags & AliasFlag.enabled != 0,
+            sendText: call,
+            sendTo: call == nil ? .world : .script
+        )
+        if let existing = aliasIDsByName[name] { aliases.remove(id: existing) }
+        guard (try? aliases.add(alias)) != nil else { return }
+        aliasIDsByName[name] = alias.id
+        automationOwners[alias.id] = owner
     }
 
     /// Schedule a one-shot deferred action (`DoAfter`/`DoAfterSpecial`/the

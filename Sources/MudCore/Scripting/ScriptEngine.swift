@@ -292,7 +292,12 @@ public actor ScriptEngine {
         await runtime.setPluginContext(resolved)
         try? await runtime.loadCompatShim()
 
-        var effects = await runtime.loadPluginScript(plugin.script, pluginID: plugin.id)
+        // Register any AddTriggerEx/AddAlias/AddTimer/DoAfter issued while the
+        // script loads (owner-scoped, so callbacks run in this plugin's env).
+        var effects = await consumeRegistrations(
+            runtime.loadPluginScript(plugin.script, pluginID: plugin.id),
+            owner: plugin.id
+        )
         for trigger in plugin.triggers {
             try? triggers.add(trigger)
             automationOwners[trigger.id] = plugin.id
@@ -309,7 +314,12 @@ public actor ScriptEngine {
             if let name = timer.label { timerIDsByName[name] = timer.id }
         }
         if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
-        await effects.append(contentsOf: runtime.callPluginCallback(plugin.id, "OnPluginInstall"))
+        // OnPluginInstall commonly registers triggers/aliases/timers (dinv does
+        // at init); consume those registrations too rather than leaking them.
+        await effects.append(contentsOf: consumeRegistrations(
+            runtime.callPluginCallback(plugin.id, "OnPluginInstall"),
+            owner: plugin.id
+        ))
         return effects
     }
 

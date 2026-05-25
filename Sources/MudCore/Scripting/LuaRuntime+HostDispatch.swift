@@ -75,6 +75,13 @@ extension LuaRuntime {
                 flags: Int(Self.argDouble(arguments, 2)),
                 script: Self.argString(arguments, 3)
             ))
+        case .addAlias:
+            effects.append(.addAlias(
+                name: Self.argString(arguments, 0),
+                pattern: Self.argString(arguments, 1),
+                flags: Int(Self.argDouble(arguments, 2)),
+                script: Self.argString(arguments, 3)
+            ))
         case .setTriggerGroup:
             effects.append(.setTriggerGroup(
                 name: Self.argString(arguments, 0),
