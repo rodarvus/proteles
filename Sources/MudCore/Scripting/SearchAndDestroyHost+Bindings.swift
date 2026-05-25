@@ -246,6 +246,25 @@ extension SearchAndDestroyHost {
     -- target list comes up empty). Use sub-second wall time so the debounce holds.
     os.clock = function() return proteles.monotonic() end
 
+    -- math.random tolerance: S&D's `gmkw` keyword guesser computes
+    -- `math.random(2 + round_banker(len*0.5), len)`, whose lower bound exceeds
+    -- the upper for short single-word mob names (e.g. "a dog" → "dog", len 3 →
+    -- math.random(4, 3)). Standard Lua 5.1 rejects that with "interval is
+    -- empty", which aborts `build_main_target_list` mid-run — and a Lua error
+    -- discards every effect accumulated in that chunk, including the panel
+    -- `publishModel`, so the whole campaign silently fails to appear. `gmkw`
+    -- runs for *every* target, so any campaign containing such a mob breaks
+    -- detection entirely. Clamp a reversed 2-arg interval (the guess then
+    -- degrades to the full word) — leaving the 0/1-arg forms untouched.
+    local __snd_orig_random = math.random
+    math.random = function(...)
+      local a = {...}
+      if #a == 2 and type(a[1]) == "number" and type(a[2]) == "number" and a[1] > a[2] then
+        a[1] = a[2]
+      end
+      return __snd_orig_random(unpack(a))
+    end
+
     -- Miniwindow: stubbed (replaced by the native SwiftUI panel). Drawing is a
     -- no-op; geometry queries return 0; `WindowInfo`-style reads return 0.
     local function noop() return 0 end

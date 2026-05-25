@@ -44,6 +44,100 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.playerOnCP == true)
     }
 
+    @Test("the cp_check_end pattern compiles and matches a blank line")
+    func cpCheckEndPatternCompiles() throws {
+        // Root-cause probe: if the end-trigger regex doesn't compile under our
+        // ICU matcher, `seedEngines` silently skips it → it's never enabled →
+        // `cp_check_end` never fires → no target list. It MUST compile and
+        // match a blank line (its end-of-block signal) but not a target line.
+        let pattern = #"^(?!You still have to kill \* .+ \(.+?(?: - Dead)?\))$"#
+        let matcher = try PatternMatcher(pattern: .regex(pattern), caseSensitive: false)
+        #expect(matcher.match("") != nil, "cp_check_end must match a blank line")
+        #expect(
+            matcher.match("You still have to kill * agony (Fantasy Fields)") == nil,
+            "cp_check_end must NOT match a target line"
+        )
+    }
+
+    @Test("math.random tolerates a reversed interval (the gmkw short-mob crash)")
+    func mathRandomReversedInterval() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // S&D's gmkw computes math.random(2 + round_banker(len*0.5), len); for a
+        // 3-letter single-word mob ("a dog" → "dog") that's math.random(4, 3),
+        // which standard Lua 5.1 rejects ("interval is empty"), aborting
+        // build_main_target_list and losing the whole campaign. The runtime
+        // clamps a reversed interval instead of throwing.
+        #expect(await host.evaluate("tostring(math.random(4, 3))") != nil)
+        #expect(await host.evaluate("tostring(math.random(4, 3) == 3)") == "true")
+        // The 0/1-arg forms are unaffected.
+        #expect(await host.evaluate("type(math.random())") == "number")
+        #expect(await host.evaluate("tostring(math.random(5) >= 1 and math.random(5) <= 5)") == "true")
+    }
+
+    @Test("a full cp scrape with a 3-letter mob builds the target list (no gmkw crash)")
+    func fullScrapeBuildsTargetListWithShortMob() async throws {
+        // Minimal DBs in a configured world-data dir, built via the runtime's
+        // own sqlite3 so the test is hermetic (no committed live DB needed).
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snd-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let host = try SearchAndDestroyHost()
+        await host.configure(directory: dir.path)
+        try await host.load()
+        _ = try await host.run("""
+        local m = sqlite3.open(GetInfo(66) .. WorldName() .. ".db")
+        m:exec[[CREATE TABLE areas (uid TEXT NOT NULL, name TEXT, texture TEXT,
+          color TEXT, flags TEXT NOT NULL DEFAULT '', PRIMARY KEY(uid));
+          INSERT INTO areas (uid, name) VALUES ('wow', 'War of the Wizards');]]
+        m:close()
+        local s = sqlite3.open(GetInfo(66) .. "/SnDdb.db")
+        s:exec[[CREATE TABLE mobs (mob TEXT NOT NULL COLLATE NOCASE,
+          room TEXT NOT NULL COLLATE NOCASE, roomid INTEGER NOT NULL,
+          zone TEXT NOT NULL, seen_count INTEGER NOT NULL DEFAULT 0,
+          kill_count INTEGER NOT NULL DEFAULT 0, UNIQUE(mob, roomid));
+          CREATE TABLE mob_keyword_exceptions (area_name TEXT NOT NULL,
+          mob_name TEXT NOT NULL, keyword TEXT NOT NULL,
+          UNIQUE(area_name, mob_name));
+          INSERT INTO mobs (mob, room, roomid, zone) VALUES ('a dog', 'A kennel', 1, 'wow');]]
+        s:close()
+        """)
+
+        var notes: [String] = []
+        func feed(_ lines: [String]) async {
+            for line in lines {
+                for effect in await host.process(line).effects {
+                    if case .echo(let text) = effect { notes.append(text) }
+                }
+            }
+        }
+        _ = await host.scanForActivity()
+        await feed([
+            "Level Taken........: [ 150 ]",
+            "The targets for this campaign are:",
+            "Find and kill 1 * a dog (War of the Wizards)", // 3-letter mob → gmkw crash
+            ""
+        ])
+        // do_cp_check's 1s os.clock debounce trips in a sub-second test; enable
+        // the cp-check line trigger directly to drive the cp-check phase.
+        _ = try await host.run(#"EnableTrigger("trg_cp_check_line", true)"#)
+        await feed([
+            "You still have to kill * a dog (War of the Wizards)",
+            "Note: Dead means that the target is dead, not that you have killed it.",
+            ""
+        ])
+        let dbg = notes.filter { $0.hasPrefix("[SnD-DBG]") }
+        #expect(dbg.contains { $0.contains("cp_check_end") }, "cp_check_end must fire on the cp-check blank")
+        #expect(
+            dbg.contains { $0.contains("build_main_target_list") },
+            "build_main_target_list must run (it crashed on math.random for the 3-letter mob)"
+        )
+        let model = await host.model.flatMap(SearchAndDestroyModel.decode)
+        #expect(model?.playerOnCP == true, "the campaign must be detected and published")
+    }
+
     @Test("auto-detects an in-progress campaign on connect (no manual cp)")
     func autoDetectsCampaignOnConnect() async throws {
         let host = try SearchAndDestroyHost()
