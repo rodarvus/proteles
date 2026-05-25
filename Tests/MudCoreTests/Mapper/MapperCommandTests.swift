@@ -246,6 +246,24 @@ struct MapperCommandTests {
             .contains { $0.contains("No portals") })
     }
 
+    @Test("custom exits: fullcexit add, list, delete-from-current, purge")
+    func customExits() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // rooms 1,2,3; current = 1
+        // A non-cardinal exit "enter cloud" from room 1 → 3.
+        #expect(await notes(mapper.handleCommand("mapper fullcexit {enter cloud} 1 3"))
+            .contains { $0.contains("Custom exit 'enter cloud'") })
+        let list = await notes(mapper.handleCommand("mapper cexits"))
+        #expect(list.contains { $0.contains("Custom exits (1)") })
+        #expect(list.contains { $0.contains("enter cloud") && $0.contains("[3]") })
+        // Deleting custom exits from the current room (1) removes it.
+        #expect(await notes(mapper.handleCommand("mapper delete cexits"))
+            .contains { $0.contains("Deleted 1 custom exit") })
+        #expect(await notes(mapper.handleCommand("mapper cexits"))
+            .contains { $0.contains("No custom exits") })
+    }
+
     @Test("purgeroom removes the current room from the map")
     func purgeRoom() async throws {
         let (mapper, url) = try seeded()

@@ -113,6 +113,105 @@ public extension MapperStore {
         try write { db in try db.execute(sql: "DELETE FROM exits WHERE fromuid IN ('*','**')") }
     }
 
+    // MARK: - Custom exits (cexits)
+
+    /// Aardwolf's six cardinal directions; a "custom exit" is any exit from a
+    /// real room whose direction isn't one of these (e.g. "enter portal").
+    static let cardinalDirections = "('n','s','e','w','u','d')"
+
+    /// One custom exit, joined to its source room for display.
+    struct CustomExitEntry: Sendable, Equatable {
+        public let fromuid: String
+        public let dir: String
+        public let touid: String
+        public let roomName: String?
+        public let area: String?
+    }
+
+    /// Custom exits, optionally filtered by the source room's area (LIKE).
+    func customExits(areaFilter: String? = nil) throws -> [CustomExitEntry] {
+        try read { db in
+            let like = areaFilter.map { "%\($0)%" } ?? "%"
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT e.fromuid, e.dir, e.touid, r.name AS name, r.area AS area
+                FROM exits e JOIN rooms r ON r.uid = e.fromuid
+                WHERE e.dir NOT IN \(Self.cardinalDirections)
+                  AND e.fromuid NOT IN ('*','**') AND IFNULL(r.area,'') LIKE ?
+                ORDER BY r.area, e.fromuid
+                """,
+                arguments: [like]
+            )
+            return rows.map {
+                CustomExitEntry(
+                    fromuid: $0["fromuid"] ?? "",
+                    dir: $0["dir"] ?? "",
+                    touid: $0["touid"] ?? "",
+                    roomName: $0["name"],
+                    area: $0["area"]
+                )
+            }
+        }
+    }
+
+    /// Add (or replace) a custom exit from one room to another.
+    func addCustomExit(dir: String, from: String, to: String, level: Int) throws {
+        try write { db in
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO exits (dir, fromuid, touid, level) VALUES (?, ?, ?, ?)",
+                arguments: [dir, from, to, String(level)]
+            )
+        }
+    }
+
+    /// Delete all custom (non-cardinal) exits from a room.
+    @discardableResult
+    func deleteCustomExits(from uid: String) throws -> Int {
+        try write { db in
+            try db.execute(
+                sql: "DELETE FROM exits WHERE fromuid = ? AND dir NOT IN \(Self.cardinalDirections)",
+                arguments: [uid]
+            )
+            return db.changesCount
+        }
+    }
+
+    /// Delete exits between two specific rooms (either direction of the pair).
+    @discardableResult
+    func deleteExits(from: String, to: String) throws -> Int {
+        try write { db in
+            try db.execute(
+                sql: "DELETE FROM exits WHERE fromuid = ? AND touid = ?",
+                arguments: [from, to]
+            )
+            return db.changesCount
+        }
+    }
+
+    /// Purge custom exits — all of them, or scoped to one area's rooms.
+    func purgeCustomExits(area: String?) throws {
+        try write { db in
+            if let area {
+                try db.execute(
+                    sql: """
+                    DELETE FROM exits WHERE dir NOT IN \(Self.cardinalDirections) AND fromuid IN (
+                      SELECT uid FROM rooms WHERE area = ?
+                    )
+                    """,
+                    arguments: [area]
+                )
+            } else {
+                try db.execute(
+                    sql: """
+                    DELETE FROM exits WHERE dir NOT IN \(Self.cardinalDirections)
+                      AND fromuid NOT IN ('*','**')
+                    """
+                )
+            }
+        }
+    }
+
     // MARK: - Purge / maintenance
 
     /// Delete a single room and everything referencing it (exits in/out, its

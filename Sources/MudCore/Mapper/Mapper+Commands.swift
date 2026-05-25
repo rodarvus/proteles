@@ -93,12 +93,65 @@ extension Mapper {
         case "portals": listPortals(arg)
         case "portal": addPortalCommand(arg)
         case "fullportal": fullPortalCommand(arg)
+        case "cexits": listCustomExits(arg)
+        case "fullcexit": fullCustomExitCommand(arg)
+        default: handleMaintenanceCommand(sub, arg)
+        }
+    }
+
+    /// Purge / delete / cache subcommands, split out to keep the dispatch
+    /// within the cyclomatic-complexity budget.
+    private func handleMaintenanceCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
+        switch sub {
         case "purgeroom": purgeRoomCommand()
         case "purgezone": purgeZoneCommand(arg)
         case "clearcache": clearCacheCommand()
         case "delete": deleteCommand(arg)
         case "purge": purgeCommand(arg)
         default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
+        }
+    }
+
+    // MARK: - Custom exits (cexits)
+
+    /// `mapper cexits [filter|here]` — list custom (non-cardinal) exits.
+    private func listCustomExits(_ arg: String) -> [ScriptEffect] {
+        let filter = arg.isEmpty ? nil
+            : (arg.lowercased() == "here" ? graph.rooms[currentRoomUID ?? ""]?.area : arg)
+        let exits = (try? store.customExits(areaFilter: filter)) ?? []
+        guard !exits.isEmpty else {
+            return [Self.note("No custom exits\(filter.map { " for '\($0)'" } ?? "").")]
+        }
+        var effects = [Self.note("Custom exits (\(exits.count)):")]
+        for exit in exits {
+            let room = exit.roomName ?? exit.fromuid
+            effects.append(Self.note("  \(room) [\(exit.fromuid)] — \(exit.dir) → [\(exit.touid)]"))
+        }
+        return effects
+    }
+
+    /// `mapper fullcexit {dir} <fromuid> <touid> <level>` — add a custom exit
+    /// with explicit endpoints. (The interactive `mapper cexit <dir>`, which
+    /// runs the command and samples the room you land in, needs live
+    /// room-change detection and lands in a later batch.)
+    private func fullCustomExitCommand(_ arg: String) -> [ScriptEffect] {
+        let groups = Self.braceGroups(arg)
+        let trailing = arg.components(separatedBy: "}").last ?? ""
+        let tokens = trailing.split(separator: " ").map(String.init)
+        guard let dir = groups.first, tokens.count >= 2 else {
+            return [Self.note("Usage: mapper fullcexit {dir} <from-room> <to-room> [level]")]
+        }
+        let from = tokens[0], to = tokens[1]
+        let level = tokens.count > 2 ? (Int(tokens[2]) ?? 0) : 0
+        guard graph.rooms[from] != nil || looksLikeRoomID(from),
+              graph.rooms[to] != nil || looksLikeRoomID(to)
+        else { return [Self.note("Both rooms must be known room ids.")] }
+        do {
+            try store.addCustomExit(dir: dir, from: from, to: to, level: level)
+            reloadGraphAndPublish()
+            return [Self.note("Custom exit '\(dir)' from \(from) → \(to) stored.")]
+        } catch {
+            return [Self.note("Couldn't store that custom exit.")]
         }
     }
 
@@ -204,19 +257,52 @@ extension Mapper {
             let removed = (try? store.deletePortal(dir: dir)) ?? false
             if removed { reloadGraphAndPublish() }
             return [Self.note(removed ? "Deleted portal '\(dir)'." : "No portal '\(dir)'.")]
+        case "cexits":
+            guard let uid = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+            let count = (try? store.deleteCustomExits(from: uid)) ?? 0
+            if count > 0 { reloadGraphAndPublish() }
+            return [Self.note("Deleted \(count) custom exit(s) from room \(uid).")]
+        case "exits":
+            return deleteExitsCommand(tokens.count > 1 ? tokens[1] : "")
         default:
-            return [Self.note("Usage: mapper delete portal <use-command>")]
+            return [Self.note(
+                "Usage: mapper delete portal <cmd> | delete cexits | delete exits to|from <room>"
+            )]
         }
     }
 
+    /// `mapper delete exits to|from <room>` — remove the exits between the
+    /// current room and another (reference: to → from current, from → into).
+    private func deleteExitsCommand(_ arg: String) -> [ScriptEffect] {
+        guard let here = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+        let tokens = arg.split(separator: " ", maxSplits: 1).map(String.init)
+        guard tokens.count == 2, let other = resolveUID(tokens[1]) else {
+            return [Self.note("Usage: mapper delete exits to|from <room>")]
+        }
+        let count: Int
+        switch tokens[0].lowercased() {
+        case "to": count = (try? store.deleteExits(from: here, to: other)) ?? 0
+        case "from": count = (try? store.deleteExits(from: other, to: here)) ?? 0
+        default: return [Self.note("Usage: mapper delete exits to|from <room>")]
+        }
+        if count > 0 { reloadGraphAndPublish() }
+        return [Self.note("Deleted \(count) exit(s).")]
+    }
+
     private func purgeCommand(_ arg: String) -> [ScriptEffect] {
-        switch arg.lowercased() {
+        let tokens = arg.split(separator: " ", maxSplits: 1).map(String.init)
+        switch tokens.first?.lowercased() {
         case "portals":
             try? store.purgePortals()
             reloadGraphAndPublish()
             return [Self.note("Purged all portals.")]
+        case "cexits":
+            let area = tokens.count > 1 ? tokens[1] : nil
+            try? store.purgeCustomExits(area: area)
+            reloadGraphAndPublish()
+            return [Self.note("Purged custom exits\(area.map { " in '\($0)'" } ?? "").")]
         default:
-            return [Self.note("Usage: mapper purge portals")]
+            return [Self.note("Usage: mapper purge portals | purge cexits [area]")]
         }
     }
 
