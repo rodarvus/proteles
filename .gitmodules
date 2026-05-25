@@ -17,3 +17,6 @@
 [submodule "dinv"]
 	path = dinv
 	url = https://github.com/rodarvus/dinv.git
+[submodule "leveldb"]
+	path = leveldb
+	url = https://github.com/rodarvus/leveldb
