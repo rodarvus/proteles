@@ -290,6 +290,49 @@ struct MapperCommandTests {
             .contains { $0.contains("enter portal") && $0.contains("[3]") })
     }
 
+    @Test("a room's note echoes on walk-in (shownotes), once per arrival")
+    func noteOnWalkIn() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room = 1
+        _ = await mapper.handleCommand("mapper note watch the trap here")
+        let stream = await mapper.subscribeNotes()
+        var iterator = stream.makeAsyncIterator()
+        // Walk away to room 2, then back into room 1 — arrival fires the note.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Middle","zone":"z","exits":{"n":3}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"South End","zone":"z","exits":{"n":2}}"#
+        )
+        let note = await iterator.next()
+        #expect(note == "*** MAPPER NOTE *** : watch the trap here")
+        // shownotes off suppresses it.
+        await mapper.setShowNotes(false)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Middle","zone":"z","exits":{"n":3}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"South End","zone":"z","exits":{"n":2}}"#
+        )
+        // Nothing new pushed; re-enabling and re-entering pushes again.
+        await mapper.setShowNotes(true)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Middle","zone":"z","exits":{"n":3}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"South End","zone":"z","exits":{"n":2}}"#
+        )
+        let next = await iterator.next()
+        #expect(next == "*** MAPPER NOTE *** : watch the trap here")
+    }
+
     @Test("interactive cexit: FAILS when no new room is reached in time")
     func interactiveCexitFailure() async throws {
         let (mapper, url) = try seeded()

@@ -120,12 +120,14 @@ public actor Mapper {
         showOtherAreas = Self.persistedFlag(store, Self.showOtherAreasKey)
         showAreaExits = Self.persistedFlag(store, Self.showAreaExitsKey)
         pkBlink = Self.persistedFlag(store, Self.pkBlinkKey, default: true)
+        showNotes = Self.persistedFlag(store, Self.showNotesKey, default: true)
         scanDepth = Self.persistedInt(store, Self.scanDepthKey, default: Self.defaultScanDepth)
     }
 
     private static let showOtherAreasKey = "ui.show_other_areas"
     private static let showAreaExitsKey = "ui.show_area_exits"
     private static let pkBlinkKey = "ui.pk_blink"
+    private static let showNotesKey = "ui.show_notes"
     private static let scanDepthKey = "ui.scan_depth"
 
     /// Default + clamp range for the scan depth (rooms drawn outward).
@@ -160,6 +162,10 @@ public actor Mapper {
     /// Whether the PK warning animates (Aardwolf's `BLINK_PK_TITLE`, default
     /// on). The PK indicator itself stays regardless.
     public private(set) var pkBlink = true
+
+    /// Whether a room's player note is echoed on arrival (Aardwolf's
+    /// `shownotes`, default on). Toggled by `mapper shownotes [on|off]`.
+    public private(set) var showNotes = true
 
     /// How many rooms the fan-out BFS draws outward (Aardwolf's scan depth).
     public private(set) var scanDepth = Mapper.defaultScanDepth
@@ -213,6 +219,13 @@ public actor Mapper {
         pkBlink = value
         try? store.setMeta(value ? "1" : "0", forKey: Self.pkBlinkKey)
         publishLayout()
+    }
+
+    /// Toggle whether room notes echo on arrival, and persist it.
+    public func setShowNotes(_ value: Bool) {
+        guard value != showNotes else { return }
+        showNotes = value
+        try? store.setMeta(value ? "1" : "0", forKey: Self.showNotesKey)
     }
 
     /// Set how many rooms the map draws outward (clamped), persist, republish.
@@ -275,6 +288,7 @@ public actor Mapper {
             return []
         }
         let uid = Self.uid(for: info)
+        let previousRoomUID = currentRoomUID
         currentRoomUID = uid
 
         // Exits: dir → destination vnum (string). Preserve any existing
@@ -316,6 +330,13 @@ public actor Mapper {
         if changed {
             try? store.upsert(room)
             try? store.saveExits(from: uid, exits: exits)
+        }
+
+        // Surface a room's player note on arrival, like the reference's
+        // `*** MAPPER NOTE ***` (got_gmcp_room, shownotes default on). Only on
+        // a genuine room change, so standing still / re-looking doesn't repeat.
+        if showNotes, previousRoomUID != uid, let note = room.notes, !note.isEmpty {
+            emitNote("*** MAPPER NOTE *** : \(note)")
         }
 
         // Ensure the area exists; request its details when the name is unknown.

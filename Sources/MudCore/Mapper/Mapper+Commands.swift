@@ -75,7 +75,8 @@ extension Mapper {
     private func handleSecondaryCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
         switch sub {
         case "note", "addnote": noteCommand(arg)
-        case "notes", "bookmarks", "shownotes": listNotes()
+        case "notes", "bookmarks": listNotes()
+        case "shownotes": showNotesCommand(arg)
         case "thisroom": thisRoom()
         case "unmapped": unmappedExits()
         case "area": areaCommand(arg)
@@ -269,6 +270,20 @@ extension Mapper {
         }
     }
 
+    /// `mapper shownotes [on|off]` — toggle echoing a room's note on arrival
+    /// (the reference's `shownotes`, default on).
+    private func showNotesCommand(_ arg: String) -> [ScriptEffect] {
+        switch arg.lowercased() {
+        case "on": setShowNotes(true); return [Self.note("Mapper notes on arrival: on.")]
+        case "off": setShowNotes(false); return [Self.note("Mapper notes on arrival: off.")]
+        case "": return [Self.note(
+                "Mapper notes on arrival are \(showNotes ? "on" : "off"). "
+                    + "Use 'mapper shownotes on|off'."
+            )]
+        default: return [Self.note("Usage: mapper shownotes on|off")]
+        }
+    }
+
     private func helpOutput() -> [ScriptEffect] {
         [
             "mapper goto <room|name>  — speedwalk to a room (id or name; portals ok)",
@@ -280,6 +295,7 @@ extension Mapper {
             "mapper area [name]       — current area, or search areas by name",
             "mapper note [text]       — note the current room (empty clears it)",
             "mapper notes             — list rooms that have notes",
+            "mapper shownotes [on|off] — echo a room's note on arrival",
             "mapper depth [n]         — how many rooms to draw outward",
             "mapper blink [on|off]    — toggle the PK-room warning animation"
         ].map { Self.note($0) }
