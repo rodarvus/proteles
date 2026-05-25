@@ -102,17 +102,24 @@ public actor SearchAndDestroyHost {
     if type(force_update_check) == "function" then force_update_check = function() end end
     if type(download_sounds) == "function" then download_sounds = function() end end
 
-    -- Auto-detect an already-running campaign: MUSHclient S&D learns it's on a
-    -- cp from the grant line, so a campaign already in progress at connect goes
-    -- unseen. `setup_scan_con_triggers()` runs exactly once, when init finishes
-    -- (`init_called == 2`), so wrapping it is a reliable "init complete" signal
-    -- — and unlike `init_called`/`current_activity` (core.lua locals invisible
-    -- to this chunk) it's a global we can hook. Schedule one do_cp_info shortly
-    -- after, so an in-progress campaign is detected without a manual `cp`.
+    -- Auto-detect an already-running campaign. `setup_scan_con_triggers()` runs
+    -- exactly once, when init finishes (`init_called == 2`), so wrapping it is a
+    -- reliable "init complete" signal — and unlike `init_called`/
+    -- `current_activity` (core.lua locals invisible to this chunk) it's a global
+    -- we can hook. Two things on that signal:
+    --   1. Persistently arm `trg_cp_info_targets`/`trg_cp_info_level_taken` (run
+    --      here, in a consumed timer-fire path, so the enable reaches the host
+    --      engine). Aardwolf auto-shows "YOUR CURRENT CAMPAIGN" on login, often
+    --      *before* a requested `cp info` — without the entry trigger armed, that
+    --      block scrolls by unparsed and the campaign is never detected. Armed,
+    --      it fires the transient line/end triggers and the chain completes.
+    --   2. Also request a `cp info` shortly after, for when nothing auto-shows.
     if type(setup_scan_con_triggers) == "function" and type(do_cp_info) == "function" then
       local __snd_orig_setup = setup_scan_con_triggers
       setup_scan_con_triggers = function(...)
         __snd_orig_setup(...)
+        EnableTrigger("trg_cp_info_level_taken", true)
+        EnableTrigger("trg_cp_info_targets", true)
         DoAfterSpecial(1.0, "do_cp_info()", sendto.script)
       end
     end

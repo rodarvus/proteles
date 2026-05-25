@@ -56,24 +56,31 @@ struct SearchAndDestroyCampaignTests {
             json: #"{"level":4,"state":3,"pos":"Standing"}"#
         )
         // tim_init_plugin (0.5s) runs twice → init completes → the
-        // setup_scan_con_triggers hook schedules do_cp_info, which then fires.
-        // (Before the fix, the hook gated on core.lua locals it couldn't see,
-        // so do_cp_info never ran and an in-progress campaign went undetected.)
-        for i in 1...6 {
+        // setup_scan_con_triggers hook arms trg_cp_info_targets persistently.
+        for i in 1...4 {
             _ = await host.fireTimers(at: Date().addingTimeInterval(Double(i) * 0.6))
         }
-        // The auto do_cp_info armed the cp-info scrape with no manual `cp` typed;
-        // feeding the MUD's cp info response must now detect the campaign.
+        // Aardwolf auto-shows the campaign on login, BEFORE any requested
+        // `cp info`. Feed that auto-shown block with no manual `cp` typed: the
+        // pre-armed entry trigger must parse it and detect the campaign.
+        // (Before the fix the entry trigger wasn't armed in time, so the block
+        // scrolled by unparsed and the campaign went undetected.)
         for line in [
+            "--------------------------[ YOUR CURRENT CAMPAIGN ]----------------------",
+            "Level Taken........: [     8 ]",
+            "----------------------------[ Campaign Victims ]-------------------------",
             "The targets for this campaign are:",
-            "Find and kill 1 * a screaming child (The Land of the Beer Goblins)",
-            "Find and kill 1 * a beer goblin scout (The Land of the Beer Goblins)",
+            "Find and kill 1 * a pink fairy armadillo (Aardwolf Zoological Park)",
+            "Find and kill 1 * a stool (War of the Wizards)",
+            "--------------------------------------------------------------------------",
+            "Use 'cp check' to see only targets that you still need to kill.",
             ""
         ] {
             _ = await host.process(line)
         }
         let model = await host.model.flatMap(SearchAndDestroyModel.decode)
-        #expect(model?.playerOnCP == true, "campaign should be auto-detected on connect")
+        #expect(model?.playerOnCP == true, "an auto-shown campaign must be detected on connect")
+        #expect(model?.activity == "cp")
     }
 
     @Test("gmcp() stringifies scalar leaves so is_character_ready works")
