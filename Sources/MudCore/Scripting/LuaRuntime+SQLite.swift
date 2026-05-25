@@ -28,13 +28,20 @@ extension LuaRuntime {
         }
     }
 
+    /// Normalise a plugin-supplied path for the host filesystem: Windows-centric
+    /// plugins (dinv) build paths with `\` separators, which are literal
+    /// filename characters on macOS. Treat `\` as `/` so those paths resolve.
+    nonisolated func normalizedPath(_ path: String) -> String {
+        path.replacingOccurrences(of: "\\", with: "/")
+    }
+
     /// Whether `sqlite3.open(path)` is permitted. In-memory/temp opens are
     /// always fine; file paths must sit inside the allowed directory.
     nonisolated func sqliteAllows(_ path: String) -> Bool {
         if path.isEmpty || path == ":memory:" { return true }
         guard let directory = sqliteDirectory else { return false }
         let base = URL(fileURLWithPath: directory).standardizedFileURL.path
-        let target = URL(fileURLWithPath: path).standardizedFileURL.path
+        let target = URL(fileURLWithPath: normalizedPath(path)).standardizedFileURL.path
         return target == base || target.hasPrefix(base + "/")
     }
 
@@ -49,7 +56,7 @@ extension LuaRuntime {
     /// outside the sandbox read as "not found" rather than leaking the tree.
     nonisolated func fileExistsAllowed(_ path: String) -> Bool {
         guard sqliteAllows(path) else { return false }
-        return FileManager.default.fileExists(atPath: path)
+        return FileManager.default.fileExists(atPath: normalizedPath(path))
     }
 
     /// `proteles.makeDirectory(path)` — create `path` (and intermediates) when
@@ -58,11 +65,12 @@ extension LuaRuntime {
     /// a shell. Returns whether the directory exists afterwards.
     nonisolated func makeDirectoryAllowed(_ path: String) -> Bool {
         guard sqliteAllows(path) else { return false }
+        let normalized = normalizedPath(path)
         try? FileManager.default.createDirectory(
-            atPath: path, withIntermediateDirectories: true
+            atPath: normalized, withIntermediateDirectories: true
         )
         var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+        return FileManager.default.fileExists(atPath: normalized, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Builds the guarded `sqlite3` global from the raw module + the host
@@ -73,6 +81,9 @@ extension LuaRuntime {
       __lsqlite3_raw = nil
       local allowed = proteles.sqliteAllowed
       local function checked_open(path, ...)
+        -- Windows-centric plugins build paths with backslash separators; treat
+        -- them as "/" so the file resolves on macOS (the host guard agrees).
+        if type(path) == "string" then path = path:gsub("\\\\", "/") end
         if type(path) == "string" and not allowed(path) then
           error("sqlite3.open: access denied for '" .. path .. "'", 2)
         end

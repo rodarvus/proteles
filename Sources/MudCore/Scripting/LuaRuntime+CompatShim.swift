@@ -256,8 +256,24 @@ public extension LuaRuntime {
       RegularExpression = 128, OmitFromOutput = 256, Temporary = 16384,
       OneShot = 32768,
     }
+    -- MUSHclient custom-colour selectors (NoChange + Custom1..Custom16). We
+    -- don't apply per-trigger colours, but plugins index these (e.g. as the
+    -- AddTriggerEx colour arg), so they must be present + non-nil.
     custom_colour = { NoChange = -1 }
+    for i = 1, 16 do custom_colour["Custom" .. i] = i - 1 end
+    -- MUSHclient send-target constants (mushclient/OtherTypes.h): sendto.script
+    -- (12) / sendto.execute (10) etc., used as the DoAfterSpecial/AddTriggerEx
+    -- target. Indexing a nil here aborts the calling chunk.
+    sendto = {
+      world = 0, command = 1, output = 2, status = 3, notepad = 4,
+      appendtonotepad = 5, logfile = 6, replacenotepad = 7, commandqueue = 8,
+      variable = 9, execute = 10, speedwalk = 11, script = 12, immediate = 13,
+      scriptafteromit = 14,
+    }
 
+    -- MUSHclient version (plugins gate features on `tonumber(Version())`);
+    -- report a recent release so version checks pass.
+    function Version() return "5.07" end
     local _unique = 0
     function GetUniqueNumber() _unique = _unique + 1; return _unique end
     -- Plugins gate the `wait` helper on these being enabled.

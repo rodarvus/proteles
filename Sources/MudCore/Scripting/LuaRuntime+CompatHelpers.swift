@@ -176,10 +176,19 @@ extension LuaRuntime {
     return json
     """
 
-    /// `gmcp(path)` / `gmcpval(path)` over the live `proteles.gmcp` table.
-    /// A table node is returned as-is; a leaf scalar is stringified (Aardwolf
-    /// plugins compare GMCP values as strings); a missing path is nil.
+    /// `gmcp(path)` / `gmcpval(path)` over the live `proteles.gmcp` table,
+    /// matching the reference gmcphelper (which routes through the GMCP
+    /// handler's `gmcpdata_as_string`): **all scalar leaves are stringified**,
+    /// recursively, so `gmcp("char.status").state` is `"3"` not `3` — Aardwolf
+    /// sends GMCP scalars as JSON numbers, but plugins (dinv, S&D, …) compare
+    /// them as strings. A missing path is nil.
     private static let gmcpHelperSource = """
+    local function stringifyLeaves(node)
+      if type(node) ~= "table" then return tostring(node) end
+      local out = {}
+      for key, value in pairs(node) do out[key] = stringifyLeaves(value) end
+      return out
+    end
     local function walk(path)
       local node = proteles.gmcp
       for key in string.gmatch(path or "", "[^.]+") do
@@ -190,8 +199,8 @@ extension LuaRuntime {
     end
     function gmcpval(path)
       local node = walk(path)
-      if node == nil or type(node) == "table" then return node end
-      return tostring(node)
+      if node == nil then return nil end
+      return stringifyLeaves(node)
     end
     gmcp = gmcpval
     function gmcpmessage() return proteles.gmcp end

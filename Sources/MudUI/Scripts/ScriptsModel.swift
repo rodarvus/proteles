@@ -80,6 +80,11 @@ public final class ScriptsModel {
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
             await session.loadPlugins(fromDirectory: pluginsDirectory)
         }
+        // The vendored dinv inventory manager (verbatim via the compat shim);
+        // its per-character DB lives under the world-data dir (the sqlite root).
+        if let worldDataDir {
+            await session.loadBundledDinv(stateDirectory: worldDataDir.path)
+        }
     }
 
     // MARK: - Triggers

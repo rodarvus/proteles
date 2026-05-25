@@ -201,6 +201,33 @@ public extension SessionController {
         }
     }
 
+    /// Load the vendored **dinv** inventory manager (run verbatim through the
+    /// compat shim — D-32). Registers its modules with the engine's loader (so
+    /// its `dofile`s resolve from the bundle), then loads `dinv.xml` with a
+    /// context whose state dir (`GetInfo(85)`) is `stateDirectory` — the
+    /// per-profile world-data dir, which is also the lsqlite3 sandbox root, so
+    /// dinv's per-character `dinv.db` lands inside the sandbox. No-op without a
+    /// script engine or the bundled assets.
+    func loadBundledDinv(stateDirectory: String) async {
+        guard let scriptEngine, let xml = DinvAssets.pluginXML,
+              let plugin = try? MUSHclientPluginLoader.parse(xml: xml)
+        else { return }
+        await scriptEngine.registerModules(DinvAssets.modules)
+        let suffixed = stateDirectory.hasSuffix("/") ? stateDirectory : stateDirectory + "/"
+        let context = PluginContext(
+            pluginID: DinvAssets.pluginID,
+            pluginName: "dinv",
+            version: "3.0102",
+            pluginDirectory: suffixed,
+            worldDirectory: suffixed,
+            appDirectory: suffixed,
+            stateDirectory: suffixed
+        )
+        await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        await persistVariablesIfDirty()
+        restartTimerLoop()
+    }
+
     // MARK: - Script set
 
     /// Replace the live script set (triggers/aliases/timers) with
