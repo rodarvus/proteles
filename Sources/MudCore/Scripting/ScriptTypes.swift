@@ -58,6 +58,11 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print ANSI-SGR-coded text to the scrollback, rendered as styled runs
     /// (the shim's `AnsiNote`).
     case echoAnsi(String)
+    /// Re-inject text as if it had arrived from the MUD (MUSHclient's
+    /// `Simulate`): the host feeds each line back through the inbound pipeline
+    /// so triggers (user + S&D) see it and it displays. S&D uses this for its
+    /// `xtest` harness and the `notes` header.
+    case simulate(String)
     /// Suspend (or resume) the scripting engines: while suspended, typed
     /// input is sent verbatim (no alias/native-command expansion), incoming
     /// lines pass through untouched (no triggers/native reactions), and

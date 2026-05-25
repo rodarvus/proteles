@@ -96,22 +96,28 @@ extension LuaRuntime {
         return arguments[index].numberValue ?? 0
     }
 
+    /// Host functions whose effect is just `Effect(firstStringArg)` — folded
+    /// into one lookup so the output dispatch stays within the complexity budget.
+    private nonisolated(unsafe) static let singleStringEffects: [HostFunction: (String) -> ScriptEffect] = [
+        .send: ScriptEffect.send, .sendNoEcho: ScriptEffect.sendNoEcho,
+        .execute: ScriptEffect.execute, .echo: ScriptEffect.echo,
+        .sendGMCP: ScriptEffect.sendGMCP, .echoAard: ScriptEffect.echoAard,
+        .echoAnsi: ScriptEffect.echoAnsi, .simulate: ScriptEffect.simulate
+    ]
+
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)
     /// for the host to apply after the chunk returns.
     nonisolated func recordOutputEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
+        if let make = Self.singleStringEffects[function] {
+            effects.append(make(Self.argString(arguments, 0)))
+            return
+        }
         switch function {
-        case .send: effects.append(.send(Self.argString(arguments, 0)))
-        case .sendNoEcho: effects.append(.sendNoEcho(Self.argString(arguments, 0)))
-        case .execute: effects.append(.execute(Self.argString(arguments, 0)))
-        case .echo: effects.append(.echo(Self.argString(arguments, 0)))
         case .note: effects.append(.note(
                 text: Self.argString(arguments, 0),
                 foreground: Self.argOptionalString(arguments, 1),
                 background: Self.argOptionalString(arguments, 2)
             ))
-        case .sendGMCP: effects.append(.sendGMCP(Self.argString(arguments, 0)))
-        case .echoAard: effects.append(.echoAard(Self.argString(arguments, 0)))
-        case .echoAnsi: effects.append(.echoAnsi(Self.argString(arguments, 0)))
         case .colourNote: effects.append(.colourNote(Self.noteSegments(arguments)))
         default: break
         }

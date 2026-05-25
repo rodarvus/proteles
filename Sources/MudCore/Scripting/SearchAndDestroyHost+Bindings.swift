@@ -31,6 +31,13 @@ extension SearchAndDestroyHost {
     function ColourTell(...) proteles.colourNote(...) end
     function AnsiNote(s) proteles.echoAnsi(s) end
     function Tell(s) proteles.echo(tostring(s)) end
+    -- NoteStyle sets bold/underline for following Notes; we don't carry note
+    -- styles, so it's a no-op (output text is unaffected).
+    function NoteStyle(...) return 0 end
+    -- Simulate: inject text as if received from the MUD (drives S&D's xtest
+    -- harness + the `notes` header). The session re-feeds it through the
+    -- inbound pipeline so triggers see it and it displays.
+    function Simulate(s) proteles.simulate(s == nil and "" or tostring(s)); return 0 end
     function Hyperlink(action, text) proteles.echo(tostring(text)) end  -- native links: later
 
     -- Colour helpers (MUSHclient world built-ins S&D calls for miniwindow
@@ -188,6 +195,14 @@ extension SearchAndDestroyHost {
     function GetOption(...) return 0 end
     function GetAlphaOption(...) return "" end
     function SetOption(...) return 0 end
+    function SetAlphaOption(...) return 0 end
+    -- Plugin state is persisted by the host lifecycle, not an explicit save;
+    -- report success (eOK) so S&D's save paths don't treat it as an error.
+    function SaveState(...) return 0 end
+    -- Native host: no Windows screen metrics, no colour-picker dialog.
+    function GetSystemMetrics(...) return 0 end
+    function PickColour(...) return -1 end
+    function ReloadPlugin(...) return 0 end
 
     -- Plugin discovery / misc (stubs — single-plugin curated runtime) --------
     function IsPluginInstalled(id) return false end

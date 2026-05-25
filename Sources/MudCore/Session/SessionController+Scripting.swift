@@ -135,8 +135,22 @@ public extension SessionController {
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):
             publishedModelsContinuation.yield(json)
+        case .simulate(let text):
+            await reinjectSimulated(text)
         default:
             break
+        }
+    }
+
+    /// MUSHclient `Simulate`: feed `text` back through the inbound pipeline as
+    /// if it had arrived from the MUD, so triggers (user + S&D) process it and
+    /// it displays. Split on newlines; a single trailing newline doesn't add a
+    /// spurious empty line. Used by S&D's `xtest` harness and `notes` header.
+    private func reinjectSimulated(_ text: String) async {
+        var segments = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if segments.count > 1, segments.last?.isEmpty == true { segments.removeLast() }
+        for segment in segments {
+            await appendLineThroughScripts(Line(id: LineID(0), text: segment))
         }
     }
 

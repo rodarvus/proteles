@@ -138,8 +138,7 @@ public actor LuaRuntime {
         case isConnected
         case jsonDecode
         case jsonEncode
-        case echoAard
-        case echoAnsi
+        case echoAard, echoAnsi, simulate
         case colourNote
         case mapperCall
         case sqliteAllowed
@@ -369,6 +368,7 @@ public actor LuaRuntime {
         setHostFunction("jsonEncode", .jsonEncode)
         setHostFunction("echoAard", .echoAard)
         setHostFunction("echoAnsi", .echoAnsi)
+        setHostFunction("simulate", .simulate)
         setHostFunction("colourNote", .colourNote)
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
