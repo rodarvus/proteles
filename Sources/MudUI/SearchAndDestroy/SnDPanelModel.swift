@@ -26,6 +26,10 @@ public final class SnDPanelModel {
     /// campaign that wasn't auto-detected on the grant line.
     @ObservationIgnored public var onScan: (@MainActor () -> Void)?
 
+    /// Request the "empty this world's SnDdb.db" flow (development/testing).
+    /// Wired by the app; `nil` makes it inert.
+    @ObservationIgnored public var onReset: (@MainActor () -> Void)?
+
     public init(model: SearchAndDestroyModel? = nil) {
         self.model = model
     }
@@ -64,5 +68,10 @@ public final class SnDPanelModel {
     /// Force a campaign/quest detection pass, if wired.
     public func scan() {
         onScan?()
+    }
+
+    /// Trigger the SnDdb.db reset flow (development/testing), if wired.
+    public func requestReset() {
+        onReset?()
     }
 }

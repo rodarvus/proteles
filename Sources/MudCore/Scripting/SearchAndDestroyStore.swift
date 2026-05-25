@@ -195,6 +195,21 @@ public final class SearchAndDestroyStore: Sendable {
         }
     }
 
+    /// Delete all S&D content (mobs, areas, keyword exceptions, history),
+    /// leaving the schema intact. A development/testing affordance so the
+    /// database can be reset to empty and re-imported.
+    public func empty() throws {
+        do {
+            try dbQueue.write { db in
+                for table in ["mobs", "area", "mob_keyword_exceptions", "history"] {
+                    try db.execute(sql: "DELETE FROM \(table)")
+                }
+            }
+        } catch {
+            throw StoreError.writeFailed(error.localizedDescription)
+        }
+    }
+
     private static func merge(into db: Database) throws -> ImportSummary {
         // An S&D DB has at least a `mobs` table.
         guard try sourceTableExists(db, "mobs") else {

@@ -109,6 +109,33 @@ struct ContentView: View {
         }
         snd.onImport = { importSearchAndDestroyDatabase() }
         snd.onScan = { Task { await session.scanSearchAndDestroy() } }
+        snd.onReset = { resetSearchAndDestroyDatabase() }
+    }
+
+    /// Empty the active world's `SnDdb.db` (development/testing): confirm, then
+    /// delete all areas/mobs/keywords/history so importing can be re-tested.
+    private func resetSearchAndDestroyDatabase() {
+        guard let profileID = worlds.activeProfileID else {
+            Task { await session.echoSystemNote("[S&D] Connect to a world first, then reset.") }
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Empty the Search & Destroy database?"
+        alert.informativeText = "This permanently deletes all areas, mobs, keyword exceptions, and "
+            + "history for this world. For development and testing."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Empty Database")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            do {
+                let url = try SearchAndDestroyStore.defaultStoreURL(forProfile: profileID)
+                try SearchAndDestroyStore(url: url).empty()
+                await session.echoSystemNote("[S&D] Database reset to empty (testing).")
+            } catch {
+                await session.echoSystemNote("[S&D] Reset failed.")
+            }
+        }
     }
 
     /// Pick an existing `SnDdb.db` and incrementally merge it into the active

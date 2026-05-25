@@ -183,6 +183,37 @@ public final class MapPanelModel {
         #endif
     }
 
+    /// Empty the live map database (development/testing): confirm, then drop
+    /// all rooms/exits/areas/notes for this world and reload the empty map.
+    /// Lets the user re-test importing and make destructive changes freely.
+    public func resetDatabase() {
+        #if os(macOS)
+            guard let mapper else {
+                importAlert = ImportAlert(
+                    title: "Connect First",
+                    message: "Connect to a world, then reset — the map database is per-world."
+                )
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "Empty the map database?"
+            alert.informativeText = "This permanently deletes all mapped rooms, exits, areas, and "
+                + "notes for this world (UI preferences are kept). For development and testing."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Empty Database")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            Task {
+                do {
+                    try await mapper.emptyDatabase()
+                    await session.echoSystemNote("[Mapper] Database reset to empty (testing).")
+                } catch {
+                    await session.echoSystemNote("[Mapper] Reset failed.")
+                }
+            }
+        #endif
+    }
+
     private static func summaryMessage(_ summary: MapperStore.ImportSummary) -> String {
         guard !summary.isEmpty else {
             return "Nothing new — your map already had everything in that file."

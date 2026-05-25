@@ -290,6 +290,22 @@ struct MapperCommandTests {
             .contains { $0.contains("enter portal") && $0.contains("[3]") })
     }
 
+    @Test("emptyDatabase wipes the live map and forgets the current room")
+    func emptyDatabase() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // 3 rooms, current = 1
+        #expect(await !mapper.graph.rooms.isEmpty)
+
+        try await mapper.emptyDatabase()
+
+        #expect(await mapper.graph.rooms.isEmpty)
+        #expect(await mapper.currentRoomUID == nil)
+        // A search finds nothing now.
+        #expect(await notes(mapper.handleCommand("mapper find end"))
+            .contains { $0.lowercased().contains("no ") })
+    }
+
     @Test("a room's note echoes on walk-in (shownotes), once per arrival")
     func noteOnWalkIn() async throws {
         let (mapper, url) = try seeded()

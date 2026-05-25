@@ -162,6 +162,11 @@ struct ProtelesApp: App {
             CommandMenu("Databases") {
                 Button("Import Map Database…") { map.importDatabase() }
                 Button("Import Search & Destroy Database…") { snd.requestImport() }
+                Divider()
+                Menu("Reset Databases (Testing)") {
+                    Button("Empty Map Database…") { map.resetDatabase() }
+                    Button("Empty Search & Destroy Database…") { snd.requestReset() }
+                }
             }
         }
 

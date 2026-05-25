@@ -80,6 +80,30 @@ struct SearchAndDestroyStoreTests {
         #expect(try dest.count(of: "area") == 2)
     }
 
+    @Test("empty() clears every table so a re-import re-adds everything")
+    func emptyClearsAllTables() throws {
+        let sourceURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        try makeV6Source(at: sourceURL)
+
+        let destURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: destURL) }
+        let dest = try SearchAndDestroyStore(url: destURL)
+        _ = try dest.importIncremental(from: sourceURL)
+
+        try dest.empty()
+        #expect(try dest.count(of: "mobs") == 0)
+        #expect(try dest.count(of: "area") == 0)
+        #expect(try dest.count(of: "mob_keyword_exceptions") == 0)
+        #expect(try dest.count(of: "history") == 0)
+        #expect(try dest.userVersion() == 6) // schema intact
+
+        // A re-import re-adds everything (proves the schema survived empty()).
+        let summary = try dest.importIncremental(from: sourceURL)
+        #expect(summary.mobs == 2)
+        #expect(summary.areas == 2)
+    }
+
     @Test("Re-importing the same DB adds nothing (dedupe is non-destructive)")
     func incrementalDedupe() throws {
         let sourceURL = tempURL()

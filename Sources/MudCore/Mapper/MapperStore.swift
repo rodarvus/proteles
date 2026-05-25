@@ -334,6 +334,25 @@ public final class MapperStore: Sendable {
         }
     }
 
+    /// Delete all map content (rooms, exits, areas, bookmarks, terrain,
+    /// environments, per-room user data, plugin storage) — leaving the schema
+    /// and the `proteles_meta` UI preferences intact. A development/testing
+    /// affordance so a database can be reset to empty and re-imported.
+    public func empty() throws {
+        do {
+            try dbQueue.write { db in
+                for table in [
+                    "rooms", "exits", "areas", "bookmarks",
+                    "environments", "terrain", "storage", "room_user_data"
+                ] {
+                    try db.execute(sql: "DELETE FROM \(table)")
+                }
+            }
+        } catch {
+            throw StoreError.writeFailed(error.localizedDescription)
+        }
+    }
+
     private static func merge(into db: Database, from source: URL) throws -> ImportSummary {
         try db.execute(sql: "ATTACH DATABASE ? AS importsrc", arguments: [source.path])
         defer { try? db.execute(sql: "DETACH DATABASE importsrc") }

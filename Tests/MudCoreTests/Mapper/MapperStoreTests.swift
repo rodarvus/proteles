@@ -52,6 +52,27 @@ struct MapperStoreTests {
         #expect(Set(room.exits.keys) == ["e"])
     }
 
+    @Test("empty() clears all map content but keeps UI preferences")
+    func emptyClearsContent() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = try MapperStore(url: url)
+        try store.upsert(Area(uid: "aylor", name: "Aylor", flags: ""))
+        try store.upsert(Room(uid: "100", name: "Town Square", area: "aylor"))
+        try store.saveExits(from: "100", exits: ["n": Exit(dir: "n", to: "101")])
+        try store.setNote("vendor here", uid: "100")
+        try store.setMeta("123", forKey: "ui.scan_depth")
+
+        try store.empty()
+
+        let graph = try store.loadGraph()
+        #expect(graph.rooms.isEmpty)
+        #expect(graph.areas.isEmpty)
+        #expect(try store.room(uid: "100") == nil)
+        // UI preferences live in proteles_meta and must survive a reset.
+        #expect(try store.meta(forKey: "ui.scan_depth") == "123")
+    }
+
     @Test("Portal pseudo-rooms ('*') load as a from-anywhere room in the graph")
     func portalPseudoRoom() throws {
         let url = tempURL()
