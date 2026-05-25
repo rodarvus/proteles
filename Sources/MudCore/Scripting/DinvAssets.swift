@@ -50,4 +50,55 @@ public enum DinvAssets {
         ) else { return nil }
         return try? String(contentsOf: url, encoding: .utf8)
     }
+
+    /// A Lua chunk that instruments dinv's init chain for live debugging
+    /// (S&D-style, so we trace the real coroutine flow instead of guessing).
+    /// Run *in dinv's environment* after load and before the `char.base`
+    /// broadcast that kicks off init. Two layers:
+    ///
+    /// 1. Force dinv's own `DEBUG` notifications on and *lock* them, so the
+    ///    notify module's `atActive` (which restores a stored level) can't turn
+    ///    them back off — this surfaces dinv's rich native `dbot.debug` trace.
+    /// 2. Entry/exit `[dinv-DBG]` markers around the init chain. Crucially the
+    ///    wrappers call through **without `pcall`**: the chain runs inside a
+    ///    `wait.make` coroutine that *yields* on MUD probes, and Lua 5.1 cannot
+    ///    yield across a `pcall`/C boundary. A logged `->` with no matching `<-`
+    ///    pinpoints exactly where the coroutine yields and never resumes.
+    ///
+    /// All markers reach the session transcript (every `Note` is teed there),
+    /// so `dinv build` live then shows the precise failure point.
+    public static let debugTraceSource = """
+    dbot.notify.level[notifyLevelDebug].enabled = true
+    local __origSetLevel = dbot.notify.setLevel
+    function dbot.notify.setLevel(value, endTag, isVerbose)
+      local r = __origSetLevel(value, endTag, isVerbose)
+      dbot.notify.level[notifyLevelDebug].enabled = true
+      return r
+    end
+
+    local function __wrap(tbl, key, label)
+      if type(tbl) ~= "table" then Note("[dinv-DBG] " .. label .. ": no container"); return end
+      local orig = tbl[key]
+      if type(orig) ~= "function" then Note("[dinv-DBG] " .. label .. ": MISSING"); return end
+      tbl[key] = function(...)
+        Note("[dinv-DBG] -> " .. label)
+        local r = orig(...)
+        Note("[dinv-DBG] <- " .. label .. " = " .. tostring(r))
+        return r
+      end
+    end
+
+    local __origBroadcast = OnPluginBroadcast
+    function OnPluginBroadcast(...)
+      Note("[dinv-DBG] -> OnPluginBroadcast")
+      if __origBroadcast then __origBroadcast(...) end
+      Note("[dinv-DBG] <- OnPluginBroadcast")
+    end
+
+    __wrap(inv.init, "atActive", "inv.init.atActive")
+    __wrap(inv.init, "atActiveCR", "inv.init.atActiveCR")
+    __wrap(dbot.init, "atActive", "dbot.init.atActive")
+    __wrap(dinv_db, "open", "dinv_db.open")
+    __wrap(inv.items, "build", "inv.items.build")
+    """
 }

@@ -240,6 +240,11 @@ public extension SessionController {
             stateDirectory: suffixed
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        // Install init-chain debug instrumentation *before* the broadcast that
+        // kicks off init, so the wrapped functions are in place when it fires.
+        await applyScriptEffects(
+            scriptEngine.runInPluginEnvironment(DinvAssets.pluginID, DinvAssets.debugTraceSource)
+        )
         await applyScriptEffects(scriptEngine.deliverGMCPBroadcast(package: "char.base"))
         await persistVariablesIfDirty()
         restartTimerLoop()

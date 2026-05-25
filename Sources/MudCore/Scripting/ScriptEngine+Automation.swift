@@ -78,6 +78,14 @@ extension ScriptEngine {
         }
     }
 
+    /// Run an arbitrary chunk in an already-loaded plugin's environment,
+    /// returning the effects it recorded. Used to install dinv's init-chain
+    /// debug instrumentation after load (the chunk just installs wrappers and
+    /// returns — it does not yield, so the surrounding `pcall` is safe).
+    public func runInPluginEnvironment(_ pluginID: String, _ source: String) async -> [ScriptEffect] {
+        await runtime.loadPluginScript(source, pluginID: pluginID)
+    }
+
     /// Whether a one-shot was scheduled since the last check (read + cleared by
     /// the session so it re-arms its timer loop exactly once).
     public func takeDidScheduleTimer() -> Bool {
