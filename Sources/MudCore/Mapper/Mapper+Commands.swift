@@ -81,8 +81,189 @@ extension Mapper {
         case "area": areaCommand(arg)
         case "depth": depthCommand(arg)
         case "blink": blinkCommand(arg)
+        default: handleMapManagementCommand(sub, arg)
+        }
+    }
+
+    /// Portals / custom-exit / findpath / purge subcommands, split from
+    /// ``handleSecondaryCommand`` to keep each within the complexity budget.
+    private func handleMapManagementCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
+        switch sub {
+        case "findpath": findPath(arg)
+        case "portals": listPortals(arg)
+        case "portal": addPortalCommand(arg)
+        case "fullportal": fullPortalCommand(arg)
+        case "purgeroom": purgeRoomCommand()
+        case "purgezone": purgeZoneCommand(arg)
+        case "clearcache": clearCacheCommand()
+        case "delete": deleteCommand(arg)
+        case "purge": purgeCommand(arg)
         default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
         }
+    }
+
+    // MARK: - findpath
+
+    /// `mapper findpath <from> <to>` — print the speedwalk + distance between
+    /// two rooms without moving (≈ reference `printpath`).
+    private func findPath(_ arg: String) -> [ScriptEffect] {
+        let parts = arg.split(separator: " ", maxSplits: 1)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, let from = resolveUID(parts[0]), let to = resolveUID(parts[1]) else {
+            return [Self.note("Usage: mapper findpath <from> <to>  (room ids or unique names)")]
+        }
+        let options = Pathfinder.Options(level: level, tier: tier)
+        guard let path = Pathfinder(graph: graph).path(from: from, to: to, options: options) else {
+            return [Self.note("No route from \(from) to \(to).")]
+        }
+        let speed = path.isEmpty ? "(same room)" : Speedwalk.build(path)
+        return [Self.note("\(from) → \(to): \(speed)  — \(path.count) step(s)")]
+    }
+
+    /// Resolve a findpath/portal argument: an all-digit room id, or a unique
+    /// room-name match.
+    private func resolveUID(_ arg: String) -> String? {
+        if looksLikeRoomID(arg) { return arg }
+        if case .uid(let uid) = resolveRoom(arg) { return uid }
+        return nil
+    }
+
+    // MARK: - Portals
+
+    /// `mapper portals [filter]` — list portals + recalls (filter by dest area).
+    private func listPortals(_ arg: String) -> [ScriptEffect] {
+        let filter = arg.isEmpty ? nil
+            : (arg.lowercased() == "here" ? graph.rooms[currentRoomUID ?? ""]?.area : arg)
+        let portals = (try? store.portals(areaFilter: filter)) ?? []
+        guard !portals.isEmpty else {
+            return [Self.note("No portals stored\(filter.map { " for '\($0)'" } ?? "").")]
+        }
+        var effects = [Self.note("Portals (\(portals.count)):")]
+        for (index, portal) in portals.enumerated() {
+            let kind = portal.isRecall ? "recall" : "portal"
+            let lvl = portal.level > 0 ? " L\(portal.level)" : ""
+            let dest = portal.roomName ?? "?"
+            effects.append(Self.note(
+                "  #\(index + 1) [\(kind)] \(portal.dir) → \(dest) [\(portal.touid)]\(lvl)"
+            ))
+        }
+        return effects
+    }
+
+    /// `mapper portal <dir> [touid] [level]` — add a portal whose use-command is
+    /// <dir>; destination defaults to the current room. A "home"/"recall"
+    /// keyword stores it as a recall.
+    private func addPortalCommand(_ arg: String) -> [ScriptEffect] {
+        let tokens = arg.split(separator: " ").map(String.init)
+        guard let dir = tokens.first else {
+            return [Self.note("Usage: mapper portal <use-command> [destination-room] [level]")]
+        }
+        let touid = tokens.count > 1 ? tokens[1] : currentRoomUID
+        guard let destination = touid,
+              graph.rooms[destination] != nil || looksLikeRoomID(destination)
+        else {
+            return [Self.note("Unknown destination room (and your current room is unknown).")]
+        }
+        let level = tokens.count > 2 ? (Int(tokens[2]) ?? 0) : 0
+        return storePortal(dir: dir, touid: destination, level: level)
+    }
+
+    /// `mapper fullportal {use-command} {destination} <level>`.
+    private func fullPortalCommand(_ arg: String) -> [ScriptEffect] {
+        let groups = Self.braceGroups(arg)
+        guard groups.count >= 2 else {
+            return [Self.note("Usage: mapper fullportal {use-command} {destination-room} <level>")]
+        }
+        let trailing = arg.components(separatedBy: "}").last ?? ""
+        let levelToken = trailing.trimmingCharacters(in: .whitespaces).split(separator: " ").first
+        let level = Int(levelToken.map(String.init) ?? "") ?? 0
+        return storePortal(dir: groups[0], touid: groups[1], level: level)
+    }
+
+    private func storePortal(dir: String, touid: String, level: Int) -> [ScriptEffect] {
+        let recall = ["home", "hom", "recall"].contains(dir.lowercased())
+        do {
+            try store.addPortal(dir: dir, touid: touid, level: level, recall: recall)
+            reloadGraphAndPublish()
+            let kind = recall ? "recall" : "portal"
+            let lvl = level > 0 ? " (level \(level))" : ""
+            return [Self.note("Stored '\(dir)' as a \(kind) to room \(touid)\(lvl).")]
+        } catch {
+            return [Self.note("Couldn't store that portal.")]
+        }
+    }
+
+    // MARK: - delete / purge
+
+    private func deleteCommand(_ arg: String) -> [ScriptEffect] {
+        let tokens = arg.split(separator: " ", maxSplits: 1).map(String.init)
+        switch tokens.first?.lowercased() {
+        case "portal":
+            let dir = tokens.count > 1 ? tokens[1] : ""
+            guard !dir.isEmpty else { return [Self.note("Usage: mapper delete portal <use-command>")] }
+            let removed = (try? store.deletePortal(dir: dir)) ?? false
+            if removed { reloadGraphAndPublish() }
+            return [Self.note(removed ? "Deleted portal '\(dir)'." : "No portal '\(dir)'.")]
+        default:
+            return [Self.note("Usage: mapper delete portal <use-command>")]
+        }
+    }
+
+    private func purgeCommand(_ arg: String) -> [ScriptEffect] {
+        switch arg.lowercased() {
+        case "portals":
+            try? store.purgePortals()
+            reloadGraphAndPublish()
+            return [Self.note("Purged all portals.")]
+        default:
+            return [Self.note("Usage: mapper purge portals")]
+        }
+    }
+
+    private func purgeRoomCommand() -> [ScriptEffect] {
+        guard let uid = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+        try? store.purgeRoom(uid: uid)
+        reloadGraphAndPublish()
+        return [Self.note("Purged room \(uid) from the map.")]
+    }
+
+    private func purgeZoneCommand(_ arg: String) -> [ScriptEffect] {
+        let area = arg.isEmpty ? graph.rooms[currentRoomUID ?? ""]?.area : arg
+        guard let area else { return [Self.note("Usage: mapper purgezone [area]  (or stand in one)")] }
+        try? store.purgeZone(area: area)
+        reloadGraphAndPublish()
+        return [Self.note("Purged area '\(area)' from the map.")]
+    }
+
+    private func clearCacheCommand() -> [ScriptEffect] {
+        reloadGraphAndPublish()
+        return [Self.note("Reloaded the map from the database.")]
+    }
+
+    /// Reload the in-memory graph from the store and republish — after a
+    /// portal/purge edit so pathfinding + the panel reflect it.
+    private func reloadGraphAndPublish() {
+        graph = (try? store.loadGraph()) ?? graph
+        publishLayout()
+    }
+
+    /// Extract `{…}` groups from a command argument (fullportal/fullcexit).
+    private static func braceGroups(_ string: String) -> [String] {
+        var groups: [String] = []
+        var current = ""
+        var inBrace = false
+        for character in string {
+            if character == "{" {
+                inBrace = true
+                current = ""
+            } else if character == "}" {
+                inBrace = false
+                groups.append(current)
+            } else if inBrace {
+                current.append(character)
+            }
+        }
+        return groups
     }
 
     // MARK: - Notes / bookmarks

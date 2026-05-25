@@ -213,4 +213,47 @@ struct MapperCommandTests {
         #expect(await notes(mapper.handleCommand("mapper unmapped"))
             .contains { $0.contains("No unmapped exits") })
     }
+
+    @Test("findpath prints the speedwalk + distance without moving")
+    func findpath() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        let effects = await mapper.handleCommand("mapper findpath 1 3")
+        #expect(sends(effects).isEmpty) // findpath never walks
+        #expect(notes(effects).contains { $0.contains("run 2n") && $0.contains("2 step") })
+    }
+
+    @Test("portal add / list / delete / purge round-trips through the exits table")
+    func portals() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        // A recall keyword stores it as a recall to room 1.
+        #expect(await notes(mapper.handleCommand("mapper portal recall 1"))
+            .contains { $0.contains("recall") && $0.contains("room 1") })
+        // A regular portal (use-command "enter cloud") to room 3, level 50.
+        _ = await mapper.handleCommand("mapper fullportal {enter cloud} {3} 50")
+        let list = await notes(mapper.handleCommand("mapper portals"))
+        #expect(list.contains { $0.contains("Portals (2)") })
+        #expect(list.contains { $0.contains("enter cloud") && $0.contains("L50") })
+        #expect(list.contains { $0.contains("[recall]") })
+        // Delete one, then purge the rest.
+        #expect(await notes(mapper.handleCommand("mapper delete portal recall"))
+            .contains { $0.contains("Deleted portal 'recall'") })
+        _ = await mapper.handleCommand("mapper purge portals")
+        #expect(await notes(mapper.handleCommand("mapper portals"))
+            .contains { $0.contains("No portals") })
+    }
+
+    @Test("purgeroom removes the current room from the map")
+    func purgeRoom() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room = 1
+        #expect(await notes(mapper.handleCommand("mapper purgeroom"))
+            .contains { $0.contains("Purged room 1") })
+        // Room 1 is gone from the reloaded graph.
+        #expect(await mapper.graph.rooms["1"] == nil)
+    }
 }

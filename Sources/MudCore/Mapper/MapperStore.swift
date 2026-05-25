@@ -476,16 +476,26 @@ public final class MapperStore: Sendable {
         return result
     }
 
-    // MARK: - GRDB helpers
+    // MARK: - GRDB helpers (internal so the Portals/cexits extension can use them)
 
-    private func write<T>(_ block: (Database) throws -> T) throws -> T {
+    func write<T>(_ block: (Database) throws -> T) throws -> T {
         do { return try dbQueue.write(block) } catch {
             throw StoreError.writeFailed(error.localizedDescription)
         }
     }
 
-    private func read<T>(_ block: (Database) throws -> T) throws -> T {
+    func read<T>(_ block: (Database) throws -> T) throws -> T {
         do { return try dbQueue.read(block) } catch { throw StoreError.readFailed(error.localizedDescription)
         }
+    }
+
+    /// Whether a table exists (our managed DB lacks the `rooms_lookup` FTS that
+    /// an imported Aardwolf.db carries, so purges must guard it).
+    static func tableExists(_ db: Database, _ name: String) throws -> Bool {
+        try Bool.fetchOne(
+            db,
+            sql: "SELECT count(*) > 0 FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
+            arguments: [name]
+        ) ?? false
     }
 }
