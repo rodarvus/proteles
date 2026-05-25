@@ -264,6 +264,35 @@ struct MapperCommandTests {
             .contains { $0.contains("No custom exits") })
     }
 
+    @Test("portal edits: change name, recall toggle, level lock")
+    func portalEdits() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper)
+        _ = await mapper.handleCommand("mapper portal enter 3")
+        // Rename, set level, toggle recall — all by use-command or #1.
+        #expect(await notes(mapper.handleCommand("mapper change portal {enter} {step}"))
+            .contains { $0.contains("Renamed portal to 'step'") })
+        #expect(await notes(mapper.handleCommand("mapper portallevel step 40"))
+            .contains { $0.contains("level set to 40") })
+        #expect(await notes(mapper.handleCommand("mapper portalrecall step"))
+            .contains { $0.contains("Recall flag added") })
+        // It now lists as a recall at level 40.
+        let list = await notes(mapper.handleCommand("mapper portals"))
+        #expect(list.contains { $0.contains("[recall]") && $0.contains("step") && $0.contains("L40") })
+    }
+
+    @Test("lockexit sets the level on the current room's exit")
+    func lockExit() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room 1, exit n→2
+        #expect(await notes(mapper.handleCommand("mapper lockexit n 25"))
+            .contains { $0.contains("locked to level 25") })
+        #expect(await notes(mapper.handleCommand("mapper lockexit x 25"))
+            .contains { $0.contains("No 'x' exit") })
+    }
+
     @Test("purgeroom removes the current room from the map")
     func purgeRoom() async throws {
         let (mapper, url) = try seeded()

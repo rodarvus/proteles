@@ -113,6 +113,47 @@ public extension MapperStore {
         try write { db in try db.execute(sql: "DELETE FROM exits WHERE fromuid IN ('*','**')") }
     }
 
+    /// Toggle a portal's recall flag by moving its row between `fromuid='*'`
+    /// and `'**'` (reference `map_portal_recall`). Returns the new recall state,
+    /// or nil if no such portal.
+    func setPortalRecall(dir: String) throws -> Bool? {
+        try write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT fromuid, touid, level FROM exits WHERE fromuid IN ('*','**') AND dir = ?",
+                arguments: [dir]
+            ) else { return nil }
+            let wasRecall = (row["fromuid"] as String? ?? "*") == "**"
+            let newFrom = wasRecall ? "*" : "**"
+            if !wasRecall {
+                try db.execute(sql: """
+                INSERT OR REPLACE INTO rooms (uid, name, area) VALUES ('**','___HERE___','___EVERYWHERE___')
+                """)
+            }
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO exits (dir, fromuid, touid, level) VALUES (?, ?, ?, ?)",
+                arguments: [dir, newFrom, row["touid"] as String? ?? "", String(row["level"] as Int? ?? 0)]
+            )
+            try db.execute(
+                sql: "DELETE FROM exits WHERE dir = ? AND fromuid = ?",
+                arguments: [dir, wasRecall ? "**" : "*"]
+            )
+            return !wasRecall
+        }
+    }
+
+    /// Set the level lock on a specific room's exit (reference `lockexit`).
+    @discardableResult
+    func setExitLevel(from uid: String, dir: String, level: Int) throws -> Bool {
+        try write { db in
+            try db.execute(
+                sql: "UPDATE exits SET level = ? WHERE dir = ? AND fromuid = ?",
+                arguments: [String(max(0, level)), dir, uid]
+            )
+            return db.changesCount > 0
+        }
+    }
+
     // MARK: - Custom exits (cexits)
 
     /// Aardwolf's six cardinal directions; a "custom exit" is any exit from a
