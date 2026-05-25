@@ -23,7 +23,7 @@ extension SessionController {
             state.phase = state.plan.password.isEmpty ? .done : .awaitingPassword
         case .awaitingPassword:
             guard sees(state.plan.passwordPrompt, in: newLines) else { return }
-            try? await sendLine(state.plan.password)
+            try? await sendLine(state.plan.password, redactInTranscript: true)
             state.phase = .done
         case .done:
             break

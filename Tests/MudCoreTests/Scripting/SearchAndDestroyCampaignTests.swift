@@ -186,6 +186,30 @@ struct SearchAndDestroyCampaignTests {
         #expect(!normal.gag)
     }
 
+    @Test("the [SnD-DBG] trace fires during a cp scrape (debug instrumentation is live)")
+    func debugTraceEmitsNotes() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // do_cp_info → cp_info_line → cp_info_end are all wrapped to emit a
+        // `[SnD-DBG]` Note, captured here as `.echo` effects. This proves the
+        // tracing reaches the live trigger/timer call path (it's how we debug
+        // campaign detection from the session transcript).
+        var notes: [String] = []
+        func collect(_ effects: [ScriptEffect]) {
+            for effect in effects {
+                if case .echo(let text) = effect { notes.append(text) }
+            }
+        }
+        await collect(host.scanForActivity())
+        for line in Self.cpInfoOutput {
+            await collect(host.process(line).effects)
+        }
+        let dbg = notes.filter { $0.hasPrefix("[SnD-DBG]") }
+        #expect(dbg.contains { $0.contains("do_cp_info") }, "do_cp_info should be traced")
+        #expect(dbg.contains { $0.contains("cp_info_line") }, "cp_info_line should be traced")
+        #expect(dbg.contains { $0.contains("cp_info_end") }, "cp_info_end should be traced")
+    }
+
     @Test("cp_info_end no longer throws (sendto is defined; DoAfterSpecial works)")
     func cpInfoEndDoesNotThrow() async throws {
         let host = try SearchAndDestroyHost()

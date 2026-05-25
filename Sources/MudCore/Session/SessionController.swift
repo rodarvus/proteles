@@ -96,6 +96,9 @@ public actor SessionController {
     /// confirmations/failures) and echoes each to the output view.
     var mapperNotesTask: Task<Void, Never>?
     var recorder: SessionRecorder?
+    /// Timestamped debug transcript paired with ``recorder`` (`.log` beside the
+    /// `.jsonl`): logs local events the wire capture omits (input/sends/notes/GMCP).
+    var transcript: SessionTranscript?
     /// Per-world persistence for scoped script/plugin variables. Set via
     /// ``attachVariableStore(_:)`` on connect; written through (dirty scopes
     /// only) after each Lua batch so plugin variables survive relaunches.
@@ -182,19 +185,15 @@ public actor SessionController {
     }
 
     /// When true, ``connect(to:)`` opens a fresh recording at
-    /// ``autoRecordingURL`` so the capture includes every byte from
-    /// the first one — crucial for replayable recordings, because
-    /// Aardwolf completes the MCCP2 handshake within milliseconds of
-    /// TCP-up. The flag is mutable at runtime so a Debug menu can
-    /// expose it in a later iteration.
+    /// ``autoRecordingURL`` so the capture includes every byte from the first
+    /// one — crucial for replayable recordings, because Aardwolf completes the
+    /// MCCP2 handshake within milliseconds of TCP-up. Mutable at runtime.
     public var autoRecord: Bool
 
     /// Where ``autoRecord`` writes. Defaults to
-    /// ``SessionRecorder/defaultRecordingURL(now:fileManager:)`` (which
-    /// places files under
+    /// ``SessionRecorder/defaultRecordingURL(now:fileManager:)`` (under
     /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`).
-    /// Tests inject a temp-dir builder so they don't litter the
-    /// developer's real recordings directory.
+    /// Tests inject a temp-dir builder so they don't litter real recordings.
     public let autoRecordingURL: @Sendable () -> URL?
 
     public init(
@@ -235,38 +234,37 @@ public actor SessionController {
         pipeline.isCompressionActive
     }
 
-    /// True while a recording is being written. Surfaced for menu
-    /// state tracking; the view layer observes this via
-    /// ``recordingStarted`` notifications instead of polling.
+    /// True while a recording is being written. Surfaced for menu state
+    /// tracking; the view layer observes ``recordingStarted`` instead of polling.
     public var isRecording: Bool {
         recorder != nil
     }
 
-    /// Start recording every inbound wire chunk to `url`. Any prior
-    /// recording is closed cleanly first. Recordings capture the raw
-    /// wire bytes (pre-decompression, pre-telnet-parse), so a replay
-    /// exercises the full protocol stack — including MCCP2.
-    ///
-    /// The recorder is **best-effort** — write failures silence
-    /// further recording rather than tear the session down, matching
-    /// the rest of MudCore's bias toward keeping the user's session
-    /// alive in the face of secondary failures.
+    /// Start recording every inbound wire chunk to `url` (and open the paired
+    /// debug transcript). Any prior recording is closed first. Recordings
+    /// capture raw wire bytes (pre-decompression, pre-telnet-parse), so a
+    /// replay exercises the full protocol stack — including MCCP2. Best-effort:
+    /// write failures silence further recording rather than tear down the
+    /// session.
     public func startRecording(to url: URL) throws {
         recorder?.close()
+        transcript?.close()
         recorder = try SessionRecorder(url: url)
+        transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
     }
 
     /// Stop the current recording. Idempotent.
     public func stopRecording() {
         recorder?.close()
         recorder = nil
+        transcript?.close()
+        transcript = nil
     }
 
-    /// Open a connection and start the inbound processing pipeline.
-    /// If ``autoRecord`` is true and no manual recording is already in
-    /// progress, opens a fresh recording at ``autoRecordingURL`` so
-    /// the capture starts from byte one (covers the telnet + MCCP2
-    /// handshake, which is what makes the recording replayable).
+    /// Open a connection and start the inbound processing pipeline. If
+    /// ``autoRecord`` is true and no manual recording is in progress, opens a
+    /// fresh recording at ``autoRecordingURL`` so the capture starts from byte
+    /// one (covering the telnet + MCCP2 handshake — what makes it replayable).
     public func connect(
         to endpoint: NetworkConnection.Endpoint,
         autologin plan: AutologinPlan? = nil
@@ -274,8 +272,7 @@ public actor SessionController {
         guard connection == nil else {
             throw SessionError.alreadyConnected
         }
-        // A fresh user-initiated connect cancels any in-flight backoff and
-        // clears the "user disconnected" latch.
+        // A fresh user-initiated connect cancels in-flight backoff + latches.
         reconnectTask?.cancel()
         reconnectTask = nil
         isReconnecting = false
@@ -324,6 +321,7 @@ public actor SessionController {
 
         if autoRecord, recorder == nil, let url = autoRecordingURL() {
             recorder = try? SessionRecorder(url: url)
+            transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
         }
 
         startProcessingLoop(on: conn)
@@ -360,10 +358,12 @@ public actor SessionController {
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
         // Locally echo what the user typed (dimmed), so input is visible —
-        // notably while writing a note. Suppressed when the server is
-        // echoing (password prompts) and for the bare prompt-refresh Enter.
+        // notably while writing a note. Suppressed when the server is echoing
+        // (password prompts) and for the bare prompt-refresh Enter. The
+        // transcript tap is gated the same way so a typed password isn't logged.
         if !serverEcho, !command.isEmpty {
             await scrollbackStore.append(Self.inputEchoLine(command))
+            logTranscript(.input, command)
         }
         try await dispatchCommand(command)
     }
@@ -407,7 +407,10 @@ public actor SessionController {
 
     /// Send a single line to the MUD (raw text + `\r\n`), bypassing alias
     /// expansion. Used for internal sends (autologin, applied effects).
-    func sendLine(_ text: String) async throws {
+    /// `redactInTranscript` hides secrets (the autologin password) from the
+    /// debug transcript while still sending them on the wire.
+    func sendLine(_ text: String, redactInTranscript: Bool = false) async throws {
+        logTranscript(.send, redactInTranscript ? "<redacted>" : text)
         try await sendRaw(Array((text + "\r\n").utf8))
     }
 
@@ -589,6 +592,8 @@ public actor SessionController {
         timerTask = nil
         recorder?.close()
         recorder = nil
+        transcript?.close()
+        transcript = nil
         autologin = nil
         connection = nil
     }

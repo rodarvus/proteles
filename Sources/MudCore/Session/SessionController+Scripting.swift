@@ -106,20 +106,25 @@ public extension SessionController {
                 // (Execute("mapper goto <id>")) relies on this.
                 try? await dispatchCommand(command)
             case .echo(let text):
+                logTranscript(.note, text)
                 await scrollbackStore.append(Line(id: LineID(0), text: text))
             case .note(let text, let foreground, let background):
+                logTranscript(.note, text)
                 await scrollbackStore.append(Line(
                     id: LineID(0),
                     text: text,
                     runs: Self.noteRuns(text, foreground: foreground, background: background)
                 ))
             case .colourNote(let segments):
+                logTranscript(.note, segments.map(\.text).joined())
                 await scrollbackStore.append(Self.colourNoteLine(segments))
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
             case .echoAard(let coded):
+                logTranscript(.note, coded)
                 await scrollbackStore.append(AardwolfColor.styledLine(from: coded))
             case .echoAnsi(let ansi):
+                logTranscript(.note, ansi)
                 await scrollbackStore.append(Self.ansiLine(ansi))
             default:
                 await applyControlEffect(effect)

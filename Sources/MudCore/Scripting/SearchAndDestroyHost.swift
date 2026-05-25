@@ -123,6 +123,51 @@ public actor SearchAndDestroyHost {
         DoAfterSpecial(1.0, "do_cp_info()", sendto.script)
       end
     end
+    \(debugTrace)
+    """
+
+    /// **Temporary** campaign-detection tracing. Each wrapped global emits a
+    /// timestamped `Note` (captured as a `NOTE` line in the session
+    /// transcript), so the live order/timing of the
+    /// `do_cp_info → cp_info_end → do_cp_check → cp_check_end →
+    /// build_main_target_list` chain is visible after the fact.
+    ///
+    /// Crucially, `do_cp_check` only sends "cp ch" when it is *not* debounced
+    /// (its `os.clock()` guard), so a `SEND cp ch` in the transcript reveals
+    /// the debounce outcome — and `cp_check_line`/`cp_info_line` counts reveal
+    /// list growth — *without* reading core.lua's locals (impossible from this
+    /// chunk; they're upvalues, and the sandbox strips `debug.getupvalue`).
+    ///
+    /// Remove once campaign detection is confirmed fixed against a captured
+    /// transcript (see CLAUDE.md status). Wrapping globals is safe: S&D's
+    /// triggers/timers call these by name at fire time.
+    private static let debugTrace = """
+    local function __snd_dbg(msg) Note("[SnD-DBG] " .. msg) end
+    local function __snd_wrap(fname)
+      local orig = _G[fname]
+      if type(orig) ~= "function" then return end
+      _G[fname] = function(...)
+        __snd_dbg(string.format("%s clk=%.3f", fname, os.clock()))
+        return orig(...)
+      end
+    end
+    for _, f in ipairs({
+      "do_cp_info", "cp_info_end", "do_cp_check", "cp_check_end",
+      "player_not_on_cp", "do_cp_complete", "player_start_new_cp",
+      "setup_scan_con_triggers", "build_main_target_list"
+    }) do __snd_wrap(f) end
+    -- Line callbacks: log the captured wildcard so list growth is visible.
+    local function __snd_wrap_line(fname, key)
+      local orig = _G[fname]
+      if type(orig) ~= "function" then return end
+      _G[fname] = function(name, line, wildcards)
+        __snd_dbg(fname .. ": " .. tostring(wildcards and wildcards[key]))
+        return orig(name, line, wildcards)
+      end
+    end
+    __snd_wrap_line("cp_info_line", "target")
+    __snd_wrap_line("cp_check_line", "target")
+    __snd_wrap_line("cp_info_level_taken", "level")
     """
 
     /// Force a campaign/quest detection pass — run S&D's `do_cp_info()` (sends

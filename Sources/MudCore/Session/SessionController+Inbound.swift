@@ -5,6 +5,12 @@ import Foundation
 /// once-per-connection GMCP handshake. Split out of ``SessionController`` to
 /// keep the core actor file within the file-length budget.
 extension SessionController {
+    /// Append one event to the timestamped debug transcript (no-op when not
+    /// recording). The single funnel every transcript tap in the session calls.
+    func logTranscript(_ category: SessionTranscript.Category, _ text: String) {
+        transcript?.log(category, text)
+    }
+
     func processChunk(_ wireBytes: [UInt8]) async {
         // Tee to the recorder before doing any parser work — we want
         // the *wire* bytes on disk so a replay re-runs the full
@@ -47,6 +53,9 @@ extension SessionController {
             await dispatchGMCP(message)
         }
         for line in output.lines {
+            // Transcript the raw MUD line (pre-gag) so S&D scrape output the
+            // window omits is still on disk for debugging.
+            logTranscript(.recv, line.text)
             await appendLineThroughScripts(line)
         }
 
@@ -58,6 +67,7 @@ extension SessionController {
     /// and the S&D host. Split out of ``processChunk`` for the complexity
     /// budget.
     private func dispatchGMCP(_ message: GMCPMessage) async {
+        logTranscript(.gmcp, "\(message.package) \(message.json)")
         await gmcpState.apply(message)
         await chatStore.ingest(message)
         if let mapper {
