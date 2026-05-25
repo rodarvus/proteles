@@ -372,6 +372,18 @@ public actor SessionController {
     /// what makes S&D's navigation (`do_mapper_goto` → `Execute("mapper goto
     /// <id>")`) reach the native mapper instead of being sent raw to the MUD.
     func dispatchCommand(_ command: String) async throws {
+        // Command stacking (Aardwolf/MUSHclient): split on `;` (`;;` = literal
+        // `;`), dispatching each command. A lone empty piece is a bare-Enter
+        // prompt nudge and is preserved.
+        let pieces = CommandStack.split(command)
+        for piece in pieces {
+            if piece.isEmpty, pieces.count > 1 { continue }
+            try await dispatchSingleCommand(piece)
+        }
+    }
+
+    /// Route one (already unstacked) command through the in-app pipeline.
+    private func dispatchSingleCommand(_ command: String) async throws {
         // Native `mapper …` commands are handled in-app, not sent to the MUD.
         if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
             await applyScriptEffects(mapper.handleCommand(command))
