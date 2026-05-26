@@ -42,7 +42,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_note_mode | ✅ done | native `NoteMode` |
 | aard_vital_shortcuts | ✅ done | native `VitalShortcuts` |
 | aard_ASCII_map | ✅ done | native `AsciiMap` |
-| aard_channels_fiendish | ❓ verify | likely covered by native Chat panel (#30/#31) + ChatEcho |
+| aard_channels_fiendish | ✅ done (core) | chat capture is native via GMCP `comm.channel` (`ChatStore` #30 — cleaner than the reference's text-trigger scraping); miniwindow replaced by the native Chat panel (#31); `ChatEcho` (#30) declutters main + mutes. Live evidence shows e.g. `claninfo` already arrives via `comm.channel`. Refinements deferred (see below). |
 | aard_group_monitor_gmcp | ✅ done (core) | covered by the native Info-panel group section (#33): members + level + HP/MP/MV bars + here-indicator. Miniwindow replaced by the native panel. Display refinements deferred to the UI revamp (see below). |
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | 🔨 build | tick countdown from `comm.tick` GMCP — small HUD feature |
@@ -78,8 +78,9 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 7 done · 8 build · 4 reimplement · 6 defer · 17 drop · 3 verify (= 45
-rows because TTS = 2 plugins → 1 feature, so 43 plugins).
+Counts: 10 done · 8 build · 4 reimplement · 6 defer · 17 drop · 0 verify (the
+verify trio — prompt_fixer/group_monitor/channels_fiendish — resolved to
+done-core; TTS = 2 plugins → 1 feature, so 43 plugins).
 
 ## Work order
 
@@ -108,6 +109,15 @@ system is reworked:
 - Display preferences: on/off, room-only filter (`grouproom`), compact mode,
   per-player show/hide (`showp`/`hidep`).
 
+### Chat-panel refinements (deferred to the UI revamp)
+
+`aard_channels_fiendish` core is covered (GMCP `comm.channel` capture + native
+Chat panel + `ChatEcho`); the remaining bits to fold in with the panel rework:
+- Capture coverage: ingest `comm.quest` (separate GMCP package, not in
+  `ChatStore` today); add a native text-trigger fallback only for any category
+  the live channel-set check (below) shows truly isn't a `comm.channel`.
+- Panel UX: right-click menu, text selection, scroll controls (`chats scroll`).
+
 ## Pending live verification (batched)
 
 Per the user's decision, live/interactive MUD verification is **batched** rather
@@ -118,6 +128,11 @@ behaviour against the live MUD (and a session transcript) in one pass:
   `IAC GA` after prompts (recordings are MCCP2-compressed, so not greppable
   offline); confirm prompts render as their own lines, anchored triggers fire,
   and autologin still matches the name/password prompts.
+- **`aard_channels_fiendish` → channel-set coverage:** inventory which channels
+  Aardwolf actually routes through GMCP `comm.channel` (claninfo confirmed
+  present) vs. plain text (`Remort Auction:`, `Global Quest:`, `INFO:`,
+  `RAIDINFO:`, `WARFARE/GENOCIDE:`), so we know which — if any — need a native
+  text-trigger fallback into `ChatStore`.
 
 **Finale — dinv** (vendored inventory manager): resumed only **after all
 aardwolfclientpackage plugins are done**. Blocker #1 (`sendgmcp`) is cleared by
