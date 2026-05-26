@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — UI revamp mock</title>
+<style>
+  :root{
+    --bg:#0c0e12; --panel:#11141a; --bar:#171b22; --sep:#262b34;
+    --fg:#c7ccd6; --dim:#8a93a3; --accent:#4f8cff;
+    --green:#3fb950; --red:#e5534b; --blue:#4f8cff; --orange:#e3923b; --cyan:#56d4dd;
+    font-family:-apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:#000; color:var(--fg); padding:14px}
+  .win{width:1280px; height:760px; background:var(--bg); border-radius:10px; overflow:hidden;
+       box-shadow:0 18px 60px rgba(0,0,0,.6); display:flex; flex-direction:column; border:1px solid #1c2128}
+  .titlebar{height:38px; background:linear-gradient(#20242c,#181b22); display:flex; align-items:center;
+            padding:0 12px; gap:8px; border-bottom:1px solid var(--sep)}
+  .dot{width:12px; height:12px; border-radius:50%}
+  .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .title{flex:1; text-align:center; font-size:13px; color:var(--dim)}
+  .toolbtn{color:var(--dim); font-size:13px; border:1px solid var(--sep); border-radius:6px; padding:3px 8px}
+  .body{flex:1; display:flex; min-height:0}
+  /* left game column */
+  .game{flex:0 0 62%; display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--sep)}
+  .out{flex:1; padding:10px 12px; font-family:"SF Mono",ui-monospace,monospace; font-size:12.5px;
+       line-height:1.5; overflow:hidden; white-space:pre-wrap}
+  .input{height:30px; border-top:1px solid var(--sep); display:flex; align-items:center; padding:0 12px;
+         font-family:"SF Mono",ui-monospace,monospace; font-size:12.5px; color:var(--fg)}
+  .caret{display:inline-block;width:7px;height:15px;background:var(--accent);margin-left:2px;border-radius:1px;
+         animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .gauges{display:flex; gap:7px; align-items:center; padding:6px 10px; background:var(--bar);
+          border-top:1px solid var(--sep)}
+  .conn{width:9px;height:9px;border-radius:50%;background:var(--green);flex:0 0 auto}
+  .gauge{flex:1; height:17px; border-radius:5px; background:#1d2230; position:relative; overflow:hidden}
+  .gauge .fill{position:absolute; left:0; top:0; bottom:0; border-radius:5px}
+  .gauge .lab{position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center;
+              padding:0 8px; font:600 11px/1 system-ui; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,.5)}
+  /* right rail */
+  .rail{flex:1; display:flex; flex-direction:column; min-width:0}
+  .panel{display:flex; flex-direction:column; min-height:0; border-bottom:1px solid var(--sep)}
+  .phead{height:26px; background:var(--bar); display:flex; align-items:center; gap:6px; padding:0 9px;
+         font-size:11.5px; color:var(--dim); border-bottom:1px solid var(--sep)}
+  .phead .x{margin-left:auto; opacity:.5}
+  .tabs{display:flex; gap:0}
+  .tab{font-size:11.5px; padding:5px 11px; color:var(--dim)}
+  .tab.on{color:var(--fg); background:var(--panel); border-bottom:2px solid var(--accent)}
+  .pcontent{flex:1; padding:8px 10px; font-size:12px; overflow:hidden}
+  .vsep{height:6px; background:var(--sep)}
+  .hsep{width:7px; background:var(--sep); cursor:col-resize}
+  /* map */
+  .mapgrid{font-family:"SF Mono",monospace; font-size:11px; line-height:1.35; color:#7fd1c4}
+  .mapgrid .me{color:#ffe680;font-weight:700}
+  /* colors for text */
+  .ch{color:var(--cyan)} .nm{color:#7ee787} .yl{color:#e3b341} .rd{color:var(--red)}
+  .gy{color:var(--dim)} .mg{color:#d2a8ff} .or{color:var(--orange)}
+  .row{display:flex; justify-content:space-between; padding:2px 0; border-bottom:1px solid #1a1f27}
+  .small{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <div class="title">Proteles — Aardwolf (Rodarvus)</div>
+    <div class="toolbtn">▦ Panels ▾</div>
+  </div>
+  <div class="body">
+    <!-- GAME COLUMN -->
+    <div class="game">
+      <div class="out"><span class="gy">The Grand City of Aylor</span>
+<span class="gy">A wide cobblestone avenue stretches north toward the recall</span>
+<span class="gy">square, lined with shops and the constant bustle of adventurers.</span>
+
+<span class="ch">[ Exits: north east south west up ]</span>
+
+You see <span class="nm">Tribunal Guard</span> standing watch here.
+<span class="mg">Wryn</span> gossips, '<span class="mg">anyone for a quick campaign run?</span>'
+<span class="yl">Your spellup glows around you.</span>
+You tell <span class="nm">Tahren</span>, '<span class="cyan">omw, 2 mins</span>'
+<span class="rd">A scurrying lizard</span> darts out and bites you!
+You <span class="or">slash</span> a scurrying lizard <span class="yl">*** DEMOLISH ***</span>
+A scurrying lizard is <span class="rd">DEAD!!</span>
+You receive 412 experience points.
+</div>
+      <div class="input"><span class="gy">&gt;</span>&nbsp;kill lizard<span class="caret"></span></div>
+      <div class="gauges">
+        <div class="conn" title="Connected"></div>
+        <div class="gauge"><div class="fill" style="width:78%;background:linear-gradient(#e5534b,#b3403a)"></div><div class="lab"><span>HP</span><span>2350</span></div></div>
+        <div class="gauge"><div class="fill" style="width:62%;background:linear-gradient(#4f8cff,#3a66c2)"></div><div class="lab"><span>MP</span><span>1607</span></div></div>
+        <div class="gauge"><div class="fill" style="width:94%;background:linear-gradient(#3fb950,#2c8a3b)"></div><div class="lab"><span>MV</span><span>1130</span></div></div>
+        <div class="gauge"><div class="fill" style="width:34%;background:linear-gradient(#e3923b,#b06f2b)"></div><div class="lab"><span>Enemy</span><span>34%</span></div></div>
+      </div>
+    </div>
+    <!-- RIGHT RAIL -->
+    <div class="hsep"></div>
+    <div class="rail">
+      <!-- MAP -->
+      <div class="panel" style="flex:0 0 44%">
+        <div class="phead">🗺  Map<span class="x">✕</span></div>
+        <div class="pcontent mapgrid">        [ ] [ ]
+     ---     ---
+    [ ]-[+]-[ ]-[ ]
+     |   |       |
+    [ ]-<span class="me">[@]</span>-[ ]-[ ]
+     |   |   |
+    [ ] [ ] [+]-[ ]
+         |
+        [ ]
+<span class="small" style="display:block;margin-top:8px">The Grand City of Aylor · room 32418 · zone: aylor</span></div>
+      </div>
+      <div class="vsep"></div>
+      <!-- S&D / TEXT MAP tab group -->
+      <div class="panel" style="flex:0 0 31%">
+        <div class="phead tabs"><div class="tab on">🎯 S&amp;D</div><div class="tab">▦ Text</div><span class="x" style="margin-left:auto;opacity:.5">✕</span></div>
+        <div class="pcontent">
+          <div class="row"><span><span class="yl">1</span> a jeweller</span><span class="small">dsr</span></div>
+          <div class="row"><span><span class="yl">2</span> Ellyde the prostitute</span><span class="small">dsr</span></div>
+          <div class="row"><span><span class="yl">4</span> a scurrying lizard</span><span class="small">hedge</span></div>
+          <div class="row"><span><span class="yl">7</span> a Nulan'Boar tribesman</span><span class="small">nulan</span></div>
+          <div class="row"><span><span class="yl">11</span> a Knossian citizen</span><span class="small">knossos</span></div>
+          <div class="small" style="margin-top:6px">Type <span class="ch">xcp &lt;n&gt;</span> or click a target to walk there.</div>
+        </div>
+      </div>
+      <div class="vsep"></div>
+      <!-- CHANNELS -->
+      <div class="panel" style="flex:1; border-bottom:none">
+        <div class="phead">💬  Channels<span class="x">✕</span></div>
+        <div class="pcontent">
+          <div><span class="small">[gossip]</span> <span class="mg">Wryn</span>: anyone for a quick cp run?</div>
+          <div><span class="small">[clan]</span> <span class="nm">Tahren</span>: nice demolish :)</div>
+          <div><span class="small">[tell]</span> <span class="cyan">Mesia</span>: look ammo on lorrd</div>
+          <div><span class="small">[say]</span> <span class="nm">a guard</span>: Move along, citizen.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
