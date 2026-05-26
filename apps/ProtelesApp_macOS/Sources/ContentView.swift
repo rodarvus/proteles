@@ -27,8 +27,10 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                MudOutputView(store: session.scrollbackStore)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                MudOutputView(store: session.scrollbackStore, onCommand: { command in
+                    Task { try? await session.send(command) }
+                })
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 CommandInputView { command in
                     Task {
                         try? await session.send(command)

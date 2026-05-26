@@ -124,6 +124,17 @@ extension LuaRuntime {
                 background: Self.argOptionalString(arguments, 2)
             ))
         case .colourNote: effects.append(.colourNote(Self.noteSegments(arguments)))
+        case .hyperlink:
+            // proteles.hyperlink(text, action, hint?) → a one-segment clickable
+            // line. The action string is interpreted like MUSHclient's
+            // Hyperlink (URL → open, else send as a command).
+            effects.append(.colourNote([NoteSegment(
+                text: Self.argString(arguments, 0),
+                link: LineLink(
+                    actionString: Self.argString(arguments, 1),
+                    hint: Self.argOptionalString(arguments, 2)
+                )
+            )]))
         default: break
         }
     }

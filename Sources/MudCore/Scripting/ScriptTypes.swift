@@ -144,10 +144,19 @@ public struct NoteSegment: Sendable, Equatable {
     public let text: String
     public let foreground: String?
     public let background: String?
+    /// Makes the segment a clickable hyperlink (native `proteles.hyperlink`
+    /// and the MUSHclient `Hyperlink` shim build linked segments).
+    public let link: LineLink?
 
-    public init(text: String, foreground: String? = nil, background: String? = nil) {
+    public init(
+        text: String,
+        foreground: String? = nil,
+        background: String? = nil,
+        link: LineLink? = nil
+    ) {
         self.text = text
         self.foreground = foreground
         self.background = background
+        self.link = link
     }
 }

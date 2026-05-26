@@ -124,6 +124,20 @@ public extension LuaRuntime {
     function AnsiNote(text)
       proteles.echoAnsi(__pending .. (text == nil and "" or tostring(text))); __pending = ""
     end
+    -- Hyperlink(action, text, hint, …): clickable text — MUSHclient's
+    -- Hyperlink. Maps to the native primitive (action: URL → opens browser,
+    -- else sent as a command). Any pending Tell prefix is flushed first; inline
+    -- composition with surrounding Tell/Note isn't supported (a known shim
+    -- limitation), so the link lands on its own line.
+    function Hyperlink(action, text, hint)
+      if __pending ~= "" then proteles.echo(__pending); __pending = "" end
+      proteles.hyperlink(tostring(text or ""), tostring(action or ""), hint and tostring(hint) or nil)
+      return error_code.eOK
+    end
+    -- MakeHyperlink returns embedded style codes in MUSHclient; we have no such
+    -- inline representation, so it degrades to the plain text (visible, not
+    -- clickable). Use Hyperlink for a clickable link.
+    function MakeHyperlink(action, text) return tostring(text or "") end
 
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end

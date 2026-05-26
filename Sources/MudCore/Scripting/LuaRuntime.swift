@@ -87,8 +87,7 @@ public actor LuaRuntime {
         case runtime(String)
         /// A result wasn't of the expected type.
         case typeMismatch(String)
-        /// The chunk ran longer than ``LuaRuntime/executionTimeout`` and
-        /// was aborted (e.g. an accidental infinite loop).
+        /// The chunk exceeded ``LuaRuntime/executionTimeout`` and was aborted.
         case timedOut
     }
 
@@ -139,7 +138,7 @@ public actor LuaRuntime {
         case jsonDecode
         case jsonEncode
         case echoAard, echoAnsi, simulate
-        case colourNote
+        case colourNote, hyperlink
         case mapperCall
         case sqliteAllowed
         case publish
@@ -367,6 +366,7 @@ public actor LuaRuntime {
         setHostFunction("echoAnsi", .echoAnsi)
         setHostFunction("simulate", .simulate)
         setHostFunction("colourNote", .colourNote)
+        setHostFunction("hyperlink", .hyperlink)
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
         setHostFunction("publish", .publish)
@@ -402,7 +402,7 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
+             .hyperlink, .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
              .addTrigger, .addAlias, .setTriggerGroup, .enableAlias:
             recordEffect(function, arguments)
             return []

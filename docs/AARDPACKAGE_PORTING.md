@@ -52,7 +52,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_statmon_gmcp | ✅ done (covered) | every field is already native: Info panel `statsSection` (Str/Int/Wis/Dex/Con/Luck + HR/DR), `characterSection` (level/TNL/align), `worthSection` (gold/QP/trivia/trains/pracs), `enemySection`; vitals in the status HUD. Nothing additive — the Info panel *is* the native statmon. Configurable grid/colours deferred to the UI revamp. |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
 | SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
-| Hyperlink_URL2 | 🎨 reimplement | native URL detection in the TextKit output view |
+| Hyperlink_URL2 | ✅ done (⏳ live) | native URL auto-linkify (D-40): `URLLinkify` NativePlugin (`onLine` → `URLLinkifier` marks URL spans clickable; default on). Built on a **shared native hyperlink primitive** (`LineLink` on `StyledRun`; click opens URL or sends a command) exposed to **native plugins** (`proteles.hyperlink`, `NoteSegment.link`) and the **mush shim** (`Hyperlink`/`MakeHyperlink`). Live-verify clicking opens browser / sends command. |
 | aard_Copy_Colour_Codes | ✅ done (⏳ live) | four copy formats (D-39): **normal** (⌘C), **ANSI Colour Codes** (`SGREncoder`, ⌘⇧C), **Aardwolf Colour Codes** (`AardwolfCodeEncoder`, ⌘⌥C — `@r`/`@R`/`@xNNN`, `@@` escape, 256-colour via `@x`), **HTML** (`HTMLEncoder`, ⌘⌥H — `<pre>` + `<span style="color:#…">` runs, palette-resolved hex, HTML-escaped). All in the Edit menu + right-click menu. Backlog #1 + #2 done. |
 | aard_Theme_Controller | 🕓 defer | native theming — UI revamp |
 | aard_splitscreen_scrollback | 🕓 defer | native split-scroll in output view — UI revamp |
@@ -78,10 +78,10 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 14 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 4 reimplement
-· 7 defer (incl. soundpack, licensing-gated) · 17 drop · 0 verify (TTS = 2
-plugins → 1 feature, so 43 plugins). **Phase A complete; Phase B HUD + sounds
-resolved — only the reimplement bucket (TTS/hyperlinks/copy-codes) remains.**
+Counts: 16 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 2 reimplement
+(TTS only) · 7 defer (incl. soundpack, licensing-gated) · 17 drop · 0 verify
+(TTS = 2 plugins → 1 feature, so 43 plugins). **Only TTS remains before the dinv
+finale** (copy-codes D-39 + hyperlinks D-40 done).
 
 ## Work order
 
@@ -151,6 +151,9 @@ behaviour against the live MUD (and a session transcript) in one pass:
 - **`Aardwolf_Tick_Timer` → `comm.tick` (D-36):** confirm Aardwolf broadcasts
   `comm.tick` each tick (cadence ≈ 30s) and the "Next tick: N" status-bar
   countdown reads correctly (resets on each tick).
+- **`Hyperlink_URL2` → native hyperlinks (D-40):** confirm URLs in output are
+  clickable and open the browser; a `proteles.hyperlink`/`Hyperlink` command
+  link sends the command to the MUD when clicked.
 - **`Omit_Blank_Lines` → View-menu toggle (D-37):** confirm the toggle hides
   empty MUD lines, leaves whitespace-only lines, and the choice persists across
   launches (`@AppStorage`).

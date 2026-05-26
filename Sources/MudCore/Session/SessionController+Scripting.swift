@@ -561,8 +561,10 @@ public extension SessionController {
             var style = StyleAttributes.default
             if let fg = segment.foreground, let color = namedColor(fg) { style.foreground = color }
             if let bg = segment.background, let color = namedColor(bg) { style.background = color }
-            if !style.isDefault, start < end {
-                runs.append(StyledRun(utf16Range: start..<end, style: style))
+            // A run is needed for a non-default style *or* a hyperlink (which
+            // may sit on otherwise-default text).
+            if !style.isDefault || segment.link != nil, start < end {
+                runs.append(StyledRun(utf16Range: start..<end, style: style, link: segment.link))
             }
         }
         return Line(id: LineID(0), text: text, runs: runs)

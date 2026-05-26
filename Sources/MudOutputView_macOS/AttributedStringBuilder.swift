@@ -51,6 +51,9 @@
                     length: run.utf16Range.count
                 )
                 apply(style: run.style, to: result, range: nsRange)
+                if let link = run.link {
+                    Self.applyLink(link, to: result, range: nsRange)
+                }
             }
 
             return result
@@ -110,6 +113,38 @@
                     value: NSUnderlineStyle.single.rawValue,
                     range: range
                 )
+            }
+        }
+
+        /// Make `range` a clickable hyperlink: an `.link` carrying the action
+        /// (`proteles-cmd:` for send-command, the URL itself for open-URL),
+        /// underlined, with the hint as a tooltip. `MudTextView`'s delegate
+        /// decodes the link on click.
+        private static func applyLink(
+            _ link: LineLink,
+            to attributed: NSMutableAttributedString,
+            range: NSRange
+        ) {
+            guard let url = linkURL(for: link.action) else { return }
+            attributed.addAttribute(.link, value: url, range: range)
+            attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            if let hint = link.hint {
+                attributed.addAttribute(.toolTip, value: hint, range: range)
+            }
+        }
+
+        /// Encode a ``LinkAction`` as a URL for the `.link` attribute. A
+        /// send-command action uses the custom `proteles-cmd:` scheme so the
+        /// text view's delegate can route it back to the session.
+        static func linkURL(for action: LinkAction) -> URL? {
+            switch action {
+            case .openURL(let string):
+                return URL(string: string)
+            case .sendCommand(let command):
+                let encoded = command.addingPercentEncoding(
+                    withAllowedCharacters: .urlPathAllowed
+                ) ?? ""
+                return URL(string: "proteles-cmd:///\(encoded)")
             }
         }
 

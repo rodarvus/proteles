@@ -13,12 +13,31 @@
     /// Plain ⌘C continues to use `NSTextView`'s built-in `copy(_:)` —
     /// which already does the right thing (plain selected text on the
     /// pasteboard).
-    public final class MudTextView: NSTextView {
+    public final class MudTextView: NSTextView, NSTextViewDelegate {
         /// Cached encoders; cheap to instantiate but no reason to recreate
         /// per copy invocation.
         private let ansiEncoder = SGREncoder()
         private let aardwolfEncoder = AardwolfCodeEncoder()
         private let htmlEncoder = HTMLEncoder()
+
+        /// Invoked when a `proteles-cmd:` hyperlink is clicked, with the
+        /// decoded command — the host sends it to the MUD. URL links
+        /// (`http`/`mailto`) open in the browser instead.
+        public var onCommand: ((String) -> Void)?
+
+        /// Route hyperlink clicks: `proteles-cmd:` → send the command;
+        /// otherwise open the URL in the default browser.
+        public func textView(_: NSTextView, clickedOnLink link: Any, at _: Int) -> Bool {
+            let string = (link as? URL)?.absoluteString ?? (link as? String) ?? ""
+            let scheme = "proteles-cmd:"
+            if string.hasPrefix(scheme) {
+                let raw = String(string.dropFirst(scheme.count)).drop { $0 == "/" }
+                onCommand?(raw.removingPercentEncoding ?? String(raw))
+                return true
+            }
+            if let url = link as? URL { NSWorkspace.shared.open(url) }
+            return true
+        }
 
         /// Copy the selection as ANSI SGR escapes (terminals, Discord, other
         /// clients).

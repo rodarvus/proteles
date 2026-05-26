@@ -12,13 +12,16 @@
     public struct MudOutputView: NSViewRepresentable {
         private let store: ScrollbackStore
         private let palette: ColorPalette
+        private let onCommand: ((String) -> Void)?
 
         public init(
             store: ScrollbackStore,
-            palette: ColorPalette = .xtermDefault
+            palette: ColorPalette = .xtermDefault,
+            onCommand: ((String) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
+            self.onCommand = onCommand
         }
 
         public func makeNSView(context: Context) -> NSScrollView {
@@ -35,6 +38,8 @@
             scrollView.translatesAutoresizingMaskIntoConstraints = false
 
             let textView = MudTextView()
+            textView.onCommand = onCommand
+            textView.delegate = textView // self-delegate for hyperlink clicks
             textView.minSize = NSSize(width: 0, height: 0)
             textView.maxSize = NSSize(
                 width: CGFloat.greatestFiniteMagnitude,
