@@ -51,7 +51,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_health_bars_gmcp | ✅ done (core, ⏳ live) | HP/MP/MV already in the status HUD (#29). Extended it (D-38) with the two additive pieces: a **combat-only Enemy gauge** (`char.status.enemy`/`enemypct` via `CharStatus.combatTarget`) and **TNL** in the summary. Configurable multi-bar panel (Align bar, stacked/graphical modes, colour/threshold config) deferred to the UI revamp (below). |
 | aard_statmon_gmcp | ✅ done (covered) | every field is already native: Info panel `statsSection` (Str/Int/Wis/Dex/Con/Luck + HR/DR), `characterSection` (level/TNL/align), `worthSection` (gold/QP/trivia/trains/pracs), `enemySection`; vitals in the status HUD. Nothing additive — the Info panel *is* the native statmon. Configurable grid/colours deferred to the UI revamp. |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
-| SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
+| SAPI + universal_text_to_speech | ⏸️ deferred (design recorded) | accessibility TTS — **deferred until after polishing** (right idea, wrong priority now). Full investigation + native architecture captured in "Deferred: TTS (accessibility)" below. |
 | Hyperlink_URL2 | ✅ done (⏳ live) | native URL auto-linkify (D-40): `URLLinkify` NativePlugin (`onLine` → `URLLinkifier` marks URL spans clickable; default on). Built on a **shared native hyperlink primitive** (`LineLink` on `StyledRun`; click opens URL or sends a command) exposed to **native plugins** (`proteles.hyperlink`, `NoteSegment.link`) and the **mush shim** (`Hyperlink`/`MakeHyperlink`). Live-verify clicking opens browser / sends command. |
 | aard_Copy_Colour_Codes | ✅ done (⏳ live) | four copy formats (D-39): **normal** (⌘C), **ANSI Colour Codes** (`SGREncoder`, ⌘⇧C), **Aardwolf Colour Codes** (`AardwolfCodeEncoder`, ⌘⌥C — `@r`/`@R`/`@xNNN`, `@@` escape, 256-colour via `@x`), **HTML** (`HTMLEncoder`, ⌘⌥H — `<pre>` + `<span style="color:#…">` runs, palette-resolved hex, HTML-escaped). All in the Edit menu + right-click menu. Backlog #1 + #2 done. |
 | aard_Theme_Controller | 🕓 defer | native theming — UI revamp |
@@ -78,10 +78,11 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 16 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 2 reimplement
-(TTS only) · 7 defer (incl. soundpack, licensing-gated) · 17 drop · 0 verify
-(TTS = 2 plugins → 1 feature, so 43 plugins). **Only TTS remains before the dinv
-finale** (copy-codes D-39 + hyperlinks D-40 done).
+Counts: 16 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 8 deferred
+(6 UI-revamp + soundpack licensing + TTS) · 17 drop · 1 reimplement done
+(copy-codes D-39, hyperlinks D-40). **All 43 plugins triaged — no active plugin
+work remains.** Next: polishing, then the deferred buckets (TTS, soundpack,
+UI-revamp panels) and the **dinv finale**.
 
 ## Work order
 
@@ -94,6 +95,47 @@ dinv finale (shared `invdata` work — see below).
 (health_bars D-38, statmon covered). `aard_soundpack` **deferred** (GPLv3
 assets — see below). Remaining: TTS (investigate first), copy-@-codes/HTML +
 hyperlinks.
+
+### Deferred: TTS (accessibility) — design recorded (D-41)
+
+`SAPI` + `universal_text_to_speech` are the same plugin id
+(`463242566069ebfd1b379ec1`) — mutually-exclusive backends. **Deferred until
+after polishing.** Full investigation so we can resume cold:
+
+**What it does.** A queued speech engine: `sapi on/off` auto-speaks all MUD
+output (colour-stripped, punctuation-filtered); `skip`/`clear`; `faster`/
+`slower`/`rate N`; `list voices`/`voice N`; `filtering N`; `say [text]`; and
+`CallPlugin(id, "say", text)` so other plugins can speak. SAPI = Windows SAPI;
+universal = **Tolk** (speech **+ braille** screen-reader abstraction).
+
+**Audience.** Primarily **blind / visually-impaired** players (the Tolk +
+braille integration is the tell — it's how non-sighted players read the MUD);
+secondarily sighted audio cues via scripts' `say`.
+
+**macOS best practices (two paths, must not double-speak).**
+1. **VoiceOver / screen-reader** (accessibility-correct, Tolk's equivalent):
+   feed new lines via `NSAccessibility.post(element:, .announcementRequested)`;
+   VoiceOver speaks **and brailles** using the user's own voice/rate/AT
+   settings. Also make the output view properly accessible.
+2. **`AVSpeechSynthesizer`** (app-controlled voice/rate/queue; modern —
+   `NSSpeechSynthesizer` is legacy) for users without a screen reader / sighted
+   cues. Must be suppressed while VoiceOver is active to avoid double-speech.
+
+**Proposed native architecture.**
+- MudCore (pure): a `SpeechFilter` (`@`-coded/ANSI line → plain speakable text +
+  punctuation-filtering levels) + a `TextToSpeech` `NativePlugin` owning policy
+  (`onLine` when auto-speak on → a new `.speak(text, interrupt:)` effect;
+  `handleCommand` for `tts on/off/rate/voice/skip/clear/say/filtering`; persisted
+  settings) + a `proteles.speak(text)` host call (the `say`/CallPlugin
+  equivalent).
+- macOS: a `SpeechController` consuming `.speak` → VoiceOver announcement **or**
+  `AVSpeechSynthesizer` (queue w/ skip/clear), VoiceOver-aware to avoid
+  double-speech.
+
+**Open decisions (revisit on resume):** (1) ship both backends w/ a setting
+(recommended) vs. one for v1; (2) auto-speak *all* output (reference) vs.
+curated default; (3) off by default (yes); (4) voice/rate via `tts` commands now,
+picker UI with Preferences (UI revamp).
 
 ### Licensing-gated assets (pending a GPLv3 enquiry)
 

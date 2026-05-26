@@ -11,28 +11,31 @@ includes the native mapper, lsqlite3, and Search-and-Destroy with live
 campaign/quest detection verified against the user's live MUD.** Read
 **PLAN.md** for the full status table + decision log (D-01…D-32).
 
-### NEXT SESSION — start here: implement the aardwolfclientpackage plugins
+### NEXT SESSION — start here: polishing, then the deferred buckets + dinv
 
-**Decision (2026-05-26, D-34): bring the 43 `aardwolfclientpackage` plugins to
-Proteles natively, per-plugin.** The full triage, verdicts, dependency
-findings, and phased work order live in **`docs/AARDPACKAGE_PORTING.md`** (the
-living tracker — read it first). Summary: **7 done · 17 dropped · 8 to build ·
-4 reimplement-differently · 6 deferred to the UI revamp · 3 to verify.**
+**The aardwolfclientpackage plugin triage is COMPLETE** — all 43 plugins are
+done / dropped / deferred / bundled (D-34…D-41). The living tracker
+**`docs/AARDPACKAGE_PORTING.md`** has every verdict; read it first. Tally:
+**16 done · 17 dropped · 8 deferred · 1 bundled-w/-dinv.** No active plugin work
+remains.
 
-Discipline: for each plugin, lead with a verdict (drop / native feature /
-native plugin / vendor-verbatim / reimplement-differently), then PROPOSE a
-deep-dive plan and wait for approval (§7/§11). None run through the generic
-shim. Key finding: the heaviest deps (`aard_repaint_buffer`,
-`aard_miniwindow_z_order_monitor` + miniwindow draw libs) are MUSHclient
-rendering infra → dropped, so the dependency graph collapses and remaining work
-has no hard ordering (sequence by value).
+Done natively this effort: `aard_GMCP_handler` (D-33), `Aardwolf_Tick_Timer`
+(D-36, NativePlugin), `Omit_Blank_Lines` (D-37, View-menu setting),
+`aard_health_bars_gmcp` Enemy+TNL (D-38), `aard_Copy_Colour_Codes` (D-39, 4 copy
+formats), `Hyperlink_URL2` + the shared native hyperlink primitive (D-40); plus
+the verify trio resolved (prompt_fixer/group_monitor/channels → done-core).
 
-**Phase A (next):** `Aardwolf_Tick_Timer`, `aard_inventory_serials`,
-`Omit_Blank_Lines`; verify-then-resolve `aard_prompt_fixer`,
-`aard_group_monitor_gmcp`, `aard_channels_fiendish`. `aard_GMCP_handler` is
-already ✅ done (D-33). **TTS scope is an open investigation** (do it when we
-reach Phase B). **dinv is the finale** — resumed only after every package
-plugin is done.
+**Next: polishing.** Then the **deferred buckets** (when their gates clear):
+- **TTS** (accessibility; design recorded, D-41 / tracker) — after polishing.
+- **soundpack** — gated on the GPLv3 asset-licensing enquiry (D-41 area /
+  "Licensing-gated assets"); user plans an in-game note to the package
+  maintainers after core + polish.
+- **UI-revamp panels** (theming, splitscreen, review buffers, command-output,
+  ingame-help, bigmap, group/health-bar config) — fold into the UI revamp.
+- **dinv finale** (incl. bundled `aard_inventory_serials`) — see PAUSED below.
+
+Discipline reminder: per-plugin verdict-first; PROPOSE then wait for approval
+(§7/§11); none run through the generic shim.
 
 ### PAUSED: dinv inventory manager (unreleased, on `main`)
 
