@@ -155,6 +155,10 @@ public extension SessionController {
     /// effects are applied, re-entrancy-guarded so a re-sending plugin can't
     /// loop. With no script engine, sends straight to the MUD.
     private func sendCommandThroughPlugins(_ command: String) async {
+        // TEMP dinv debug: log the call origin of every command send, so a
+        // doubled send (live only) reveals its two paths in the transcript.
+        let origin = Thread.callStackSymbols.filter { $0.contains("MudCore") }.prefix(6)
+        logTranscript(.note, "[send-origin] \(command) <= " + origin.joined(separator: " <= "))
         // While OnPluginSend is processing, a send goes straight to the MUD
         // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
         // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered

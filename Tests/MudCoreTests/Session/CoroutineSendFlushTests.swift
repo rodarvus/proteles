@@ -121,6 +121,13 @@ struct CoroutineSendFlushTests {
             await waitForSend("hello", on: conn, timeout: .milliseconds(500)),
             "OnPluginSend's bare re-send was re-queued by the hook, not transmitted: \(conn.sentLines)"
         )
+        // It must be transmitted EXACTLY once — live transcripts show every dinv
+        // bypass send going out twice, which corrupts stateful sequences
+        // (hold→enter→wear for portals).
+        #expect(
+            conn.sentLines.count(where: { $0 == "hello" }) == 1,
+            "bypass re-send was duplicated: \(conn.sentLines)"
+        )
         await controller.disconnect()
     }
 }
