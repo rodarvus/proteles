@@ -92,15 +92,15 @@ public actor SessionController {
     /// Drains the mapper's system-note stream (delayed cexit results) to output.
     var mapperNotesTask: Task<Void, Never>?
     var recorder: SessionRecorder?
-    /// Re-entrancy guard for `OnPluginSend` (a re-sending plugin re-enters it).
-    var pluginSendDepth = 0
+    /// MUSHclient's `m_bPluginProcessingSend` re-entrancy guard: true while
+    /// `OnPluginSend` runs, so a send it issues (dinv's bypass) skips the hook.
+    var pluginProcessingSend = false
     /// Vendored dinv's state dir, armed at world-load; loaded lazily on the
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
     var loadedPluginsDirectory: URL? // active world's plugin dir, for ReloadPlugin disk re-read
-    /// Timestamped debug transcript paired with ``recorder`` (`.log` beside the
-    /// `.jsonl`): logs local events the wire capture omits (input/sends/notes/GMCP).
+    /// Timestamped `.log` beside ``recorder``: local events the wire omits.
     var transcript: SessionTranscript?
     /// Per-world persistence for scoped script/plugin variables (write-through).
     var variableStore: VariableStore?

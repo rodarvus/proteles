@@ -155,12 +155,16 @@ public extension SessionController {
     /// effects are applied, re-entrancy-guarded so a re-sending plugin can't
     /// loop. With no script engine, sends straight to the MUD.
     private func sendCommandThroughPlugins(_ command: String) async {
-        guard let scriptEngine, pluginSendDepth < 8 else {
+        // While OnPluginSend is processing, a send goes straight to the MUD
+        // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
+        // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered
+        // to the hook and re-queued.
+        guard let scriptEngine, !pluginProcessingSend else {
             try? await sendLine(command)
             return
         }
-        pluginSendDepth += 1
-        defer { pluginSendDepth -= 1 }
+        pluginProcessingSend = true
+        defer { pluginProcessingSend = false }
         let (blocked, effects) = await scriptEngine.fireOnPluginSend(command)
         if !effects.isEmpty { await applyScriptEffects(effects) }
         if !blocked { try? await sendLine(command) }

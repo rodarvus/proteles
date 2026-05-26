@@ -84,4 +84,43 @@ struct CoroutineSendFlushTests {
         )
         await controller.disconnect()
     }
+
+    /// dinv's `bypass`: a command tagged `DINV_BYPASS ` is meant to skip dinv's
+    /// own command queue — `OnPluginSend` strips the tag and re-sends the bare
+    /// command "immediately, no questions asked", returning false to drop the
+    /// tagged original. MUSHclient guards `OnPluginSend` against re-entrancy
+    /// (`doc.cpp`: `m_bPluginProcessingSend` "so we don't go into a loop"), so
+    /// that bare re-send reaches the MUD directly. Without the guard, our host
+    /// re-runs `OnPluginSend` on the bare command, where the (queue-active)
+    /// plugin re-queues it — so it never transmits (dinv's stuck fence echoes).
+    private let bypassPlugin = """
+    <muclient>
+    <plugin id="com.test.bypass" name="Bypass"/>
+    <script><![CDATA[
+    function OnPluginSend(text)
+      local bare = string.match(text, "^BYP (.*)$")
+      if bare then SendNoEcho(bare); return false end
+      return false  -- non-bypass: swallow it (stand-in for dinv's active queue)
+    end
+    function fire() SendNoEcho("BYP hello") end
+    ]]></script>
+    <aliases><alias match="fire" enabled="y" script="fire" send_to="12"/></aliases>
+    </muclient>
+    """
+
+    @Test("A Send issued from within OnPluginSend bypasses the hook (no re-queue)")
+    func onPluginSendReentrancyGuard() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: bypassPlugin))
+        let conn = InMemoryConnection()
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("fire")
+        #expect(
+            await waitForSend("hello", on: conn, timeout: .milliseconds(500)),
+            "OnPluginSend's bare re-send was re-queued by the hook, not transmitted: \(conn.sentLines)"
+        )
+        await controller.disconnect()
+    }
 }
