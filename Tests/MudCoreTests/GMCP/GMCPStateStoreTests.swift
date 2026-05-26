@@ -159,6 +159,34 @@ struct GMCPStateStoreApplyTests {
         #expect(await store.state == GMCPState())
     }
 
+    @Test("comm.tick stamps lastTick and is broadcast")
+    func commTickStampsLastTick() async throws {
+        let store = GMCPStateStore()
+        #expect(await store.state.lastTick == nil)
+        let changed = await store.apply(
+            GMCPMessage(package: "comm.tick", json: #"{"ctime":1779752147,"time":"19:35:47"}"#)
+        )
+        #expect(changed)
+        let tick = await store.state.lastTick
+        #expect(tick != nil)
+        #expect(try abs(#require(tick?.timeIntervalSinceNow)) < 5) // stamped at receipt (~now)
+    }
+
+    @Test("secondsToNextTick = lastTick + interval - now (matches reference, unclamped)")
+    func secondsToNextTickMath() {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        // 30s interval; 8s elapsed → 22 remaining.
+        #expect(GMCPState.secondsToNextTick(
+            lastTick: base, now: base.addingTimeInterval(8)
+        ) == 22)
+        // Just witnessed → full interval.
+        #expect(GMCPState.secondsToNextTick(lastTick: base, now: base) == 30)
+        // Overdue tick → negative, not clamped (mirrors the reference's %2i).
+        #expect(GMCPState.secondsToNextTick(
+            lastTick: base, now: base.addingTimeInterval(33)
+        ) == -3)
+    }
+
     @Test("subscribe delivers the current snapshot, then updates")
     func subscribeDeliversCurrentThenUpdates() async {
         let store = GMCPStateStore()

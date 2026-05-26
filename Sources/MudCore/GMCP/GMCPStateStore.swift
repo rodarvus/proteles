@@ -12,8 +12,29 @@ public struct GMCPState: Sendable, Equatable {
     public var base: CharBase?
     public var room: RoomInfo?
     public var group: GroupInfo?
+    /// When the most recent Aardwolf tick was witnessed (a `comm.tick` GMCP
+    /// broadcast). `nil` until the first tick — "a tick must be witnessed
+    /// before the next tick can be predicted" (cf. Aardwolf_Tick_Timer).
+    public var lastTick: Date?
 
     public init() {}
+
+    /// Aardwolf's nominal tick length. Fixed at 30s to match the reference
+    /// `Aardwolf_Tick_Timer` (it does not measure the interval); each
+    /// `comm.tick` re-anchors the countdown, so the readout self-corrects.
+    public static let tickInterval: TimeInterval = 30
+
+    /// Seconds until the next tick: `lastTick + interval - now`, matching the
+    /// reference's `last_tick + tick_length - os.time()`. **Not** clamped — a
+    /// late tick shows a brief negative until the next `comm.tick` resets the
+    /// anchor (same as the reference's `%2i` formatting).
+    public static func secondsToNextTick(
+        lastTick: Date,
+        now: Date = Date(),
+        interval: TimeInterval = tickInterval
+    ) -> Int {
+        Int(lastTick.addingTimeInterval(interval).timeIntervalSince(now))
+    }
 }
 
 /// Decodes incoming ``GMCPMessage``s into a typed ``GMCPState`` and
@@ -34,10 +55,19 @@ public actor GMCPStateStore {
     /// are notified.
     @discardableResult
     public func apply(_ message: GMCPMessage) -> Bool {
-        // Aardwolf sends package names lowercased on the wire
-        // (char.vitals, char.maxstats, …); match case-insensitively so we
-        // don't depend on the exact casing.
-        let changed: Bool = switch message.package.lowercased() {
+        // Aardwolf sends package names lowercased on the wire (char.vitals,
+        // char.maxstats, …); match case-insensitively. comm.tick is handled
+        // out of band (it stamps a time rather than decoding a module).
+        let package = message.package.lowercased()
+        let changed = package == "comm.tick" ? markTick() : decodeModule(package, message)
+        if changed { broadcast() }
+        return changed
+    }
+
+    /// Decode a character/room/group module into its state slot. Returns
+    /// whether it updated the state (recognised package, clean decode).
+    private func decodeModule(_ package: String, _ message: GMCPMessage) -> Bool {
+        switch package {
         case "char.vitals": set(\.vitals, from: message, as: CharVitals.self)
         case "char.maxstats": set(\.maxStats, from: message, as: CharMaxStats.self)
         case "char.stats": set(\.stats, from: message, as: CharStats.self)
@@ -48,8 +78,13 @@ public actor GMCPStateStore {
         case "group": set(\.group, from: message, as: GroupInfo.self)
         default: false
         }
-        if changed { broadcast() }
-        return changed
+    }
+
+    /// Record that a tick was just witnessed (a `comm.tick` broadcast). Always
+    /// "changed" so the new countdown anchor reaches the status bar.
+    private func markTick() -> Bool {
+        state.lastTick = Date()
+        return true
     }
 
     /// Subscribe to state snapshots. The current snapshot is delivered

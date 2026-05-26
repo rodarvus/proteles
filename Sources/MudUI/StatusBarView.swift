@@ -43,6 +43,10 @@ public struct StatusBarView: View {
                     .lineLimit(1)
             }
 
+            if let lastTick = gmcp.lastTick {
+                tickReadout(lastTick)
+            }
+
             if let vitals = gmcp.vitals, let max = gmcp.maxStats {
                 HStack(spacing: 10) {
                     VitalGauge(label: "HP", current: vitals.hp, max: max.maxhp, tint: .red)
@@ -59,6 +63,18 @@ public struct StatusBarView: View {
             Rectangle()
                 .fill(.separator)
                 .frame(height: 1)
+        }
+    }
+
+    /// Live "Next tick: N" countdown. `TimelineView` refreshes it every second
+    /// off the witnessed-tick anchor — no manual timer — and each new
+    /// `comm.tick` re-anchors it (see ``GMCPState/secondsToNextTick``).
+    private func tickReadout(_ lastTick: Date) -> some View {
+        TimelineView(.periodic(from: lastTick, by: 1)) { context in
+            Text("Next tick: \(GMCPState.secondsToNextTick(lastTick: lastTick, now: context.date))")
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 

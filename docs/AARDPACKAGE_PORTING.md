@@ -45,7 +45,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_channels_fiendish | ✅ done (core) | chat capture is native via GMCP `comm.channel` (`ChatStore` #30 — cleaner than the reference's text-trigger scraping); miniwindow replaced by the native Chat panel (#31); `ChatEcho` (#30) declutters main + mutes. Live evidence shows e.g. `claninfo` already arrives via `comm.channel`. Refinements deferred (see below). |
 | aard_group_monitor_gmcp | ✅ done (core) | covered by the native Info-panel group section (#33): members + level + HP/MP/MV bars + here-indicator. Miniwindow replaced by the native panel. Display refinements deferred to the UI revamp (see below). |
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
-| Aardwolf_Tick_Timer | 🔨 build | tick countdown from `comm.tick` GMCP — small HUD feature |
+| Aardwolf_Tick_Timer | ✅ done (native, ⏳ live) | native HUD feature (D-36): `comm.tick` → `GMCPState.lastTick`; "Next tick: N" in the status bar via `TimelineView`. Fixed 30s interval, unclamped — matches the reference exactly (drops the miniwindow + mode-toggle commands). Live-verify `comm.tick` cadence/format (batch). |
 | aard_inventory_serials | 🔨 build | serial #s in inventory output — small line-rewrite plugin (pairs w/ dinv) |
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
 | aard_health_bars_gmcp | 🔨 build | extend the native status HUD (#29) |
@@ -78,16 +78,15 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 10 done · 8 build · 4 reimplement · 6 defer · 17 drop · 0 verify (the
-verify trio — prompt_fixer/group_monitor/channels_fiendish — resolved to
-done-core; TTS = 2 plugins → 1 feature, so 43 plugins).
+Counts: 11 done · 7 build · 4 reimplement · 6 defer · 17 drop · 0 verify (verify
+trio resolved done-core; Aardwolf_Tick_Timer done D-36; TTS = 2 plugins → 1
+feature, so 43 plugins).
 
 ## Work order
 
 **Phase A — quick, high-value native, no new UI subsystems:**
-`Aardwolf_Tick_Timer`, `aard_inventory_serials`, `Omit_Blank_Lines`; and the
-verify-then-likely-resolve trio (`aard_prompt_fixer`,
-`aard_group_monitor_gmcp`, `aard_channels_fiendish`).
+~~`Aardwolf_Tick_Timer`~~ (done, D-36), `aard_inventory_serials`,
+`Omit_Blank_Lines`; verify trio done (prompt_fixer/group_monitor/channels).
 
 **Phase B — native features with new subsystems:**
 TTS (investigate first), `aard_soundpack`, copy-@-codes/HTML + hyperlinks,
@@ -128,6 +127,9 @@ behaviour against the live MUD (and a session transcript) in one pass:
   `IAC GA` after prompts (recordings are MCCP2-compressed, so not greppable
   offline); confirm prompts render as their own lines, anchored triggers fire,
   and autologin still matches the name/password prompts.
+- **`Aardwolf_Tick_Timer` → `comm.tick` (D-36):** confirm Aardwolf broadcasts
+  `comm.tick` each tick (cadence ≈ 30s) and the "Next tick: N" status-bar
+  countdown reads correctly (resets on each tick).
 - **`aard_channels_fiendish` → channel-set coverage:** inventory which channels
   Aardwolf actually routes through GMCP `comm.channel` (claninfo confirmed
   present) vs. plain text (`Remort Auction:`, `Global Quest:`, `INFO:`,
