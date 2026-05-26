@@ -124,14 +124,14 @@ public actor SessionController {
     /// rebinds); subscribe/yield logic lives in the +Scripting extension.
     var mapperAttachmentSubscribers: [UUID: AsyncStream<Mapper>.Continuation] = [:]
 
-    /// True while the server is echoing (it sent `WILL ECHO`, e.g. a
-    /// password prompt) — local echo of typed input is suppressed until it
-    /// sends `WONT ECHO`.
+    /// True while the server is echoing (`WILL ECHO`, e.g. a password prompt);
+    /// local echo of typed input is suppressed until it sends `WONT ECHO`.
     var serverEcho = false
 
-    /// Behaviour on an unexpected drop. Defaults to ``ReconnectPolicy/disabled``
-    /// so library/test callers opt in explicitly; the app sets
-    /// ``ReconnectPolicy/standard``.
+    /// Drop empty MUD lines from output; off by default (`Omit_Blank_Lines`).
+    public internal(set) var omitBlankLines = false
+
+    /// Drop behaviour; defaults to ``ReconnectPolicy/disabled`` (app sets standard).
     public var reconnectPolicy: ReconnectPolicy
 
     /// The endpoint / credentials of the most recent ``connect(to:autologin:)``,

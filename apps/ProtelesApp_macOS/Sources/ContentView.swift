@@ -16,6 +16,9 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
+    /// "Omit Blank Lines" display preference (View menu); pushed to the session
+    /// on launch and whenever it changes. Same UserDefaults key as the toggle.
+    @AppStorage("omitBlankLines") private var omitBlankLines = false
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -62,6 +65,9 @@ struct ContentView: View {
             for await snapshot in await session.gmcpState.subscribe() {
                 gmcp = snapshot
             }
+        }
+        .task(id: omitBlankLines) {
+            await session.setOmitBlankLines(omitBlankLines)
         }
         .task {
             // Feed Search-and-Destroy's published window model to the panel.

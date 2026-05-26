@@ -224,6 +224,9 @@ private struct ProtelesCommands: Commands {
     let scripts: ScriptsModel
     @Bindable var layout: LayoutModel
     @Environment(\.openWindow) private var openWindow
+    /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
+    /// the same key and pushes it to the session.
+    @AppStorage("omitBlankLines") private var omitBlankLines = false
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -275,6 +278,13 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("B", modifiers: [.command, .shift])
             Button("Chat Panel") { layout.show(.chat) }
                 .keyboardShortcut("J", modifiers: [.command, .shift])
+
+            Divider()
+
+            // Display preference (native equivalent of Omit_Blank_Lines): drop
+            // completely-empty MUD lines from the main output. Persists via
+            // @AppStorage; ContentView pushes the value to the session.
+            Toggle("Omit Blank Lines", isOn: $omitBlankLines)
         }
     }
 }

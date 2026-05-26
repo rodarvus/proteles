@@ -2,15 +2,31 @@ import Foundation
 
 /// Applying scripting decisions (triggers/aliases) to the live session.
 public extension SessionController {
+    /// Set the blank-line omission preference (from the UI's persisted toggle).
+    func setOmitBlankLines(_ enabled: Bool) {
+        omitBlankLines = enabled
+    }
+
+    /// Whether `line` should be withheld from the main output given the
+    /// blank-line preference: only *completely empty* text (matching the
+    /// reference's `^$`, so a whitespace-only line is kept).
+    static func omitsFromOutput(_ line: Line, omitBlankLines: Bool) -> Bool {
+        omitBlankLines && line.text.isEmpty
+    }
+
     /// Run a received line through the script engine (if any), then append
     /// it unless a trigger gagged it. Trigger sends/echoes are applied
     /// afterwards so echoes land just below the line that produced them.
     internal func appendLineThroughScripts(_ line: Line) async {
+        // Blank-line omission (View menu): triggers/S&D still see the line, but
+        // it's withheld from the main output. Checked per line against the
+        // current preference.
+        let omitBlank = Self.omitsFromOutput(line, omitBlankLines: omitBlankLines)
         guard let scriptEngine else {
             // S&D matches the raw line on its own runtime; its scrape triggers
             // gag their own command output (cp info/check) from the window.
             let sndGag = await applySearchAndDestroyLine(line.text)
-            if !sndGag { await scrollbackStore.append(line) }
+            if !sndGag, !omitBlank { await scrollbackStore.append(line) }
             return
         }
         let disposition = await scriptEngine.process(line)
@@ -18,7 +34,7 @@ public extension SessionController {
         // runtime), so feed it the original text regardless of the user gag —
         // and let *its* gag suppress the line too (cp info/check scrape output).
         let sndGag = await applySearchAndDestroyLine(line.text)
-        if !disposition.gag, !sndGag {
+        if !disposition.gag, !sndGag, !omitBlank {
             await scrollbackStore.append(disposition.replacement ?? line)
         }
         await applyScriptEffects(disposition.effects)

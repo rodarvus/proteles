@@ -50,7 +50,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
 | aard_health_bars_gmcp | 🔨 build | extend the native status HUD (#29) |
 | aard_statmon_gmcp | 🔨 build | extend the native status HUD (#29) |
-| Omit_Blank_Lines | 🔨 build | tiny native output option |
+| Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
 | SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
 | Hyperlink_URL2 | 🎨 reimplement | native URL detection in the TextKit output view |
 | aard_Copy_Colour_Codes | 🎨 reimplement | native "copy w/ @-codes / copy as HTML" (backlog #1/#2) |
@@ -78,14 +78,14 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 11 done · 4 build (Omit_Blank_Lines, soundpack, health_bars, statmon) ·
-1 bundled-w/-dinv (inventory_serials) · 4 reimplement · 6 defer · 17 drop · 0
-verify (TTS = 2 plugins → 1 feature, so 43 plugins).
+Counts: 12 done · 3 build (soundpack, health_bars, statmon) · 1 bundled-w/-dinv
+(inventory_serials) · 4 reimplement · 6 defer · 17 drop · 0 verify (TTS = 2
+plugins → 1 feature, so 43 plugins). **Phase A complete.**
 
 ## Work order
 
-**Phase A — quick, high-value native, no new UI subsystems:**
-~~`Aardwolf_Tick_Timer`~~ (done, D-36), `Omit_Blank_Lines`; verify trio done
+**Phase A — COMPLETE.** ~~`Aardwolf_Tick_Timer`~~ (D-36),
+~~`Omit_Blank_Lines`~~ (D-37), verify trio done
 (prompt_fixer/group_monitor/channels). `aard_inventory_serials` moved to the
 dinv finale (shared `invdata` work — see below).
 
@@ -131,6 +131,9 @@ behaviour against the live MUD (and a session transcript) in one pass:
 - **`Aardwolf_Tick_Timer` → `comm.tick` (D-36):** confirm Aardwolf broadcasts
   `comm.tick` each tick (cadence ≈ 30s) and the "Next tick: N" status-bar
   countdown reads correctly (resets on each tick).
+- **`Omit_Blank_Lines` → View-menu toggle (D-37):** confirm the toggle hides
+  empty MUD lines, leaves whitespace-only lines, and the choice persists across
+  launches (`@AppStorage`).
 - **`aard_channels_fiendish` → channel-set coverage:** inventory which channels
   Aardwolf actually routes through GMCP `comm.channel` (claninfo confirmed
   present) vs. plain text (`Remort Auction:`, `Global Quest:`, `INFO:`,
