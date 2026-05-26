@@ -131,14 +131,14 @@ struct ProtelesApp: App {
             }
             ProtelesCommands(session: session, worlds: worlds, scripts: scripts, layout: layout)
             CommandGroup(after: .pasteboard) {
-                Button("Copy with Colour Codes") {
-                    NSApp.sendAction(
-                        #selector(MudTextView.copyWithCodes(_:)),
-                        to: nil,
-                        from: nil
-                    )
+                Button("Copy as ANSI Colour Codes") {
+                    NSApp.sendAction(#selector(MudTextView.copyWithCodes(_:)), to: nil, from: nil)
                 }
                 .keyboardShortcut("C", modifiers: [.command, .shift])
+                Button("Copy as Aardwolf Colour Codes") {
+                    NSApp.sendAction(#selector(MudTextView.copyAsAardwolfCodes(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("c", modifiers: [.command, .option])
             }
             CommandMenu("Debug") {
                 Button("Start Recording") {

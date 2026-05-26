@@ -53,7 +53,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
 | SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
 | Hyperlink_URL2 | 🎨 reimplement | native URL detection in the TextKit output view |
-| aard_Copy_Colour_Codes | 🎨 reimplement | native "copy w/ @-codes / copy as HTML" (backlog #1/#2) |
+| aard_Copy_Colour_Codes | 🟡 @-codes done, HTML next | native **"Copy as Aardwolf Colour Codes"** (`AardwolfCodeEncoder`, D-39 / backlog #1) — `@r`/`@R`/`@xNNN`, `@@` escaping; preserves 256-colour via `@x` (better than the reference's 16-only `StylesToColours`). Alongside the existing ANSI SGR copy. **HTML copy (backlog #2) is the remaining follow-up.** |
 | aard_Theme_Controller | 🕓 defer | native theming — UI revamp |
 | aard_splitscreen_scrollback | 🕓 defer | native split-scroll in output view — UI revamp |
 | aard_vi_review_buffers | 🕓 defer | categorized scrollback review — UI revamp |

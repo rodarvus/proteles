@@ -14,29 +14,42 @@
     /// which already does the right thing (plain selected text on the
     /// pasteboard).
     public final class MudTextView: NSTextView {
-        /// Cached encoder; cheap to instantiate but no reason to recreate
+        /// Cached encoders; cheap to instantiate but no reason to recreate
         /// per copy invocation.
-        private let encoder = SGREncoder()
+        private let ansiEncoder = SGREncoder()
+        private let aardwolfEncoder = AardwolfCodeEncoder()
 
+        /// Copy the selection as ANSI SGR escapes (terminals, Discord, other
+        /// clients).
         @objc public func copyWithCodes(_: Any?) {
+            copySelection { ansiEncoder.encode($0) }
+        }
+
+        /// Copy the selection as Aardwolf `@`-colour codes (pastes back into
+        /// Aardwolf notes/forum/channels or to another Aardwolf player) —
+        /// the native `aard_Copy_Colour_Codes`.
+        @objc public func copyAsAardwolfCodes(_: Any?) {
+            copySelection { aardwolfEncoder.encode($0) }
+        }
+
+        /// Encode the current selection via `encode` and place it on the
+        /// pasteboard. No-op when nothing is selected.
+        private func copySelection(_ encode: (NSAttributedString) -> String) {
             guard let storage = textStorage else { return }
             let selection = selectedRange()
             guard selection.length > 0 else { return }
-
-            let selectedAttributed = storage.attributedSubstring(from: selection)
-            let encoded = encoder.encode(selectedAttributed)
-
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
-            pasteboard.setString(encoded, forType: .string)
+            pasteboard.setString(encode(storage.attributedSubstring(from: selection)), forType: .string)
         }
 
         override public func validateUserInterfaceItem(
             _ item: any NSValidatedUserInterfaceItem
         ) -> Bool {
-            if item.action == #selector(copyWithCodes(_:)) {
-                return selectedRange().length > 0
-            }
+            let action = item.action
+            let isCopyCodes = action == #selector(copyWithCodes(_:))
+                || action == #selector(copyAsAardwolfCodes(_:))
+            if isCopyCodes { return selectedRange().length > 0 }
             return super.validateUserInterfaceItem(item)
         }
 
@@ -61,14 +74,23 @@
                 return 0
             }()
 
-            let item = NSMenuItem(
-                title: "Copy with Colour Codes",
+            let ansiItem = NSMenuItem(
+                title: "Copy as ANSI Colour Codes",
                 action: #selector(copyWithCodes(_:)),
                 keyEquivalent: "C"
             )
-            item.keyEquivalentModifierMask = [.command, .shift]
-            item.target = self
-            menu.insertItem(item, at: insertIndex)
+            ansiItem.keyEquivalentModifierMask = [.command, .shift]
+            ansiItem.target = self
+            menu.insertItem(ansiItem, at: insertIndex)
+
+            let aardItem = NSMenuItem(
+                title: "Copy as Aardwolf Colour Codes",
+                action: #selector(copyAsAardwolfCodes(_:)),
+                keyEquivalent: "c"
+            )
+            aardItem.keyEquivalentModifierMask = [.command, .option]
+            aardItem.target = self
+            menu.insertItem(aardItem, at: insertIndex + 1)
 
             return menu
         }
