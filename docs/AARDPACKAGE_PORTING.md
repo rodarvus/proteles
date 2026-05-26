@@ -43,7 +43,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_vital_shortcuts | ✅ done | native `VitalShortcuts` |
 | aard_ASCII_map | ✅ done | native `AsciiMap` |
 | aard_channels_fiendish | ❓ verify | likely covered by native Chat panel (#30/#31) + ChatEcho |
-| aard_group_monitor_gmcp | ❓ verify | likely covered by native Group panel (#33); else extend |
+| aard_group_monitor_gmcp | ✅ done (core) | covered by the native Info-panel group section (#33): members + level + HP/MP/MV bars + here-indicator. Miniwindow replaced by the native panel. Display refinements deferred to the UI revamp (see below). |
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | 🔨 build | tick countdown from `comm.tick` GMCP — small HUD feature |
 | aard_inventory_serials | 🔨 build | serial #s in inventory output — small line-rewrite plugin (pairs w/ dinv) |
@@ -94,6 +94,19 @@ HUD extensions (`aard_health_bars_gmcp`, `aard_statmon_gmcp`).
 
 **Phase C — deferred to the UI revamp:** theming, splitscreen scrollback,
 review buffers, command-output capture, in-game help window, bigmap.
+
+### Group-monitor display refinements (deferred to the UI revamp)
+
+The native group section (`InfoPanel.swift`) covers the essentials; the
+`aard_group_monitor_gmcp` extras are panel UX/polish to fold in when the panel
+system is reworked:
+- Leader indicator (model already has `group.leader`).
+- Align bar + align-coloured names; quest-timer (`qt`) column — needs extending
+  `GroupInfo.Member.Info` (no `qt`/`qtstring` field yet).
+- Sorting (by HP %/total damage, by quest timers).
+- HP numbers overlaid on the bars.
+- Display preferences: on/off, room-only filter (`grouproom`), compact mode,
+  per-player show/hide (`showp`/`hidep`).
 
 ## Pending live verification (batched)
 
