@@ -47,7 +47,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | ✅ done (native, ⏳ live) | `TickTimer` **NativePlugin** (D-36): `comm.tick` → `updateTick` effect → status-bar "Next tick: N" via `TimelineView`. Fixed 30s, unclamped (matches reference). Per-world **enable/disable** persists via `NativePluginStore` + Plugins window (drops the miniwindow + mode-toggle commands); self-hides when disabled/disconnected. Live-verify cadence/format (batch). |
 | aard_inventory_serials | 🧩 bundle w/ dinv | serial #s in inventory output. Both this and dinv consume Aardwolf's `invdata`/objectID stream (dinv_items.lua parses `invdata`), so the **work is bundled into the dinv finale** — they stay separate, useful plugins, but share the invdata-capture machinery. Not a Phase-A line-rewrite. |
-| aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
+| aard_soundpack | ⏸️ deferred (licensing) | comm/event sound cues. Engine is easy natively (`AVAudioPlayer` for volume+pan; a `NativePlugin` matching the ~40 event lines), but the 65 default `.wav`s are **GPLv3** (`aardwolfclientpackage/COPYING.txt`), so bundling is gated on the licensing call. Plan: native **BYO-sounds** engine (ship only the event→filename mapping; user supplies a sounds dir) *or* bundle if GPL3 is cleared. **Drop** the remote `!!SOUND(url)` download (security). See "Licensing-gated assets" below. |
 | aard_health_bars_gmcp | ✅ done (core, ⏳ live) | HP/MP/MV already in the status HUD (#29). Extended it (D-38) with the two additive pieces: a **combat-only Enemy gauge** (`char.status.enemy`/`enemypct` via `CharStatus.combatTarget`) and **TNL** in the summary. Configurable multi-bar panel (Align bar, stacked/graphical modes, colour/threshold config) deferred to the UI revamp (below). |
 | aard_statmon_gmcp | ✅ done (covered) | every field is already native: Info panel `statsSection` (Str/Int/Wis/Dex/Con/Luck + HR/DR), `characterSection` (level/TNL/align), `worthSection` (gold/QP/trivia/trains/pracs), `enemySection`; vitals in the status HUD. Nothing additive — the Info panel *is* the native statmon. Configurable grid/colours deferred to the UI revamp. |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
@@ -78,9 +78,10 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 14 done · 1 build (soundpack) · 1 bundled-w/-dinv (inventory_serials) ·
-4 reimplement · 6 defer · 17 drop · 0 verify (TTS = 2 plugins → 1 feature, so 43
-plugins). **Phase A complete; Phase B underway (HUD work done).**
+Counts: 14 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 4 reimplement
+· 7 defer (incl. soundpack, licensing-gated) · 17 drop · 0 verify (TTS = 2
+plugins → 1 feature, so 43 plugins). **Phase A complete; Phase B HUD + sounds
+resolved — only the reimplement bucket (TTS/hyperlinks/copy-codes) remains.**
 
 ## Work order
 
@@ -89,9 +90,23 @@ plugins). **Phase A complete; Phase B underway (HUD work done).**
 (prompt_fixer/group_monitor/channels). `aard_inventory_serials` moved to the
 dinv finale (shared `invdata` work — see below).
 
-**Phase B — native features with new subsystems:**
-TTS (investigate first), `aard_soundpack`, copy-@-codes/HTML + hyperlinks,
-HUD extensions (`aard_health_bars_gmcp`, `aard_statmon_gmcp`).
+**Phase B — native features with new subsystems:** HUD extensions done
+(health_bars D-38, statmon covered). `aard_soundpack` **deferred** (GPLv3
+assets — see below). Remaining: TTS (investigate first), copy-@-codes/HTML +
+hyperlinks.
+
+### Licensing-gated assets (pending a GPLv3 enquiry)
+
+`aardwolfclientpackage` is **GPL v3-or-higher** (`COPYING.txt`), so bundling its
+assets into Proteles is an open licensing question shared by several items:
+- **`aard_soundpack`** — the 65 default `.wav` sound cues.
+- Starter map DB (#6) and Search-and-Destroy data, already parked on the same call.
+
+**Plan (user):** after core work + polish, send an in-game note to the
+aardwolfclientpackage maintainers to share Proteles' status and enquire about
+GPL3 use of these assets. Until then: either defer, or ship engines that work
+with **user-supplied** assets (BYO sounds dir / map DB) so there's no GPL
+exposure. Decide soundpack's path (BYO vs. bundle) once the enquiry resolves.
 
 **Phase C — deferred to the UI revamp:** theming, splitscreen scrollback,
 review buffers, command-output capture, in-game help window, bigmap, and the
