@@ -9,9 +9,9 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Phases 0–6 complete and shipped as `v0.1.0` — the first tagged release that
 includes the native mapper, lsqlite3, and Search-and-Destroy with live
 campaign/quest detection verified against the user's live MUD.** Read
-**PLAN.md** for the full status table + decision log (D-01…D-32).
+**PLAN.md** for the full status table + decision log (D-01…D-42).
 
-### NEXT SESSION — start here: polishing, then the deferred buckets + dinv
+### NEXT SESSION — start here: dinv open items, polishing, deferred buckets
 
 **The aardwolfclientpackage plugin triage is COMPLETE** — all 43 plugins are
 done / dropped / deferred / bundled (D-34…D-41). The living tracker
@@ -32,58 +32,61 @@ the verify trio resolved (prompt_fixer/group_monitor/channels → done-core).
   maintainers after core + polish.
 - **UI-revamp panels** (theming, splitscreen, review buffers, command-output,
   ingame-help, bigmap, group/health-bar config) — fold into the UI revamp.
-- **dinv finale** (incl. bundled `aard_inventory_serials`) — see PAUSED below.
+- **dinv finale** — `dinv build` now WORKS (D-42); two open items remain (see
+  the dinv section: container-identify completion + the mapper-speedwalk plugin-
+  command leak). Bundled `aard_inventory_serials` still pending.
 
 Discipline reminder: per-plugin verdict-first; PROPOSE then wait for approval
 (§7/§11); none run through the generic shim.
 
-### PAUSED: dinv inventory manager (unreleased, on `main`)
+### dinv inventory manager — WORKING (D-42; unreleased, on `main`)
 
 Run verbatim through the generic `mush.lua` compat shim (D-32 — not a bespoke
-host; dinv has no miniwindow). Vendored under `Resources/dinv`. **Init now
-works end-to-end** (loads, opens its per-character SQLite DB, runs
-`inv.items.build`) — the blocker was that GMCP-broadcast callbacks didn't run
-through `consumeRegistrations`, so a `wait.time` resume timer scheduled from
-`OnPluginBroadcast` was dropped and the init coroutine hung. Fixed in
-`fireCallbackOnAll` (commit "consume registrations from OnPluginBroadcast").
+host; dinv has no miniwindow). Vendored under `Resources/dinv`. **`dinv build`
+now works end-to-end, live-verified**: fast init, full inventory identified
+(409 items in one run), DB built, `dinv search` returns results, "Build
+completed: success". The four host bugs that were blocking it are fixed (all
+D-42, each red-reproduced offline first — *don't re-derive*):
 
-`dinv build` still fails. The live transcript
-(`session-20260525-233529.log`) pinpointed **three remaining blockers**, in
-priority order — *do not re-derive these, they're confirmed from the wire +
-reference*:
-1. **`aard_GMCP_handler` dependency (the big one).** dinv does
-   `Execute("sendgmcp config prompt")`/`invmon` and spins for a `config` GMCP
-   reply. `sendgmcp` was NOT a MUD command — it's an alias from
-   `aard_GMCP_handler.xml`. ✅ **ADDRESSED (D-33):** the native `AardGMCPHandler`
-   plugin now handles `sendgmcp <payload>` → real GMCP packet, so the request
-   reaches Aardwolf. **Still to verify live** that Aardwolf replies with
-   `config {"prompt":…}` (the paused-dinv transcript only showed `config
-   {"noexp":…}`); confirm via transcript when dinv resumes.
-2. **`SetEchoInput` missing from the shim** (we have `GetEchoInput`). dinv's
-   `dbot.execute` path calls `SetEchoInput(false)` (dinv_dbot.lua:2554) → the
-   wait-coroutine dies. Trivial shim add.
-3. **`DoAfterSpecial` missing from the *generic* shim** — it exists only in
-   S&D's curated bindings (`SearchAndDestroyHost+Bindings.swift`). dinv uses it
-   in 5 places incl. the execute-queue's deferred re-arm → coroutine dies.
-   Trivial shim add (mirror the S&D impl).
+1. **THE root cause — literal `{`/`}` in trigger regex.** `NSRegularExpression`
+   (ICU) rejects a non-quantifier `{` as a malformed quantifier and `try?`
+   returned nil, so dinv's fence trigger (`^{ DINV fence N }$`) never compiled →
+   every fence + its gating callbacks timed out at 30s → `doDelayCommands` stuck
+   true → dinv "hijacked" all commands. Fix: `PatternMatcher.escapeLiteralBraces`
+   (PCRE-lenient; real quantifiers + `\{` preserved).
+2. **Timer-loop re-arm** after a typed command schedules a one-shot
+   (`dispatchSingleCommand`) — else a send after a coroutine's first `wait.time`
+   yield is dropped.
+3. **`OnPluginSend` re-entrancy guard** (`pluginProcessingSend`, ≈ MUSHclient
+   `m_bPluginProcessingSend`) — a send from inside `OnPluginSend` (dinv's
+   `DINV_BYPASS` strip + re-send) goes straight to the MUD, not re-queued.
+4. **`AddTriggerEx` `response` body + `%`-expansion** — the generic shim now
+   builds the fire body from `response`/`script`/`sendto` and the fire path
+   `%`-expands owned-plugin scripts (dinv dispatches via `fn("%1","%2")`).
 
-Cascade: #2/#3 kill coroutines in the `dbot.execute` command-queue/fence
-framework and #1 starves config detection, so commands pile up, `fence()`
-blocks its full 30s, then a flood of `echo { DINV fence N }` dumps at once;
-inventory discovery reports "resource is in use" + "timeout"; build ends with 0
-items. Resume dinv AFTER aard_GMCP_handler lands, then add `SetEchoInput` +
-`DoAfterSpecial` to `LuaRuntime+CompatShim.swift`, then re-test live.
+Also: `dinv reload` works (host `ReloadPlugin`); `dinv backup`/`migrate`/
+`version` commands removed + automatic pre-build backup disabled (uses
+sandboxed `io`) — see `Resources/dinv/PROVENANCE.md`. Shim additions:
+`DoAfterSpecial`/`DoAfter`/`SetEchoInput`/`Execute`-script-prefix.
 
-**Still on `main`: temporary dinv init-chain debug instrumentation** —
-`DinvAssets.debugTraceSource` (the `[dinv-DBG]` entry/exit markers + forced
-`dbot.debug`), installed in `SessionController.loadPendingDinv` before the
-`char.base` broadcast. dinv is also still armed-to-load on connect
-(`ScriptsModel.load` → `armBundledDinv`), so every live session emits the
-`[dinv-DBG]` trace + dinv's timeouts. **Strip the trace (and consider gating
-the dinv arming) when dinv work resumes** — it served its purpose.
+**Reliability harness (keep):** an injectable **`MudConnection`** seam +
+`InMemoryConnection` let `swift test` drive the *real* `SessionController`
+(async timer loop + send path) offline. Regression tests:
+`CoroutineSendFlushTests`, `DinvQueuePatternTests`, `PatternMatcherBraceTests`,
+`PluginReloadTests`, `DinvBuildHarnessTests`. `DinvAssets.debugTraceSource` is
+now a **debug/test aid only** (no longer installed in live sessions; invoked by
+the harness) — the lens for the next dinv issue. The `[dinv-DBG]`/`[empty-send]`
+live instrumentation has been stripped.
 
-Reusable shim infra already added closing dinv's API surface: a comprehensive
-`utils` library; a real `AddAlias` dynamic-alias path; the `OnPluginSend` hook;
+**dinv open items (next):** (a) the **container-identify phase** (items inside
+bags: get→id→put) not yet verified to completion — needs one full uninterrupted
+run reviewed; (b) **mapper speedwalk steps that are plugin commands**
+(`dinv portal use …`, when a mapper path crosses a dinv portal) leak raw to the
+MUD instead of re-dispatching through the command pipeline (`Execute`) so dinv
+can handle them. Both are *separate from* the now-working build.
+
+Reusable shim infra closing dinv's API surface: a comprehensive `utils`
+library; a real `AddAlias` dynamic-alias path; the `OnPluginSend` hook;
 gmcphelper scalar-stringification; Windows-path (`\`→`/`) normalization;
 `IsTrigger`/`IsTimer`/`IsAlias` existence checks; `runInPluginEnvironment`.
 

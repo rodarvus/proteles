@@ -51,8 +51,12 @@ public enum DinvAssets {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
-    /// A Lua chunk that instruments dinv's init chain for live debugging
-    /// (S&D-style, so we trace the real coroutine flow instead of guessing).
+    /// A Lua chunk that instruments dinv's init chain + execute-queue for
+    /// debugging. **Debug/test aid only** — no longer installed in live
+    /// sessions (it's invoked by the offline `DinvBuildHarnessTests` to make the
+    /// harness trace as rich as a session `.log`). Kept because it's the lens
+    /// that pinned the build deadlock and is the natural tool for the next
+    /// dinv issue (e.g. the container-identify phase).
     /// Run *in dinv's environment* after load and before the `char.base`
     /// broadcast that kicks off init. Two layers:
     ///

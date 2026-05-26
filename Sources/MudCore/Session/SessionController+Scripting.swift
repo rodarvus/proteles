@@ -155,11 +155,6 @@ public extension SessionController {
     /// effects are applied, re-entrancy-guarded so a re-sending plugin can't
     /// loop. With no script engine, sends straight to the MUD.
     private func sendCommandThroughPlugins(_ command: String) async {
-        // TEMP dinv debug: pin the source of the mystery empty sends (no wire trace).
-        if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let frames = Thread.callStackSymbols.filter { $0.contains("MudCore") }.prefix(8)
-            logTranscript(.note, "[empty-send] " + frames.joined(separator: " <- "))
-        }
         // While OnPluginSend is processing, a send goes straight to the MUD
         // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
         // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered
@@ -265,11 +260,8 @@ public extension SessionController {
             stateDirectory: suffixed
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-        // Install init-chain debug instrumentation *before* the broadcast that
-        // kicks off init, so the wrapped functions are in place when it fires.
-        await applyScriptEffects(
-            scriptEngine.runInPluginEnvironment(DinvAssets.pluginID, DinvAssets.debugTraceSource)
-        )
+        // Replay char.base so dinv — freshly loaded with its init flag clear —
+        // catches it while active and runs its init chain.
         await applyScriptEffects(scriptEngine.deliverGMCPBroadcast(package: "char.base"))
         await persistVariablesIfDirty()
         restartTimerLoop()
