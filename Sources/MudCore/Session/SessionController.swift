@@ -74,10 +74,13 @@ public actor SessionController {
     public nonisolated let publishedModels: AsyncStream<String>
     nonisolated let publishedModelsContinuation: AsyncStream<String>.Continuation
 
-    /// The current network connection, or `nil` between sessions. Fresh per
-    /// ``connect(to:autologin:)`` — ``NetworkConnection`` finishes its byte
-    /// stream on disconnect and can't be reused.
-    var connection: NetworkConnection?
+    /// The current connection (`nil` between sessions); fresh per connect (the
+    /// byte stream finishes on disconnect). ``MudConnection`` so tests inject one.
+    var connection: (any MudConnection)?
+
+    /// Factory for a fresh connection per session (real ``NetworkConnection`` by
+    /// default; overridden by tests to drive the session offline).
+    let makeConnection: @Sendable () -> any MudConnection
 
     /// Mirror of the active connection's state, for synchronous reads.
     public private(set) var state: State = .disconnected
@@ -204,8 +207,10 @@ public actor SessionController {
         reconnectPolicy: ReconnectPolicy = .disabled,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
             try? SessionRecorder.defaultRecordingURL()
-        }
+        },
+        makeConnection: @escaping @Sendable () -> any MudConnection = { NetworkConnection() }
     ) {
+        self.makeConnection = makeConnection
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
         self.chatStore = chatStore
@@ -300,7 +305,7 @@ public actor SessionController {
         await chatStore.reset()
         await mapStore.reset()
 
-        let conn = NetworkConnection()
+        let conn = makeConnection()
         connection = conn
         // Re-publish this connection's state transitions onto the durable
         // stream so the UI keeps observing across reconnects.
@@ -368,11 +373,9 @@ public actor SessionController {
     }
 
     /// Route a command through the in-app pipeline (native `mapper …` → S&D
-    /// aliases → user aliases → MUD), without the user-input echo. Used by
-    /// typed input (after echo) and by a plugin's `Execute`, which re-parses
-    /// the command as if typed — MUSHclient's `Execute` semantics. This is
-    /// what makes S&D's navigation (`do_mapper_goto` → `Execute("mapper goto
-    /// <id>")`) reach the native mapper instead of being sent raw to the MUD.
+    /// aliases → user aliases → MUD), without the user-input echo. Used by typed
+    /// input and by a plugin's `Execute` (MUSHclient semantics — re-parsed as if
+    /// typed, so S&D's `Execute("mapper goto …")` reaches the native mapper).
     func dispatchCommand(_ command: String) async throws {
         // Command stacking (Aardwolf/MUSHclient): split on `;` (`;;` = literal
         // `;`), dispatching each command. A lone empty piece is a bare-Enter
@@ -430,7 +433,7 @@ public actor SessionController {
 
     // MARK: - Private
 
-    private func startProcessingLoop(on conn: NetworkConnection) {
+    private func startProcessingLoop(on conn: any MudConnection) {
         processTask?.cancel()
         let bytesStream = conn.bytes
         processTask = Task { [weak self] in
@@ -445,11 +448,10 @@ public actor SessionController {
         }
     }
 
-    /// React to the inbound byte stream ending on its own — a
-    /// remote-initiated close. Flushes any trailing line and tears the
-    /// session down, then either begins autoreconnect (if the policy is
-    /// enabled and this was neither a user disconnect nor a clean quit) or
-    /// surfaces `.disconnected`.
+    /// React to the inbound byte stream ending on its own (remote close):
+    /// flush any trailing line, tear the session down, then autoreconnect (if
+    /// the policy allows and it wasn't a user disconnect/clean quit) or surface
+    /// `.disconnected`.
     private func handleByteStreamEnded() async {
         guard connection != nil else { return }
         await flushOnDisconnect()
@@ -564,11 +566,9 @@ public actor SessionController {
         }
     }
 
-    /// Drive the timer loop with the connection: start it on connect (so a
-    /// reconnect re-arms timers), stop it on disconnect so recurring timers
-    /// (e.g. S&D's 0.5s tim_init_plugin bootstrap) don't spin on a dead
-    /// session. A remote drop also cancels the loop via teardownSession; this
-    /// covers the reconnect re-arm.
+    /// Drive the timer loop with the connection: start on connect (re-arms
+    /// timers on reconnect), stop on disconnect so recurring timers don't spin
+    /// on a dead session (remote drops also cancel it via teardownSession).
     private func syncTimerLoop(to newState: State) {
         switch newState {
         case .connected: restartTimerLoop()
