@@ -3,10 +3,11 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.1.0` — first tagged release, daily-usable.** Connect, play,
-> script, map, and run the Aardwolf plugin ecosystem today. There's no signed
-> download yet — build it from source (below). The design lives in
-> **[PLAN.md](PLAN.md)**.
+> **Status: `v0.2.0` — daily-usable.** Connect, play, script, map, and run the
+> Aardwolf plugin ecosystem today — now with a **tiled, resizable window** (all
+> panels visible at once), the **dinv inventory manager** working end-to-end,
+> and the Aardwolf plugin package ported natively. No signed download yet —
+> build it from source (below). The design lives in **[PLAN.md](PLAN.md)**.
 
 ---
 
@@ -19,13 +20,22 @@ for the modern Mac — no Wine, no VM, no emulator.
 - **Prompt-driven autologin** — your password lives in the Keychain, not a
   config file. Connect timeout + **autoreconnect** with backoff on a drop.
 - **Command input** with history recall (↑/↓), whole-line autocompletion (Tab),
-  and bare-Enter prompt nudges.
-- **Copy with colour codes** (⇧⌘C) for pasting coloured snippets elsewhere.
+  and bare-Enter prompt nudges — and it **stays focused**, so you can type a
+  command even right after selecting/copying from the output.
+- **Copy with colour codes** — as ANSI (⇧⌘C), Aardwolf `@`-codes, or HTML — for
+  pasting coloured snippets elsewhere.
+
+**A tiled, resizable window**
+- Panels **tile a resizable dock** so you can see the **Map, Search & Destroy,
+  Channels, Text Map, and Character** panels at the same time — drag the
+  dividers to resize, tab-group panels into one slot, and **show/hide** any of
+  them from the View menu or the toolbar **Panels** menu. The arrangement
+  persists per world; **Reset Layout** restores the default.
+- A **full-width graphical vitals bar** (HP/MP/MV + a combat Enemy gauge) spans
+  the game output — no duplicated text.
 
 **Aardwolf surface (GMCP)**
-- Live **HP/MP/MV** gauges + level·class·align in the status bar.
-- A docked panel set you switch between: **Info** (room/exits/group), **Map**,
-  **Chat**, and **S&D** — all in the main window so they never fall behind it.
+- The **Character** panel (room/exits/group/worth) and the live vitals bar.
 - **Chat capture** with per-channel filtering and `@`-colour rendering.
 
 **Scripting**
@@ -37,8 +47,16 @@ for the modern Mac — no Wine, no VM, no emulator.
 - Drop in a **MUSHclient `.xml` plugin** and it runs through the `mush.lua`
   compatibility shim (per-plugin sandboxed environments). The **Plugins**
   window (⇧⌘P) imports them with a compatibility report.
-- Five **native plugins** ported from the Aardwolf package: Vital Shortcuts,
-  Note Mode, Text Substitution (`#sub`/`#gag`), Chat Echo, and ASCII Map.
+- The **dinv inventory manager** (~26k lines of Lua) runs end-to-end through the
+  shim: `dinv build` identifies your whole inventory **including items inside
+  containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
+  **portal navigation** all work.
+- The **Aardwolf MUSHclient plugin package** is ported natively (all 43 plugins
+  triaged): the GMCP handler (`sendgmcp` + config), a GA-based prompt boundary,
+  the tick-timer countdown, Omit Blank Lines, Enemy/TNL HUD bars, the three
+  copy-colour formats, clickable hyperlinks / URL auto-linkify, and the
+  group/channels surfaces — plus the bundled native plugins (Vital Shortcuts,
+  Note Mode, Text Substitution `#sub`/`#gag`, Chat Echo, ASCII Map).
 
 **Mapper** (native graphical, GMCP-driven)
 - Auto-maps as you explore; a tight fan-out layout coloured by terrain, with
@@ -104,8 +122,8 @@ Then, in the app:
 | Manage Worlds | ⇧⌘M |
 | Scripts editor | ⇧⌘T |
 | Plugins | ⇧⌘P |
-| Info / Map / Chat panels | ⇧⌘I / ⇧⌘B / ⇧⌘J |
-| Copy with colour codes | ⇧⌘C |
+| Toggle panels — Map / Text Map / Channels / S&D / Character | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I |
+| Copy with colour codes (ANSI) | ⇧⌘C |
 
 ---
 
@@ -123,7 +141,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~731 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~834 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -134,7 +152,7 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-31).
+  the append-only decision log (D-01…D-43).
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
 

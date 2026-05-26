@@ -4,42 +4,47 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-26)
+## Current status (2026-05-27)
 
-**Phases 0–6 complete and shipped as `v0.1.0` — the first tagged release that
-includes the native mapper, lsqlite3, and Search-and-Destroy with live
-campaign/quest detection verified against the user's live MUD.** Read
-**PLAN.md** for the full status table + decision log (D-01…D-42).
+**Shipped `v0.2.0`** (built on the `v0.1.0` foundation — native mapper, lsqlite3,
+Search-and-Destroy). Headlines: a **tiled, resizable panel dock** (all panels at
+once), the **dinv inventory manager** working end-to-end, and the **Aardwolf
+MUSHclient plugin package ported natively** (43-plugin triage complete). Read
+**PLAN.md** for the full status table + decision log (D-01…D-44). ~834 tests,
+four gates green.
 
-### NEXT SESSION — start here: dinv open items, polishing, deferred buckets
+### NEXT SESSION — start here: UI revamp iteration, then Phase 7
 
-**The aardwolfclientpackage plugin triage is COMPLETE** — all 43 plugins are
-done / dropped / deferred / bundled (D-34…D-41). The living tracker
-**`docs/AARDPACKAGE_PORTING.md`** has every verdict; read it first. Tally:
-**16 done · 17 dropped · 8 deferred · 1 bundled-w/-dinv.** No active plugin work
-remains.
+**The UI revamp is the active workstream** (v1 shipped as D-44; design in
+**`docs/UI_REVAMP.md`**, visual mock in `docs/ui-revamp-mock.html`). The
+foundation is a Codable split-tree (`PanelKind` + `PanelLayout` in MudCore,
+unit-tested) rendered by `PanelLayoutView`/`SplitContainer`/`TabContainer` in
+MudUI; layout persists per world. **Iterate next, in rough priority:**
+1. **Drag-to-redock** — move a panel between regions by dragging (v1 uses the
+   View-menu show/hide + tab grouping; the tree already supports any tiling).
+2. **Detachable windows** — tear a panel into its own macOS window (the model
+   was built single-window-first but for this).
+3. **Remaining panels** — Text Map content polish, plus Help / NPC-scan /
+   Rich-exits (the `PanelKind` slots are reserved but not built).
+4. **Divider feel / min-sizes**, then **theming** (its own pass — styling was
+   intentionally untouched in v1).
 
-Done natively this effort: `aard_GMCP_handler` (D-33), `Aardwolf_Tick_Timer`
-(D-36, NativePlugin), `Omit_Blank_Lines` (D-37, View-menu setting),
-`aard_health_bars_gmcp` Enemy+TNL (D-38), `aard_Copy_Colour_Codes` (D-39, 4 copy
-formats), `Hyperlink_URL2` + the shared native hyperlink primitive (D-40); plus
-the verify trio resolved (prompt_fixer/group_monitor/channels → done-core).
+**dinv is DONE** (D-42 build + D-43 finale: 5 reliability fixes + container-
+identify verified live; the tracker is closed). The aardwolfclientpackage
+triage is COMPLETE (`docs/AARDPACKAGE_PORTING.md`: 16 done · 17 dropped ·
+8 deferred · 1 bundled-w/-dinv). No active plugin work remains.
 
-**Next: polishing.** Then the **deferred buckets** (when their gates clear):
-- **TTS** (accessibility; design recorded, D-41 / tracker) — after polishing.
-- **soundpack** — gated on the GPLv3 asset-licensing enquiry (D-41 area /
-  "Licensing-gated assets"); user plans an in-game note to the package
-  maintainers after core + polish.
-- **UI-revamp panels** (theming, splitscreen, review buffers, command-output,
-  ingame-help, bigmap, group/health-bar config) — fold into the UI revamp.
-- **dinv finale** — `dinv build` now WORKS (D-42); two open items remain (see
-  the dinv section: container-identify completion + the mapper-speedwalk plugin-
-  command leak). Bundled `aard_inventory_serials` still pending.
+**Deferred buckets** (when their gates clear): **TTS** (accessibility; design
+recorded, D-41); **soundpack** (gated on the GPLv3 asset-licensing enquiry);
+bundled **`aard_inventory_serials`** (still pending). **Phase 7 proper:**
+Preferences UI, MacroEngine, Scripts-editor UX rework (issue #4), notifications,
+logging. **Open issues #1/#2 (copy @-codes / HTML) appear satisfied by D-39 —
+verify + close.**
 
 Discipline reminder: per-plugin verdict-first; PROPOSE then wait for approval
 (§7/§11); none run through the generic shim.
 
-### dinv inventory manager — WORKING (D-42; unreleased, on `main`)
+### dinv inventory manager — DONE & SHIPPED (D-42 build + D-43 finale, `v0.2.0`)
 
 Run verbatim through the generic `mush.lua` compat shim (D-32 — not a bespoke
 host; dinv has no miniwindow). Vendored under `Resources/dinv`. **`dinv build`
@@ -78,12 +83,18 @@ now a **debug/test aid only** (no longer installed in live sessions; invoked by
 the harness) — the lens for the next dinv issue. The `[dinv-DBG]`/`[empty-send]`
 live instrumentation has been stripped.
 
-**dinv open items (next):** (a) the **container-identify phase** (items inside
-bags: get→id→put) not yet verified to completion — needs one full uninterrupted
-run reviewed; (b) **mapper speedwalk steps that are plugin commands**
-(`dinv portal use …`, when a mapper path crosses a dinv portal) leak raw to the
-MUD instead of re-dispatching through the command pipeline (`Execute`) so dinv
-can handle them. Both are *separate from* the now-working build.
+**dinv finale (D-43) — all closed, live-verified, shipped `v0.2.0`:** five
+reliability fixes, each red-reproduced offline first (*don't re-derive*):
+(1) **doubling** — `dofile` ran modules in `_G`, leaking dinv's `OnPluginSend`;
+every other hook-less plugin inherited it → bypass sent twice (fix: `dofile`
+`setfenv`s to the caller's env); (2) **portal `;` stacking** — `DoAfterSpecial(…,
+sendto.execute)` now defers through `Execute` (splits on `;`); (3) **getConfig
+timeouts** — `dispatchGMCP` now fires `OnPluginTelnetSubnegotiation(201, …)`;
+(4) **gag lockup** — `MatchResult.expandForScript` Lua-escapes `%`-captures
+(dinv's `^(.*)$` stat trigger compares to a `{ \dinv … }` marker); (5)
+**multi-line Note** — echo effects split embedded `\n`. **Container-identify**
+(get→id→put for bagged items) verified live; the mapper-speedwalk plugin-command
+leak was fixed earlier (`.execute`). dinv is complete.
 
 Reusable shim infra closing dinv's API surface: a comprehensive `utils`
 library; a real `AddAlias` dynamic-alias path; the `OnPluginSend` hook;
