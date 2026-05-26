@@ -49,7 +49,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_inventory_serials | 🧩 bundle w/ dinv | serial #s in inventory output. Both this and dinv consume Aardwolf's `invdata`/objectID stream (dinv_items.lua parses `invdata`), so the **work is bundled into the dinv finale** — they stay separate, useful plugins, but share the invdata-capture machinery. Not a Phase-A line-rewrite. |
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
 | aard_health_bars_gmcp | ✅ done (core, ⏳ live) | HP/MP/MV already in the status HUD (#29). Extended it (D-38) with the two additive pieces: a **combat-only Enemy gauge** (`char.status.enemy`/`enemypct` via `CharStatus.combatTarget`) and **TNL** in the summary. Configurable multi-bar panel (Align bar, stacked/graphical modes, colour/threshold config) deferred to the UI revamp (below). |
-| aard_statmon_gmcp | 🔨 build | extend the native status HUD (#29) |
+| aard_statmon_gmcp | ✅ done (covered) | every field is already native: Info panel `statsSection` (Str/Int/Wis/Dex/Con/Luck + HR/DR), `characterSection` (level/TNL/align), `worthSection` (gold/QP/trivia/trains/pracs), `enemySection`; vitals in the status HUD. Nothing additive — the Info panel *is* the native statmon. Configurable grid/colours deferred to the UI revamp. |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
 | SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
 | Hyperlink_URL2 | 🎨 reimplement | native URL detection in the TextKit output view |
@@ -78,9 +78,9 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 13 done · 2 build (soundpack, statmon) · 1 bundled-w/-dinv
-(inventory_serials) · 4 reimplement · 6 defer · 17 drop · 0 verify (TTS = 2
-plugins → 1 feature, so 43 plugins). **Phase A complete; Phase B underway.**
+Counts: 14 done · 1 build (soundpack) · 1 bundled-w/-dinv (inventory_serials) ·
+4 reimplement · 6 defer · 17 drop · 0 verify (TTS = 2 plugins → 1 feature, so 43
+plugins). **Phase A complete; Phase B underway (HUD work done).**
 
 ## Work order
 
