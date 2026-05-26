@@ -78,8 +78,7 @@ public actor SessionController {
     /// byte stream finishes on disconnect). ``MudConnection`` so tests inject one.
     var connection: (any MudConnection)?
 
-    /// Factory for a fresh connection per session (real ``NetworkConnection`` by
-    /// default; overridden by tests to drive the session offline).
+    /// Factory for a fresh connection per session (real by default; tests override).
     let makeConnection: @Sendable () -> any MudConnection
 
     /// Mirror of the active connection's state, for synchronous reads.
@@ -350,13 +349,10 @@ public actor SessionController {
         updateState(.disconnected)
     }
 
-    /// Send a user-typed command. When a script engine is present the line
-    /// is first run through its aliases (so a matched alias rewrites it);
-    /// otherwise it goes to the MUD verbatim. Either way `\r\n` is appended.
-    ///
-    /// Tracks quit commands so the server-initiated close that follows a
-    /// `quit` is treated as a clean logout rather than a dropped link —
-    /// otherwise autoreconnect would immediately drag the user back in.
+    /// Send a user-typed command (run through aliases when a script engine is
+    /// present, else verbatim; `\r\n` appended). Tracks quit commands so the
+    /// server close after `quit` is a clean logout, not a dropped link that
+    /// would trigger autoreconnect.
     public func send(_ command: String) async throws {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -402,6 +398,10 @@ public actor SessionController {
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.expandInput(command))
             await persistVariablesIfDirty()
+            // A command may schedule a one-shot (a plugin's wait.make/DoAfter
+            // coroutine, e.g. dinv's build queue). The loop idles when no timers
+            // remain, so re-arm it — else the resume (and its sends) never fire.
+            await rearmTimerLoopIfScriptScheduled()
         } else {
             try await sendLine(command)
         }
