@@ -46,6 +46,35 @@ struct PluginHostTests {
         #expect(disposition.effects == [.send("pong")])
     }
 
+    /// A plugin that registers a *dynamic* trigger whose action is a raw
+    /// `response` body with `%1` placeholders and an empty `script` arg + a
+    /// script send-to — the exact shape dinv uses for its data/fence triggers.
+    /// Exercises AddTriggerEx routing the `response` (not the empty `script`)
+    /// and the fire-time `%`-expansion of the captures.
+    private let responsePlugin = """
+    <muclient>
+    <plugin id="com.test.resp" name="Resp Test"/>
+    <script><![CDATA[
+    function OnPluginInstall()
+      AddTriggerEx("val", "^val (.*)$", 'Send("v=%1")',
+                   trigger_flag.Enabled + trigger_flag.RegularExpression,
+                   custom_colour.Custom11, 0, "", "", sendto.script, 0)
+    end
+    ]]></script>
+    </muclient>
+    """
+
+    @Test("AddTriggerEx response body runs as Lua with %1 expanded to captures")
+    func dynamicResponseTriggerExpandsWildcards() async throws {
+        let plugin = try MUSHclientPluginLoader.parse(xml: responsePlugin)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(plugin)
+        #expect(await engine.triggerList.count == 1)
+
+        let disposition = await engine.process(line: "val 99")
+        #expect(disposition.effects == [.send("v=99")])
+    }
+
     @Test("A missing OnPluginInstall is a no-op, not an error")
     func missingCallbackIsNoOp() async throws {
         let xml = """

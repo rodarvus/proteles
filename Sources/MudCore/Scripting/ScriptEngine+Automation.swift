@@ -148,8 +148,9 @@ extension ScriptEngine {
         owner: String?
     ) {
         let isRegex = flags & TriggerFlag.regularExpression != 0
-        let call = script.isEmpty ? nil
-            : "\(script)(\(Self.luaString(name)), matches[0], matches)"
+        // The shim hands us the full Lua body (function-call, raw response, or
+        // a world Send), so run it verbatim — the fire path %-expands it.
+        let call = script.isEmpty ? nil : script
         let trigger = Trigger(
             name: name,
             pattern: isRegex ? .regex(pattern) : .wildcard(pattern),

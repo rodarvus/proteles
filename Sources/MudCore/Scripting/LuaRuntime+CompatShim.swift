@@ -382,13 +382,31 @@ public extension LuaRuntime {
     -- ask the host to reload itself (dinv's `dinv reload`); the host routes by
     -- kind (native / bundled dinv / on-disk MUSHclient).
     function ReloadPlugin(id) proteles.reloadPlugin(tostring(id)); return error_code.eOK end
+    -- Build the Lua a trigger runs when it fires, matching MUSHclient: a non-
+    -- empty `script` is a handler called as `fn(name, line, wildcards)`; else,
+    -- with a script send-to (12/14, the AddTriggerEx default in the Aardwolf
+    -- corpus), the `response` text is run as Lua (the host %-expands %1/%0/… to
+    -- captures first); else the response is sent to the world. An empty body is
+    -- a no-op (e.g. an OmitFromOutput-only suppression trigger).
+    local function __triggerBody(name, response, script, sendtoVal)
+      if script and script ~= "" then
+        return script .. "(" .. string.format("%q", tostring(name)) .. ", matches[0], matches)"
+      end
+      response = tostring(response or "")
+      if response == "" then return "" end
+      if sendtoVal == nil or sendtoVal == 12 or sendtoVal == 14 then return response end
+      return "Send(" .. string.format("%q", response) .. ")"
+    end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
-      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0,
+                          __triggerBody(name, response, script, sendto))
       __triggerNames[tostring(name)] = true
       return error_code.eOK
     end
     function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
-      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
+      -- AddTrigger has no send_to param; MUSHclient defaults to the world.
+      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0,
+                          __triggerBody(name, response, script, 1))
       __triggerNames[tostring(name)] = true
       return error_code.eOK
     end

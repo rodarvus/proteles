@@ -437,9 +437,15 @@ public actor ScriptEngine {
                 disposition.effects.append(.send(send))
             }
             if let script = firing.script {
+                let owner = automationOwners[firing.triggerID]
+                // Plugin triggers follow MUSHclient: %1/%0/%<name> in the script
+                // body are substituted with captures before it runs (dinv's
+                // dynamic triggers dispatch via `fn("%1","%2",…)`). User scripts
+                // (no owner) run verbatim so literal `%` isn't mangled.
+                let body = owner == nil ? script : firing.match.expand(script)
                 await disposition.effects.append(contentsOf: runOwnedScript(
-                    script,
-                    owner: automationOwners[firing.triggerID],
+                    body,
+                    owner: owner,
                     matches: firing.match.captures,
                     named: firing.match.named
                 ))
