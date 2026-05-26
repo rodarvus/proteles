@@ -82,6 +82,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// store (emitted by a plugin after a command mutates its state, e.g.
     /// adding a `#sub` rule).
     case persistPluginState(id: String)
+    /// Tear down and re-instantiate a plugin by id (MUSHclient `ReloadPlugin`).
+    /// The host routes by kind: native plugins disable→enable (re-running
+    /// `install()`); the bundled dinv and on-disk MUSHclient plugins are
+    /// unloaded (their env + owned triggers/aliases/timers cleared) and loaded
+    /// fresh. Backs `dinv reload` (and any plugin's self-reload).
+    case reloadPlugin(id: String)
     /// Toggle one of Aardwolf's telnet options (sub-negotiation 102), e.g.
     /// enabling the ASCII-map / room-desc tag streams. Framed as
     /// `IAC SB 102 <option> <1=on|2=off> IAC SE`.

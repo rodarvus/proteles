@@ -42,7 +42,8 @@ public actor ScriptEngine {
     /// session re-arms its timer loop (it idles when no timers remain).
     var didScheduleTimer = false
     /// Native (Swift) plugins folded into the same pipeline as Lua plugins.
-    private var nativePlugins = NativePluginRegistry()
+    /// Module-internal so the automation extension's reload helpers can reach it.
+    var nativePlugins = NativePluginRegistry()
     /// When true, automations are paused: typed input is sent verbatim,
     /// incoming lines pass through, and timers don't fire (Note mode).
     private var suspended = false

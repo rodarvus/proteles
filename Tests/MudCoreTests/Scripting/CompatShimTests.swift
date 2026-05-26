@@ -182,4 +182,42 @@ struct CompatShimTests {
         ))
         #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p")
     }
+
+    @Test("Execute runs script-prefixed text as Lua, plain text as a command")
+    func executeScriptPrefix() async throws {
+        let lua = try await shimmed()
+        // A run of leading backslashes (the MUSHclient script prefix) → eval.
+        let scripted = try await lua.run(#"Execute(string.char(92, 92, 92) .. 'Send("hi")')"#)
+        #expect(scripted == [.send("hi")])
+        // No prefix → an ordinary world command.
+        let plain = try await lua.run("Execute('north')")
+        #expect(plain == [.execute("north")])
+    }
+
+    @Test("DoAfter / DoAfterSpecial map to scheduleAfter (script vs send)")
+    func deferredActions() async throws {
+        let lua = try await shimmed()
+        let send = try await lua.run("DoAfter(1.5, 'kill mob')")
+        #expect(send == [.scheduleAfter(seconds: 1.5, isScript: false, body: "kill mob")])
+        // sendto.script (12) → run the body as Lua.
+        let script = try await lua.run("DoAfterSpecial(2, 'foo()', sendto.script)")
+        #expect(script == [.scheduleAfter(seconds: 2, isScript: true, body: "foo()")])
+    }
+
+    @Test("ReloadPlugin records a reloadPlugin effect for the given id")
+    func reloadPlugin() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("ReloadPlugin('com.test.thing')")
+        #expect(effects == [.reloadPlugin(id: "com.test.thing")])
+    }
+
+    @Test("SetEchoInput round-trips through GetEchoInput")
+    func echoInputRoundTrip() async throws {
+        let lua = try await shimmed()
+        #expect(try await lua.boolean("GetEchoInput() == 1"))
+        _ = try await lua.run("SetEchoInput(false)")
+        #expect(try await lua.boolean("GetEchoInput() == 0"))
+        _ = try await lua.run("SetEchoInput(true)")
+        #expect(try await lua.boolean("GetEchoInput() == 1"))
+    }
 }

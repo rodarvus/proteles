@@ -383,15 +383,10 @@ Release Notes
   >
   </alias>
 
-  <alias
-   script="inv.cli.version.fn"
-   match="^[ ]*dinv[ ]+version[ ]*(check|changelog|update[ ]+confirm)?[ ]*$"
-   enabled="y"
-   regexp="y"
-   send_to="12"
-   sequence="100"
-  >
-  </alias>
+  <!-- Proteles: the `dinv version` alias (check / changelog / update confirm)
+       is removed. Its handlers fetch from GitHub over HTTP, which the native
+       host doesn't provide, and in-client self-update isn't a Proteles flow.
+       See Resources/dinv/PROVENANCE.md. -->
 
   <alias
    script="inv.cli.organize.fn1"
@@ -605,25 +600,10 @@ Release Notes
   >
   </alias>
 
-  <alias
-   script="inv.cli.backup.fn"
-   match="^[ ]*dinv[ ]+backup[ ]+(list|create|delete|restore)[ ]*([^ ]+)?[ ]*$"
-   enabled="y"
-   regexp="y"
-   send_to="12"
-   sequence="100"
-  >
-  </alias>
-
-  <alias
-   script="inv.cli.migrate.fn"
-   match="^[ ]*dinv[ ]+migrate[ ]*(confirm)?[ ]*$"
-   enabled="y"
-   regexp="y"
-   send_to="12"
-   sequence="100"
-  >
-  </alias>
+  <!-- Proteles: the `dinv backup` and `dinv migrate` aliases are removed.
+       Manual backup/restore and DB-format migration are admin flows we don't
+       expose; the automatic pre-build backup (dbot.backup.preBuild) is
+       internal and unaffected. See Resources/dinv/PROVENANCE.md. -->
 
   <alias
    script="inv.cli.reload.fn"

@@ -99,6 +99,34 @@ extension ScriptEngine {
         await runtime.loadPluginScript(source, pluginID: pluginID)
     }
 
+    /// Tear down a single loaded MUSHclient plugin so it can be reloaded
+    /// cleanly (MUSHclient `ReloadPlugin`). Removes the triggers/aliases/timers
+    /// it owns (and their name lookups), drops its Lua environment — which
+    /// releases its globals and lifecycle callbacks so they can't fire again —
+    /// and forgets it from the load order. Idempotent: unloading an unknown id
+    /// is a no-op. State that lives outside the engine (scoped variables, the
+    /// plugin's own SQLite DB) is intentionally preserved across the reload.
+    public func unloadPlugin(_ id: String) async {
+        let ownedIDs = Set(automationOwners.filter { $0.value == id }.keys)
+        for ownedID in ownedIDs {
+            triggers.remove(id: ownedID)
+            aliases.remove(id: ownedID)
+            timers.remove(id: ownedID)
+            automationOwners[ownedID] = nil
+        }
+        triggerIDsByName = triggerIDsByName.filter { !ownedIDs.contains($0.value) }
+        aliasIDsByName = aliasIDsByName.filter { !ownedIDs.contains($0.value) }
+        timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
+        loadedPluginIDs.removeAll { $0 == id }
+        await runtime.clearPluginEnvironment(id)
+    }
+
+    /// True when `id` names a registered native (Swift) plugin (so the host can
+    /// route a reload to disable→enable rather than the unload/reload path).
+    public func isNativePlugin(id: String) -> Bool {
+        nativePlugins.listing.contains { $0.metadata.id == id }
+    }
+
     /// Whether a one-shot was scheduled since the last check (read + cleared by
     /// the session so it re-arms its timer loop exactly once).
     public func takeDidScheduleTimer() -> Bool {

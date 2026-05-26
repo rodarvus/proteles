@@ -90,13 +90,13 @@ public actor SessionController {
     /// Drains the mapper's system-note stream (delayed cexit results) to output.
     var mapperNotesTask: Task<Void, Never>?
     var recorder: SessionRecorder?
-    /// Re-entrancy guard for the `OnPluginSend` hook (a plugin may re-send,
-    /// re-entering the hook); caps pathological loops.
+    /// Re-entrancy guard for `OnPluginSend` (a re-sending plugin re-enters it).
     var pluginSendDepth = 0
     /// Vendored dinv's state dir, armed at world-load; loaded lazily on the
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
+    var loadedPluginsDirectory: URL? // active world's plugin dir, for ReloadPlugin disk re-read
     /// Timestamped debug transcript paired with ``recorder`` (`.log` beside the
     /// `.jsonl`): logs local events the wire capture omits (input/sends/notes/GMCP).
     var transcript: SessionTranscript?

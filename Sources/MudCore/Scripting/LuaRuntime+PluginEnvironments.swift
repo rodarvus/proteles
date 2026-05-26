@@ -34,6 +34,15 @@ public extension LuaRuntime {
         pluginEnvs.removeAll()
     }
 
+    /// Drop a *single* plugin's environment (e.g. when reloading just that
+    /// plugin). Releases the registry ref so its globals/callbacks can't fire
+    /// again; a subsequent ``createPluginEnvironment(_:)`` gives it a fresh one.
+    func clearPluginEnvironment(_ pluginID: String) {
+        if let ref = pluginEnvs.removeValue(forKey: pluginID) {
+            luaL_unref(state, LUA_REGISTRYINDEX, ref)
+        }
+    }
+
     /// Run a plugin's `<script>` chunk in its environment, returning the
     /// effects it recorded. Errors surface as a red note.
     @discardableResult

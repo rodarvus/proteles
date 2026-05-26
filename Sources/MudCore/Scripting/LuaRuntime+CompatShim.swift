@@ -142,7 +142,20 @@ public extension LuaRuntime {
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end
     function SendNoEcho(text) proteles.sendNoEcho(tostring(text)); return error_code.eOK end
-    function Execute(text) proteles.execute(tostring(text)); return error_code.eOK end
+    -- MUSHclient's Execute runs world input. Text prefixed with the script
+    -- prefix (a run of backslashes, the MUSHclient convention) is executed as
+    -- Lua in the caller's environment rather than sent; plugins use this to
+    -- defer script (e.g. dinv's self-reload Execute("\\\\\\DoAfterSpecial(…)")).
+    function Execute(text)
+      text = tostring(text)
+      local stripped = text:gsub("^\\\\+", "")
+      if stripped ~= text then
+        local chunk = loadstring(stripped)
+        if chunk then chunk() end
+        return error_code.eOK
+      end
+      proteles.execute(text); return error_code.eOK
+    end
 
     -- Variables -------------------------------------------------------------
     function GetVariable(name) return proteles.getVar(name) end
@@ -316,9 +329,17 @@ public extension LuaRuntime {
     -- don't error.
     function GetAlphaOption(name) return "" end
     function SetAlphaOption(name, value) return error_code.eOK end
-    -- GetEchoInput: whether typed input is locally echoed. dinv reads it to
-    -- restore the prior state around its prompt reads; default on (1).
-    function GetEchoInput() return 1 end
+    -- GetEchoInput/SetEchoInput: whether typed input is locally echoed. We
+    -- don't suppress local echo (the native input field owns that), but dinv's
+    -- prompt-read path saves/sets/restores it around a read, so the round-trip
+    -- must be consistent: track a shim-local flag (default on) so a saved value
+    -- restores faithfully and SetEchoInput(false) doesn't break the caller.
+    local __echoInput = 1
+    function GetEchoInput() return __echoInput end
+    function SetEchoInput(flag)
+      __echoInput = (flag == false or flag == nil or flag == 0) and 0 or 1
+      return error_code.eOK
+    end
     -- Clipboard: not yet wired to the native pasteboard (MudCore is
     -- platform-agnostic). Reads return empty; writes are accepted as eOK so
     -- copy/paste features (e.g. dinv priority copy) don't error.
@@ -344,6 +365,23 @@ public extension LuaRuntime {
       __timerNames[tostring(name)] = true
       return error_code.eOK
     end
+    -- Deferred actions → one-shot timers on the host's timer engine. With
+    -- sendto.script (12) / sendto.scriptafteromit (14) the text runs as Lua in
+    -- the owning plugin's env; otherwise it's sent to the MUD. dinv's reload,
+    -- execute-queue re-arm, and version paths all rely on DoAfterSpecial.
+    function DoAfterSpecial(seconds, text, sendtoValue)
+      local isScript = (sendtoValue == 12 or sendtoValue == 14)
+      proteles.doAfter(tonumber(seconds) or 0, tostring(text), isScript)
+      return error_code.eOK
+    end
+    function DoAfter(seconds, text)
+      proteles.doAfter(tonumber(seconds) or 0, tostring(text), false)
+      return error_code.eOK
+    end
+    -- ReloadPlugin: tear down and re-instantiate a plugin by id. A plugin can
+    -- ask the host to reload itself (dinv's `dinv reload`); the host routes by
+    -- kind (native / bundled dinv / on-disk MUSHclient).
+    function ReloadPlugin(id) proteles.reloadPlugin(tostring(id)); return error_code.eOK end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
       proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
       __triggerNames[tostring(name)] = true

@@ -80,13 +80,13 @@ public final class ScriptsModel {
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
             await session.loadPlugins(fromDirectory: pluginsDirectory)
         }
-        // dinv (D-32) is PAUSED: its build/refresh flow blocks on the
-        // `aard_GMCP_handler` plugin (the `sendgmcp` alias + config-packet
-        // synthesis), which we'll implement natively first. Until then we do
-        // NOT arm it — arming triggers its init on connect, which emits the
-        // [dinv-DBG] trace and a cascade of GMCP-config timeouts. The vendored
-        // assets + shim infra stay in place; re-enable by restoring this call
-        // once aard_GMCP_handler lands. See CLAUDE.md "PAUSED: dinv".
+        // dinv (D-32): its per-character DB lives under the world-data dir (the
+        // sqlite root). Armed here; loaded once the character is active (D-32).
+        // The `aard_GMCP_handler` blocker is resolved (D-33); the [dinv-DBG]
+        // trace stays installed until dinv is verified solid end-to-end.
+        if let worldDataDir {
+            await session.armBundledDinv(stateDirectory: worldDataDir.path)
+        }
     }
 
     // MARK: - Triggers

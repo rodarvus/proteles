@@ -144,7 +144,7 @@ public actor LuaRuntime {
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
-        case fileExists, makeDirectory
+        case fileExists, makeDirectory, reloadPlugin
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -155,9 +155,8 @@ public actor LuaRuntime {
     nonisolated(unsafe) var bundledModules: [String: String] = [:]
     nonisolated(unsafe) var moduleSearchPaths: [String] = []
 
-    /// Ambient environment for `proteles.info`/`proteles.pluginID`
-    /// (≈ MUSHclient `GetInfo`/`GetPluginID`). The loader sets this per
-    /// plugin; defaults to the user-scripts context.
+    /// Ambient environment for `proteles.info`/`proteles.pluginID` (≈ MUSHclient
+    /// `GetInfo`/`GetPluginID`). Loader-set per plugin; defaults to user scripts.
     nonisolated(unsafe) var pluginContext = PluginContext.default
 
     /// Per-plugin sandbox environments (plugin id → registry ref of an env
@@ -382,6 +381,7 @@ public actor LuaRuntime {
         setHostFunction("monotonic", .monotonic)
         setHostFunction("fileExists", .fileExists)
         setHostFunction("makeDirectory", .makeDirectory)
+        setHostFunction("reloadPlugin", .reloadPlugin)
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
@@ -403,7 +403,7 @@ public actor LuaRuntime {
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
-             .addTrigger, .addAlias, .setTriggerGroup, .enableAlias:
+             .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin:
             recordEffect(function, arguments)
             return []
         case .call:

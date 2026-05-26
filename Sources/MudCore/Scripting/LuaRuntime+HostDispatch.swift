@@ -107,7 +107,8 @@ extension LuaRuntime {
         .execute: ScriptEffect.execute, .echo: ScriptEffect.echo,
         .sendGMCP: ScriptEffect.sendGMCP, .echoAard: ScriptEffect.echoAard,
         .echoAnsi: ScriptEffect.echoAnsi, .simulate: ScriptEffect.simulate,
-        .removeTrigger: ScriptEffect.removeTrigger
+        .removeTrigger: ScriptEffect.removeTrigger,
+        .reloadPlugin: { ScriptEffect.reloadPlugin(id: $0) }
     ]
 
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)

@@ -186,14 +186,8 @@ public extension SessionController {
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):
             publishedModelsContinuation.yield(json)
-        case .simulate(let text):
-            await reinjectSimulated(text)
-        case .injectGMCP(let package, let json):
-            // Feed a synthesized GMCP message through the same inbound dispatch
-            // as a real packet (native GMCP handler's config-state synthesis).
-            await dispatchGMCP(GMCPMessage(package: package, json: json))
         default:
-            break
+            await applyInboundControlEffect(effect)
         }
     }
 
@@ -201,7 +195,7 @@ public extension SessionController {
     /// if it had arrived from the MUD, so triggers (user + S&D) process it and
     /// it displays. Split on newlines; a single trailing newline doesn't add a
     /// spurious empty line. Used by S&D's `xtest` harness and `notes` header.
-    private func reinjectSimulated(_ text: String) async {
+    func reinjectSimulated(_ text: String) async {
         var segments = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         if segments.count > 1, segments.last?.isEmpty == true { segments.removeLast() }
         for segment in segments {
@@ -384,6 +378,7 @@ public extension SessionController {
     /// connecting. No-op without a script engine or plugins.
     func loadPlugins(fromDirectory directory: URL) async {
         guard let scriptEngine else { return }
+        loadedPluginsDirectory = directory
         let entries = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )) ?? []

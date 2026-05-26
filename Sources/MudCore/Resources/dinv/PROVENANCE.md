@@ -26,3 +26,23 @@ inert `async` stub are already provided by the shim.
 The GitHub self-updater (`dbot.remote`, the only `async`/`io` user) is inert:
 Proteles vendors dinv and updates it with the app, so `dinv version
 check/update` is a no-op here.
+
+## Local modifications
+
+These files are vendored *near*-verbatim; the only divergence from upstream is
+a small set of removed user-command **aliases** in `dinv.xml`. The underlying
+Lua handlers are left untouched (so re-syncing upstream is a matter of
+re-deleting these alias blocks):
+
+- **`dinv version`** (check / changelog / update confirm) — removed. The
+  handlers fetch over HTTP from GitHub, which the native host doesn't provide,
+  and in-client self-update isn't a Proteles flow (the app ships dinv).
+- **`dinv backup`** (list / create / delete / restore) — removed. Manual
+  backup/restore is an admin flow we don't surface. The *automatic* pre-build
+  backup (`dbot.backup.preBuild`) is internal and still runs.
+- **`dinv migrate`** (confirm) — removed. DB-format migration is an admin flow
+  we don't surface.
+
+`dinv reload` is kept and works: it calls `ReloadPlugin(GetPluginID())` via the
+shim's `DoAfterSpecial(…, sendto.script)`, which the host routes to a clean
+unload + reload of the bundled plugin.
