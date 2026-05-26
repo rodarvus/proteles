@@ -159,17 +159,30 @@ struct GMCPStateStoreApplyTests {
         #expect(await store.state == GMCPState())
     }
 
-    @Test("comm.tick stamps lastTick and is broadcast")
-    func commTickStampsLastTick() async throws {
+    @Test("comm.tick is no longer decoded by apply (TickTimer owns it now)")
+    func commTickNotDecodedByApply() async {
         let store = GMCPStateStore()
-        #expect(await store.state.lastTick == nil)
         let changed = await store.apply(
             GMCPMessage(package: "comm.tick", json: #"{"ctime":1779752147,"time":"19:35:47"}"#)
         )
-        #expect(changed)
-        let tick = await store.state.lastTick
-        #expect(tick != nil)
-        #expect(try abs(#require(tick?.timeIntervalSinceNow)) < 5) // stamped at receipt (~now)
+        #expect(!changed)
+        #expect(await store.state.lastTick == nil)
+    }
+
+    @Test("setLastTick updates the anchor and broadcasts (no-op when unchanged)")
+    func setLastTickUpdatesAndBroadcasts() async {
+        let store = GMCPStateStore()
+        let stream = await store.subscribe()
+        var iterator = stream.makeAsyncIterator()
+        _ = await iterator.next() // initial snapshot (lastTick nil)
+
+        let tick = Date(timeIntervalSince1970: 1_000_000)
+        await store.setLastTick(tick)
+        #expect(await store.state.lastTick == tick)
+        #expect(await iterator.next()?.lastTick == tick) // broadcast delivered
+
+        await store.setLastTick(nil)
+        #expect(await store.state.lastTick == nil)
     }
 
     @Test("secondsToNextTick = lastTick + interval - now (matches reference, unclamped)")

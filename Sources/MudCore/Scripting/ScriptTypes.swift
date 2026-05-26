@@ -89,6 +89,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish a captured ASCII map block (its styled lines) to the Map
     /// panel; an empty array clears it.
     case updateMap([Line])
+    /// Set the witnessed-tick anchor for the status-bar countdown (a `Date`,
+    /// or `nil` to clear). Emitted by the native `TickTimer` plugin on each
+    /// `comm.tick`; routing it through an effect (rather than decoding in the
+    /// GMCP store) lets the plugin's enabled flag gate it — disable the plugin
+    /// and the ticks stop, so the readout self-hides.
+    case updateTick(Date?)
     /// A `CallPlugin(<mapper>, function, args…)` routed to the native mapper.
     /// The host runs it and delivers any resulting broadcasts (e.g. the
     /// 500/501 path results) back through `OnPluginBroadcast`.

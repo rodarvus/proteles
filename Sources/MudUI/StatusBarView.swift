@@ -71,10 +71,16 @@ public struct StatusBarView: View {
     /// `comm.tick` re-anchors it (see ``GMCPState/secondsToNextTick``).
     private func tickReadout(_ lastTick: Date) -> some View {
         TimelineView(.periodic(from: lastTick, by: 1)) { context in
-            Text("Next tick: \(GMCPState.secondsToNextTick(lastTick: lastTick, now: context.date))")
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            // Self-hide once ticks stop arriving (TickTimer disabled, or
+            // disconnected): an anchor older than a grace window has no live
+            // countdown. Re-evaluated each second by the timeline.
+            let elapsed = context.date.timeIntervalSince(lastTick)
+            if elapsed < GMCPState.tickInterval * 2 {
+                Text("Next tick: \(GMCPState.secondsToNextTick(lastTick: lastTick, now: context.date))")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 

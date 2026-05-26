@@ -164,6 +164,8 @@ public extension SessionController {
             try? await sendRaw(Self.aardwolfTelnetBytes(option: option, on: on))
         case .updateMap(let map):
             await mapStore.update(map)
+        case .updateTick(let date):
+            await gmcpState.setLastTick(date)
         case .mapperCall(let function, let args):
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):

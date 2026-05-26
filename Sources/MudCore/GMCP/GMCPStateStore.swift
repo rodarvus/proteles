@@ -56,12 +56,21 @@ public actor GMCPStateStore {
     @discardableResult
     public func apply(_ message: GMCPMessage) -> Bool {
         // Aardwolf sends package names lowercased on the wire (char.vitals,
-        // char.maxstats, …); match case-insensitively. comm.tick is handled
-        // out of band (it stamps a time rather than decoding a module).
-        let package = message.package.lowercased()
-        let changed = package == "comm.tick" ? markTick() : decodeModule(package, message)
+        // char.maxstats, …); match case-insensitively. comm.tick is handled by
+        // the TickTimer plugin via setLastTick, not decoded here.
+        let changed = decodeModule(message.package.lowercased(), message)
         if changed { broadcast() }
         return changed
+    }
+
+    /// Set (or clear) the witnessed-tick anchor and notify observers. Driven by
+    /// the native `TickTimer` plugin's `comm.tick` handling (via the
+    /// `updateTick` effect) rather than `apply`, so the plugin's enabled flag
+    /// gates it — see ``GMCPState/secondsToNextTick``.
+    public func setLastTick(_ date: Date?) {
+        guard state.lastTick != date else { return }
+        state.lastTick = date
+        broadcast()
     }
 
     /// Decode a character/room/group module into its state slot. Returns
@@ -78,13 +87,6 @@ public actor GMCPStateStore {
         case "group": set(\.group, from: message, as: GroupInfo.self)
         default: false
         }
-    }
-
-    /// Record that a tick was just witnessed (a `comm.tick` broadcast). Always
-    /// "changed" so the new countdown anchor reaches the status bar.
-    private func markTick() -> Bool {
-        state.lastTick = Date()
-        return true
     }
 
     /// Subscribe to state snapshots. The current snapshot is delivered

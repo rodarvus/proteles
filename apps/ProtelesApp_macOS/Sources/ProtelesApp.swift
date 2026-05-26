@@ -78,6 +78,7 @@ struct ProtelesApp: App {
                 await scriptEngine.registerNativePlugin(TextSubstitution())
                 await scriptEngine.registerNativePlugin(ChatEcho())
                 await scriptEngine.registerNativePlugin(AsciiMap())
+                await scriptEngine.registerNativePlugin(TickTimer())
             }
         }
 
