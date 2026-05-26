@@ -100,5 +100,27 @@ public enum DinvAssets {
     __wrap(dbot.init, "atActive", "dbot.init.atActive")
     __wrap(dinv_db, "open", "dinv_db.open")
     __wrap(inv.items, "build", "inv.items.build")
+
+    -- Execute-queue / fence / callback flow (the build deadlock lives here):
+    -- entry/exit markers show how far dequeueCR gets and where it stalls.
+    __wrap(dbot.execute.queue, "dequeueCR", "dequeueCR")
+    __wrap(dbot.execute.queue, "fence", "fence")
+    __wrap(dbot.callback, "wait", "callback.wait")
+    __wrap(dbot.prompt, "disable", "prompt.disable")
+    __wrap(dbot.prompt, "enable", "prompt.enable")
+    local __origBypass = dbot.execute.queue.bypass
+    if type(__origBypass) == "function" then
+      dbot.execute.queue.bypass = function(command)
+        Note("[dinv-DBG] bypass -> " .. tostring(command))
+        return __origBypass(command)
+      end
+    end
+    local __origPushFast = dbot.execute.queue.pushFast
+    if type(__origPushFast) == "function" then
+      dbot.execute.queue.pushFast = function(command)
+        Note("[dinv-DBG] pushFast <- " .. tostring(command))
+        return __origPushFast(command)
+      end
+    end
     """
 }
