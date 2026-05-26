@@ -91,6 +91,20 @@ extension ScriptEngine {
         return effects
     }
 
+    /// Deliver an inbound GMCP message to every plugin's
+    /// `OnPluginTelnetSubnegotiation(201, "<package> <json>")` — MUSHclient fires
+    /// this for the raw GMCP subnegotiation (telnet option 201). dinv's config
+    /// detection reads ONLY this path (`dbot.gmcp.currentState[mode]` is set
+    /// there), so without it every `getConfig` (prompt/invmon/…) times out at 5s
+    /// and dinv falls back to defaults. The body keeps Aardwolf's exact spacing
+    /// (`{ "prompt" : "YES" }`), which dinv's pattern requires.
+    public func deliverGMCPSubnegotiation(package: String, json: String) async -> [ScriptEffect] {
+        await fireCallbackOnAll("OnPluginTelnetSubnegotiation", [
+            .number(201),
+            .string("\(package) \(json)")
+        ])
+    }
+
     /// Run an arbitrary chunk in an already-loaded plugin's environment,
     /// returning the effects it recorded. Used to install dinv's init-chain
     /// debug instrumentation after load (the chunk just installs wrappers and

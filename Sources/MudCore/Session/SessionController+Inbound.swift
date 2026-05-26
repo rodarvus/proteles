@@ -78,6 +78,11 @@ extension SessionController {
         }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
+            // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
+            // (option 201); dinv's config detection reads only that path.
+            await applyScriptEffects(scriptEngine.deliverGMCPSubnegotiation(
+                package: message.package, json: message.json
+            ))
             // A plugin's OnPluginBroadcast may have scheduled a one-shot (e.g. a
             // wait.time resume timer); re-arm the loop so it fires when idle.
             await rearmTimerLoopIfScriptScheduled()
