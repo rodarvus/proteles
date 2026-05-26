@@ -170,6 +170,10 @@ public extension SessionController {
             publishedModelsContinuation.yield(json)
         case .simulate(let text):
             await reinjectSimulated(text)
+        case .injectGMCP(let package, let json):
+            // Feed a synthesized GMCP message through the same inbound dispatch
+            // as a real packet (native GMCP handler's config-state synthesis).
+            await dispatchGMCP(GMCPMessage(package: package, json: json))
         default:
             break
         }

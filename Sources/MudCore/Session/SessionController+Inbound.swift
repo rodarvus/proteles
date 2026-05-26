@@ -65,8 +65,9 @@ extension SessionController {
 
     /// Route one GMCP message to the GMCP state, chat, mapper, script engine,
     /// and the S&D host. Split out of ``processChunk`` for the complexity
-    /// budget.
-    private func dispatchGMCP(_ message: GMCPMessage) async {
+    /// budget. Also reused by the `injectGMCP` effect (synthesized config
+    /// packets from the native GMCP handler) so they take the same path.
+    func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
         await gmcpState.apply(message)
         await chatStore.ingest(message)

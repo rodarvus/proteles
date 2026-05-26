@@ -14,17 +14,26 @@ campaign/quest detection verified against the user's live MUD.** Read
 ### NEXT SESSION — start here: implement the aardwolfclientpackage plugins
 
 **Decision (2026-05-26): pause dinv; pivot to implementing the
-`aardwolfclientpackage` MUSHclient plugins as a deliberate effort, starting
-with `aard_GMCP_handler` (dinv's hard dependency — see below).** The 43 plugin
-XMLs live in `aardwolfclientpackage/MUSHclient/worlds/plugins/`. The first
-batch that matters for the Aardwolf core experience (and that other plugins
-depend on):
-- **`aard_GMCP_handler.xml`** — provides the `sendgmcp *` alias
-  (`GMCP_Alias` → `Send_GMCP_Packet(wildcards[1])`, e.g.
-  `sendgmcp config prompt` → a real GMCP packet) AND *synthesises* `config`
-  GMCP packets from triggers (e.g. "You will now see prompts." →
-  `OnPluginTelnetSubnegotiation(201, 'config { "prompt":"YES" }')`). The whole
-  package assumes this handler is loaded. **dinv blocks on it.**
+`aardwolfclientpackage` MUSHclient plugins as a deliberate effort.** The 43
+plugin XMLs live in `aardwolfclientpackage/MUSHclient/worlds/plugins/`.
+**Per-plugin triage discipline:** for each, lead with a verdict — **drop /
+native feature / native plugin / vendor-verbatim / reimplement-differently** —
+then PROPOSE a plan and wait for approval (§7/§11). Not all plugins are
+relevant to a native macOS client (e.g. `aard_miniwindow_z_order_monitor`,
+`aard_repaint_buffer`, `aard_layout`, `MUSHclient_Help`,
+`aard_package_update_checker`, `aard_keyboard_lockout`, `aard_new_connection*`,
+`SAPI`/`universal_text_to_speech`, `Hyperlink_URL2`); some are good ideas to
+reimplement the native way (TTS via `AVSpeechSynthesizer`, native
+notifications, SwiftUI theming).
+
+The first batch that matters for the Aardwolf core experience:
+- **`aard_GMCP_handler`** — ✅ **DONE natively (D-33)** as `AardGMCPHandler`:
+  the `sendgmcp <payload>` command + prompt/compact config-state synthesis (via
+  the new `injectGMCP` effect). ~80% was already native (wire-layer GMCP
+  negotiation/decode/broadcast + the `aardwolfHandshake` request batch), so we
+  only filled the gaps. This **clears dinv's blocker #1** (its `sendgmcp config
+  …` requests now become real GMCP packets) — still needs live verification
+  that Aardwolf replies with `config {"prompt":…}`.
 - Then per the existing parity work: `aard_GMCP_mapper` (already native),
   `aard_prompt_fixer`, `aard_chat_echo`, `aard_channels_fiendish`,
   `aard_vital_shortcuts`, `aard_note_mode`, `aard_text_substitution`,
@@ -52,10 +61,12 @@ priority order — *do not re-derive these, they're confirmed from the wire +
 reference*:
 1. **`aard_GMCP_handler` dependency (the big one).** dinv does
    `Execute("sendgmcp config prompt")`/`invmon` and spins for a `config` GMCP
-   reply. `sendgmcp` is NOT a MUD command — it's an alias from
-   `aard_GMCP_handler.xml`. Without it the literal text hits the MUD ("That is
-   not a command.") and the reply never comes → 5s timeouts (prompt, invmon,
-   pagesize). **This is why we're doing aard_GMCP_handler first.**
+   reply. `sendgmcp` was NOT a MUD command — it's an alias from
+   `aard_GMCP_handler.xml`. ✅ **ADDRESSED (D-33):** the native `AardGMCPHandler`
+   plugin now handles `sendgmcp <payload>` → real GMCP packet, so the request
+   reaches Aardwolf. **Still to verify live** that Aardwolf replies with
+   `config {"prompt":…}` (the paused-dinv transcript only showed `config
+   {"noexp":…}`); confirm via transcript when dinv resumes.
 2. **`SetEchoInput` missing from the shim** (we have `GetEchoInput`). dinv's
    `dbot.execute` path calls `SetEchoInput(false)` (dinv_dbot.lua:2554) → the
    wait-coroutine dies. Trivial shim add.

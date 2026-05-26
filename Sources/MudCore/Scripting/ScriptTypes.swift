@@ -52,6 +52,14 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Send a GMCP packet to the server (the payload is framed as
     /// `IAC SB 201 <payload> IAC SE`). Backs `Send_GMCP_Packet`.
     case sendGMCP(String)
+    /// Inject a *synthesized* GMCP message into the **inbound** path as if it
+    /// had arrived from the server — the host routes it through the same
+    /// dispatch as a real packet (state, chat, mapper, plugin broadcasts). The
+    /// inverse of ``sendGMCP``. Backs the native GMCP handler's config-state
+    /// synthesis: Aardwolf emits no `config` GMCP when prompt/compact are
+    /// toggled via commands, so we synthesize one from the text feedback (this
+    /// mirrors aard_GMCP_handler's `OnPluginTelnetSubnegotiation(201, …)`).
+    case injectGMCP(package: String, json: String)
     /// Print Aardwolf `@`-coded text to the scrollback, rendered as styled
     /// runs (`proteles.echoAard`).
     case echoAard(String)

@@ -72,6 +72,7 @@ struct ProtelesApp: App {
         // package). Registration is quick and completes well before connect.
         if let scriptEngine {
             Task {
+                await scriptEngine.registerNativePlugin(AardGMCPHandler())
                 await scriptEngine.registerNativePlugin(VitalShortcuts())
                 await scriptEngine.registerNativePlugin(NoteMode())
                 await scriptEngine.registerNativePlugin(TextSubstitution())
