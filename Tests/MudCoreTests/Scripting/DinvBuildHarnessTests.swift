@@ -133,6 +133,11 @@ struct DinvBuildHarnessTests {
 
         let engine = try await loadDinv(in: dir)
         let driver = Driver(engine: engine, clock: Date())
+        // Force dinv's notes on (the same instrumentation the live session
+        // installs) so the offline trace is as rich as the `.log`.
+        await driver.apply(engine.runInPluginEnvironment(
+            DinvAssets.pluginID, DinvAssets.debugTraceSource
+        ))
 
         // Kick init: deliver the active char.status + char.base broadcast dinv
         // gates init on, then pump the queue/fence/timer flow to quiescence.
