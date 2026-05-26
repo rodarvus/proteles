@@ -283,9 +283,12 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("B", modifiers: [.command, .shift])
             Button("Chat Panel") { layout.show(.chat) }
                 .keyboardShortcut("J", modifiers: [.command, .shift])
+        }
 
-            Divider()
-
+        // A real "View" menu for display preferences (the panel toggles above
+        // sit in the File group next to Connect; this is where output options
+        // belong).
+        CommandMenu("View") {
             // Display preference (native equivalent of Omit_Blank_Lines): drop
             // completely-empty MUD lines from the main output. Persists via
             // @AppStorage; ContentView pushes the value to the session.
