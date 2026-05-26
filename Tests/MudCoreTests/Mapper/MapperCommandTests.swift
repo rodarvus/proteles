@@ -13,8 +13,8 @@ struct MapperCommandTests {
         return (mapper, url)
     }
 
-    private func sends(_ effects: [ScriptEffect]) -> [String] {
-        effects.compactMap { if case .send(let text) = $0 { text } else { nil } }
+    private func walkCommands(_ effects: [ScriptEffect]) -> [String] {
+        effects.compactMap { if case .execute(let text) = $0 { text } else { nil } }
     }
 
     private func notes(_ effects: [ScriptEffect]) -> [String] {
@@ -45,7 +45,7 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         let effects = await mapper.handleCommand("mapper goto 3")
-        #expect(sends(effects) == ["run 2n"])
+        #expect(walkCommands(effects) == ["run 2n"])
         #expect(notes(effects).contains { $0.contains("North End") && $0.contains("2 step") })
     }
 
@@ -54,7 +54,7 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        #expect(await sends(mapper.handleCommand("mapper walkto 2")) == ["run n"])
+        #expect(await walkCommands(mapper.handleCommand("mapper walkto 2")) == ["run n"])
     }
 
     @Test("Already-there and unknown-room are reported, not walked")
@@ -62,7 +62,7 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        #expect(await sends(mapper.handleCommand("mapper goto 1")).isEmpty)
+        #expect(await walkCommands(mapper.handleCommand("mapper goto 1")).isEmpty)
         #expect(await notes(mapper.handleCommand("mapper goto 1")).contains { $0.contains("already there") })
         // 9999 is neither a mapped room nor a known exit target → unreachable.
         #expect(await notes(mapper.handleCommand("mapper goto 9999"))
@@ -166,7 +166,7 @@ struct MapperCommandTests {
         // Raise the stored exit level by re-saving via the store, then reload.
         // Simpler: char.status low level + a level-tagged exit isn't expressible
         // through room.info, so assert the default (level 0) route works.
-        #expect(await sends(mapper.handleCommand("mapper goto 2")) == ["run n"])
+        #expect(await walkCommands(mapper.handleCommand("mapper goto 2")) == ["run n"])
     }
 
     @Test("goto by a unique room name resolves and routes")
@@ -175,7 +175,7 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         // "North End" is unique → resolves to room 3 → run 2n.
-        #expect(await sends(mapper.handleCommand("mapper goto North End")) == ["run 2n"])
+        #expect(await walkCommands(mapper.handleCommand("mapper goto North End")) == ["run 2n"])
     }
 
     @Test("goto by an ambiguous name lists candidates instead of routing")
@@ -184,7 +184,7 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         let effects = await mapper.handleCommand("mapper goto End") // South End + North End
-        #expect(sends(effects).isEmpty)
+        #expect(walkCommands(effects).isEmpty)
         #expect(notes(effects).contains { $0.contains("Multiple rooms match") })
         #expect(notes(effects).contains { $0.contains("South End") })
     }
@@ -220,8 +220,27 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         let effects = await mapper.handleCommand("mapper findpath 1 3")
-        #expect(sends(effects).isEmpty) // findpath never walks
+        #expect(walkCommands(effects).isEmpty) // findpath never walks
         #expect(notes(effects).contains { $0.contains("run 2n") && $0.contains("2 step") })
+    }
+
+    @Test("A portal step in a goto path is emitted as .execute (not raw .send)")
+    func gotoPortalStepIsExecuted() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        // Room 4 exists but has no cardinal link to the 1→2→3 corridor — the
+        // only way there is a portal whose use-command is itself a plugin alias.
+        // Ingest it first, then seed (which leaves the *current* room as 1).
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":4,"name":"Far Vault","zone":"z","exits":{}}"#
+        )
+        await seed(mapper)
+        _ = await mapper.handleCommand("mapper fullportal {dinv portal use 3720280535} {4} 0")
+        let cmds = await walkCommands(mapper.handleCommand("mapper goto 4"))
+        // The portal hop must go through the command pipeline so dinv's alias
+        // handles it — i.e. it's an `.execute`, which is what walkCommands reads.
+        #expect(cmds == ["dinv portal use 3720280535"])
     }
 
     @Test("portal add / list / delete / purge round-trips through the exits table")

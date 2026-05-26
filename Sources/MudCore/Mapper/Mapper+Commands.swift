@@ -148,7 +148,12 @@ extension Mapper {
         if path.isEmpty { return [Self.note("You're already there.")] }
         let name = graph.rooms[uid]?.name ?? "room \(uid)"
         var effects: [ScriptEffect] = [Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s).")]
-        effects += Speedwalk.commands(path).map { ScriptEffect.send($0) }
+        // Run each step through the command pipeline (`.execute`), not a raw
+        // `.send`: the reference mapper speedwalks via `ExecuteWithWaits`, so a
+        // step that's a plugin/alias command — e.g. a portal hop stored as
+        // `dinv portal use <id>` — is handled by its plugin instead of leaking
+        // to the MUD. Plain directions (`run 3n2e`) match no alias and pass through.
+        effects += Speedwalk.commands(path).map { ScriptEffect.execute($0) }
         return effects
     }
 
