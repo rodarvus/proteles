@@ -13,37 +13,26 @@ campaign/quest detection verified against the user's live MUD.** Read
 
 ### NEXT SESSION — start here: implement the aardwolfclientpackage plugins
 
-**Decision (2026-05-26): pause dinv; pivot to implementing the
-`aardwolfclientpackage` MUSHclient plugins as a deliberate effort.** The 43
-plugin XMLs live in `aardwolfclientpackage/MUSHclient/worlds/plugins/`.
-**Per-plugin triage discipline:** for each, lead with a verdict — **drop /
-native feature / native plugin / vendor-verbatim / reimplement-differently** —
-then PROPOSE a plan and wait for approval (§7/§11). Not all plugins are
-relevant to a native macOS client (e.g. `aard_miniwindow_z_order_monitor`,
-`aard_repaint_buffer`, `aard_layout`, `MUSHclient_Help`,
-`aard_package_update_checker`, `aard_keyboard_lockout`, `aard_new_connection*`,
-`SAPI`/`universal_text_to_speech`, `Hyperlink_URL2`); some are good ideas to
-reimplement the native way (TTS via `AVSpeechSynthesizer`, native
-notifications, SwiftUI theming).
+**Decision (2026-05-26, D-34): bring the 43 `aardwolfclientpackage` plugins to
+Proteles natively, per-plugin.** The full triage, verdicts, dependency
+findings, and phased work order live in **`docs/AARDPACKAGE_PORTING.md`** (the
+living tracker — read it first). Summary: **7 done · 17 dropped · 8 to build ·
+4 reimplement-differently · 6 deferred to the UI revamp · 3 to verify.**
 
-The first batch that matters for the Aardwolf core experience:
-- **`aard_GMCP_handler`** — ✅ **DONE natively (D-33)** as `AardGMCPHandler`:
-  the `sendgmcp <payload>` command + prompt/compact config-state synthesis (via
-  the new `injectGMCP` effect). ~80% was already native (wire-layer GMCP
-  negotiation/decode/broadcast + the `aardwolfHandshake` request batch), so we
-  only filled the gaps. This **clears dinv's blocker #1** (its `sendgmcp config
-  …` requests now become real GMCP packets) — still needs live verification
-  that Aardwolf replies with `config {"prompt":…}`.
-- Then per the existing parity work: `aard_GMCP_mapper` (already native),
-  `aard_prompt_fixer`, `aard_chat_echo`, `aard_channels_fiendish`,
-  `aard_vital_shortcuts`, `aard_note_mode`, `aard_text_substitution`,
-  `aard_ASCII_map` (the last five already have *native* ports — decide
-  native-port vs. shim-verbatim per plugin, per the §7/§11 workflow: PROPOSE a
-  plan first and wait for approval).
+Discipline: for each plugin, lead with a verdict (drop / native feature /
+native plugin / vendor-verbatim / reimplement-differently), then PROPOSE a
+deep-dive plan and wait for approval (§7/§11). None run through the generic
+shim. Key finding: the heaviest deps (`aard_repaint_buffer`,
+`aard_miniwindow_z_order_monitor` + miniwindow draw libs) are MUSHclient
+rendering infra → dropped, so the dependency graph collapses and remaining work
+has no hard ordering (sequence by value).
 
-Per CLAUDE.md workflow: for each plugin, PROPOSE a plan (native feature vs.
-native Proteles plugin vs. shim-verbatim; trade-offs) and wait for approval
-before implementing.
+**Phase A (next):** `Aardwolf_Tick_Timer`, `aard_inventory_serials`,
+`Omit_Blank_Lines`; verify-then-resolve `aard_prompt_fixer`,
+`aard_group_monitor_gmcp`, `aard_channels_fiendish`. `aard_GMCP_handler` is
+already ✅ done (D-33). **TTS scope is an open investigation** (do it when we
+reach Phase B). **dinv is the finale** — resumed only after every package
+plugin is done.
 
 ### PAUSED: dinv inventory manager (unreleased, on `main`)
 
