@@ -138,10 +138,14 @@ public struct AliasEngine {
             guard alias.enabled else { continue }
             guard let match = matchers[alias.id]?.match(input) else { continue }
 
+            // A script-target send is run as Lua (`fn("%1")`); escape captures
+            // for the Lua string context so a backslash/quote can't break it.
+            // Other targets go to the world/output verbatim.
+            let expand = alias.sendTo == .script ? match.expandForScript : match.expand
             firings.append(AliasFiring(
                 aliasID: alias.id,
                 match: match,
-                send: alias.sendText.map { match.expand($0) },
+                send: alias.sendText.map(expand),
                 target: alias.sendTo
             ))
             if alias.oneShot { oneShotsToRemove.append(alias.id) }

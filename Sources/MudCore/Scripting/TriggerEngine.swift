@@ -66,6 +66,21 @@ public struct TriggerMatch: Sendable, Equatable {
     /// `%<name>` named groups, `%%` a literal `%`. Unknown sequences are
     /// passed through verbatim.
     public func expand(_ template: String) -> String {
+        expand(template, escape: { $0 })
+    }
+
+    /// Like ``expand(_:)`` but escapes each substituted capture for embedding in
+    /// a Lua **string literal** — MUSHclient plugins build script bodies like
+    /// `fn("%1")` and run them as Lua (trigger/alias send-to-script). A raw
+    /// capture containing `\`, `"`, or a newline would otherwise produce invalid
+    /// Lua (e.g. dinv's statBonus closing marker `{ \dinv … }` → `"\d…"`, which
+    /// Lua 5.1 rejects as a bad escape — so the handler never ran and dinv's
+    /// catch-all `^(.*)$` gag stayed enabled, suppressing all output).
+    public func expandForScript(_ template: String) -> String {
+        expand(template, escape: Self.luaStringEscape)
+    }
+
+    private func expand(_ template: String, escape: (String) -> String) -> String {
         var result = ""
         var iterator = template.makeIterator()
         var pending: Character? = iterator.next()
@@ -85,10 +100,10 @@ public struct TriggerMatch: Sendable, Equatable {
                     name.append(value)
                     next = iterator.next()
                 }
-                result.append(named[name] ?? "")
+                result.append(escape(named[name] ?? ""))
             case let digit? where digit.isNumber:
                 let index = Int(String(digit)) ?? 0
-                result.append(index < captures.count ? captures[index] : "")
+                result.append(escape(index < captures.count ? captures[index] : ""))
             case let other?:
                 result.append("%")
                 result.append(other)
@@ -98,6 +113,22 @@ public struct TriggerMatch: Sendable, Equatable {
             pending = iterator.next()
         }
         return result
+    }
+
+    /// Escape a string for safe embedding inside a double-quoted Lua literal.
+    static func luaStringEscape(_ value: String) -> String {
+        var out = ""
+        out.reserveCapacity(value.count)
+        for character in value {
+            switch character {
+            case "\\": out += "\\\\"
+            case "\"": out += "\\\""
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            default: out.append(character)
+            }
+        }
+        return out
     }
 }
 

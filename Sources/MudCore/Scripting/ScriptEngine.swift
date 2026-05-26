@@ -440,9 +440,11 @@ public actor ScriptEngine {
                 let owner = automationOwners[firing.triggerID]
                 // Plugin triggers follow MUSHclient: %1/%0/%<name> in the script
                 // body are substituted with captures before it runs (dinv's
-                // dynamic triggers dispatch via `fn("%1","%2",…)`). User scripts
-                // (no owner) run verbatim so literal `%` isn't mangled.
-                let body = owner == nil ? script : firing.match.expand(script)
+                // dynamic triggers dispatch via `fn("%1","%2",…)`). Captures are
+                // Lua-string-escaped so a backslash/quote in the matched line
+                // (e.g. dinv's `{ \dinv … }` marker) can't break the body. User
+                // scripts (no owner) run verbatim so literal `%` isn't mangled.
+                let body = owner == nil ? script : firing.match.expandForScript(script)
                 await disposition.effects.append(contentsOf: runOwnedScript(
                     body,
                     owner: owner,
