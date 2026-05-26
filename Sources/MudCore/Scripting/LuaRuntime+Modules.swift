@@ -150,6 +150,13 @@ extension LuaRuntime {
       if source == nil then error("cannot open '" .. tostring(path) .. "'", 2) end
       local chunk = proteles.__compile(source, path)
       if chunk == nil then error("error loading '" .. tostring(path) .. "'", 2) end
+      -- Run the file in the CALLER's environment (like `loadstring` below), so a
+      -- plugin's dofile'd modules define their globals in the plugin's own env —
+      -- not the shared `_G`. Without this, e.g. dinv's `dinv_init.lua` leaks its
+      -- top-level `OnPluginSend` into `_G`, where every *other* plugin that
+      -- lacks its own `OnPluginSend` inherits it via `__index` and re-runs it —
+      -- so each dinv bypass send was transmitted once per such plugin (doubling).
+      setfenv(chunk, getfenv(2))
       return chunk()
     end
 
