@@ -370,6 +370,18 @@ public extension LuaRuntime {
     -- the owning plugin's env; otherwise it's sent to the MUD. dinv's reload,
     -- execute-queue re-arm, and version paths all rely on DoAfterSpecial.
     function DoAfterSpecial(seconds, text, sendtoValue)
+      -- sendto.execute (10): the deferred text is processed like typed input —
+      -- aliases, speedwalk AND command stacking (`;`). dinv relies on this for
+      -- its portal sequence, e.g. `wear <id> portal;put <id> <bag>`: the client
+      -- must split on `;` into two commands. We defer a script that calls
+      -- `Execute`, which routes through the host command pipeline (where the
+      -- `;` split happens) — a raw send would hand Aardwolf the whole stacked
+      -- string and it'd treat `portal;put …` as the wear location.
+      if sendtoValue == 10 then
+        proteles.doAfter(tonumber(seconds) or 0,
+                         "Execute(" .. string.format("%q", tostring(text)) .. ")", true)
+        return error_code.eOK
+      end
       local isScript = (sendtoValue == 12 or sendtoValue == 14)
       proteles.doAfter(tonumber(seconds) or 0, tostring(text), isScript)
       return error_code.eOK
