@@ -46,3 +46,13 @@ re-deleting these alias blocks):
 `dinv reload` is kept and works: it calls `ReloadPlugin(GetPluginID())` via the
 shim's `DoAfterSpecial(…, sendto.script)`, which the host routes to a clean
 unload + reload of the bundled plugin.
+
+One more local edit, in `dinv_dbot.lua`:
+
+- **`dbot.backup.preBuild()`** — neutralized to a no-op. It otherwise creates an
+  automatic pre-build backup by copying the SQLite DB file via Lua `io`
+  (`copyFile`), but the sandbox excludes `io`, so once the DB has items the
+  build would error with `attempt to index global 'io'`. Backups are disabled
+  anyway (the `dinv backup` command is removed), so skipping is consistent. The
+  other `io` users in dinv (the GitHub version-updater and `dinv_migrate`) sit
+  behind the removed `version`/`migrate` commands and aren't reached.

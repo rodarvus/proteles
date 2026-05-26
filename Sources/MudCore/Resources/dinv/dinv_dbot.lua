@@ -1295,25 +1295,15 @@ function dbot.backup.getBackups()
 end -- dbot.backup.getBackups
 
 
--- Automatic backup before dinv build confirm (only if database has items).
+-- Automatic backup before dinv build confirm.
+--
+-- Proteles: disabled. The backup feature copies the SQLite DB file via Lua
+-- `io` (copyFile), which the sandbox deliberately excludes, and the user-facing
+-- `dinv backup` command is removed (see Resources/dinv/PROVENANCE.md). Skipping
+-- here keeps `dinv build` from erroring on `io` once the DB has items.
 function dbot.backup.preBuild()
-  local db = dinv_db.handle
-  if not db then return DRL_RET_UNINITIALIZED end
-
-  -- Only backup if we have existing items
-  local count = 0
-  for row in db:nrows("SELECT COUNT(*) as cnt FROM items") do
-    count = row.cnt
-  end
-
-  if count == 0 then
-    dbot.debug("dbot.backup.preBuild: Skipping pre-build backup (no items in database)")
-    return DRL_RET_SUCCESS
-  end
-
-  local backupName = "pre-build"
-  dbot.info("Creating automatic backup before build...")
-  return dbot.backup.create(backupName, nil)
+  dbot.debug("dbot.backup.preBuild: backups disabled in Proteles; skipping")
+  return DRL_RET_SUCCESS
 end -- dbot.backup.preBuild
 
 
