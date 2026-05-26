@@ -78,6 +78,15 @@ public struct CharStatus: Codable, Sendable, Equatable {
         self.enemy = enemy
         self.enemypct = enemypct
     }
+
+    /// The current combat opponent and its remaining health percentage, or
+    /// `nil` when not fighting — Aardwolf clears `enemy` to `""` out of combat
+    /// and only sends `enemypct` while engaged. Backs the status-bar enemy
+    /// gauge (the useful slice of `aard_health_bars_gmcp`).
+    public var combatTarget: (name: String, percent: Int)? {
+        guard let enemy, !enemy.isEmpty, let enemypct else { return nil }
+        return (enemy, enemypct)
+    }
 }
 
 /// `Char.Stats` — the trainable stats plus hit/damage roll, as Aardwolf's

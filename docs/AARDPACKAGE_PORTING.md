@@ -48,7 +48,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | Aardwolf_Tick_Timer | ✅ done (native, ⏳ live) | `TickTimer` **NativePlugin** (D-36): `comm.tick` → `updateTick` effect → status-bar "Next tick: N" via `TimelineView`. Fixed 30s, unclamped (matches reference). Per-world **enable/disable** persists via `NativePluginStore` + Plugins window (drops the miniwindow + mode-toggle commands); self-hides when disabled/disconnected. Live-verify cadence/format (batch). |
 | aard_inventory_serials | 🧩 bundle w/ dinv | serial #s in inventory output. Both this and dinv consume Aardwolf's `invdata`/objectID stream (dinv_items.lua parses `invdata`), so the **work is bundled into the dinv finale** — they stay separate, useful plugins, but share the invdata-capture machinery. Not a Phase-A line-rewrite. |
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
-| aard_health_bars_gmcp | 🔨 build | extend the native status HUD (#29) |
+| aard_health_bars_gmcp | ✅ done (core, ⏳ live) | HP/MP/MV already in the status HUD (#29). Extended it (D-38) with the two additive pieces: a **combat-only Enemy gauge** (`char.status.enemy`/`enemypct` via `CharStatus.combatTarget`) and **TNL** in the summary. Configurable multi-bar panel (Align bar, stacked/graphical modes, colour/threshold config) deferred to the UI revamp (below). |
 | aard_statmon_gmcp | 🔨 build | extend the native status HUD (#29) |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
 | SAPI + universal_text_to_speech | 🎨 reimplement | one native TTS feature on `AVSpeechSynthesizer` (TTS scope still to investigate) |
@@ -78,9 +78,9 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 12 done · 3 build (soundpack, health_bars, statmon) · 1 bundled-w/-dinv
+Counts: 13 done · 2 build (soundpack, statmon) · 1 bundled-w/-dinv
 (inventory_serials) · 4 reimplement · 6 defer · 17 drop · 0 verify (TTS = 2
-plugins → 1 feature, so 43 plugins). **Phase A complete.**
+plugins → 1 feature, so 43 plugins). **Phase A complete; Phase B underway.**
 
 ## Work order
 
@@ -94,7 +94,12 @@ TTS (investigate first), `aard_soundpack`, copy-@-codes/HTML + hyperlinks,
 HUD extensions (`aard_health_bars_gmcp`, `aard_statmon_gmcp`).
 
 **Phase C — deferred to the UI revamp:** theming, splitscreen scrollback,
-review buffers, command-output capture, in-game help window, bigmap.
+review buffers, command-output capture, in-game help window, bigmap, and the
+**health-bars configurable multi-bar panel** (D-38): the full
+`aard_health_bars_gmcp` display — Align bar, stacked vs. separate bars,
+graphical-vs-text mode, per-bar colour/threshold config. The status HUD already
+covers HP/MP/MV + a combat Enemy gauge + TNL; the rest is a dedicated
+vitals/combat panel.
 
 ### Group-monitor display refinements (deferred to the UI revamp)
 
@@ -134,6 +139,9 @@ behaviour against the live MUD (and a session transcript) in one pass:
 - **`Omit_Blank_Lines` → View-menu toggle (D-37):** confirm the toggle hides
   empty MUD lines, leaves whitespace-only lines, and the choice persists across
   launches (`@AppStorage`).
+- **`aard_health_bars_gmcp` → Enemy gauge + TNL (D-38):** confirm the combat
+  Enemy gauge appears while fighting (and clears after) and that TNL shows in
+  the summary.
 - **`aard_channels_fiendish` → channel-set coverage:** inventory which channels
   Aardwolf actually routes through GMCP `comm.channel` (claninfo confirmed
   present) vs. plain text (`Remort Auction:`, `Global Quest:`, `INFO:`,

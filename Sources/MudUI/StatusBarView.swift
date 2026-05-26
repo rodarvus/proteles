@@ -54,6 +54,12 @@ public struct StatusBarView: View {
                     VitalGauge(label: "MV", current: vitals.moves, max: max.maxmoves, tint: .green)
                 }
             }
+
+            // Combat opponent's remaining health — only while fighting
+            // (the useful slice of aard_health_bars_gmcp).
+            if let target = gmcp.status?.combatTarget {
+                VitalGauge(label: target.name, current: target.percent, max: 100, tint: .orange)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -106,6 +112,9 @@ public struct StatusBarView: View {
         var parts: [String] = []
         if let level = gmcp.status?.level {
             parts.append("Lvl \(level)")
+        }
+        if let tnl = gmcp.status?.tnl {
+            parts.append("TNL \(tnl)")
         }
         if let className = gmcp.base?.class, !className.isEmpty {
             parts.append(className)
