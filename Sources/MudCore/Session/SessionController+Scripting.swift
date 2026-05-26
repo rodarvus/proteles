@@ -117,34 +117,42 @@ public extension SessionController {
             case .send(let command), .sendNoEcho(let command):
                 await sendCommandThroughPlugins(command)
             case .execute(let command):
-                // Re-parse through the command pipeline (native mapper / aliases),
-                // like MUSHclient's Execute — not a raw send. S&D navigation
-                // (Execute("mapper goto <id>")) relies on this.
+                // MUSHclient's Execute: re-parse through the command pipeline
+                // (native mapper / aliases), not a raw send.
                 try? await dispatchCommand(command)
             case .echo(let text):
-                logTranscript(.note, text)
-                await scrollbackStore.append(Line(id: LineID(0), text: text))
+                await appendOutputLines(text) { Line(id: LineID(0), text: $0) }
             case .note(let text, let foreground, let background):
-                logTranscript(.note, text)
-                await scrollbackStore.append(Line(
-                    id: LineID(0),
-                    text: text,
-                    runs: Self.noteRuns(text, foreground: foreground, background: background)
-                ))
+                await appendOutputLines(text) {
+                    Line(
+                        id: LineID(0),
+                        text: $0,
+                        runs: Self.noteRuns($0, foreground: foreground, background: background)
+                    )
+                }
             case .colourNote(let segments):
                 logTranscript(.note, segments.map(\.text).joined())
                 await scrollbackStore.append(Self.colourNoteLine(segments))
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
             case .echoAard(let coded):
-                logTranscript(.note, coded)
-                await scrollbackStore.append(AardwolfColor.styledLine(from: coded))
+                await appendOutputLines(coded) { AardwolfColor.styledLine(from: $0) }
             case .echoAnsi(let ansi):
-                logTranscript(.note, ansi)
-                await scrollbackStore.append(Self.ansiLine(ansi))
+                await appendOutputLines(ansi) { Self.ansiLine($0) }
             default:
                 await applyControlEffect(effect)
             }
+        }
+    }
+
+    /// Append a Note/echo's text, splitting embedded `\n` into separate lines
+    /// (MUSHclient renders them as breaks; trailing `\n` adds no empty line).
+    private func appendOutputLines(_ text: String, _ makeLine: (String) -> Line) async {
+        logTranscript(.note, text)
+        var segments = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if segments.count > 1, segments.last?.isEmpty == true { segments.removeLast() }
+        for segment in segments {
+            await scrollbackStore.append(makeLine(segment))
         }
     }
 
