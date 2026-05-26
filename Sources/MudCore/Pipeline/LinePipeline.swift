@@ -173,11 +173,21 @@ public struct LinePipeline {
     /// end of replay) so a trailing partial line is not silently lost.
     public mutating func flush() -> [Line] {
         var lines: [Line] = []
+        drainPending(into: &lines)
+        return lines
+    }
+
+    /// Drain the parser's in-progress line (ANSI pending text → line builder →
+    /// finalise) into `lines`. Emits nothing when there is no pending content.
+    /// Shared by ``flush()`` (end-of-stream) and the `IAC GA`/`IAC EOR`
+    /// prompt-boundary flush (see ``handle(_:output:)``). Safe mid-stream:
+    /// ``ANSIParser/flush(_:)`` only emits pending text, leaving the persisted
+    /// colour state intact so subsequent parsing continues correctly.
+    private mutating func drainPending(into lines: inout [Line]) {
         ansi.flush { ansiEvent in
             lineBuilder.consume(ansiEvent) { line in lines.append(line) }
         }
         lineBuilder.flush { line in lines.append(line) }
-        return lines
     }
 
     /// Reset all parser state for a fresh connection or replay.
@@ -234,8 +244,20 @@ public struct LinePipeline {
             if option == TelnetOption.gmcp, let message = GMCPMessage(subnegotiationPayload: payload) {
                 output.gmcp.append(message)
             }
-        case .command:
-            break
+        case .command(let byte):
+            // `IAC GA` (Go-Ahead) marks a prompt boundary: the server has
+            // finished and it's the client's turn. Aardwolf sends GA after
+            // every prompt (we never negotiate SUPPRESS-GO-AHEAD), and prompts
+            // arrive with no trailing newline. Flushing the pending line here
+            // makes a prompt always its *own* `Line` instead of gluing onto the
+            // following server output — so anchored triggers (`^…$`) fire
+            // reliably without us rewriting the player's server-side prompt to
+            // end in `%c` (the invasive trick aard_prompt_fixer used; D-35).
+            // `IAC EOR` would mean the same, but we don't negotiate the EOR
+            // option, so it never arrives — GA is the live signal.
+            if byte == TelnetCommand.ga {
+                drainPending(into: &output.lines)
+            }
         }
     }
 }

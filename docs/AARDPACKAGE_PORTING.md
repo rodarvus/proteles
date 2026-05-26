@@ -44,7 +44,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_ASCII_map | ✅ done | native `AsciiMap` |
 | aard_channels_fiendish | ❓ verify | likely covered by native Chat panel (#30/#31) + ChatEcho |
 | aard_group_monitor_gmcp | ❓ verify | likely covered by native Group panel (#33); else extend |
-| aard_prompt_fixer | ❓ verify | likely obsolete under GMCP + our handshake; confirm then drop |
+| aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | 🔨 build | tick countdown from `comm.tick` GMCP — small HUD feature |
 | aard_inventory_serials | 🔨 build | serial #s in inventory output — small line-rewrite plugin (pairs w/ dinv) |
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
@@ -94,6 +94,17 @@ HUD extensions (`aard_health_bars_gmcp`, `aard_statmon_gmcp`).
 
 **Phase C — deferred to the UI revamp:** theming, splitscreen scrollback,
 review buffers, command-output capture, in-game help window, bigmap.
+
+## Pending live verification (batched)
+
+Per the user's decision, live/interactive MUD verification is **batched** rather
+than per-plugin. Each item below passed unit tests + the four gates; confirm
+behaviour against the live MUD (and a session transcript) in one pass:
+
+- **`aard_prompt_fixer` → GA prompt boundary (D-35):** confirm Aardwolf sends
+  `IAC GA` after prompts (recordings are MCCP2-compressed, so not greppable
+  offline); confirm prompts render as their own lines, anchored triggers fire,
+  and autologin still matches the name/password prompts.
 
 **Finale — dinv** (vendored inventory manager): resumed only **after all
 aardwolfclientpackage plugins are done**. Blocker #1 (`sendgmcp`) is cleared by

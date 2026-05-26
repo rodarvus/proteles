@@ -213,6 +213,58 @@ struct LinePipelineEchoTests {
     }
 }
 
+@Suite("LinePipeline — GA prompt boundary")
+struct LinePipelineGoAheadTests {
+    private func ga() -> [UInt8] {
+        [TelnetCommand.iac, TelnetCommand.ga]
+    }
+
+    @Test("IAC GA flushes a newline-less prompt as its own Line")
+    func gaFlushesPrompt() throws {
+        var pipeline = LinePipeline()
+        // A prompt with no trailing LF: without GA it would sit pending.
+        let output = try pipeline.consume(Array("<100hp>".utf8) + ga())
+        #expect(output.lines.map(\.text) == ["<100hp>"])
+        #expect(pipeline.pendingLineText.isEmpty)
+    }
+
+    @Test("Without GA the prompt stays pending (baseline)")
+    func noGaKeepsPending() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume(Array("<100hp>".utf8))
+        #expect(output.lines.isEmpty)
+        #expect(pipeline.pendingLineText == "<100hp>")
+    }
+
+    @Test("GA with nothing pending emits no spurious empty line")
+    func gaNoPendingNoLine() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume(ga())
+        #expect(output.lines.isEmpty)
+    }
+
+    @Test("GA separates the prompt from the following server line (the fix)")
+    func gaSeparatesPromptFromNextLine() throws {
+        var pipeline = LinePipeline()
+        // Prompt, GA, then a spontaneous line. The line must NOT glue onto the
+        // prompt — it arrives as its own anchored-trigger-matchable Line.
+        let bytes = Array("<100hp>".utf8) + ga() + Array("You tell the group 'hi'\n".utf8)
+        let output = try pipeline.consume(bytes)
+        #expect(output.lines.map(\.text) == ["<100hp>", "You tell the group 'hi'"])
+    }
+
+    @Test("GA preserves the pending prompt's ANSI styling")
+    func gaPreservesStyling() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume(Array("\u{1B}[31m<hp>\u{1B}[0m".utf8) + ga())
+        #expect(output.lines.count == 1)
+        #expect(output.lines[0].text == "<hp>")
+        #expect(output.lines[0].runs == [
+            StyledRun(utf16Range: 0..<4, style: StyleAttributes(foreground: .named(.red)))
+        ])
+    }
+}
+
 @Suite("SessionController — input echo line")
 struct SessionControllerInputEchoTests {
     @Test("A typed command echoes as a dimmed line")
