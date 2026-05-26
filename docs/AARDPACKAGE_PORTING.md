@@ -46,7 +46,7 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_group_monitor_gmcp | ✅ done (core) | covered by the native Info-panel group section (#33): members + level + HP/MP/MV bars + here-indicator. Miniwindow replaced by the native panel. Display refinements deferred to the UI revamp (see below). |
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | ✅ done (native, ⏳ live) | native HUD feature (D-36): `comm.tick` → `GMCPState.lastTick`; "Next tick: N" in the status bar via `TimelineView`. Fixed 30s interval, unclamped — matches the reference exactly (drops the miniwindow + mode-toggle commands). Live-verify `comm.tick` cadence/format (batch). |
-| aard_inventory_serials | 🔨 build | serial #s in inventory output — small line-rewrite plugin (pairs w/ dinv) |
+| aard_inventory_serials | 🧩 bundle w/ dinv | serial #s in inventory output. Both this and dinv consume Aardwolf's `invdata`/objectID stream (dinv_items.lua parses `invdata`), so the **work is bundled into the dinv finale** — they stay separate, useful plugins, but share the invdata-capture machinery. Not a Phase-A line-rewrite. |
 | aard_soundpack | 🔨 build | comm/event sounds — native `AVAudioPlayer` |
 | aard_health_bars_gmcp | 🔨 build | extend the native status HUD (#29) |
 | aard_statmon_gmcp | 🔨 build | extend the native status HUD (#29) |
@@ -78,15 +78,16 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 11 done · 7 build · 4 reimplement · 6 defer · 17 drop · 0 verify (verify
-trio resolved done-core; Aardwolf_Tick_Timer done D-36; TTS = 2 plugins → 1
-feature, so 43 plugins).
+Counts: 11 done · 4 build (Omit_Blank_Lines, soundpack, health_bars, statmon) ·
+1 bundled-w/-dinv (inventory_serials) · 4 reimplement · 6 defer · 17 drop · 0
+verify (TTS = 2 plugins → 1 feature, so 43 plugins).
 
 ## Work order
 
 **Phase A — quick, high-value native, no new UI subsystems:**
-~~`Aardwolf_Tick_Timer`~~ (done, D-36), `aard_inventory_serials`,
-`Omit_Blank_Lines`; verify trio done (prompt_fixer/group_monitor/channels).
+~~`Aardwolf_Tick_Timer`~~ (done, D-36), `Omit_Blank_Lines`; verify trio done
+(prompt_fixer/group_monitor/channels). `aard_inventory_serials` moved to the
+dinv finale (shared `invdata` work — see below).
 
 **Phase B — native features with new subsystems:**
 TTS (investigate first), `aard_soundpack`, copy-@-codes/HTML + hyperlinks,
@@ -140,3 +141,6 @@ behaviour against the live MUD (and a session transcript) in one pass:
 aardwolfclientpackage plugins are done**. Blocker #1 (`sendgmcp`) is cleared by
 D-33; remaining: add `SetEchoInput` + `DoAfterSpecial`, verify the `config`
 reply live. Strip the temporary `[dinv-DBG]` instrumentation when it resumes.
+**Bundled into this finale: `aard_inventory_serials`** — both depend on the
+same Aardwolf `invdata`/objectID capture, so we build that machinery once.
+They remain separate, individually-useful plugins; only the work is shared.
