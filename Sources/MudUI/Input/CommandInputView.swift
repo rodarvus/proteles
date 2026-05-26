@@ -62,6 +62,9 @@ public struct CommandInputView: View {
         func makeNSView(context: Context) -> NSTextField {
             let field = AutoFocusTextField()
             field.delegate = context.coordinator
+            // Stable id so the output view can find + refocus the command field
+            // when the user types after selecting text (always-focused input).
+            field.identifier = NSUserInterfaceItemIdentifier("proteles.command")
             field.placeholderString = "Send command…"
             field.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             field.isBordered = false

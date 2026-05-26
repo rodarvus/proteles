@@ -39,6 +39,36 @@
             return true
         }
 
+        /// The command input field is the window's permanent typing target.
+        /// When the user types a printable key while the *output* has focus
+        /// (e.g. right after selecting text to copy), focus snaps back to the
+        /// command field and the keystroke is re-delivered there — so the input
+        /// is "always ready" (UI revamp requirement). ⌘-shortcuts (copy,
+        /// select-all, find) and arrow/selection keys stay with the text view.
+        override public func keyDown(with event: NSEvent) {
+            let isPlainTyping = event.modifierFlags
+                .isDisjoint(with: [.command, .control, .option, .function])
+            guard isPlainTyping,
+                  !Self.navigationKeyCodes.contains(event.keyCode),
+                  let field = commandField,
+                  window?.firstResponder !== field,
+                  window?.firstResponder !== field.currentEditor()
+            else {
+                super.keyDown(with: event)
+                return
+            }
+            window?.makeFirstResponder(field)
+            NSApp.postEvent(event, atStart: true) // re-deliver to the now-focused field
+        }
+
+        /// Arrow/page/home/end/tab — leave these for scrolling/selection.
+        private static let navigationKeyCodes: Set<UInt16> = [123, 124, 125, 126, 116, 121, 115, 119, 48]
+
+        /// The window's command input field, located by its stable identifier.
+        private var commandField: NSTextField? {
+            window?.contentView?.firstDescendant(matching: "proteles.command")
+        }
+
         /// Copy the selection as ANSI SGR escapes (terminals, Discord, other
         /// clients).
         @objc public func copyWithCodes(_: Any?) {
@@ -129,6 +159,22 @@
             menu.insertItem(htmlItem, at: insertIndex + 2)
 
             return menu
+        }
+    }
+
+    private extension NSView {
+        /// Depth-first search for the descendant view with the given accessibility
+        /// identifier (used to find the command input from the output view).
+        func firstDescendant(matching identifier: String) -> NSTextField? {
+            for subview in subviews {
+                if let field = subview as? NSTextField, field.identifier?.rawValue == identifier {
+                    return field
+                }
+                if let found = subview.firstDescendant(matching: identifier) {
+                    return found
+                }
+            }
+            return nil
         }
     }
 #endif

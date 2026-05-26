@@ -39,11 +39,14 @@ struct ProtelesApp: App {
     /// The graphical GMCP map (docked Map panel).
     @State private var map: MapPanelModel
 
+    /// The captured ASCII "text map" (docked Text Map panel).
+    @State private var asciiMap: MapModel
+
     /// The Search-and-Destroy panel model (docked S&D panel).
     @State private var snd = SnDPanelModel()
 
-    /// Main-window dock layout (which live panel is shown).
-    @State private var layout = LayoutModel()
+    /// Main-window tiled-dock layout (UI revamp — docs/UI_REVAMP.md).
+    @State private var layout = LayoutStore()
 
     init() {
         // Scrollback persistence.
@@ -94,6 +97,7 @@ struct ProtelesApp: App {
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
         _map = State(initialValue: MapPanelModel(session: session))
+        _asciiMap = State(initialValue: MapModel(store: session.mapStore))
 
         if let persistence {
             let store = session.scrollbackStore
@@ -110,6 +114,7 @@ struct ProtelesApp: App {
                 layout: layout,
                 chat: chat,
                 map: map,
+                asciiMap: asciiMap,
                 snd: snd
             )
             .frame(minWidth: 940, minHeight: 500)
@@ -227,7 +232,7 @@ private struct ProtelesCommands: Commands {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
-    @Bindable var layout: LayoutModel
+    @Bindable var layout: LayoutStore
     @Environment(\.openWindow) private var openWindow
     /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
     /// the same key and pushes it to the session.
@@ -272,27 +277,37 @@ private struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.pluginsWindowID)
             }
             .keyboardShortcut("P", modifiers: [.command, .shift])
+        }
+
+        // Panels live in the main-window tiled dock (not separate windows, which
+        // could fall behind the game window). Toggling shows/hides each in place.
+        CommandMenu("View") {
+            Toggle(isOn: panelBinding(.map)) { Text("Map") }
+                .keyboardShortcut("B", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.asciiMap)) { Text("Text Map") }
+                .keyboardShortcut("E", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.channels)) { Text("Channels") }
+                .keyboardShortcut("J", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.hunt)) { Text("Search & Destroy") }
+                .keyboardShortcut("U", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.info)) { Text("Character") }
+                .keyboardShortcut("I", modifiers: [.command, .shift])
 
             Divider()
 
-            // Live panels live in the main-window dock (not separate windows,
-            // which could fall behind the game window).
-            Button("Info Panel") { layout.show(.info) }
-                .keyboardShortcut("I", modifiers: [.command, .shift])
-            Button("Map Panel") { layout.show(.map) }
-                .keyboardShortcut("B", modifiers: [.command, .shift])
-            Button("Chat Panel") { layout.show(.chat) }
-                .keyboardShortcut("J", modifiers: [.command, .shift])
-        }
+            Button("Reset Layout") { layout.resetToDefault() }
 
-        // A real "View" menu for display preferences (the panel toggles above
-        // sit in the File group next to Connect; this is where output options
-        // belong).
-        CommandMenu("View") {
+            Divider()
+
             // Display preference (native equivalent of Omit_Blank_Lines): drop
             // completely-empty MUD lines from the main output. Persists via
             // @AppStorage; ContentView pushes the value to the session.
             Toggle("Omit Blank Lines", isOn: $omitBlankLines)
         }
+    }
+
+    /// A binding that reflects a panel's visibility and toggles it on change.
+    private func panelBinding(_ kind: PanelKind) -> Binding<Bool> {
+        Binding(get: { layout.isVisible(kind) }, set: { _ in layout.toggle(kind) })
     }
 }

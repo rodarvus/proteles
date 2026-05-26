@@ -9,9 +9,10 @@ struct ContentView: View {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
-    @Bindable var layout: LayoutModel
+    let layout: LayoutStore
     let chat: ChatModel
     let map: MapPanelModel
+    let asciiMap: MapModel
     let snd: SnDPanelModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
@@ -25,87 +26,83 @@ struct ContentView: View {
     private static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                MudOutputView(store: session.scrollbackStore, onCommand: { command in
-                    Task { try? await session.send(command) }
-                })
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                CommandInputView { command in
-                    Task {
-                        try? await session.send(command)
-                    }
+        PanelLayoutView(store: layout) { kind in panelContent(kind) }
+            .frame(minWidth: 820, minHeight: 460)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) { panelsMenu }
+            }
+            .task {
+                for await networkState in session.connectionStates {
+                    connectionState = Self.map(networkState)
                 }
-                StatusBarView(state: connectionState, gmcp: gmcp)
             }
-            // Keep the vertical MUD output comfortably wide (~100+ cols)
-            // regardless of the dock.
-            .frame(minWidth: 640, maxWidth: .infinity)
-
-            if layout.dockVisible {
-                Divider()
-                dock
-                    .frame(minWidth: 300, idealWidth: 340, maxWidth: 560)
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    layout.toggleDock()
-                } label: {
-                    Image(systemName: "sidebar.right")
+            .task {
+                for await snapshot in await session.gmcpState.subscribe() {
+                    gmcp = snapshot
                 }
-                .help("Toggle the panel dock")
             }
-        }
-        .task {
-            for await networkState in session.connectionStates {
-                connectionState = Self.map(networkState)
+            .task(id: omitBlankLines) {
+                await session.setOmitBlankLines(omitBlankLines)
             }
-        }
-        .task {
-            for await snapshot in await session.gmcpState.subscribe() {
-                gmcp = snapshot
+            .task {
+                // Feed Search-and-Destroy's published window model to the panel.
+                for await json in session.publishedModels {
+                    snd.update(json: json)
+                }
             }
-        }
-        .task(id: omitBlankLines) {
-            await session.setOmitBlankLines(omitBlankLines)
-        }
-        .task {
-            // Feed Search-and-Destroy's published window model to the panel.
-            for await json in session.publishedModels {
-                snd.update(json: json)
+            .onAppear {
+                wireSearchAndDestroy()
+                // Bind the mapper at the app root so it's live regardless of which
+                // dock tab is shown (e.g. for a menu-triggered map import).
+                map.start()
             }
-        }
-        .onAppear {
-            wireSearchAndDestroy()
-            // Bind the mapper at the app root so it's live regardless of which
-            // dock tab is shown (e.g. for a menu-triggered map import).
-            map.start()
-        }
-        .task { await launch() }
+            .task { await launch() }
     }
 
-    /// The right-hand dock: a panel picker over the selected live panel.
-    /// Single column so the output keeps its width; collapsible/resizable.
-    private var dock: some View {
+    /// Map a panel kind to its live view (the layout engine supplies chrome).
+    private func panelContent(_ kind: PanelKind) -> AnyView {
+        switch kind {
+        case .output: AnyView(gameColumn)
+        case .map: AnyView(MapPanelView(model: map))
+        case .asciiMap: AnyView(MapView(model: asciiMap))
+        case .channels: AnyView(ChatView(model: chat))
+        case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
+        case .info: AnyView(InfoPanel(state: gmcp))
+        }
+    }
+
+    /// The main game column: MUD output, command input, and the full-width
+    /// graphical vitals bar (spanning the output, no duplicated text summary).
+    private var gameColumn: some View {
         VStack(spacing: 0) {
-            Picker("Panel", selection: $layout.selectedPanel) {
-                ForEach(LayoutModel.Panel.allCases) { panel in
-                    Label(panel.title, systemImage: panel.systemImage).tag(panel)
+            MudOutputView(store: session.scrollbackStore, onCommand: { command in
+                Task { try? await session.send(command) }
+            })
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            CommandInputView { command in
+                Task { try? await session.send(command) }
+            }
+            GaugeBarView(state: connectionState, gmcp: gmcp)
+        }
+    }
+
+    /// Toolbar menu to show/hide each panel + reset the layout.
+    private var panelsMenu: some View {
+        Menu {
+            ForEach(PanelKind.toggleable) { kind in
+                Toggle(isOn: Binding(
+                    get: { layout.isVisible(kind) },
+                    set: { _ in layout.toggle(kind) }
+                )) {
+                    Label(kind.title, systemImage: kind.systemImage)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(6)
             Divider()
-            switch layout.selectedPanel {
-            case .info: InfoPanel(state: gmcp)
-            case .map: MapPanelView(model: map)
-            case .chat: ChatView(model: chat)
-            case .hunt: SearchAndDestroyPanelView(model: snd)
-            }
+            Button("Reset Layout") { layout.resetToDefault() }
+        } label: {
+            Image(systemName: "rectangle.3.group")
         }
+        .help("Show or hide panels")
     }
 
     /// Wire the S&D panel's actions to the live session: toolbar/row commands
