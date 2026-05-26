@@ -18,6 +18,7 @@
         /// per copy invocation.
         private let ansiEncoder = SGREncoder()
         private let aardwolfEncoder = AardwolfCodeEncoder()
+        private let htmlEncoder = HTMLEncoder()
 
         /// Copy the selection as ANSI SGR escapes (terminals, Discord, other
         /// clients).
@@ -30,6 +31,12 @@
         /// the native `aard_Copy_Colour_Codes`.
         @objc public func copyAsAardwolfCodes(_: Any?) {
             copySelection { aardwolfEncoder.encode($0) }
+        }
+
+        /// Copy the selection as HTML markup (`<span style="color:…">` runs in
+        /// a `<pre>`) — paste the source into a forum/blog/editor.
+        @objc public func copyAsHTML(_: Any?) {
+            copySelection { htmlEncoder.encode($0) }
         }
 
         /// Encode the current selection via `encode` and place it on the
@@ -49,6 +56,7 @@
             let action = item.action
             let isCopyCodes = action == #selector(copyWithCodes(_:))
                 || action == #selector(copyAsAardwolfCodes(_:))
+                || action == #selector(copyAsHTML(_:))
             if isCopyCodes { return selectedRange().length > 0 }
             return super.validateUserInterfaceItem(item)
         }
@@ -91,6 +99,15 @@
             aardItem.keyEquivalentModifierMask = [.command, .option]
             aardItem.target = self
             menu.insertItem(aardItem, at: insertIndex + 1)
+
+            let htmlItem = NSMenuItem(
+                title: "Copy as HTML",
+                action: #selector(copyAsHTML(_:)),
+                keyEquivalent: "h"
+            )
+            htmlItem.keyEquivalentModifierMask = [.command, .option]
+            htmlItem.target = self
+            menu.insertItem(htmlItem, at: insertIndex + 2)
 
             return menu
         }

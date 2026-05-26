@@ -139,6 +139,10 @@ struct ProtelesApp: App {
                     NSApp.sendAction(#selector(MudTextView.copyAsAardwolfCodes(_:)), to: nil, from: nil)
                 }
                 .keyboardShortcut("c", modifiers: [.command, .option])
+                Button("Copy as HTML") {
+                    NSApp.sendAction(#selector(MudTextView.copyAsHTML(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .option])
             }
             CommandMenu("Debug") {
                 Button("Start Recording") {
