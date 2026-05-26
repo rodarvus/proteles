@@ -2,6 +2,33 @@ import Foundation
 @testable import MudCore
 import Testing
 
+@Suite("PatternMatcher — literal braces (PCRE-lenient)")
+struct PatternMatcherBraceTests {
+    private func matches(_ pattern: String, _ line: String) throws -> Bool {
+        try PatternMatcher(pattern: .regex(pattern), caseSensitive: true).match(line) != nil
+    }
+
+    @Test("A literal `{ … }` pattern compiles and matches (dinv fence)")
+    func literalBraces() throws {
+        // ICU rejects `{ ` as a quantifier; PCRE (and now us) treats it literal.
+        #expect(try matches("^{ DINV fence 1 }$", "{ DINV fence 1 }"))
+        #expect(try !matches("^{ DINV fence 1 }$", "{ DINV fence 2 }"))
+        #expect(try matches("\\{invmon\\}(.*)", "{invmon}sword,12,1,0"))
+    }
+
+    @Test("Real {n,m} quantifiers are preserved, not escaped")
+    func quantifiersPreserved() throws {
+        #expect(try matches("^a{2,3}$", "aaa"))
+        #expect(try !matches("^a{2,3}$", "a"))
+        #expect(try matches("^x{3}$", "xxx"))
+    }
+
+    @Test("Mixed literal brace + quantifier in one pattern")
+    func mixed() throws {
+        #expect(try matches("^\\{ level [0-9]{1,3} \\}$", "{ level 200 }"))
+    }
+}
+
 @Suite("TriggerMatch — substitution")
 struct TriggerMatchSubstitutionTests {
     @Test("Numbered and whole-match substitution")

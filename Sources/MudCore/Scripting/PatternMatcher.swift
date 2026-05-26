@@ -17,7 +17,8 @@ struct PatternMatcher {
     private let nameMapping: [(icu: String, original: String)]
 
     init(pattern: TriggerPattern, caseSensitive: Bool) throws {
-        let (source, mapping) = Self.sanitizeNamedGroups(pattern.regexSource())
+        let (named, mapping) = Self.sanitizeNamedGroups(pattern.regexSource())
+        let source = Self.escapeLiteralBraces(named)
         var options: NSRegularExpression.Options = []
         if !caseSensitive { options.insert(.caseInsensitive) }
         guard let regex = try? NSRegularExpression(pattern: source, options: options) else {
@@ -77,5 +78,55 @@ struct PatternMatcher {
         }
         result += text.substring(from: cursor)
         return (result, mapping)
+    }
+
+    /// Escape `{`/`}` that don't form a valid `{n}`/`{n,}`/`{n,m}` quantifier,
+    /// so they match literally. ICU (NSRegularExpression) rejects a stray `{`
+    /// as a malformed quantifier and the whole pattern fails to compile; PCRE
+    /// (what MUSHclient uses) treats it as a literal. Aardwolf plugins rely on
+    /// that — dinv's command-queue fence matches `^{ DINV fence N }$`, so
+    /// without this its fence trigger never compiles and the build deadlocks.
+    /// Already-escaped `\{` and real quantifiers are preserved.
+    static func escapeLiteralBraces(_ source: String) -> String {
+        let chars = Array(source)
+        var result = ""
+        var index = 0
+        while index < chars.count {
+            let char = chars[index]
+            if char == "\\", index + 1 < chars.count {
+                result.append(char)
+                result.append(chars[index + 1])
+                index += 2
+            } else if char == "{", let end = validQuantifierEnd(chars, from: index) {
+                result.append(contentsOf: chars[index...end])
+                index = end + 1
+            } else if char == "{" || char == "}" {
+                result.append("\\")
+                result.append(char)
+                index += 1
+            } else {
+                result.append(char)
+                index += 1
+            }
+        }
+        return result
+    }
+
+    /// If `chars[start]` (`{`) opens a valid quantifier (`{n}`, `{n,}`,
+    /// `{n,m}`), return the index of its closing `}`; otherwise `nil`.
+    private static func validQuantifierEnd(_ chars: [Character], from start: Int) -> Int? {
+        var index = start + 1
+        let digitsStart = index
+        while index < chars.count, chars[index].isNumber {
+            index += 1
+        }
+        guard index > digitsStart else { return nil } // need at least one digit
+        if index < chars.count, chars[index] == "," {
+            index += 1
+            while index < chars.count, chars[index].isNumber {
+                index += 1
+            }
+        }
+        return (index < chars.count && chars[index] == "}") ? index : nil
     }
 }

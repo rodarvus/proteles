@@ -29,7 +29,7 @@ struct DinvQueuePatternTests {
     fenceN = 0
     function fence()
       fenceN = fenceN + 1
-      local tag = "FENCE " .. fenceN
+      local tag = "{ DINV fence " .. fenceN .. " }"
       fenceDone = false
       AddTriggerEx("fnc", "^" .. tag .. "$", "fenceDone = true",
                    trigger_flag.Enabled + trigger_flag.RegularExpression + trigger_flag.OneShot,
@@ -68,7 +68,7 @@ struct DinvQueuePatternTests {
         var answered = Set<String>()
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while ContinuousClock.now < deadline {
-            for line in conn.sentLines where line.hasPrefix("echo FENCE ") {
+            for line in conn.sentLines where line.hasPrefix("echo { DINV fence ") {
                 let reply = String(line.dropFirst("echo ".count))
                 if answered.insert(reply).inserted { conn.injectLine(reply) }
             }
