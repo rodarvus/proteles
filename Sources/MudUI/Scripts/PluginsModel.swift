@@ -60,7 +60,9 @@ public final class PluginsModel {
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
 
-    /// Built-in features vendored from the Aardwolf package (always active).
+    /// Built-in / bundled plugins surfaced in the Plugins window: the native
+    /// mapper (always on), dinv (bundled), and Search & Destroy (installed on
+    /// request — it's not shipped with the app).
     public let builtInFeatures: [BuiltInFeatureRow] = [
         BuiltInFeatureRow(
             id: "mapper",
@@ -78,12 +80,24 @@ public final class PluginsModel {
             ]
         ),
         BuiltInFeatureRow(
+            id: "dinv",
+            name: "dinv (Inventory)",
+            summary: "The dinv inventory manager (MIT) — bundled and run verbatim through the "
+                + "MUSHclient compatibility shim. Scans and identifies your whole inventory into a "
+                + "per-character SQLite database for fast, stat-aware search.",
+            commands: [
+                "dinv build — scan + identify your full inventory",
+                "dinv search <terms> — find items by stat / keyword",
+                "dinv help — dinv's own command reference"
+            ]
+        ),
+        BuiltInFeatureRow(
             id: "search-and-destroy",
             name: "Search & Destroy",
-            summary: "The Search-and-Destroy campaign/quest hunter, vendored to run its own Lua "
-                + "logic verbatim on a dedicated sandboxed runtime with a native panel (the S&D "
-                + "dock tab). Detects campaigns/quests, finds + navigates to targets, and keeps "
-                + "its own SnDdb.db (import via Databases ▸ Import Search & Destroy Database).",
+            summary: "The Search-and-Destroy campaign/quest hunter (by Crowley) — not bundled with "
+                + "Proteles; install it on request from the Search & Destroy panel. It then runs its "
+                + "own Lua on a dedicated sandboxed runtime with a native panel: detects "
+                + "campaigns/quests, finds + navigates to targets, and keeps its own SnDdb.db.",
             commands: [
                 "xcp — get the current campaign/quest target",
                 "nx / nx- — go to the next / previous target",
