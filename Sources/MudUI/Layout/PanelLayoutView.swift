@@ -49,14 +49,32 @@ public struct PanelLayoutView: View {
         }
     }
 
-    /// A leaf panel: `output` renders raw; everything else gets chrome.
-    @ViewBuilder
+    /// A leaf panel: `output` renders raw (plus a small drag grip so it can be
+    /// re-docked too); everything else gets chrome. Every panel is a drop target
+    /// for drag-to-redock.
     private func panel(_ kind: PanelKind) -> some View {
-        if kind == .output {
-            content(kind)
-        } else {
-            PanelChrome(kind: kind, onClose: { store.close(kind) }, content: { content(kind) })
+        Group {
+            if kind == .output {
+                content(kind)
+                    .overlay(alignment: .topTrailing) { outputDragGrip }
+            } else {
+                PanelChrome(kind: kind, onClose: { store.close(kind) }, content: { content(kind) })
+            }
         }
+        .panelDropTarget(kind, store: store)
+    }
+
+    /// A small drag handle for the (chrome-less) output panel, so it can be
+    /// moved like any other. Top-trailing keeps it clear of the input field.
+    private var outputDragGrip: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(5)
+            .background(.bar, in: RoundedRectangle(cornerRadius: 5))
+            .padding(6)
+            .panelDragSource(.output)
+            .help("Drag to move the game window")
     }
 }
 
@@ -79,6 +97,10 @@ struct PanelChrome<Content: View>: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .opacity(hovering ? 1 : 0)
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))
@@ -91,6 +113,9 @@ struct PanelChrome<Content: View>: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.bar)
+            .contentShape(Rectangle())
+            .panelDragSource(kind)
+            .help("Drag to move \(kind.title)")
             .overlay(alignment: .bottom) {
                 Rectangle().fill(.separator).frame(height: 1)
             }

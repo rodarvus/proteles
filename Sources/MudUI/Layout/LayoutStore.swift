@@ -58,6 +58,14 @@ public final class LayoutStore {
         save()
     }
 
+    /// Re-dock `kind` at `zone` relative to `target` (drag-to-redock).
+    public func move(_ kind: PanelKind, onto target: PanelKind, zone: DropZone) {
+        let next = layout.moving(kind, onto: target, zone: zone)
+        guard next != layout else { return }
+        layout = next
+        save()
+    }
+
     private func save() {
         if let data = try? JSONEncoder().encode(layout) {
             UserDefaults.standard.set(data, forKey: defaultsKey)

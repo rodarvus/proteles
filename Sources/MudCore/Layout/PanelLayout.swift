@@ -152,7 +152,7 @@ public indirect enum PanelLayout: Codable, Equatable, Sendable {
 
     /// Drop `kind`; returns nil when the whole node should disappear so its
     /// parent can drop it.
-    private func purged(_ kind: PanelKind) -> PanelLayout? {
+    func purged(_ kind: PanelKind) -> PanelLayout? {
         switch self {
         case .leaf(let existing):
             return existing == kind ? nil : self

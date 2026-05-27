@@ -138,6 +138,8 @@ struct TabContainer: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .panelDragSource(kind)
+                    .help("Drag to move \(kind.title)")
                 }
                 Spacer(minLength: 4)
                 Button {
@@ -156,6 +158,7 @@ struct TabContainer: View {
             }
             content(panels[selected])
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .panelDropTarget(panels[selected], store: store)
         }
     }
 }
