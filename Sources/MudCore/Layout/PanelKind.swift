@@ -20,6 +20,8 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case hunt
     /// Character summary (level/class/align/worth) + group/party members.
     case info
+    /// In-game help reader (captured `help <topic>` with clickable cross-refs).
+    case help
 
     public var id: String {
         rawValue
@@ -34,6 +36,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "Channels"
         case .hunt: "Search & Destroy"
         case .info: "Character"
+        case .help: "Help"
         }
     }
 
@@ -46,6 +49,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "Chat"
         case .hunt: "S&D"
         case .info: "Char"
+        case .help: "Help"
         }
     }
 
@@ -58,6 +62,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "bubble.left.and.bubble.right"
         case .hunt: "scope"
         case .info: "person.text.rectangle"
+        case .help: "questionmark.circle"
         }
     }
 

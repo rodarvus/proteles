@@ -45,4 +45,25 @@ public extension SessionController {
             richExitsCustomExits = []
         }
     }
+
+    /// Enable/disable in-game Help capture (the Help panel). Enabling turns on
+    /// Aardwolf's HELPS tag option so `help` output arrives tagged; disabling
+    /// turns it off and discards any partial capture.
+    func setHelpCaptureEnabled(_ enabled: Bool) async {
+        guard helpCaptureEnabled != enabled else { return }
+        helpCaptureEnabled = enabled
+        if enabled {
+            if !sentHelpsTagOption {
+                sentHelpsTagOption = true
+                await setAardwolfTagOption(3, on: true) // TELOPT_HELPS
+            }
+        } else {
+            if sentHelpsTagOption {
+                sentHelpsTagOption = false
+                await setAardwolfTagOption(3, on: false)
+            }
+            helpCaptureActive = false
+            helpCaptureBuffer = []
+        }
+    }
 }

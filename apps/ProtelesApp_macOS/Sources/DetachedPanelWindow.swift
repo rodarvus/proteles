@@ -17,6 +17,7 @@ struct DetachedPanelWindow: View {
     let map: MapPanelModel
     let asciiMap: MapModel
     let snd: SnDPanelModel
+    let help: HelpPanelModel
 
     @Environment(\.dismiss) private var dismiss
     @State private var gmcp = GMCPState()
@@ -60,6 +61,7 @@ struct DetachedPanelWindow: View {
         case .channels: ChatView(model: chat)
         case .hunt: SearchAndDestroyPanelView(model: snd)
         case .info: InfoPanel(state: gmcp)
+        case .help: HelpPanelView(model: help)
         case .output: EmptyView() // output isn't detachable (it's the main window)
         }
     }

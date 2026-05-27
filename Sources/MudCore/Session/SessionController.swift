@@ -74,6 +74,11 @@ public actor SessionController {
     public nonisolated let publishedModels: AsyncStream<String>
     nonisolated let publishedModelsContinuation: AsyncStream<String>.Continuation
 
+    /// Captured in-game help articles (Rich Exits' sibling — see ``HelpParser``);
+    /// the Help panel subscribes and renders the latest. Newest-only.
+    public nonisolated let helpArticles: AsyncStream<HelpArticle>
+    nonisolated let helpArticlesContinuation: AsyncStream<HelpArticle>.Continuation
+
     /// The current connection (`nil` between sessions); fresh per connect (the
     /// byte stream finishes on disconnect). ``MudConnection`` so tests inject one.
     var connection: (any MudConnection)?
@@ -155,6 +160,19 @@ public actor SessionController {
     var richExitsCardinals: [RichExits.Cardinal] = []
     /// The latest room's custom exits (from the mapper graph), cached likewise.
     var richExitsCustomExits: [RichExits.CustomExit] = []
+
+    /// Capture Aardwolf `help <topic>` output into the Help panel (gagged from
+    /// the main output) with clickable cross-references; off by default. Tied to
+    /// the Help panel's visibility. See ``HelpParser``.
+    public internal(set) var helpCaptureEnabled = false
+    /// Whether the HELPS tag option (option-102 subneg) was sent this session.
+    var sentHelpsTagOption = false
+    /// True while buffering lines between `{help}` and `{/help}`.
+    var helpCaptureActive = false
+    /// Whether the in-progress capture is a `help search` result.
+    var helpCaptureIsSearch = false
+    /// Accumulated help body lines for the in-progress capture.
+    var helpCaptureBuffer: [Line] = []
 
     /// Drop behaviour; defaults to ``ReconnectPolicy/disabled`` (app sets standard).
     public var reconnectPolicy: ReconnectPolicy
@@ -248,6 +266,11 @@ public actor SessionController {
         )
         publishedModels = models
         publishedModelsContinuation = modelsContinuation
+        let (articles, articlesContinuation) = AsyncStream<HelpArticle>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        helpArticles = articles
+        helpArticlesContinuation = articlesContinuation
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
@@ -325,6 +348,9 @@ public actor SessionController {
         sentExitsTag = false
         richExitsCardinals = []
         richExitsCustomExits = []
+        sentHelpsTagOption = false
+        helpCaptureActive = false
+        helpCaptureBuffer = []
         await gmcpState.reset()
         await chatStore.reset()
         await mapStore.reset()

@@ -76,11 +76,14 @@ extension SessionController {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
             }
         }
-        // Rich Exits: cache the new room's cardinal (GMCP) + custom (mapper)
-        // exits so the exits-line rewrite has them ready, and one-shot enable
-        // Aardwolf's exits tag now that we're logged in.
-        if richExitsEnabled, message.package.lowercased() == "room.info" {
-            await refreshRichExits()
+        // On each room.info (post-login), refresh Rich Exits and one-shot enable
+        // any tag options whose features are on.
+        if message.package.lowercased() == "room.info" {
+            if richExitsEnabled { await refreshRichExits() }
+            if helpCaptureEnabled, !sentHelpsTagOption {
+                sentHelpsTagOption = true
+                await setAardwolfTagOption(3, on: true) // TELOPT_HELPS
+            }
         }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
@@ -114,6 +117,45 @@ extension SessionController {
             sentExitsTag = true
             try? await dispatchCommand("tags exits on")
         }
+    }
+
+    /// Feed an incoming line to the Help-capture state machine. Returns `true`
+    /// if the line was consumed (a tag marker or a buffered body line) so the
+    /// caller skips normal output/script processing. On the closing tag, the
+    /// buffered block is published to the Help panel as a ``HelpArticle``.
+    func captureHelpLine(_ line: Line) -> Bool {
+        if helpCaptureActive {
+            if HelpParser.isCloseTag(line.text) {
+                helpCaptureActive = false
+                let article = HelpParser.makeArticle(from: helpCaptureBuffer, isSearch: helpCaptureIsSearch)
+                helpCaptureBuffer = []
+                helpArticlesContinuation.yield(article)
+                return true
+            }
+            helpCaptureBuffer.append(line)
+            return true
+        }
+        if let isSearch = HelpParser.openTag(line.text) {
+            helpCaptureActive = true
+            helpCaptureIsSearch = isSearch
+            helpCaptureBuffer = []
+            return true
+        }
+        return false
+    }
+
+    /// Toggle an Aardwolf "tag" telnet option via the option-102 subnegotiation
+    /// (`IAC SB 102 <option> <1=on|2=off> IAC SE`) — exactly as
+    /// `telnet_options.lua`'s `TelnetOption` does. Used to enable HELPS (3) tags
+    /// so help output arrives wrapped in `{help}…{/help}`.
+    func setAardwolfTagOption(_ option: UInt8, on: Bool) async {
+        let aardwolfTelopt: UInt8 = 102
+        let payload: [UInt8] = [
+            TelnetCommand.iac, TelnetCommand.sb, aardwolfTelopt,
+            option, on ? 1 : 2,
+            TelnetCommand.iac, TelnetCommand.se
+        ]
+        try? await sendRaw(payload)
     }
 
     /// Apply the Rich Exits transform to an outgoing line: when enabled, rewrite

@@ -49,6 +49,9 @@ struct ProtelesApp: App {
     /// Main-window tiled-dock layout (UI revamp — docs/UI_REVAMP.md).
     @State private var layout = LayoutStore()
 
+    /// In-game Help panel model (shared by the docked + detached Help views).
+    @State private var help = HelpPanelModel()
+
     /// AppKit hooks for menu surgery the SwiftUI command API can't fully do
     /// (stripping the empty Format menu with deterministic timing).
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -124,7 +127,8 @@ struct ProtelesApp: App {
                 chat: chat,
                 map: map,
                 asciiMap: asciiMap,
-                snd: snd
+                snd: snd,
+                help: help
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")
@@ -216,7 +220,8 @@ struct ProtelesApp: App {
                     chat: chat,
                     map: map,
                     asciiMap: asciiMap,
-                    snd: snd
+                    snd: snd,
+                    help: help
                 )
             }
         }
@@ -380,6 +385,8 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("U", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.info)) { Text("Character") }
                 .keyboardShortcut("I", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.help)) { Text("Help") }
+                .keyboardShortcut("H", modifiers: [.command, .control])
 
             Divider()
 

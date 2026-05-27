@@ -14,6 +14,8 @@ struct ContentView: View {
     let map: MapPanelModel
     let asciiMap: MapModel
     let snd: SnDPanelModel
+    /// In-game Help panel: receives captured help articles + drives navigation.
+    let help: HelpPanelModel
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
@@ -67,6 +69,18 @@ struct ContentView: View {
             }
             .task(id: richExits) {
                 await session.setRichExitsEnabled(richExits)
+            }
+            // Help capture is on only while the Help panel is visible.
+            .task(id: layout.isVisible(.help)) {
+                await session.setHelpCaptureEnabled(layout.isVisible(.help))
+            }
+            // Feed captured help articles to the Help panel; route its link
+            // clicks + search back to the session.
+            .task {
+                help.onCommand = { command in Task { try? await session.send(command) } }
+                for await article in session.helpArticles {
+                    await help.apply(article)
+                }
             }
             .task(id: autoReconnect) {
                 await session.setReconnectEnabled(autoReconnect)
@@ -123,6 +137,7 @@ struct ContentView: View {
         case .channels: AnyView(ChatView(model: chat))
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
         case .info: AnyView(InfoPanel(state: gmcp))
+        case .help: AnyView(HelpPanelView(model: help))
         }
     }
 
