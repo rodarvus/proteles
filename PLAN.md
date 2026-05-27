@@ -5,9 +5,10 @@
 > project evolves; the **Decision Log** (§13) is append-only history and is
 > never edited, only superseded.
 
-**Last rewritten:** 2026-05-25 · **Latest release:** `v0.1.0` (mapper +
-lsqlite3 + Search-and-Destroy, with live campaign/quest detection verified) ·
-**HEAD:** `v0.1.0` on `main`.
+**Last rewritten:** 2026-05-27 · **Latest release:** `v0.2.3` (MIT relicense +
+clean copyleft-free binary, iTerm2 theme gallery, first Preferences pass, app
+icon) · **HEAD:** `main` ahead of `v0.2.3` with drag-to-redock, detachable
+windows, and Rich Exits (D-45) — unreleased.
 
 ---
 
@@ -37,12 +38,17 @@ mapper, and arrange every panel in a **tiled, resizable window**.
 | Aardwolf MUSHclient plugin package — native triage complete (all 43) | ✅ shipped (`v0.2.0`) |
 | dinv inventory manager (build incl. containers, search/organize/priority/analyze/portals) | ✅ shipped (`v0.2.0`) |
 | Tiled, resizable panel dock (drag-resize, tab groups, show/hide, per-world persistence) | ✅ shipped (`v0.2.0`) |
-| Preferences UI, themes, notifications, logging, macros | ⬜ Phase 7 |
-| UI revamp follow-ups (drag-to-redock, detachable windows, theming, remaining panels) | ⬜ Phase 7 |
+| MIT relicense + clean copyleft-free binary (S&D download-on-request installer) | ✅ shipped (`v0.2.3`) |
+| Theme gallery (10 iTerm2-inspired themes + WCAG contrast clamp) | ✅ shipped (`v0.2.3`) |
+| First Preferences pass (connection / fonts / themes / anti-idle) + app icon | ✅ shipped (`v0.2.3`) |
+| Drag-to-redock + detachable panel windows | ✅ built (unreleased) |
+| Rich Exits (clickable room exits incl. custom exits, main window) | ✅ built (unreleased, D-45) |
+| Help panel (capture `help`, clickable cross-refs, history) | 🔜 next (PROPOSE first) |
+| Notifications, logging, MacroEngine, remaining Preferences tabs | ⬜ Phase 7 |
 | Signing/notarization/updater/release | ⬜ Phase 8 |
 | iOS/iPad port | ⬜ Phase 9 |
 
-~834 tests across ~185 suites; four gates green (`swift build`,
+~893 tests across ~196 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
@@ -360,16 +366,20 @@ work (mapper, lsqlite3, S&D) has landed on `main` since.
 
 ### 8.1 Phase 7 — Polish, preferences, daily-driver quality (next)
 
-- Full **Preferences** UI: appearance/fonts/palettes, notifications, logging,
-  network, scripting.
+Done so far: a first **Preferences** pass (connection / fonts / themes /
+anti-idle), the **theme gallery** (10 iTerm2-inspired themes + contrast clamp),
+the lsqlite3 `ATTACH` authorizer, and the UI-revamp follow-ups (drag-to-redock,
+detachable windows, **Rich Exits** D-45). Remaining:
+
+- **Help panel** (next): capture Aardwolf's server-side `help <topic>` into a
+  dedicated panel, clickable cross-references (D-40 link primitive), history.
+  PROPOSE first; read the reference + live help output (NO-GUESSING).
+- **Notifications:** macOS user notifications on tells/mentions/named events.
+- **Logging:** per-session HTML/text logs with rotation + a UI.
 - **MacroEngine + editor** (keyboard chord → command/script) and the Scripts-
   editor UX rework (issue #4 — clearer layouts, multiline alias command+actions).
-- **Themes:** named palette/window bundles.
-- **Notifications:** macOS user notifications on tells/mentions/named events.
-- **Logging:** per-session HTML/text logs with rotation.
-- More native ports as demand dictates (inventory/dinv, group/stat monitors,
-  tick timer), per the propose-first rule (§11).
-- Harden the lsqlite3 sandbox (`sqlite3_set_authorizer`).
+- Remaining **Preferences** tabs (notifications, logging, scripting).
+- More native ports as demand dictates, per the propose-first rule (§11).
 
 ### 8.2 Phase 8 — macOS v1.0 release
 

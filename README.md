@@ -3,11 +3,12 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.2.0` — daily-usable.** Connect, play, script, map, and run the
-> Aardwolf plugin ecosystem today — now with a **tiled, resizable window** (all
-> panels visible at once), the **dinv inventory manager** working end-to-end,
-> and the Aardwolf plugin package ported natively. No signed download yet —
-> build it from source (below). The design lives in **[PLAN.md](PLAN.md)**.
+> **Status: `v0.2.3` — daily-usable.** Connect, play, script, map, and run the
+> Aardwolf plugin ecosystem today — with a **tiled, resizable window** (drag
+> panels to re-dock or tear them into their own windows), a **theme gallery**,
+> **clickable room exits**, the **dinv inventory manager** working end-to-end,
+> and the Aardwolf plugin package ported natively. **MIT-licensed**, no signed
+> download yet — build from source (below). Design lives in **[PLAN.md](PLAN.md)**.
 
 ---
 
@@ -28,15 +29,22 @@ for the modern Mac — no Wine, no VM, no emulator.
 **A tiled, resizable window**
 - Panels **tile a resizable dock** so you can see the **Map, Search & Destroy,
   Channels, Text Map, and Character** panels at the same time — drag the
-  dividers to resize, tab-group panels into one slot, and **show/hide** any of
-  them from the View menu or the toolbar **Panels** menu. The arrangement
-  persists per world; **Reset Layout** restores the default.
+  dividers to resize, **drag a panel onto another's edge/centre to re-dock** or
+  tab-group it, **tear a panel into its own window**, and **show/hide** any of
+  them from the View menu. The arrangement persists per world; you can **save
+  layout presets** and **Reset Layout** restores the default.
 - A **full-width graphical vitals bar** (HP/MP/MV + a combat Enemy gauge) spans
   the game output — no duplicated text.
+- A **theme gallery** (Preferences ▸ Appearance): 10 colour themes inspired by
+  iTerm2 (Dracula, Nord, Tokyo Night, Catppuccin, Gruvbox, …) plus a light
+  theme with a contrast clamp so bright MUD text stays legible.
 
 **Aardwolf surface (GMCP)**
 - The **Character** panel (room/exits/group/worth) and the live vitals bar.
 - **Chat capture** with per-channel filtering and `@`-colour rendering.
+- **Rich Exits** (View ▸ Rich Exits): makes the room's exits — cardinals *and*
+  custom exits like `enter portal` — clickable right in the game output, so a
+  click walks you there. Right in the main window; no separate panel.
 
 **Scripting**
 - User **triggers / aliases / timers** edited in a GUI (⇧⌘T), persisted
@@ -70,9 +78,11 @@ for the modern Mac — no Wine, no VM, no emulator.
   other tools read. Import an existing map via **Databases ▸ Import Map
   Database**.
 
-**Search & Destroy** (the campaign/quest hunter, vendored natively)
-- Runs S&D's own Lua logic verbatim on a dedicated sandboxed runtime, with a
-  native **S&D** dock panel instead of its miniwindow.
+**Search & Destroy** (the campaign/quest hunter, installed on request)
+- Not bundled (it's a third-party plugin) — the **S&D** panel offers **Install
+  Search & Destroy…**, which downloads + attaches it on request. It then runs
+  S&D's own Lua logic verbatim on a dedicated sandboxed runtime, with a native
+  dock panel instead of its miniwindow.
 - Detects campaigns/quests, finds + navigates to targets (`xcp`, `nx`, `xrt`,
   `go`, …), scans, and keeps its own `SnDdb.db` (import via **Databases ▸
   Import Search & Destroy Database**).
@@ -141,7 +151,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~834 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~893 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -152,14 +162,15 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-43).
+  the append-only decision log (D-01…D-45).
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
 
 ## License & attribution
 
-Pre-1.0; licensing is being finalised. Proteles **references** MUSHclient,
-Mudlet, and the Aardwolf plugin package for protocol/behaviour fidelity but
-links none of their code. Bundled ports (notably Search-and-Destroy) carry
-their own provenance — see `Sources/MudCore/Resources/.../PROVENANCE.md`; the
-S&D upstream license is being settled before any public release that bundles it.
+Proteles is **[MIT-licensed](LICENSE)**. It **references** MUSHclient, Mudlet,
+and the Aardwolf plugin package for protocol/behaviour fidelity but links none
+of their code — the native ports are independent reimplementations of Aardwolf's
+documented behaviour. The shipped binary contains no GPL or unlicensed code;
+Search-and-Destroy is **not bundled** (installed on request). Third-party
+attribution is in **[NOTICES.md](NOTICES.md)**.

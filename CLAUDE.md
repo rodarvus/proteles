@@ -6,40 +6,47 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 
 ## Current status (2026-05-27)
 
-**Shipped `v0.2.0`** (built on the `v0.1.0` foundation — native mapper, lsqlite3,
-Search-and-Destroy). Headlines: a **tiled, resizable panel dock** (all panels at
-once), the **dinv inventory manager** working end-to-end, and the **Aardwolf
-MUSHclient plugin package ported natively** (43-plugin triage complete). Read
-**PLAN.md** for the full status table + decision log (D-01…D-44). ~834 tests,
-four gates green.
+**Shipped `v0.2.3`** (built on the `v0.1.0`/`v0.2.0` foundation — native mapper,
+lsqlite3, Search-and-Destroy, dinv, tiled panel dock). Headlines since `v0.2.0`:
+**MIT licensing** + a clean copyleft-free binary (S&D unbundled to a
+download-on-request installer), an **iTerm2-inspired theme gallery** (10 themes
++ contrast clamp), a first **Preferences** pass (connection/fonts/themes/
+anti-idle), a **live-tail scroll split**, **saved layout presets**, and an **app
+icon** (the amber/rust aardwolf squircle). Read **PLAN.md** for the full status
+table + decision log (D-01…D-45). ~893 tests, four gates green.
 
-### NEXT SESSION — start here: UI revamp iteration, then Phase 7
+**Unreleased on `main` (post-`v0.2.3`):** the app icon, a version-from-bundle
+fix, **drag-to-redock**, **detachable windows**, **Rich Exits** (D-45), and menu
+fixes (single View menu, no empty Format menu). No release cut yet — ship these
+when the user asks.
 
-**The UI revamp is the active workstream** (v1 shipped as D-44; design in
-**`docs/UI_REVAMP.md`**, visual mock in `docs/ui-revamp-mock.html`). The
-foundation is a Codable split-tree (`PanelKind` + `PanelLayout` in MudCore,
-unit-tested) rendered by `PanelLayoutView`/`SplitContainer`/`TabContainer` in
-MudUI; layout persists per world. **Iterate next, in rough priority:**
-1. **Drag-to-redock** — move a panel between regions by dragging (v1 uses the
-   View-menu show/hide + tab grouping; the tree already supports any tiling).
-2. **Detachable windows** — tear a panel into its own macOS window (the model
-   was built single-window-first but for this).
-3. **Remaining panels** — Text Map content polish, plus Help / NPC-scan /
-   Rich-exits (the `PanelKind` slots are reserved but not built).
-4. **Divider feel / min-sizes**, then **theming** (its own pass — styling was
-   intentionally untouched in v1).
+### NEXT SESSION — start here: Help panel, then Phase 7
 
-**dinv is DONE** (D-42 build + D-43 finale: 5 reliability fixes + container-
-identify verified live; the tracker is closed). The aardwolfclientpackage
-triage is COMPLETE (`docs/AARDPACKAGE_PORTING.md`: 16 done · 17 dropped ·
-8 deferred · 1 bundled-w/-dinv). No active plugin work remains.
+**The UI revamp's headline items are DONE:** drag-to-redock, detachable windows,
+theming, and **Rich Exits** (clickable room exits in the main window, D-45) all
+shipped. Foundation: a Codable split-tree (`PanelKind` + `PanelLayout` in
+MudCore, unit-tested) rendered by `PanelLayoutView`/`SplitContainer`/
+`TabContainer` in MudUI; layout persists per world. Design in
+**`docs/UI_REVAMP.md`**. **NPC-scan was dropped** (user's call). Remaining UI
+items, rough priority:
+1. **Help panel** (next — user approved the approach in principle): capture
+   Aardwolf's server-side `help <topic>` output into a dedicated Help panel,
+   make help cross-references **clickable** (reuse the D-40 link primitive →
+   `help <topic>`), and add back/forward history. **Research the reference +
+   live help output before designing (NO-GUESSING); PROPOSE first.**
+2. **Text Map content polish**; **divider min-sizes / feel** — minor.
+
+**dinv is DONE** (D-42 build + D-43 finale; tracker closed). The
+aardwolfclientpackage triage is COMPLETE (`docs/AARDPACKAGE_PORTING.md`). No
+active generic-shim plugin work remains.
 
 **Deferred buckets** (when their gates clear): **TTS** (accessibility; design
 recorded, D-41); **soundpack** (gated on the GPLv3 asset-licensing enquiry);
-bundled **`aard_inventory_serials`** (still pending). **Phase 7 proper:**
-Preferences UI, MacroEngine, Scripts-editor UX rework (issue #4), notifications,
-logging. **Open issues #1/#2 (copy @-codes / HTML) appear satisfied by D-39 —
-verify + close.**
+bundled **`aard_inventory_serials`** (still pending). **Phase 7 proper** (all
+unblocked): **Notifications** (tells/mentions/named events), **Logging**
+(per-session HTML/text with rotation + UI), **MacroEngine** + Scripts-editor UX
+rework (issue #4), remaining Preferences tabs. **Issues #1/#2 (copy @-codes /
+HTML) are DONE (D-39) and CLOSED.**
 
 Discipline reminder: per-plugin verdict-first; PROPOSE then wait for approval
 (§7/§11); none run through the generic shim.
