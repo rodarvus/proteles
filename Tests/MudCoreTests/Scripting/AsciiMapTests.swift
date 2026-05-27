@@ -52,9 +52,11 @@ struct AsciiMapTests {
         // (this is what would corrupt auto-login / a note).
         #expect(plugin.onGMCP(package: "room.info", json: "{}").isEmpty)
 
-        // Enter a playing state (3) → entering fires an initial map request.
-        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) == [.send("map")])
-        // Now room.info refreshes.
+        // Enter a playing state (3) → set the solid-line map type once, then
+        // fire an initial map request.
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#)
+            == [.send("maptype 5 session"), .send("map")])
+        // Now room.info refreshes (maptype already set, so just `map`).
         #expect(plugin.onGMCP(package: "room.info", json: "{}") == [.send("map")])
 
         // Non-map packages are ignored.
@@ -78,9 +80,19 @@ struct AsciiMapTests {
     @Test("Entering a playing state requests a map only on the transition")
     func requestsOnceOnTransition() {
         var plugin = AsciiMap()
-        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) == [.send("map")])
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#)
+            == [.send("maptype 5 session"), .send("map")])
         // Staying in state 3 (e.g. align update) must not re-request.
         #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#).isEmpty)
+    }
+
+    @Test("maptype is sent only once, even across re-entered playing states")
+    func mapTypeSentOnce() {
+        var plugin = AsciiMap()
+        _ = plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) // sets maptype + map
+        _ = plugin.onGMCP(package: "char.status", json: #"{"state":1}"#) // leave play
+        // Re-entering play requests a map again, but NOT maptype a second time.
+        #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#) == [.send("map")])
     }
 
     @Test("Aardwolf telnet framing is IAC SB 102 <opt> <1|2> IAC SE")

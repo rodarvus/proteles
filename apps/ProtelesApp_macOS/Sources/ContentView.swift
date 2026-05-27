@@ -27,9 +27,6 @@ struct ContentView: View {
 
     var body: some View {
         PanelLayoutView(store: layout, onDetach: detach) { kind in panelContent(kind) }
-            .overlay(alignment: .topTrailing) {
-                FloatingPanelLayer(store: layout) { kind in panelContent(kind) }
-            }
             .frame(minWidth: 820, minHeight: 460)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) { panelsMenu }
@@ -92,6 +89,11 @@ struct ContentView: View {
                 Task { try? await session.send(command) }
             })
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
+            // the game output, layered over it — not over the side dock.
+            .overlay(alignment: .topTrailing) {
+                FloatingPanelLayer(store: layout) { kind in panelContent(kind) }
+            }
             CommandInputView { command in
                 Task { try? await session.send(command) }
             }

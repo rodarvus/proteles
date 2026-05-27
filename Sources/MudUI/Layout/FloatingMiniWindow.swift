@@ -28,10 +28,8 @@ public struct FloatingMiniWindow<Content: View>: View {
         VStack(spacing: 0) {
             header
             content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: 340, maxHeight: 360)
-        .fixedSize() // size to content, within the caps above
+        .fixedSize() // hug the content exactly — no scrollbars (content is bounded)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8).strokeBorder(.separator, lineWidth: 1)
