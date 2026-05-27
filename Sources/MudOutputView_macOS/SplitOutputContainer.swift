@@ -62,10 +62,9 @@
                 separator.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor),
                 separator.heightAnchor.constraint(equalToConstant: 1),
 
-                // Floats at the bottom-right of the history area, just above the
-                // live-tail pane.
-                jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-                jumpButton.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor, constant: -10),
+                // Bottom-right of the (non-scrolling) live-tail pane.
+                jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                jumpButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
                 jumpButton.widthAnchor.constraint(equalToConstant: 28),
                 jumpButton.heightAnchor.constraint(equalToConstant: 28)
             ])
@@ -96,7 +95,7 @@
                 accessibilityDescription: "Scroll to latest"
             )?.withSymbolConfiguration(.init(pointSize: 22, weight: .regular))
             jumpButton.contentTintColor = .white
-            jumpButton.alphaValue = 0.55
+            jumpButton.alphaValue = 0.3
             jumpButton.toolTip = "Jump to the latest output"
             jumpButton.target = self
             jumpButton.action = #selector(jumpToBottom)
@@ -128,7 +127,7 @@
             guard !jumpButton.isHidden else { return }
             let point = convert(event.locationInWindow, from: nil)
             let hovering = jumpButton.frame.insetBy(dx: -6, dy: -6).contains(point)
-            jumpButton.animator().alphaValue = hovering ? 0.95 : 0.55
+            jumpButton.animator().alphaValue = hovering ? 0.8 : 0.3
         }
 
         override func layout() {
@@ -149,7 +148,7 @@
             tailScrollView.isHidden = !show
             separator.isHidden = !show
             jumpButton.isHidden = !show
-            jumpButton.alphaValue = 0.55 // reset hover brightness when re-shown
+            jumpButton.alphaValue = 0.3 // reset hover brightness when re-shown
             if show {
                 (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
             }
