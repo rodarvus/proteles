@@ -32,6 +32,13 @@ struct ContentView: View {
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
     @AppStorage("keepAlive") private var keepAlive = true
+    /// Selected colour theme (Appearance preference). Drives the output palette
+    /// and the app-wide light/dark chrome appearance.
+    @AppStorage("themeID") private var themeID = Theme.default.id
+
+    private var theme: Theme {
+        Theme.with(id: themeID)
+    }
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -64,6 +71,11 @@ struct ContentView: View {
             }
             .task(id: keepAlive) {
                 await session.setKeepAliveEnabled(keepAlive)
+            }
+            .task(id: themeID) {
+                // Flip the whole app's chrome (panels, materials, gauges) to
+                // match the theme's light/dark appearance.
+                NSApp.appearance = NSAppearance(named: theme.appearance == .light ? .aqua : .darkAqua)
             }
             .task {
                 // Feed Search-and-Destroy's published window model to the panel.
@@ -115,12 +127,13 @@ struct ContentView: View {
         VStack(spacing: 0) {
             MudOutputView(
                 store: session.scrollbackStore,
+                palette: theme.palette,
                 fontSize: CGFloat(outputFontSize),
                 fontName: outputFontName,
                 onCommand: { command in Task { try? await session.send(command) } }
             )
-            // Recreate (and re-render) when the output font family/size changes.
-            .id("\(outputFontName)|\(outputFontSize)")
+            // Recreate (and re-render) when the theme or output font changes.
+            .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
             // the game output, layered over it — not over the side dock.

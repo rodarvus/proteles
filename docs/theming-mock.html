@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — Theming mockups</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 32px;
+    background: #1c1c1e; color: #e0e0e2;
+    font: 14px/1.5 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: #9a9aa0; margin: 0 0 28px; max-width: 760px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(420px, 1fr)); gap: 22px; }
+  .card {
+    border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  }
+  .card-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 9px 14px; background: rgba(255,255,255,.05);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .card-head .name { font-weight: 600; }
+  .card-head .tag {
+    font-size: 11px; padding: 1px 7px; border-radius: 5px;
+    background: rgba(255,255,255,.12); color: #c9c9cf;
+  }
+  .card-head .tag.light { background: #ffe9a8; color: #5a4500; }
+  .swatches { display: flex; height: 14px; }
+  .swatches span { flex: 1; }
+  .term {
+    padding: 12px 14px; font: 12.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: pre-wrap; min-height: 232px;
+  }
+  .note { grid-column: 1 / -1; color: #9a9aa0; font-size: 13px; max-width: 820px; }
+  code { background: rgba(255,255,255,.1); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>Proteles — colour themes</h1>
+  <p class="sub">Each card is the same Aardwolf output rendered through a complete 16-colour
+  palette + foreground/background. Dark themes are primary; the two light themes are
+  hand-tuned (and clamp "white/bright-white" to dark ink) so MUD text stays legible —
+  the thing Mudlet/MUSHclient never solved. The strip under each title is its 16 ANSI colours
+  (8 normal, 8 bright).</p>
+  <div class="grid" id="grid"></div>
+
+<script>
+// ---- palettes: [black,red,green,yellow,blue,magenta,cyan,white] normal, then bright ----
+const themes = [
+  { name: "Proteles Dark", appearance: "dark", bg:"#000000", fg:"#e5e5e5",
+    n:["#000000","#cd0000","#00cd00","#cdcd00","#0000ee","#cd00cd","#00cdcd","#e5e5e5"],
+    b:["#7f7f7f","#ff0000","#00ff00","#ffff00","#5c5cff","#ff00ff","#00ffff","#ffffff"] },
+
+  { name: "Aardwolf (MUSHclient)", appearance: "dark", bg:"#000000", fg:"#c0c0c0",
+    n:["#000000","#800000","#008000","#808000","#000080","#800080","#008080","#c0c0c0"],
+    b:["#808080","#ff0000","#00ff00","#ffff00","#0000ff","#ff00ff","#00ffff","#ffffff"] },
+
+  { name: "Solarized Dark", appearance: "dark", bg:"#002b36", fg:"#839496",
+    n:["#073642","#dc322f","#859900","#b58900","#268bd2","#d33682","#2aa198","#eee8d5"],
+    b:["#586e75","#cb4b16","#586e75","#657b83","#839496","#6c71c4","#93a1a1","#fdf6e3"] },
+
+  { name: "Midnight Ink", appearance: "dark", bg:"#11131a", fg:"#c8ccd6",
+    n:["#1a1d27","#e0606e","#6fcf97","#e0c46c","#6c9ced","#c792ea","#56c8d8","#c8ccd6"],
+    b:["#5a6072","#ff7a85","#8ee6ad","#ffd97a","#8fb6ff","#dcb0ff","#7fe3f0","#ffffff"] },
+
+  { name: "Solarized Light", appearance: "light", bg:"#fdf6e3", fg:"#586e75",
+    n:["#073642","#dc322f","#859900","#b58900","#268bd2","#d33682","#2aa198","#586e75"],
+    b:["#657b83","#cb4b16","#657b83","#586e75","#268bd2","#6c71c4","#2aa198","#073642"] },
+
+  { name: "Paper (warm light)", appearance: "light", bg:"#f5efe0", fg:"#33312b",
+    n:["#5b5750","#b0202a","#2e7d32","#9a7d00","#1565c0","#8e24aa","#00838f","#33312b"],
+    b:["#8a857b","#d0323c","#2e9e3a","#b8920a","#1976d2","#a13bc0","#0097a7","#1a1814"] },
+];
+
+// ---- sample output: tokens reference a colour role; bright roles use the bright set ----
+// roles: fg, dim(=bright black), room(=bright cyan), area(=cyan), exits(=bright green),
+// mob(=bright white), hp(=bright red), mn(=bright blue), mv(=bright green),
+// chan(=bright yellow), hit(=bright red), verb(=bright yellow), gold(=yellow)
+const L = [
+  [["Twisted Mind of a Psionicist","room"]],
+  [["Deathtrap Dungeon","area"]],
+  [["  Anguish and terror sound throughout, stimulating every molecule within","fg"]],
+  [["  your cranium. The weak of mind dare not venture far into these parts.","fg"]],
+  [[""]],
+  [["[ Exits: ","exits"],["north east south west up down","exits"],[" ]","exits"]],
+  [["A psionicist ","fg"],["(White Aura)","mob"],[" floats here, pondering the world.","fg"]],
+  [[""]],
+  [["You unleash a ","fg"],["devastating","verb"],[" mind flay at a thug! ","fg"],["[",
+    "dim"],["1232","hit"],["]","dim"]],
+  [["A thug is ","fg"],["DEAD","hit"],["!!","dim"]],
+  [[""]],
+  [["Rodarvus ","gold"],["chats","chan"],[" '","dim"],["theming is looking sharp","chan"],
+    ["'","dim"]],
+  [[""]],
+  [["[ ","dim"],["3004/3187hp","hp"],[" ","dim"],["2458/3017mn","mn"],[" ","dim"],
+    ["1686mv","mv"],[" ","dim"],["27qt 3590tnl","gold"],[" ]","dim"]],
+];
+
+const role = (t, key) => {
+  switch (key) {
+    case "fg":    return t.fg;
+    case "dim":   return t.b[0];   // bright black
+    case "room":  return t.b[6];   // bright cyan
+    case "area":  return t.n[6];   // cyan
+    case "exits": return t.b[2];   // bright green
+    case "mob":   return t.b[7];   // bright white
+    case "hp":    return t.b[1];   // bright red
+    case "mn":    return t.b[4];   // bright blue
+    case "mv":    return t.b[2];   // bright green
+    case "chan":  return t.b[3];   // bright yellow
+    case "hit":   return t.b[1];
+    case "verb":  return t.b[3];
+    case "gold":  return t.n[3];   // yellow
+    default:      return t.fg;
+  }
+};
+
+const grid = document.getElementById("grid");
+for (const t of themes) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const swatches = [...t.n, ...t.b].map(c => `<span style="background:${c}"></span>`).join("");
+  const body = L.map(line =>
+    line.map(([txt, key]) => `<span style="color:${role(t, key)}">${txt || " "}</span>`).join("")
+  ).join("\n");
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="name">${t.name}</span>
+      <span class="tag ${t.appearance}">${t.appearance}</span>
+    </div>
+    <div class="swatches">${swatches}</div>
+    <div class="term" style="background:${t.bg};color:${t.fg}">${body}</div>`;
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>

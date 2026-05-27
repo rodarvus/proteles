@@ -1,3 +1,4 @@
+import MudCore
 import SwiftUI
 
 /// First-pass Preferences (⌘,). A tabbed Settings window; both controls here
@@ -36,8 +37,13 @@ private struct GeneralSettingsView: View {
 
 /// Output appearance.
 private struct AppearanceSettingsView: View {
+    @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     @AppStorage("outputFontName") private var outputFontName = ""
+
+    private var theme: Theme {
+        Theme.with(id: themeID)
+    }
 
     /// Monospaced families that ship with macOS, plus the system default ("").
     private static let fontChoices: [(label: String, name: String)] = [
@@ -57,6 +63,14 @@ private struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Theme") {
+                Picker("Colour theme", selection: $themeID) {
+                    ForEach(Theme.all) { theme in
+                        Text(theme.name).tag(theme.id)
+                    }
+                }
+                ThemePreview(theme: theme, fontSize: outputFontSize, fontName: outputFontName)
+            }
             Section("Game Output") {
                 Picker("Font", selection: $outputFontName) {
                     ForEach(Self.fontChoices, id: \.name) { choice in
@@ -81,6 +95,50 @@ private struct AppearanceSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A compact sample of game output rendered through a theme's palette + font.
+private struct ThemePreview: View {
+    let theme: Theme
+    let fontSize: Double
+    let fontName: String
+
+    private var font: Font {
+        fontName.isEmpty
+            ? .system(size: fontSize, design: .monospaced)
+            : .custom(fontName, fixedSize: fontSize)
+    }
+
+    var body: some View {
+        let palette = theme.palette
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Twisted Mind of a Psionicist")
+                .foregroundStyle(color(palette.brightNamed[.cyan]))
+            Text("[ Exits: north east south ]")
+                .foregroundStyle(color(palette.brightNamed[.green]))
+            Text("A psionicist ").foregroundStyle(color(palette.defaultForeground))
+                + Text("(White Aura)").foregroundStyle(color(palette.brightNamed[.white]))
+                + Text(" floats here.").foregroundStyle(color(palette.defaultForeground))
+            Text("3004hp ").foregroundStyle(color(palette.brightNamed[.red]))
+                + Text("2458mn ").foregroundStyle(color(palette.brightNamed[.blue]))
+                + Text("1686mv").foregroundStyle(color(palette.brightNamed[.green]))
+        }
+        .font(font)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(color(palette.defaultBackground), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
+    }
+
+    private func color(_ rgb: RGB?) -> Color {
+        guard let rgb else { return .primary }
+        return Color(
+            .sRGB,
+            red: Double(rgb.red) / 255,
+            green: Double(rgb.green) / 255,
+            blue: Double(rgb.blue) / 255
+        )
     }
 }
 

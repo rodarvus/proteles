@@ -15,17 +15,25 @@ public struct ColorPalette: Sendable, Equatable, Codable {
     public let brightNamed: [NamedColor: RGB]
     public let defaultForeground: RGB
     public let defaultBackground: RGB
+    /// Minimum foreground/background contrast ratio (WCAG-style) to enforce, or
+    /// `nil` for none. Light themes set this (~3) so MUD-sent near-white text —
+    /// designed for a black background — doesn't vanish on a light one: any
+    /// resolved foreground below the floor falls back to ``defaultForeground``
+    /// (the theme's ink). The bit Mudlet/MUSHclient never did.
+    public let minForegroundContrast: Double?
 
     public init(
         named: [NamedColor: RGB],
         brightNamed: [NamedColor: RGB],
         defaultForeground: RGB,
-        defaultBackground: RGB
+        defaultBackground: RGB,
+        minForegroundContrast: Double? = nil
     ) {
         self.named = named
         self.brightNamed = brightNamed
         self.defaultForeground = defaultForeground
         self.defaultBackground = defaultBackground
+        self.minForegroundContrast = minForegroundContrast
     }
 
     /// Resolve an ``ANSIColor`` to its concrete ``RGB``.
@@ -43,9 +51,30 @@ public struct ColorPalette: Sendable, Equatable, Codable {
     }
 
     /// Resolve an optional foreground colour, falling back to
-    /// ``defaultForeground`` when `nil`.
+    /// ``defaultForeground`` when `nil`, then applying the legibility clamp
+    /// (light themes only — see ``minForegroundContrast``).
     public func resolveForeground(_ color: ANSIColor?) -> RGB {
-        color.map(resolve(_:)) ?? defaultForeground
+        let resolved = color.map(resolve(_:)) ?? defaultForeground
+        guard let floor = minForegroundContrast,
+              Self.contrastRatio(resolved, defaultBackground) < floor
+        else { return resolved }
+        return defaultForeground
+    }
+
+    /// WCAG relative luminance of an sRGB colour (0…1).
+    static func relativeLuminance(_ rgb: RGB) -> Double {
+        func channel(_ value: UInt8) -> Double {
+            let srgb = Double(value) / 255
+            return srgb <= 0.03928 ? srgb / 12.92 : pow((srgb + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(rgb.red) + 0.7152 * channel(rgb.green) + 0.0722 * channel(rgb.blue)
+    }
+
+    /// WCAG contrast ratio between two colours (1…21).
+    static func contrastRatio(_ lhs: RGB, _ rhs: RGB) -> Double {
+        let lumA = relativeLuminance(lhs), lumB = relativeLuminance(rhs)
+        let (hi, lo) = lumA > lumB ? (lumA, lumB) : (lumB, lumA)
+        return (hi + 0.05) / (lo + 0.05)
     }
 
     /// Resolve an optional background colour, falling back to
