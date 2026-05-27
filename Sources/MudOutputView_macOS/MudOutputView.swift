@@ -44,8 +44,12 @@
             scrollView.documentView = textView
 
             // Live-tail pane: a small bottom mirror of the latest lines, shown
-            // only when scrolled up (see SplitOutputContainer).
-            let tailScrollView = NSScrollView()
+            // only when scrolled up (see SplitOutputContainer). Scroll gestures
+            // over it are forwarded to the history view, so you can always
+            // scroll back to the bottom (which dismisses the split) even with
+            // the cursor over the overlay.
+            let tailScrollView = PassthroughScrollView()
+            tailScrollView.forwardingTarget = scrollView
             tailScrollView.hasVerticalScroller = false
             tailScrollView.hasHorizontalScroller = false
             tailScrollView.drawsBackground = true

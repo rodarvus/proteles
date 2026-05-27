@@ -172,4 +172,22 @@
             NotificationCenter.default.removeObserver(self)
         }
     }
+
+    /// A scroll view that forwards its scroll-wheel events to another scroll
+    /// view. Used for the live-tail pane: the tail itself has nothing to scroll,
+    /// so without this, scrolling while the cursor is over the overlay would be
+    /// swallowed there and the history would stay stuck scrolled-up (you could
+    /// never scroll back down to dismiss the split). Forwarding sends those
+    /// gestures to the history view instead.
+    final class PassthroughScrollView: NSScrollView {
+        weak var forwardingTarget: NSScrollView?
+
+        override func scrollWheel(with event: NSEvent) {
+            if let forwardingTarget {
+                forwardingTarget.scrollWheel(with: event)
+            } else {
+                super.scrollWheel(with: event)
+            }
+        }
+    }
 #endif
