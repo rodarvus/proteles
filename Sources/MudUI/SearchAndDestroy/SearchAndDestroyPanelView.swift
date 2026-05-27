@@ -22,9 +22,18 @@ public struct SearchAndDestroyPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Empty state (still offers Scan + Import)
+    // MARK: - Empty state
 
+    @ViewBuilder
     private var emptyState: some View {
+        if model.isInstalled {
+            noHuntState
+        } else {
+            notInstalledState
+        }
+    }
+
+    private var noHuntState: some View {
         VStack(spacing: 14) {
             ContentUnavailableView(
                 "No Hunt Active",
@@ -37,6 +46,30 @@ public struct SearchAndDestroyPanelView: View {
             if model.isInteractive {
                 Button("Import SnDdb.db…") { model.requestImport() }
                     .buttonStyle(.bordered)
+            }
+        }
+        .padding()
+    }
+
+    /// S&D isn't part of Proteles — offer to download + install it on request.
+    private var notInstalledState: some View {
+        VStack(spacing: 14) {
+            ContentUnavailableView(
+                "Search & Destroy Not Installed",
+                systemImage: "arrow.down.circle",
+                description: Text(
+                    "Search & Destroy is a third-party Aardwolf plugin by Crowley — not part of "
+                        + "Proteles. Install it to track campaign and quest targets here."
+                )
+            )
+            if model.isInstalling {
+                ProgressView("Installing…").controlSize(.small)
+            } else if model.isInteractive {
+                Button("Install Search & Destroy…") { model.requestInstall() }
+                    .buttonStyle(.borderedProminent)
+            }
+            if let error = model.installError {
+                Text(error).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center)
             }
         }
         .padding()

@@ -30,6 +30,19 @@ public final class SnDPanelModel {
     /// Wired by the app; `nil` makes it inert.
     @ObservationIgnored public var onReset: (@MainActor () -> Void)?
 
+    /// Request installing the (separately-downloaded) Search-and-Destroy plugin.
+    /// Wired by the app; `nil` hides the install affordance.
+    @ObservationIgnored public var onInstall: (@MainActor () -> Void)?
+
+    /// Whether S&D is installed. Set by the app (reads
+    /// ``MudCore/SearchAndDestroyAssets/isInstalled``) so the panel can offer
+    /// the install flow when it's absent.
+    public var isInstalled = true
+    /// True while a download/install is in flight (drives the panel's spinner).
+    public var isInstalling = false
+    /// The most recent install error, surfaced in the panel; cleared on retry.
+    public var installError: String?
+
     public init(model: SearchAndDestroyModel? = nil) {
         self.model = model
     }
@@ -73,5 +86,10 @@ public final class SnDPanelModel {
     /// Trigger the SnDdb.db reset flow (development/testing), if wired.
     public func requestReset() {
         onReset?()
+    }
+
+    /// Trigger the S&D download/install flow, if wired.
+    public func requestInstall() {
+        onInstall?()
     }
 }

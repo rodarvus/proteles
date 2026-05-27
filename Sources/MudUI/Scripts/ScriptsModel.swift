@@ -29,9 +29,17 @@ public final class ScriptsModel {
     private let session: SessionController
     private var store: ScriptStore?
     private var profileID: UUID?
+    /// The active world's data dir, kept so Search-and-Destroy can be (re)loaded
+    /// after a download-on-first-use install without reloading the whole world.
+    private var worldDataDir: URL?
 
     public init(session: SessionController) {
         self.session = session
+    }
+
+    /// Whether the (separately-installed) Search-and-Destroy plugin is present.
+    public var isSearchAndDestroyInstalled: Bool {
+        SearchAndDestroyAssets.isInstalled
     }
 
     /// Load a profile's scripts: build its store, mirror the document, and
@@ -59,6 +67,7 @@ public final class ScriptsModel {
         // GetInfo(66) plugins use to find the mapper DB / keep their own DBs.
         // Attach it before loading the mapper + plugins.
         let worldDataDir = try? MapperStore.worldDataDirectory(forProfile: id)
+        self.worldDataDir = worldDataDir
         if let worldDataDir {
             await session.attachWorldDataDirectory(worldDataDir.path)
         }
@@ -66,14 +75,12 @@ public final class ScriptsModel {
         if let mapper = Self.makeMapper(forProfile: id) {
             await session.attachMapper(mapper)
         }
-        // Attach the native Search-and-Destroy host: its own sandboxed runtime
-        // + curated bindings, pointed at the same world-data dir (where it
-        // finds the mapper DB and keeps its SnDdb.db). Its triggers/aliases/
-        // timers then run live and it publishes its model to the S&D panel.
-        if let worldDataDir, let host = try? SearchAndDestroyHost() {
-            await host.configure(directory: worldDataDir.path)
-            try? await host.load()
-            await session.attachSearchAndDestroy(host)
+        // Attach the native Search-and-Destroy host (if S&D is installed): its
+        // own sandboxed runtime + curated bindings, pointed at the world-data
+        // dir. Inert when S&D isn't installed (host.load throws); the user can
+        // install it on demand (see installSearchAndDestroy()).
+        if let worldDataDir {
+            await loadSearchAndDestroyHost(worldDataDir: worldDataDir)
         }
         // Then load this world's MUSHclient .xml plugins (after the script
         // reset above, so their triggers/timers survive).
@@ -87,6 +94,28 @@ public final class ScriptsModel {
         if let worldDataDir {
             await session.armBundledDinv(stateDirectory: worldDataDir.path)
         }
+    }
+
+    // MARK: - Search-and-Destroy (user-installed plugin)
+
+    /// Build, load, and attach the S&D host for `worldDataDir`. No-op-ish when
+    /// S&D isn't installed (load throws; the host just isn't attached).
+    private func loadSearchAndDestroyHost(worldDataDir: URL) async {
+        guard let host = try? SearchAndDestroyHost() else { return }
+        await host.configure(directory: worldDataDir.path)
+        try? await host.load()
+        await session.attachSearchAndDestroy(host)
+    }
+
+    /// Download + install the Search-and-Destroy plugin, then attach it live
+    /// (no reconnect). Throws on download/extract failure. macOS only.
+    public func installSearchAndDestroy() async throws {
+        #if os(macOS)
+            try await SearchAndDestroyInstaller.install()
+            if let worldDataDir {
+                await loadSearchAndDestroyHost(worldDataDir: worldDataDir)
+            }
+        #endif
     }
 
     // MARK: - Triggers

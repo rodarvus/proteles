@@ -189,6 +189,27 @@ struct ContentView: View {
         snd.onImport = { importSearchAndDestroyDatabase() }
         snd.onScan = { Task { await session.scanSearchAndDestroy() } }
         snd.onReset = { resetSearchAndDestroyDatabase() }
+        snd.onInstall = { installSearchAndDestroy() }
+        snd.isInstalled = scripts.isSearchAndDestroyInstalled
+    }
+
+    /// Download + install the Search-and-Destroy plugin on request (S&D isn't
+    /// bundled), then attach it live and update the panel's installed state.
+    private func installSearchAndDestroy() {
+        snd.installError = nil
+        snd.isInstalling = true
+        Task {
+            do {
+                try await scripts.installSearchAndDestroy()
+                snd.isInstalled = scripts.isSearchAndDestroyInstalled
+                await session.echoSystemNote(
+                    "[S&D] Installed. Start a campaign or quest to see targets here."
+                )
+            } catch {
+                snd.installError = error.localizedDescription
+            }
+            snd.isInstalling = false
+        }
     }
 
     /// Empty the active world's `SnDdb.db` (development/testing): confirm, then
