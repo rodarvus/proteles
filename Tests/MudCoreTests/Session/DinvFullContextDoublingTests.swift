@@ -12,6 +12,10 @@ import Testing
 /// each distinct fence send. Live every such send doubled.
 @Suite("dinv — full-context doubling repro", .serialized)
 struct DinvFullContextDoublingTests {
+    init() {
+        SnDFixture.install()
+    }
+
     /// A user plugin defining OnPluginSend (mirrors the user's aard_autobypass:
     /// it only acts on campaign-request commands, ignoring DINV_BYPASS).
     private let userPlugin = """

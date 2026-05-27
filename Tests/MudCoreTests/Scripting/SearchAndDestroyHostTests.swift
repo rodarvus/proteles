@@ -4,6 +4,10 @@ import Testing
 
 @Suite("Search-and-Destroy — host (S1.2/S1.3)")
 struct SearchAndDestroyHostTests {
+    init() {
+        SnDFixture.install()
+    }
+
     @Test("core.lua loads on the curated runtime; its functions are defined")
     func loadsCore() async throws {
         let host = try SearchAndDestroyHost()

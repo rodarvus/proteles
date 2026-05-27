@@ -3,6 +3,10 @@ import Testing
 
 @Suite("Search-and-Destroy — XML normalisation + automation parse")
 struct SearchAndDestroyXMLTests {
+    init() {
+        SnDFixture.install()
+    }
+
     @Test("Escapes < and > only inside attribute values")
     func escapesAttributeAngles() {
         let input = #"<trigger match="^a(?<mob>.+)b$" enabled="y"></trigger>"#

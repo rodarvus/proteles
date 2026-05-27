@@ -7,6 +7,10 @@ import Testing
 /// (Search_and_Destroy.xml, group `trg_campaign`).
 @Suite("Search-and-Destroy — campaign detection")
 struct SearchAndDestroyCampaignTests {
+    init() {
+        SnDFixture.install()
+    }
+
     /// The reference `cp info` output (area campaign), per the trigger patterns:
     /// - `^Level Taken\.{8}: \[\s+(?<level>…) \]$`
     /// - `^The targets for this campaign are:$`

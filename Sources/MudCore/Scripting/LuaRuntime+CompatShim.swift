@@ -23,11 +23,11 @@ public extension LuaRuntime {
         _ = try run(Self.automationShimSource)
         _ = try run(Self.utilsShimSource)
         registerModules(Self.standardHelpers)
-        // The `wait` coroutine helper (and its `check` dependency) verbatim
-        // from the Aardwolf package, so third-party plugins that `require
-        // "wait"` work. They run on the programmatic-automation API above.
-        registerModule("wait", source: SearchAndDestroyAssets.lua("wait") ?? "")
-        registerModule("check", source: SearchAndDestroyAssets.lua("check") ?? "")
+        // Nick Gammon's `wait` coroutine helper (and its `check` dependency),
+        // bundled (see MUSHHelperAssets), so third-party plugins that
+        // `require "wait"` work. They run on the programmatic-automation API.
+        registerModule("wait", source: MUSHHelperAssets.lua("wait") ?? "")
+        registerModule("check", source: MUSHHelperAssets.lua("check") ?? "")
         // `async` is the Aardwolf HTTP/background-thread helper (LuaSocket +
         // SSL + llthreads). Proteles has no network helper, so we register an
         // inert stub: `require "async"` succeeds (a plugin's script loads and

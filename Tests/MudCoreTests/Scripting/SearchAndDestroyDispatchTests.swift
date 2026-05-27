@@ -4,6 +4,10 @@ import Testing
 
 @Suite("Search-and-Destroy — host dispatch (S6.2)")
 struct SearchAndDestroyDispatchTests {
+    init() {
+        SnDFixture.install()
+    }
+
     @Test("Named captures land on the `matches` table (wildcards.<name>)")
     func namedCapturesOnMatchesTable() async throws {
         let runtime = try LuaRuntime()

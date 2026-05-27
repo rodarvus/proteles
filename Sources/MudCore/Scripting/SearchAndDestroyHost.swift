@@ -68,9 +68,11 @@ public actor SearchAndDestroyHost {
     public func load() async throws {
         guard let core = SearchAndDestroyAssets.core else { throw HostError.assetsMissing }
 
-        // S&D's `require`/`dofile` targets resolve from these bundled modules
-        // (the loader falls back to a bundled module by basename for dofile).
-        await runtime.registerModules(SearchAndDestroyAssets.helperModules) // wait, constants, area data
+        // S&D's `require`/`dofile` targets resolve from these modules (the
+        // loader falls back to a module by basename for dofile): its own data
+        // modules (downloaded with it) + Gammon's bundled wait/check.
+        await runtime.registerModules(SearchAndDestroyAssets.helperModules) // constants, area data
+        await runtime.registerModules(MUSHHelperAssets.modules) // wait, check (Gammon)
         await runtime.registerModules(LuaRuntime.standardHelpers.filter {
             ["serialize", "tprint", "json", "aardwolf_colors"].contains($0.key)
         })

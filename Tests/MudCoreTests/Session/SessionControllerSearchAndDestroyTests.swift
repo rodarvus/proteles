@@ -4,6 +4,10 @@ import Testing
 
 @Suite("SessionController — Search-and-Destroy wiring (S6.3)")
 struct SessionControllerSearchAndDestroyTests {
+    init() {
+        SnDFixture.install()
+    }
+
     @Test("A published model effect is forwarded to the publishedModels stream")
     func forwardsPublishedModel() async {
         let session = SessionController()

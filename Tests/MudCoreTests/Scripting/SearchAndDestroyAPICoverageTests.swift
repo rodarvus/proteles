@@ -10,6 +10,10 @@ import Testing
 /// not in the user's hands.
 @Suite("Search-and-Destroy — host API coverage")
 struct SearchAndDestroyAPICoverageTests {
+    init() {
+        SnDFixture.install()
+    }
+
     /// Identifiers that look like calls but aren't Lua globals we must provide:
     /// SQL keywords that appear inside query string literals in core.lua.
     private static let sqlNoise: Set<String> = [

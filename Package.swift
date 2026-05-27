@@ -52,9 +52,11 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift")
             ],
             resources: [
-                // Vendored Search-and-Destroy Lua + data (the native S&D
-                // plugin reuses its logic verbatim; see PROVENANCE.md).
-                .copy("Resources/SearchAndDestroy"),
+                // Nick Gammon's MUSHclient helper libs (wait/check) — bundled
+                // for the compat shim + dinv; see Resources/MUSHHelpers/PROVENANCE.md.
+                // (Search-and-Destroy's own Lua is NOT bundled — it's a separate,
+                // user-installed download; see SearchAndDestroyInstaller.)
+                .copy("Resources/MUSHHelpers"),
                 // Vendored dinv inventory manager (MIT; run verbatim through
                 // the MUSHclient compat shim — see Resources/dinv/PROVENANCE.md).
                 .copy("Resources/dinv")
