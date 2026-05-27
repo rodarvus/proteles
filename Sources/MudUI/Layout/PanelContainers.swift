@@ -20,8 +20,11 @@ struct SplitContainer: View {
     @State private var dragBase: [Double]?
     @State private var activeDivider: Int?
 
-    private let dividerThickness: CGFloat = 7
-    private let minPanelPoints: CGFloat = 90
+    /// Width of a divider's grab zone (layout gap between panels). The visible
+    /// line drawn inside it is a hairline — see ``divider(index:total:)``.
+    private let dividerThickness: CGFloat = 6
+    /// A panel can't be dragged (or pushed by its neighbour) below this.
+    private let minPanelPoints: CGFloat = 100
 
     var body: some View {
         GeometryReader { geo in
@@ -58,29 +61,47 @@ struct SplitContainer: View {
     }
 
     private func divider(index: Int, total: CGFloat) -> some View {
-        Rectangle()
-            .fill(activeDivider == index ? Color.accentColor.opacity(0.6) : Color(.separatorColor))
-            .frame(
-                width: axis == .horizontal ? dividerThickness : nil,
-                height: axis == .vertical ? dividerThickness : nil
-            )
-            .frame(
-                maxWidth: axis == .vertical ? .infinity : nil,
-                maxHeight: axis == .horizontal ? .infinity : nil
-            )
-            .contentShape(Rectangle())
-            .onHover { inside in
-                activeDivider = inside ? index : (activeDivider == index ? nil : activeDivider)
-                #if os(macOS)
-                    if inside {
-                        (axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set()
-                    } else {
-                        NSCursor.arrow.set()
-                    }
-                #endif
-            }
-            .gesture(dragGesture(index: index, total: total))
-            .help("Drag to resize")
+        let active = activeDivider == index
+        // A hairline at rest, thickening + accenting on hover/drag, centred in a
+        // wider invisible grab zone (so it's easy to grab without a chunky bar).
+        return ZStack {
+            Rectangle().fill(.clear)
+            Rectangle()
+                .fill(active ? Color.accentColor : Color(.separatorColor))
+                .frame(
+                    width: axis == .horizontal ? (active ? 2 : 1) : nil,
+                    height: axis == .vertical ? (active ? 2 : 1) : nil
+                )
+                .animation(.easeOut(duration: 0.12), value: active)
+        }
+        .frame(
+            width: axis == .horizontal ? dividerThickness : nil,
+            height: axis == .vertical ? dividerThickness : nil
+        )
+        .frame(
+            maxWidth: axis == .vertical ? .infinity : nil,
+            maxHeight: axis == .horizontal ? .infinity : nil
+        )
+        .contentShape(Rectangle())
+        .onHover { inside in
+            activeDivider = inside ? index : (activeDivider == index ? nil : activeDivider)
+            #if os(macOS)
+                if inside {
+                    (axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            #endif
+        }
+        .gesture(dragGesture(index: index, total: total))
+        .simultaneousGesture(TapGesture(count: 2).onEnded { evenOut() })
+        .help("Drag to resize · double-click to even out")
+    }
+
+    /// Reset this split's children to equal shares (double-clicking a divider).
+    private func evenOut() {
+        let equal = Array(repeating: 1.0 / Double(items.count), count: items.count)
+        store.setFractions(equal, at: path)
     }
 
     private func dragGesture(index: Int, total: CGFloat) -> some Gesture {
