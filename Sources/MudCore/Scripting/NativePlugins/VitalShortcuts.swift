@@ -1,9 +1,9 @@
 import Foundation
 
-/// Native port of Aardwolf's `aard_vital_shortcuts` (Fiendish): type
-/// `hp`/`mn`/`mv`/`vitals` to print colour-coded vital percentages — your
+/// Type `hp`/`mn`/`mv`/`vitals` to print colour-coded vital percentages — your
 /// own, a grouped member's (`hp fiendish`), or everyone under a threshold
-/// (`vitals below 40`).
+/// (`vitals below 40`). Independent Swift implementation driven by GMCP;
+/// inspired by Fiendish's `aard_vital_shortcuts`.
 ///
 /// A value-type reducer on the native-plugin host: it caches the relevant
 /// GMCP packages in ``onGMCP(package:json:)`` and renders coloured output in
@@ -13,7 +13,7 @@ public struct VitalShortcuts: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.vitalshortcuts",
         name: "Vital Shortcuts",
-        author: "Proteles (after Fiendish)",
+        author: "Proteles",
         version: "1.0",
         summary: "Type hp/mn/mv/vitals to print colour-coded vital percentages "
             + "(yours or a group member's)."

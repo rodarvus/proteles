@@ -1,7 +1,8 @@
 import Foundation
 
-/// Native port of Aardwolf's `Hyperlink_URL2` (Nick Gammon): turn URLs in MUD
-/// output into clickable hyperlinks, preserving the line's colour.
+/// Turns URLs in MUD output into clickable hyperlinks, preserving the line's
+/// colour. Independent Swift implementation; the idea is a long-standing MUD
+/// staple (e.g. Nick Gammon's `Hyperlink_URL2`).
 ///
 /// A thin `NativePlugin` over the pure ``URLLinkifier``: `onLine` returns a
 /// replacement ``Line`` whose URL spans carry `.openURL` links (the macOS
@@ -11,7 +12,7 @@ public struct URLLinkify: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.urllinkify",
         name: "URL Links",
-        author: "Proteles (after Nick Gammon)",
+        author: "Proteles",
         version: "1.0",
         summary: "Turn URLs in the output into clickable links (opens in your browser)."
     )

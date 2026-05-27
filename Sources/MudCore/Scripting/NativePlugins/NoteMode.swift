@@ -1,8 +1,9 @@
 import Foundation
 
-/// Native port of Aardwolf's `aard_note_mode` (Fiendish): while you're
-/// writing an in-game note, pause every automation so your keystrokes and
-/// the game's output reach the note unmodified, then resume when you finish.
+/// Pauses automations while you write an in-game note (independent Swift
+/// implementation of this Aardwolf behaviour; inspired by Fiendish's
+/// `aard_note_mode`). While note-writing, every automation is paused so your
+/// keystrokes and the game's output reach the note unmodified, then resumes.
 ///
 /// Aardwolf signals note-writing with `char.status.state == 5`. This plugin
 /// watches that transition (via ``onGMCP(package:json:)``) and emits
@@ -13,7 +14,7 @@ public struct NoteMode: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.notemode",
         name: "Note Mode",
-        author: "Proteles (after Fiendish)",
+        author: "Proteles",
         version: "1.0",
         summary: "Pauses triggers, aliases, timers, and commands while you write an in-game note."
     )

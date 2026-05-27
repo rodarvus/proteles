@@ -1,9 +1,10 @@
 import Foundation
 
-/// Native port of Aardwolf's `aard_ASCII_map`: capture the server's ASCII
-/// map (bracketed by `<MAPSTART>`/`<MAPEND>` once the map telnet-option is
-/// on), hide that block from the main scrollback, and publish its styled
-/// lines to the Map window.
+/// Captures the server's ASCII map (bracketed by `<MAPSTART>`/`<MAPEND>` once
+/// Aardwolf's map telnet-option is on), hides that block from the main
+/// scrollback, and publishes its styled lines to the Map window. Independent
+/// Swift implementation of this Aardwolf behaviour; inspired by Fiendish's
+/// `aard_ASCII_map`.
 ///
 /// On connect it enables Aardwolf telnet-option `MAP` (4) and requests a
 /// map; on each `room.info` it re-requests, so the panel tracks your
@@ -12,7 +13,7 @@ public struct AsciiMap: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.asciimap",
         name: "ASCII Map",
-        author: "Proteles (after Fiendish)",
+        author: "Proteles",
         version: "1.0",
         summary: "Captures the server's ASCII map into the Map window and hides it from the main output."
     )

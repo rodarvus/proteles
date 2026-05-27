@@ -1,6 +1,7 @@
 import Foundation
 
-/// Native completion of Aardwolf's `aard_GMCP_handler` (Fiendish).
+/// Completes Proteles' native GMCP handling (independent implementation;
+/// inspired by Fiendish's `aard_GMCP_handler`).
 ///
 /// Most of that plugin's job is **already native** in Proteles and must not be
 /// duplicated: the wire layer performs GMCP telnet negotiation (`WILL`→`DO`,
@@ -21,14 +22,14 @@ import Foundation
 ///    (`OnPluginTelnetSubnegotiation(201, 'config { … }')`). We do the same via
 ///    the `injectGMCP` effect, keeping downstream config state accurate.
 ///
-/// Deliberately *not* ported (Windows/MUSHclient-only or obsolete here): the
+/// Deliberately omitted (Windows/MUSHclient-only or obsolete here): the
 /// `OnPluginTelnetRequest` registry/`luacom` ident block, the `gmcpdebug`
 /// toggle, `OnPluginListChanged`→`aard_requirements`, and `getmemoryusage`.
 public struct AardGMCPHandler: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.gmcphandler",
         name: "Aardwolf GMCP Handler",
-        author: "Proteles (after Fiendish)",
+        author: "Proteles",
         version: "1.0",
         summary: "Adds the `sendgmcp` command and synthesizes config GMCP from "
             + "prompt/compact toggles (the rest of the handler is native already)."

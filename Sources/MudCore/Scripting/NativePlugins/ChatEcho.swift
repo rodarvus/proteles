@@ -1,8 +1,8 @@
 import Foundation
 
-/// Native port of Aardwolf's `aard_chat_echo` (Fiendish): declutter the main
-/// window by hiding channel chatter (which is still captured in the Chat
-/// window), and mute specific players' channel messages.
+/// Declutters the main window by hiding channel chatter (still captured in the
+/// Chat window) and muting specific players (independent Swift implementation
+/// of this Aardwolf behaviour; inspired by Fiendish's `aard_chat_echo`).
 ///
 /// Channels arrive twice: as inline text in the main scrollback and as
 /// structured `comm.channel` GMCP. This plugin caches each `comm.channel`
@@ -14,7 +14,7 @@ public struct ChatEcho: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.chatecho",
         name: "Chat Echo",
-        author: "Proteles (after Fiendish)",
+        author: "Proteles",
         version: "1.0",
         summary: "Hide channel chatter from the main window (kept in the Chat window) and mute players."
     )
