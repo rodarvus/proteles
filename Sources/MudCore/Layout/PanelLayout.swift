@@ -44,9 +44,11 @@ public indirect enum PanelLayout: Codable, Equatable, Sendable {
         .split(axis: .horizontal, items: [
             .init(fraction: 0.62, node: .leaf(.output)),
             .init(fraction: 0.38, node: .split(axis: .vertical, items: [
-                .init(fraction: 0.45, node: .leaf(.map)),
-                .init(fraction: 0.30, node: .tabs(panels: [.hunt, .asciiMap], selection: 0)),
-                .init(fraction: 0.25, node: .leaf(.channels))
+                // Map trimmed ~20% (0.45→0.36) and S&D to ~6 rows (0.30→0.26);
+                // the reclaimed height goes to Channels.
+                .init(fraction: 0.36, node: .leaf(.map)),
+                .init(fraction: 0.26, node: .tabs(panels: [.hunt, .asciiMap], selection: 0)),
+                .init(fraction: 0.38, node: .leaf(.channels))
             ]))
         ])
     }

@@ -55,7 +55,8 @@ public struct ChatView: View {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(model.filteredLines) { chatLine in
                         Text(chatLine.line.attributedText())
-                            .font(.system(.body, design: .monospaced))
+                            // One step down from .body so more chat fits the panel.
+                            .font(.system(.callout, design: .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .id(chatLine.id)
