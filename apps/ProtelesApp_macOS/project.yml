@@ -29,8 +29,8 @@ targets:
       properties:
         CFBundleDisplayName: Proteles
         CFBundleName: Proteles
-        CFBundleShortVersionString: "0.2.1"
-        CFBundleVersion: "21"
+        CFBundleShortVersionString: "0.2.2"
+        CFBundleVersion: "22"
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: ""
         NSPrincipalClass: NSApplication
@@ -52,8 +52,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.proteles.ProtelesApp
         PRODUCT_NAME: Proteles
-        MARKETING_VERSION: "0.2.1"
-        CURRENT_PROJECT_VERSION: "21"
+        MARKETING_VERSION: "0.2.2"
+        CURRENT_PROJECT_VERSION: "22"
         # Sign with a stable, self-signed dev identity so the Keychain
         # remembers "Always Allow" across rebuilds (ad-hoc builds have no
         # stable identity and re-prompt every time). Run
