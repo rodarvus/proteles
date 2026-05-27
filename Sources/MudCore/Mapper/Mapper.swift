@@ -118,6 +118,12 @@ public actor Mapper {
     public init(store: MapperStore) throws {
         self.store = store
         graph = try store.loadGraph()
+        // Seed the sector palette from disk so imported rooms colour without a
+        // live GMCP room.sectors. Inlined (an actor init can't call an isolated
+        // method); the merge logic is shared via the static loader.
+        let palette = Self.loadPalette(from: store)
+        environments = palette.environments
+        terrainColours = palette.colours
         // Restore persisted UI preferences (per-profile, in proteles_meta).
         showOtherAreas = Self.persistedFlag(store, Self.showOtherAreasKey)
         showAreaExits = Self.persistedFlag(store, Self.showAreaExitsKey)
@@ -434,6 +440,35 @@ public actor Mapper {
         try? store.replaceEnvironments(rows)
     }
 
+    /// Merge the persisted sector palette into the in-memory `environments`
+    /// (id→name) + `terrainColours` (name→colour), so rooms colour from disk
+    /// without waiting for a live GMCP `room.sectors` (a later `room.sectors`
+    /// clears + rebuilds these, staying authoritative when present). This is
+    /// what lets an imported map (e.g. all of aylor) render in colour rather
+    /// than a uniform grey.
+    private func seedTerrainPaletteFromStore() {
+        let palette = Self.loadPalette(from: store)
+        environments.merge(palette.environments) { _, new in new }
+        terrainColours.merge(palette.colours) { _, new in new }
+    }
+
+    /// Read the persisted `environments` table into a `(id→name, name→colour)`
+    /// pair. `nonisolated` so the actor's `init` can use it before isolation is
+    /// established (`MapperStore` access is synchronous + thread-safe).
+    private nonisolated static func loadPalette(
+        from store: MapperStore
+    ) -> (environments: [String: String], colours: [String: Int]) {
+        guard let rows = try? store.loadEnvironments() else { return ([:], [:]) }
+        var environments: [String: String] = [:]
+        var colours: [String: Int] = [:]
+        for env in rows {
+            guard let name = env.name else { continue }
+            environments[env.uid] = name
+            if let color = env.color { colours[name] = color }
+        }
+        return (environments, colours)
+    }
+
     static func decodeInt(_ json: String, key: String) -> Int? {
         guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
         else { return nil }
@@ -452,6 +487,7 @@ public actor Mapper {
     public func importMap(from source: URL) throws -> MapperStore.ImportSummary {
         let summary = try store.importIncremental(from: source)
         graph = try store.loadGraph()
+        seedTerrainPaletteFromStore() // an imported DB brings its own sector palette
         publishLayout()
         return summary
     }
@@ -459,6 +495,7 @@ public actor Mapper {
     /// Reload the in-memory graph from the store (e.g. after an import).
     public func reload() throws {
         graph = try store.loadGraph()
+        seedTerrainPaletteFromStore()
         publishLayout()
     }
 

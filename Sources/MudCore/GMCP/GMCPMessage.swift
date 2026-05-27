@@ -92,6 +92,10 @@ public extension GMCPMessage {
             "request char",
             "request room",
             "request area",
+            // The sector palette (terrain → colour index); without it the
+            // mapper can't colour rooms (it falls back to the persisted
+            // environments table — see Mapper.seedTerrainPaletteFromStore).
+            "request sectors",
             "request quest",
             "request group"
         ]

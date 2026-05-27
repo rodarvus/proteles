@@ -253,5 +253,7 @@ struct GMCPEncodingTests {
         #expect(payloads.contains { $0.contains(#"Core.Supports.Set [ "Char 1", "Comm 1", "Room 1" ]"#) })
         #expect(payloads.contains("request char"))
         #expect(payloads.contains("rawcolor on"))
+        // The sector palette is required for the mapper to colour rooms.
+        #expect(payloads.contains("request sectors"))
     }
 }

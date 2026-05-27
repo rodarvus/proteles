@@ -11,6 +11,25 @@ struct MapperTests {
         return try (Mapper(store: store), url)
     }
 
+    @Test("A fresh mapper seeds the terrain palette from the persisted environments table")
+    func seedsTerrainPaletteFromStore() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-seed-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // Persist a sector palette (as a prior session / DB import would have).
+        let store = try MapperStore(url: url)
+        try store.replaceEnvironments([
+            .init(uid: "2", name: "city", color: 7),
+            .init(uid: "10", name: "forest", color: 10)
+        ])
+        // A *fresh* mapper on the same DB — no live room.sectors this session —
+        // must still know the palette, so imported rooms colour (not grey).
+        let mapper = try Mapper(store: MapperStore(url: url))
+        #expect(await mapper.terrainColours["city"] == 7)
+        #expect(await mapper.terrainColours["forest"] == 10)
+        #expect(await mapper.environments["2"] == "city")
+    }
+
     @Test("room.info upserts the room, its exits, and a stub area; requests the area name")
     func ingestRoomInfo() async throws {
         let (mapper, url) = try freshMapper()

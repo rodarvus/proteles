@@ -247,6 +247,19 @@ public final class MapperStore: Sendable {
         }
     }
 
+    /// Load the persisted `environments` table (the sector palette) so the
+    /// mapper can colour rooms from disk without waiting for a live GMCP
+    /// `room.sectors` packet — matching the reference mapper, which reads room
+    /// colours from this table.
+    public func loadEnvironments() throws -> [Environment] {
+        try read { db in
+            try Row.fetchAll(db, sql: "SELECT uid, name, color FROM environments").compactMap { row in
+                guard let uid = row["uid"] as String? else { return nil }
+                return Environment(uid: uid, name: row["name"], color: row["color"])
+            }
+        }
+    }
+
     /// Replace the whole `environments` table, mirroring the mapper's
     /// `update_gmcp_sectors`.
     public func replaceEnvironments(_ environments: [Environment]) throws {
