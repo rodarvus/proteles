@@ -49,6 +49,10 @@ struct ProtelesApp: App {
     /// Main-window tiled-dock layout (UI revamp — docs/UI_REVAMP.md).
     @State private var layout = LayoutStore()
 
+    /// AppKit hooks for menu surgery the SwiftUI command API can't fully do
+    /// (stripping the empty Format menu with deterministic timing).
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
@@ -261,6 +265,29 @@ struct ProtelesApp: App {
     static let pluginsWindowID = "plugins"
 }
 
+/// Strips the empty "Format" menu AppKit leaves behind even after
+/// `CommandGroup(replacing: .textFormatting) {}` — the editable command field
+/// still contributes a Font/Text container. Done in the delegate so the timing
+/// is deterministic (the main menu is fully built by
+/// `applicationDidFinishLaunching`) and re-checked on activation so it can't
+/// reappear if SwiftUI rebuilds the menu bar. A MUD client has no rich text.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_: Notification) {
+        removeFormatMenu()
+    }
+
+    func applicationDidBecomeActive(_: Notification) {
+        removeFormatMenu()
+    }
+
+    private func removeFormatMenu() {
+        guard let mainMenu = NSApp.mainMenu,
+              let index = mainMenu.items.firstIndex(where: { $0.title == "Format" })
+        else { return }
+        mainMenu.removeItem(at: index)
+    }
+}
+
 /// Session + worlds commands, extracted so they can use
 /// `@Environment(\.openWindow)` (which the `App` struct itself can't
 /// hold) to surface the Worlds window.
@@ -320,7 +347,10 @@ private struct ProtelesCommands: Commands {
 
         // Panels live in the main-window tiled dock (not separate windows, which
         // could fall behind the game window). Toggling shows/hides each in place.
-        CommandMenu("View") {
+        // Merge into the *existing* system View menu (which holds Enter Full
+        // Screen) via `.sidebar` rather than a `CommandMenu("View")`, which would
+        // create a second top-level View menu.
+        CommandGroup(after: .sidebar) {
             Toggle(isOn: panelBinding(.map)) { Text("Map") }
                 .keyboardShortcut("B", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.asciiMap)) { Text("Text Map") }

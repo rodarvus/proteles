@@ -97,7 +97,6 @@ struct ContentView: View {
             }
             .onAppear {
                 wireSearchAndDestroy()
-                removeEmptyFormatMenu()
                 // Bind the mapper at the app root so it's live regardless of which
                 // dock tab is shown (e.g. for a menu-triggered map import).
                 map.start()
@@ -107,20 +106,6 @@ struct ContentView: View {
                 }
             }
             .task { await launch() }
-    }
-
-    /// Remove the empty "Format" menu AppKit leaves behind: replacing the
-    /// SwiftUI `.textFormatting` group strips its items but the system still
-    /// contributes a Font/Text container for the editable command field, which
-    /// shows as an empty top-level Format menu. A MUD client has no rich-text
-    /// formatting, so drop it. Deferred so the main menu is fully built.
-    private func removeEmptyFormatMenu() {
-        DispatchQueue.main.async {
-            guard let mainMenu = NSApp.mainMenu,
-                  let index = mainMenu.items.firstIndex(where: { $0.title == "Format" })
-            else { return }
-            mainMenu.removeItem(at: index)
-        }
     }
 
     /// Tear `kind` out of the dock into its own window.
