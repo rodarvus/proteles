@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — iTerm2-inspired theme proposals</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 32px;
+    background: #16161a; color: #e0e0e2;
+    font: 14px/1.5 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: #9a9aa0; margin: 0 0 28px; max-width: 820px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(420px, 1fr)); gap: 22px; }
+  .card { border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.10);
+          box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; padding: 9px 14px;
+               background: rgba(255,255,255,.05); border-bottom: 1px solid rgba(255,255,255,.08); }
+  .card-head .name { font-weight: 600; }
+  .card-head .origin { font-size: 11px; color: #8a8a90; }
+  .card-head .tag { margin-left: auto; font-size: 11px; padding: 1px 7px; border-radius: 5px;
+                    background: rgba(255,255,255,.12); color: #c9c9cf; }
+  .card-head .tag.light { background: #ffe9a8; color: #5a4500; }
+  .swatches { display: flex; height: 14px; }
+  .swatches span { flex: 1; }
+  .term { padding: 12px 14px; font: 12.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+          white-space: pre-wrap; min-height: 232px; }
+  .note { color: #9a9aa0; font-size: 13px; max-width: 820px; margin-top: 26px; }
+  code { background: rgba(255,255,255,.1); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>iTerm2-inspired themes — 8 proposals</h1>
+  <p class="sub">The most-loved schemes from the iTerm2 community gallery, with their canonical
+  16-colour palettes, on identical Aardwolf output. Seven dark (MUD content assumes a dark
+  background) + one gorgeous light (Catppuccin Latte) that uses our contrast clamp so bright
+  text stays legible. Strip under each title = its 16 ANSI colours (8 normal, 8 bright).</p>
+  <div class="grid" id="grid"></div>
+  <p class="note">Pick any subset to ship (alongside or replacing the current Aardwolf / Solarized /
+  Midnight / Paper set). I'd keep <b>Aardwolf</b> as the default for MUSHclient parity and add your
+  favourites here as the “gorgeous” options.</p>
+
+<script>
+const themes = [
+  { name:"Dracula", origin:"Zeno Rocha", appearance:"dark", bg:"#282a36", fg:"#f8f8f2",
+    n:["#21222c","#ff5555","#50fa7b","#f1fa8c","#bd93f9","#ff79c6","#8be9fd","#f8f8f2"],
+    b:["#6272a4","#ff6e6e","#69ff94","#ffffa5","#d6acff","#ff92df","#a4ffff","#ffffff"] },
+  { name:"Nord", origin:"Arctic Ice Studio", appearance:"dark", bg:"#2e3440", fg:"#d8dee9",
+    n:["#3b4252","#bf616a","#a3be8c","#ebcb8b","#81a1c1","#b48ead","#88c0d0","#e5e9f0"],
+    b:["#4c566a","#bf616a","#a3be8c","#ebcb8b","#81a1c1","#b48ead","#8fbcbb","#eceff4"] },
+  { name:"Tokyo Night", origin:"enkia", appearance:"dark", bg:"#1a1b26", fg:"#c0caf5",
+    n:["#15161e","#f7768e","#9ece6a","#e0af68","#7aa2f7","#bb9af7","#7dcfff","#a9b1d6"],
+    b:["#414868","#f7768e","#9ece6a","#e0af68","#7aa2f7","#bb9af7","#7dcfff","#c0caf5"] },
+  { name:"Catppuccin Mocha", origin:"Catppuccin", appearance:"dark", bg:"#1e1e2e", fg:"#cdd6f4",
+    n:["#45475a","#f38ba8","#a6e3a1","#f9e2af","#89b4fa","#f5c2e7","#94e2d5","#bac2de"],
+    b:["#585b70","#f38ba8","#a6e3a1","#f9e2af","#89b4fa","#f5c2e7","#94e2d5","#a6adc8"] },
+  { name:"Gruvbox Dark", origin:"morhetz", appearance:"dark", bg:"#282828", fg:"#ebdbb2",
+    n:["#282828","#cc241d","#98971a","#d79921","#458588","#b16286","#689d6a","#a89984"],
+    b:["#928374","#fb4934","#b8bb26","#fabd2f","#83a598","#d3869b","#8ec07c","#ebdbb2"] },
+  { name:"One Dark", origin:"Atom", appearance:"dark", bg:"#282c34", fg:"#abb2bf",
+    n:["#282c34","#e06c75","#98c379","#e5c07b","#61afef","#c678dd","#56b6c2","#abb2bf"],
+    b:["#545862","#e06c75","#98c379","#e5c07b","#61afef","#c678dd","#56b6c2","#c8ccd4"] },
+  { name:"Snazzy", origin:"sindresorhus", appearance:"dark", bg:"#282a36", fg:"#eff0eb",
+    n:["#282a36","#ff5c57","#5af78e","#f3f99d","#57c7ff","#ff6ac1","#9aedfe","#f1f1f0"],
+    b:["#686868","#ff5c57","#5af78e","#f3f99d","#57c7ff","#ff6ac1","#9aedfe","#eff0eb"] },
+  { name:"Catppuccin Latte", origin:"Catppuccin", appearance:"light", bg:"#eff1f5", fg:"#4c4f69",
+    n:["#5c5f77","#d20f39","#40a02b","#df8e1d","#1e66f5","#ea76cb","#179299","#acb0be"],
+    b:["#6c6f85","#d20f39","#40a02b","#df8e1d","#1e66f5","#ea76cb","#179299","#bcc0cc"] },
+];
+
+const L = [
+  [["Twisted Mind of a Psionicist","room"]],
+  [["Deathtrap Dungeon","area"]],
+  [["  Anguish and terror sound throughout, stimulating every molecule within","fg"]],
+  [["  your cranium. The weak of mind dare not venture far into these parts.","fg"]],
+  [[""]],
+  [["[ Exits: ","exits"],["north east south west up down","exits"],[" ]","exits"]],
+  [["A psionicist ","fg"],["(White Aura)","mob"],[" floats here, pondering the world.","fg"]],
+  [[""]],
+  [["You unleash a ","fg"],["devastating","verb"],[" mind flay at a thug! ","fg"],["[","dim"],
+    ["1232","hit"],["]","dim"]],
+  [["A thug is ","fg"],["DEAD","hit"],["!!","dim"]],
+  [[""]],
+  [["Rodarvus ","gold"],["chats","chan"],[" '","dim"],["these themes are gorgeous","chan"],
+    ["'","dim"]],
+  [[""]],
+  [["[ ","dim"],["3004/3187hp","hp"],[" ","dim"],["2458/3017mn","mn"],[" ","dim"],
+    ["1686mv","mv"],[" ","dim"],["27qt 3590tnl","gold"],[" ]","dim"]],
+];
+
+const role = (t, key) => ({
+  fg:t.fg, dim:t.b[0], room:t.b[6], area:t.n[6], exits:t.b[2], mob:t.b[7],
+  hp:t.b[1], mn:t.b[4], mv:t.b[2], chan:t.b[3], hit:t.b[1], verb:t.b[3], gold:t.n[3],
+}[key] || t.fg);
+
+const grid = document.getElementById("grid");
+for (const t of themes) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const swatches = [...t.n, ...t.b].map(c => `<span style="background:${c}"></span>`).join("");
+  const body = L.map(line =>
+    line.map(([txt, key]) => `<span style="color:${role(t, key)}">${txt || " "}</span>`).join("")
+  ).join("\n");
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="name">${t.name}</span>
+      <span class="origin">${t.origin}</span>
+      <span class="tag ${t.appearance}">${t.appearance}</span>
+    </div>
+    <div class="swatches">${swatches}</div>
+    <div class="term" style="background:${t.bg};color:${t.fg}">${body}</div>`;
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>
