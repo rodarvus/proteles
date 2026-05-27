@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — aardwolf face (round 2, amber/rust)</title>
+<style>
+  body { margin:0; padding:32px; background:#1b1713; color:#efe7dd;
+    font:14px/1.5 -apple-system,system-ui,sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#b8a999; max-width:820px; margin:0 0 28px; }
+  .row { display:flex; gap:28px; flex-wrap:wrap; }
+  .card { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    border-radius:14px; padding:20px; width:300px; }
+  .card h2 { font-size:15px; margin:0 0 2px; }
+  .card p { color:#b8a999; font-size:12.5px; margin:0 0 16px; min-height:56px; }
+  .icon { border-radius:22.37%; box-shadow:0 8px 22px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.22); overflow:hidden; display:inline-block; }
+  .big { width:176px; height:176px; }
+  .sizes { display:flex; align-items:flex-end; gap:14px; margin-top:18px; }
+  .sizes .lbl { color:#8a7d70; font-size:11px; text-align:center; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+  <h1>Proteles — aardwolf face · round 2</h1>
+  <p class="sub">Three executions of direction A in warm amber→rust. The cream face carries the
+  shape; ears are tall + upright (the aardwolf’s defining feature), the muzzle is slender, and a
+  small centre tuft hints at the erectile mane. Check the 16px column — that’s the real test. Tell me
+  which to lock, and any tweaks (ear angle, snout length, with/without eyes, stripe accents).</p>
+
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <!-- A1: geometric, sharp ears, dark eyes+nose, centre mane tuft -->
+    <symbol id="a1" viewBox="0 0 100 100">
+      <g fill="#FBEFDD">
+        <path d="M33 48 L24 13 L49 41 Z"/>                 <!-- left ear -->
+        <path d="M67 48 L76 13 L51 41 Z"/>                 <!-- right ear -->
+        <path d="M46 42 L50 24 L54 42 Z"/>                 <!-- mane tuft -->
+        <path d="M30 46 Q50 39 70 46 L61 73 Q50 87 39 73 Z"/> <!-- muzzle -->
+      </g>
+      <circle cx="42" cy="55" r="3.2" fill="#7A360F"/>
+      <circle cx="58" cy="55" r="3.2" fill="#7A360F"/>
+      <path d="M46 70 h8 l-4 7 Z" fill="#7A360F"/>          <!-- nose -->
+    </symbol>
+
+    <!-- A2: same face + a 3-spike mane crest rising behind the head -->
+    <symbol id="a2" viewBox="0 0 100 100">
+      <path d="M30 40 L36 18 L42 34 L50 10 L58 34 L64 18 L70 40 Z" fill="#E7A24E"/> <!-- crest behind -->
+      <g fill="#FBEFDD">
+        <path d="M33 50 L25 18 L49 43 Z"/>
+        <path d="M67 50 L75 18 L51 43 Z"/>
+        <path d="M30 48 Q50 41 70 48 L61 74 Q50 88 39 74 Z"/>
+      </g>
+      <circle cx="42" cy="57" r="3.2" fill="#7A360F"/>
+      <circle cx="58" cy="57" r="3.2" fill="#7A360F"/>
+      <path d="M46 72 h8 l-4 7 Z" fill="#7A360F"/>
+    </symbol>
+
+    <!-- A3: pure silhouette, rounded — no facial features (max legibility tiny) -->
+    <symbol id="a3" viewBox="0 0 100 100">
+      <g fill="#FBEFDD">
+        <path d="M34 48 Q27 28 30 16 Q34 12 40 26 Q45 38 49 43 Z"/>  <!-- left ear (curved) -->
+        <path d="M66 48 Q73 28 70 16 Q66 12 60 26 Q55 38 51 43 Z"/>  <!-- right ear -->
+        <path d="M31 46 Q50 38 69 46 Q66 70 50 86 Q34 70 31 46 Z"/>  <!-- head/muzzle -->
+      </g>
+    </symbol>
+  </defs></svg>
+
+  <div class="row" id="row"></div>
+
+<script>
+  const grad = "linear-gradient(150deg,#F6B259,#9C3B12)";
+  const variants = [
+    { id:"a1", name:"A1 · Geometric", desc:"Sharp upright ears, slender muzzle, centre mane tuft, dark eyes + nose. Crisp and bold." },
+    { id:"a2", name:"A2 · Maned",      desc:"A1 plus a three-spike crest rising behind the head — the most distinctly ‘aardwolf’." },
+    { id:"a3", name:"A3 · Silhouette", desc:"Pure rounded shape, no facial features — the safest read at 16px; calmest." },
+  ];
+  const sizes = [128,48,32,16];
+  const row = document.getElementById("row");
+  for (const v of variants) {
+    const strip = sizes.map(s => `
+      <div><div class="icon" style="width:${s}px;height:${s}px;background:${grad}">
+        <svg width="${s}" height="${s}" viewBox="0 0 100 100"><use href="#${v.id}"/></svg>
+      </div><div class="lbl">${s}</div></div>`).join("");
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>${v.name}</h2><p>${v.desc}</p>
+      <div class="icon big" style="background:${grad}">
+        <svg width="176" height="176" viewBox="0 0 100 100"><use href="#${v.id}"/></svg>
+      </div><div class="sizes">${strip}</div>`;
+    row.appendChild(card);
+  }
+</script>
+</body>
+</html>

@@ -13,4 +13,4 @@
 --operatorfunc spaced
 
 # Ignore vendored submodules and build outputs
---exclude .build,.swiftpm,DerivedData,mushclient,mudlet,iterm2,aardwolfclientpackage
+--exclude .build,.swiftpm,DerivedData,mushclient,mudlet,iterm2,aardwolfclientpackage,scripts

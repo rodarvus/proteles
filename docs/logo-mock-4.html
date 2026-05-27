@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — mouth options (round 4)</title>
+<style>
+  body { margin:0; padding:32px; background:#1b1713; color:#efe7dd;
+    font:14px/1.5 -apple-system,system-ui,sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#b8a999; max-width:820px; margin:0 0 28px; }
+  .row { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
+  .card { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    border-radius:14px; padding:20px; width:300px; }
+  .card h2 { font-size:15px; margin:0 0 2px; }
+  .card p { color:#b8a999; font-size:12.5px; margin:0 0 14px; min-height:40px; }
+  .icon { border-radius:22.37%; box-shadow:0 8px 22px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.22); overflow:hidden; display:inline-block; }
+  .big { width:200px; height:200px; }
+  .sizes { display:flex; align-items:flex-end; gap:14px; margin-top:18px; }
+  .sizes .lbl { color:#8a7d70; font-size:11px; text-align:center; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+  <h1>Proteles — mouth options · round 4</h1>
+  <p class="sub">Same A1 rounded-ears face; three mouths below the nose. (The mouth all but vanishes by
+  16px, so it’s about character at the larger sizes.) Pick one — or “none / nose only”.</p>
+
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <!-- shared face (ears + tuft + muzzle + eyes + nose), no mouth -->
+    <g id="face-base">
+      <g fill="#FBEFDD">
+        <path d="M33 46 C27 30 26 20 31 14 C35 10 41 22 49 42 Z"/>
+        <path d="M67 46 C73 30 74 20 69 14 C65 10 59 22 51 42 Z"/>
+        <path d="M46 42 L50 25 L54 42 Z"/>
+        <path d="M30 46 Q50 39 70 46 L61 73 Q50 87 39 73 Z"/>
+      </g>
+      <circle cx="42" cy="55" r="3.2" fill="#7A360F"/>
+      <circle cx="58" cy="55" r="3.2" fill="#7A360F"/>
+      <path d="M46 69 h8 l-4 7 Z" fill="#7A360F"/>
+    </g>
+    <!-- M1: philtrum + smile -->
+    <symbol id="m1" viewBox="0 0 100 100">
+      <use href="#face-base"/>
+      <path d="M50 76 V80 M50 80 Q44 85 38 82 M50 80 Q56 85 62 82"
+            fill="none" stroke="#7A360F" stroke-width="2.4" stroke-linecap="round"/>
+    </symbol>
+    <!-- M2: gentle smile -->
+    <symbol id="m2" viewBox="0 0 100 100">
+      <use href="#face-base"/>
+      <path d="M40 80 Q50 87 60 80" fill="none" stroke="#7A360F"
+            stroke-width="2.4" stroke-linecap="round"/>
+    </symbol>
+    <!-- M3: neutral line -->
+    <symbol id="m3" viewBox="0 0 100 100">
+      <use href="#face-base"/>
+      <path d="M41 82 Q50 84 59 82" fill="none" stroke="#7A360F"
+            stroke-width="2.4" stroke-linecap="round"/>
+    </symbol>
+    <!-- M0: nose only -->
+    <symbol id="m0" viewBox="0 0 100 100"><use href="#face-base"/></symbol>
+  </defs></svg>
+
+  <div class="row" id="row"></div>
+
+<script>
+  const grad = "linear-gradient(150deg,#F6B259,#9C3B12)";
+  const cards = [
+    { id:"m1", name:"M1 · Philtrum + smile", desc:"Classic muzzle line — friendliest, most ‘creature’." },
+    { id:"m2", name:"M2 · Gentle smile",     desc:"A simple grin; approachable, no philtrum." },
+    { id:"m3", name:"M3 · Neutral",          desc:"Near-flat — calm, dignified, more ‘wild’." },
+    { id:"m0", name:"M0 · Nose only",        desc:"No mouth — cleanest; relies on eyes + nose." },
+  ];
+  const sizes = [128,48,32,16];
+  const row = document.getElementById("row");
+  for (const c of cards) {
+    const strip = sizes.map(s => `
+      <div><div class="icon" style="width:${s}px;height:${s}px;background:${grad}">
+        <svg width="${s}" height="${s}" viewBox="0 0 100 100"><use href="#${c.id}"/></svg>
+      </div><div class="lbl">${s}</div></div>`).join("");
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>${c.name}</h2><p>${c.desc}</p>
+      <div class="icon big" style="background:${grad}">
+        <svg width="200" height="200" viewBox="0 0 100 100"><use href="#${c.id}"/></svg>
+      </div><div class="sizes">${strip}</div>`;
+    row.appendChild(card);
+  }
+</script>
+</body>
+</html>

@@ -52,6 +52,8 @@ excluded:
   - mudlet
   - iterm2
   - aardwolfclientpackage
+  # Build-only tooling (one-off icon generator), not shipped code.
+  - scripts
 
 line_length:
   warning: 110

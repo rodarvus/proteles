@@ -52,6 +52,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.proteles.ProtelesApp
         PRODUCT_NAME: Proteles
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "0.2.3"
         CURRENT_PROJECT_VERSION: "23"
         # Sign with a stable, self-signed dev identity so the Keychain

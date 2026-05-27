@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proteles — logo / icon concepts (round 1)</title>
+<style>
+  body { margin:0; padding:32px; background:#16161a; color:#e6e6e9;
+    font:14px/1.5 -apple-system,system-ui,sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#9a9aa0; max-width:820px; margin:0 0 28px; }
+  .row { display:flex; gap:28px; flex-wrap:wrap; }
+  .card { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    border-radius:14px; padding:20px; width:300px; }
+  .card h2 { font-size:15px; margin:0 0 2px; }
+  .card p { color:#9a9aa0; font-size:12.5px; margin:0 0 16px; min-height:48px; }
+  /* macOS-style rounded icon */
+  .icon { border-radius:22.37%; box-shadow:0 8px 22px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.18); overflow:hidden; display:inline-block; }
+  .big { width:176px; height:176px; }
+  .sizes { display:flex; align-items:flex-end; gap:14px; margin-top:18px; }
+  .sizes .lbl { color:#7a7a80; font-size:11px; text-align:center; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+  <h1>Proteles — logo / icon concepts</h1>
+  <p class="sub">Round 1: four directions on the “Proteles = aardwolf genus” theme, each rendered as a
+  macOS rounded icon at 176 / 128 / 48 / 32 / 16 px so we can judge how it reads when tiny (the real
+  test for an app icon). These are quick vector drafts — tell me which direction(s) to refine, tweak
+  the palette, etc. The glyphs are pure SVG, so iterating is cheap.</p>
+
+  <!-- Reusable glyphs (100x100). Foreground is white; squircle gradient set per card. -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <!-- A: Aardwolf face — big pointed ears + muzzle -->
+      <symbol id="g-face" viewBox="0 0 100 100">
+        <g fill="#fff">
+          <path d="M31 46 L21 16 L47 41 Z"/>            <!-- left ear -->
+          <path d="M69 46 L79 16 L53 41 Z"/>            <!-- right ear -->
+          <path d="M28 44 Q50 36 72 44 Q70 74 50 86 Q30 74 28 44 Z"/> <!-- muzzle -->
+        </g>
+        <circle cx="42" cy="56" r="3.4" fill="#1a1a1a"/> <!-- eyes (negative) -->
+        <circle cx="58" cy="56" r="3.4" fill="#1a1a1a"/>
+        <path d="M50 70 l-4 -6 h8 Z" fill="#1a1a1a"/>    <!-- nose -->
+      </symbol>
+
+      <!-- B: Mane / crest — abstract erectile dorsal mane -->
+      <symbol id="g-mane" viewBox="0 0 100 100">
+        <path fill="#fff" d="M16 78
+          L28 52 L34 64 L46 22 L52 58 L64 36 L70 60 L84 78 Z"/>
+        <rect x="16" y="76" width="68" height="7" rx="3.5" fill="#fff"/>
+      </symbol>
+
+      <!-- C: Monogram P with an ear notch -->
+      <symbol id="g-mono" viewBox="0 0 100 100">
+        <g fill="#fff">
+          <path d="M34 22 h22 a20 20 0 0 1 0 40 H46 v18 a4 4 0 0 1 -4 4 h-4
+                   a4 4 0 0 1 -4 -4 V26 a4 4 0 0 1 4 -4 Z M46 36 v14 h9 a7 7 0 0 0 0 -14 Z"/>
+          <path d="M60 18 l10 -8 l-1 14 Z"/>  <!-- ear tip flick -->
+        </g>
+      </symbol>
+
+      <!-- D: Terminal prompt + ears (MUD client nod) -->
+      <symbol id="g-prompt" viewBox="0 0 100 100">
+        <g fill="#fff">
+          <path d="M30 30 L22 14 L40 26 Z"/>   <!-- left ear -->
+          <path d="M70 30 L78 14 L60 26 Z"/>   <!-- right ear -->
+          <rect x="22" y="30" width="56" height="44" rx="9"/> <!-- terminal -->
+          <path d="M34 46 l10 8 l-10 8" fill="none" stroke="#1a1a1a"
+                stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="50" y="60" width="16" height="5" rx="2.5" fill="#1a1a1a"/> <!-- cursor line -->
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <div class="row" id="row"></div>
+
+<script>
+  const concepts = [
+    { id:"g-face",   name:"A · Aardwolf face",
+      desc:"Big pointed ears + muzzle — an instantly readable animal mark; the literal nod to the aardwolf.",
+      grad:["#F2A65A","#A6531C"] },           // warm savanna amber→rust
+    { id:"g-mane",   name:"B · Mane / crest",
+      desc:"The aardwolf’s erectile dorsal mane, abstracted into a bold crest. Distinctive and very legible tiny.",
+      grad:["#5AA9E6","#2E5FB0"] },           // cool blue
+    { id:"g-mono",   name:"C · Monogram “P”",
+      desc:"A clean letter-mark with a subtle ear flick. Safest / most ‘app-store’; pairs well with a wordmark.",
+      grad:["#8E7BEF","#5B3FB8"] },           // indigo/violet
+    { id:"g-prompt", name:"D · Prompt + ears",
+      desc:"A terminal prompt wearing aardwolf ears — ties the MUD-client heritage to the name.",
+      grad:["#3BC9A6","#127D63"] },           // teal/green
+  ];
+  const sizes = [128, 48, 32, 16];
+  const row = document.getElementById("row");
+  let gi = 0;
+  for (const c of concepts) {
+    const id = "grad"+(gi++);
+    const card = document.createElement("div");
+    card.className = "card";
+    const sizeStrip = sizes.map(s => `
+      <div><div class="icon" style="width:${s}px;height:${s}px;background:linear-gradient(145deg,${c.grad[0]},${c.grad[1]})">
+        <svg width="${s}" height="${s}" viewBox="0 0 100 100"><use href="#${c.id}"/></svg>
+      </div><div class="lbl">${s}</div></div>`).join("");
+    card.innerHTML = `
+      <h2>${c.name}</h2>
+      <p>${c.desc}</p>
+      <div class="icon big" style="background:linear-gradient(145deg,${c.grad[0]},${c.grad[1]})">
+        <svg width="176" height="176" viewBox="0 0 100 100"><use href="#${c.id}"/></svg>
+      </div>
+      <div class="sizes">${sizeStrip}</div>`;
+    row.appendChild(card);
+  }
+</script>
+</body>
+</html>
