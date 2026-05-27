@@ -115,6 +115,7 @@ struct TabContainer: View {
     let selection: Int
     let store: LayoutStore
     let path: [Int]
+    let onDetach: (PanelKind) -> Void
     let content: (PanelKind) -> AnyView
 
     var body: some View {
@@ -143,13 +144,22 @@ struct TabContainer: View {
                 }
                 Spacer(minLength: 4)
                 Button {
+                    onDetach(panels[selected])
+                } label: {
+                    Image(systemName: "rectangle.portrait.and.arrow.right").font(.caption2.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tertiary)
+                .padding(.trailing, 4)
+                .help("Open \(panels[selected].title) in its own window")
+                Button {
                     store.close(panels[selected])
                 } label: {
                     Image(systemName: "xmark").font(.caption2.weight(.semibold))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tertiary)
-                .padding(.horizontal, 8)
+                .padding(.trailing, 8)
                 .help("Hide \(panels[selected].title)")
             }
             .background(.bar)

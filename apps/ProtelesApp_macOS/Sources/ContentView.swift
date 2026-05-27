@@ -26,7 +26,7 @@ struct ContentView: View {
     private static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
 
     var body: some View {
-        PanelLayoutView(store: layout) { kind in panelContent(kind) }
+        PanelLayoutView(store: layout, onDetach: detach) { kind in panelContent(kind) }
             .frame(minWidth: 820, minHeight: 460)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) { panelsMenu }
@@ -55,8 +55,18 @@ struct ContentView: View {
                 // Bind the mapper at the app root so it's live regardless of which
                 // dock tab is shown (e.g. for a menu-triggered map import).
                 map.start()
+                // Re-open windows for panels that were detached last session.
+                for kind in layout.detached {
+                    openWindow(value: kind)
+                }
             }
             .task { await launch() }
+    }
+
+    /// Tear `kind` out of the dock into its own window.
+    private func detach(_ kind: PanelKind) {
+        layout.detach(kind)
+        openWindow(value: kind)
     }
 
     /// Map a panel kind to its live view (the layout engine supplies chrome).

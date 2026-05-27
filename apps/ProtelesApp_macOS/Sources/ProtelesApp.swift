@@ -182,6 +182,23 @@ struct ProtelesApp: App {
             }
         }
 
+        // Detached panels: each torn-out panel gets its own window, keyed by
+        // its kind so re-opening the same panel reuses one window.
+        WindowGroup(for: PanelKind.self) { $kind in
+            if let kind {
+                DetachedPanelWindow(
+                    kind: kind,
+                    session: session,
+                    layout: layout,
+                    chat: chat,
+                    map: map,
+                    asciiMap: asciiMap,
+                    snd: snd
+                )
+            }
+        }
+        .windowResizability(.contentSize)
+
         Window("Worlds", id: ProtelesApp.worldsWindowID) {
             ConnectionManagerView(model: worlds) { profile in
                 let session = session

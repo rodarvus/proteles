@@ -1,0 +1,61 @@
+import MudCore
+import MudUI
+import SwiftUI
+
+/// A single panel torn out of the dock into its own macOS window (UI revamp,
+/// detachable windows). Renders the same live view as the docked panel — the
+/// shared `@Observable` models are reference types, so the window stays in sync.
+/// Closing the window drops it from ``LayoutStore/detached`` (`onDisappear`); a
+/// re-dock button returns it to the dock. If the panel is re-docked or hidden
+/// elsewhere (Panels menu), the window dismisses itself.
+struct DetachedPanelWindow: View {
+    let kind: PanelKind
+    let session: SessionController
+    let layout: LayoutStore
+    let chat: ChatModel
+    let map: MapPanelModel
+    let asciiMap: MapModel
+    let snd: SnDPanelModel
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var gmcp = GMCPState()
+
+    var body: some View {
+        content
+            .frame(minWidth: 280, minHeight: 220)
+            .navigationTitle(kind.title)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        layout.redock(kind)
+                        dismiss()
+                    } label: {
+                        Label("Re-dock", systemImage: "rectangle.portrait.and.arrow.forward")
+                    }
+                    .help("Return \(kind.title) to the main window")
+                }
+            }
+            .task {
+                // Only the Character panel needs live GMCP; cheap to always run.
+                for await snapshot in await session.gmcpState.subscribe() {
+                    gmcp = snapshot
+                }
+            }
+            .onChange(of: layout.isDetached(kind)) { _, stillDetached in
+                if !stillDetached { dismiss() } // re-docked/hidden from elsewhere
+            }
+            .onDisappear { layout.hideDetached(kind) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch kind {
+        case .map: MapPanelView(model: map)
+        case .asciiMap: MapView(model: asciiMap)
+        case .channels: ChatView(model: chat)
+        case .hunt: SearchAndDestroyPanelView(model: snd)
+        case .info: InfoPanel(state: gmcp)
+        case .output: EmptyView() // output isn't detachable (it's the main window)
+        }
+    }
+}

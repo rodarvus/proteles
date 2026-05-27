@@ -9,14 +9,21 @@ import SwiftUI
 public struct PanelLayoutView: View {
     @Bindable private var store: LayoutStore
     private let content: (PanelKind) -> AnyView
+    private let onDetach: (PanelKind) -> Void
 
     /// - Parameters:
     ///   - store: the live layout (bound, so resizes/toggles re-render).
     ///   - content: maps a panel kind to its view. `output` is rendered raw
     ///     (it owns the game text + input + gauges); every other kind is wrapped
     ///     in chrome with a title and close button.
-    public init(store: LayoutStore, content: @escaping (PanelKind) -> AnyView) {
+    ///   - onDetach: tear a panel into its own window (the app opens it).
+    public init(
+        store: LayoutStore,
+        onDetach: @escaping (PanelKind) -> Void = { _ in },
+        content: @escaping (PanelKind) -> AnyView
+    ) {
         self.store = store
+        self.onDetach = onDetach
         self.content = content
     }
 
@@ -36,6 +43,7 @@ public struct PanelLayoutView: View {
                 selection: selection,
                 store: store,
                 path: path,
+                onDetach: onDetach,
                 content: content
             ))
         case .split(let axis, let items):
@@ -58,7 +66,12 @@ public struct PanelLayoutView: View {
                 content(kind)
                     .overlay(alignment: .topTrailing) { outputDragGrip }
             } else {
-                PanelChrome(kind: kind, onClose: { store.close(kind) }, content: { content(kind) })
+                PanelChrome(
+                    kind: kind,
+                    onClose: { store.close(kind) },
+                    onDetach: { onDetach(kind) },
+                    content: { content(kind) }
+                )
             }
         }
         .panelDropTarget(kind, store: store)
@@ -83,6 +96,7 @@ public struct PanelLayoutView: View {
 struct PanelChrome<Content: View>: View {
     let kind: PanelKind
     let onClose: () -> Void
+    let onDetach: () -> Void
     @ViewBuilder let content: Content
     @State private var hovering = false
 
@@ -101,6 +115,14 @@ struct PanelChrome<Content: View>: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .opacity(hovering ? 1 : 0)
+                Button(action: onDetach) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.caption2.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tertiary)
+                .opacity(hovering ? 1 : 0)
+                .help("Open \(kind.title) in its own window")
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))
