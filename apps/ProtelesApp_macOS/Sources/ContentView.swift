@@ -23,6 +23,9 @@ struct ContentView: View {
     /// "Omit Blank Lines" display preference (View menu); pushed to the session
     /// on launch and whenever it changes. Same UserDefaults key as the toggle.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    /// Output font size (Appearance preference). Changing it recreates the
+    /// output view, which re-renders the scrollback at the new size.
+    @AppStorage("outputFontSize") private var outputFontSize = 13.0
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -95,9 +98,12 @@ struct ContentView: View {
     /// graphical vitals bar (spanning the output, no duplicated text summary).
     private var gameColumn: some View {
         VStack(spacing: 0) {
-            MudOutputView(store: session.scrollbackStore, onCommand: { command in
-                Task { try? await session.send(command) }
-            })
+            MudOutputView(
+                store: session.scrollbackStore,
+                fontSize: CGFloat(outputFontSize),
+                onCommand: { command in Task { try? await session.send(command) } }
+            )
+            .id(outputFontSize) // recreate (and re-render) when the font size changes
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
             // the game output, layered over it — not over the side dock.

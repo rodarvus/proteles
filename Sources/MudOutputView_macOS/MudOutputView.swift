@@ -12,15 +12,18 @@
     public struct MudOutputView: NSViewRepresentable {
         private let store: ScrollbackStore
         private let palette: ColorPalette
+        private let fontSize: CGFloat
         private let onCommand: ((String) -> Void)?
 
         public init(
             store: ScrollbackStore,
             palette: ColorPalette = .xtermDefault,
+            fontSize: CGFloat = 13,
             onCommand: ((String) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
+            self.fontSize = fontSize
             self.onCommand = onCommand
         }
 
@@ -59,7 +62,7 @@
             tailScrollView.documentView = tailTextView
 
             let lineHeight = NSLayoutManager().defaultLineHeight(
-                for: tailTextView.font ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
+                for: tailTextView.font ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
             )
             let tailHeight = ceil(lineHeight * CGFloat(Self.tailLineCount)) + 16 // inset slack
 
@@ -126,7 +129,7 @@
             textView.backgroundColor = NSColor(palette.defaultBackground)
             textView.textContainerInset = NSSize(width: 8, height: 8)
             textView.font = NSFont.monospacedSystemFont(
-                ofSize: 13,
+                ofSize: fontSize,
                 weight: .regular
             )
             textView.textContainer?.widthTracksTextView = true

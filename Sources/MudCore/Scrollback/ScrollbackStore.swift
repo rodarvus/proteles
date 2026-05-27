@@ -130,6 +130,24 @@ public actor ScrollbackStore {
         return stream
     }
 
+    /// Subscribe to ``ScrollbackEvent``s *and* atomically capture the lines
+    /// already resident, in one actor hop. Use this when a fresh view must
+    /// render the existing buffer and then stay live without missing or
+    /// double-counting any line (the render coordinator on (re)attach — e.g.
+    /// after a font-size change recreates the view). Cancel iteration to
+    /// unsubscribe.
+    public func eventsWithSnapshot() -> (snapshot: [Line], stream: AsyncStream<ScrollbackEvent>) {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<ScrollbackEvent>.makeStream(
+            bufferingPolicy: .unbounded
+        )
+        eventSubscribers[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeEventSubscriber(id) }
+        }
+        return (Array(lines), stream)
+    }
+
     // MARK: - Private
 
     private func appendLine(_ line: Line) {

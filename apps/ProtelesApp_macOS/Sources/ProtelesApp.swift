@@ -1,3 +1,4 @@
+import AppKit
 import MudCore
 import MudOutputView_macOS
 import MudUI
@@ -103,6 +104,10 @@ struct ProtelesApp: App {
             let store = session.scrollbackStore
             Task { await persistence.attach(to: store) }
         }
+
+        // Single-session client: no window tabbing, so the "Show Tab Bar" /
+        // "Show All Tabs" menu items don't clutter the menu bar.
+        NSWindow.allowsAutomaticWindowTabbing = false
     }
 
     var body: some Scene {
@@ -122,6 +127,15 @@ struct ProtelesApp: App {
         }
         .windowResizability(.contentSize)
         .commands {
+            // Strip auto-generated menu items that don't apply to a MUD client:
+            // the Format menu (rich-text styling), File ▸ New (no documents),
+            // and the View ▸ Show/Customise Toolbar + sidebar commands.
+            CommandGroup(replacing: .textFormatting) {}
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .sidebar) {}
+            CommandGroup(replacing: .help) {}
+
             CommandGroup(replacing: .appInfo) {
                 Button("About Proteles") {
                     NSApp.orderFrontStandardAboutPanel(
@@ -180,6 +194,11 @@ struct ProtelesApp: App {
                     Button("Empty Search & Destroy Database…") { snd.requestReset() }
                 }
             }
+        }
+
+        // Preferences (⌘,). SwiftUI adds the standard "Settings…" app-menu item.
+        Settings {
+            SettingsView()
         }
 
         // Detached panels: each torn-out panel gets its own window, keyed by

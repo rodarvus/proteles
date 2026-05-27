@@ -92,7 +92,11 @@
         /// with the store's eviction order.
         public func attach(to store: ScrollbackStore) async {
             detach()
-            let stream = await store.events()
+            // Atomically grab the resident lines + a live event stream, then
+            // render the existing buffer up front — so a freshly (re)created
+            // view (e.g. after a font-size change) isn't blank.
+            let (snapshot, stream) = await store.eventsWithSnapshot()
+            renderSnapshot(snapshot)
             subscriptionTask = Task { [weak self] in
                 for await event in stream {
                     await MainActor.run {
@@ -127,6 +131,27 @@
         }
 
         // MARK: - Private
+
+        /// Render a batch of already-resident lines in one transaction (used on
+        /// attach to restore the existing buffer). Mirrors the append path in
+        /// ``flushPending`` but skips eviction handling (the snapshot is, by
+        /// definition, within budget).
+        private func renderSnapshot(_ lines: [Line]) {
+            guard !lines.isEmpty, let textView, let storage = textView.textStorage else { return }
+            storage.beginEditing()
+            for line in lines {
+                let attributed = builder.build(line)
+                storage.append(attributed)
+                lineLengths.append((id: line.id, utf16Length: attributed.length))
+                recentLines.append(attributed)
+            }
+            if recentLines.count > tailLineCount {
+                recentLines.removeFirst(recentLines.count - tailLineCount)
+            }
+            storage.endEditing()
+            scrollToBottom(textView)
+            refreshTail()
+        }
 
         private func enqueue(_ event: ScrollbackEvent) {
             pendingEvents.append(event)

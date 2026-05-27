@@ -1,6 +1,27 @@
 @testable import MudCore
 import Testing
 
+@Suite("ScrollbackStore — eventsWithSnapshot")
+struct ScrollbackStoreEventsSnapshotTests {
+    @Test("Returns the resident lines and then streams subsequent appends")
+    func snapshotThenStream() async {
+        let store = ScrollbackStore()
+        await store.append(text: "old1")
+        await store.append(text: "old2")
+
+        let (snapshot, stream) = await store.eventsWithSnapshot()
+        #expect(snapshot.map(\.text) == ["old1", "old2"], "captures the existing buffer")
+
+        await store.append(text: "new")
+        var streamed: [String] = []
+        for await event in stream {
+            if case .appended(let line) = event { streamed.append(line.text) }
+            break // just the first post-subscription event
+        }
+        #expect(streamed == ["new"], "later appends arrive on the stream, not the snapshot")
+    }
+}
+
 @Suite("ScrollbackStore — append & identifiers")
 struct ScrollbackStoreAppendTests {
     @Test("Append assigns monotonic IDs starting at 0")
