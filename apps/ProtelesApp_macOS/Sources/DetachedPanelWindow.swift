@@ -1,3 +1,4 @@
+import AppKit
 import MudCore
 import MudUI
 import SwiftUI
@@ -23,6 +24,10 @@ struct DetachedPanelWindow: View {
     var body: some View {
         content
             .frame(minWidth: 280, minHeight: 220)
+            // Float above the main window so a torn-out panel stays visible even
+            // when the main Proteles window has focus (SwiftUI's .windowLevel is
+            // macOS 15+, so reach the NSWindow directly).
+            .background(WindowAccessor { $0.level = .floating })
             .navigationTitle(kind.title)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -57,5 +62,21 @@ struct DetachedPanelWindow: View {
         case .info: InfoPanel(state: gmcp)
         case .output: EmptyView() // output isn't detachable (it's the main window)
         }
+    }
+}
+
+/// Reaches the hosting `NSWindow` so we can apply AppKit-only configuration
+/// (e.g. window level) not yet exposed by SwiftUI on macOS 14.
+private struct WindowAccessor: NSViewRepresentable {
+    let configure: (NSWindow) -> Void
+
+    func makeNSView(context _: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { if let window = view.window { configure(window) } }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context _: Context) {
+        DispatchQueue.main.async { if let window = nsView.window { configure(window) } }
     }
 }
