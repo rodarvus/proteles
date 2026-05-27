@@ -33,7 +33,10 @@
             let scrollView = NSScrollView()
             scrollView.hasVerticalScroller = true
             scrollView.hasHorizontalScroller = false
-            scrollView.autohidesScrollers = false
+            // Overlay scrollers: hidden at rest, fading in only while scrolling
+            // (standard macOS behaviour) so they never eat output width.
+            scrollView.scrollerStyle = .overlay
+            scrollView.autohidesScrollers = true
             scrollView.borderType = .noBorder
             scrollView.translatesAutoresizingMaskIntoConstraints = false
 

@@ -166,10 +166,23 @@
             storage.endEditing()
 
             if stickToBottom {
-                textView.scrollToEndOfDocument(nil)
+                scrollToBottom(textView)
             }
 
             onFrameFlush?(ContinuousClock.now - start)
+        }
+
+        /// Pin the view to the bottom. We scroll immediately *and* again on the
+        /// next runloop tick: TextKit lays text out asynchronously, so an
+        /// immediate `scrollToEndOfDocument` can land short of the true end
+        /// (the new lines aren't measured yet) — most visibly right after
+        /// connect, when the first burst arrives before the view has sized. The
+        /// deferred pass runs after layout settles and lands on the real bottom.
+        private func scrollToBottom(_ textView: NSTextView) {
+            textView.scrollToEndOfDocument(nil)
+            DispatchQueue.main.async { [weak textView] in
+                textView?.scrollToEndOfDocument(nil)
+            }
         }
 
         private func isScrolledToBottom(_ textView: NSTextView) -> Bool {
