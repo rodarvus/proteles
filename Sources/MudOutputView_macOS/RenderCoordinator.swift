@@ -47,6 +47,16 @@
         private var subscriptionTask: Task<Void, Never>?
         private var frameTask: Task<Void, Never>?
 
+        /// Live-tail split (Mudlet-style): a small bottom pane that always shows
+        /// the most recent lines while the user scrolls back through history.
+        /// We keep the last ``tailLineCount`` rendered lines and mirror them
+        /// into ``tailTextView`` whenever new output arrives. The pane's
+        /// show/hide is owned by the view (``SplitOutputContainer``); here we
+        /// only keep its content current.
+        private weak var tailTextView: NSTextView?
+        private var tailLineCount = 10
+        private var recentLines: Deque<NSAttributedString> = []
+
         /// FIFO of `(LineID, utf16Length)` for every line currently in
         /// `NSTextStorage`. On eviction, we pop from the head and delete
         /// exactly that many UTF-16 code units from the front of the
@@ -108,10 +118,35 @@
             frameTask = nil
         }
 
+        /// Wire the live-tail pane: `textView` will mirror the most recent
+        /// `lineCount` lines of output. Call once, after construction.
+        public func attachTail(textView: NSTextView, lineCount: Int) {
+            tailTextView = textView
+            tailLineCount = max(1, lineCount)
+            refreshTail()
+        }
+
         // MARK: - Private
 
         private func enqueue(_ event: ScrollbackEvent) {
             pendingEvents.append(event)
+        }
+
+        /// Re-render the live-tail pane from the buffered recent lines. The
+        /// lines already carry a trailing newline (so the main view stacks
+        /// them); we strip the final one so the tail isn't padded by a blank
+        /// row at the bottom.
+        private func refreshTail() {
+            guard let storage = tailTextView?.textStorage else { return }
+            let combined = NSMutableAttributedString()
+            for line in recentLines {
+                combined.append(line)
+            }
+            if combined.length > 0, combined.mutableString.hasSuffix("\n") {
+                combined.deleteCharacters(in: NSRange(location: combined.length - 1, length: 1))
+            }
+            storage.setAttributedString(combined)
+            tailTextView?.scrollToEndOfDocument(nil)
         }
 
         private func flushPending() {
@@ -125,6 +160,7 @@
 
             let start = ContinuousClock.now
             let stickToBottom = isScrolledToBottom(textView)
+            var didAppend = false
 
             storage.beginEditing()
 
@@ -146,6 +182,11 @@
                     let attributed = builder.build(line)
                     storage.append(attributed)
                     lineLengths.append((id: line.id, utf16Length: attributed.length))
+                    recentLines.append(attributed)
+                    if recentLines.count > tailLineCount {
+                        recentLines.removeFirst(recentLines.count - tailLineCount)
+                    }
+                    didAppend = true
 
                 case .evicted(let id):
                     guard let head = lineLengths.popFirst() else { break }
@@ -168,6 +209,7 @@
             if stickToBottom {
                 scrollToBottom(textView)
             }
+            if didAppend { refreshTail() }
 
             onFrameFlush?(ContinuousClock.now - start)
         }

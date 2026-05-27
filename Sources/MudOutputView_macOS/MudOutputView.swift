@@ -24,12 +24,14 @@
             self.onCommand = onCommand
         }
 
-        public func makeNSView(context: Context) -> NSScrollView {
-            // We hand-roll the NSScrollView + MudTextView pair rather
-            // than calling NSTextView.scrollableTextView(), because the
-            // latter returns a stock NSTextView and we need our
-            // ``MudTextView`` subclass for the `copyWithCodes(_:)`
-            // action.
+        /// Number of lines kept in the live-tail pane (the Mudlet-style split
+        /// shown while scrolled back).
+        private static let tailLineCount = 10
+
+        public func makeNSView(context: Context) -> NSView {
+            // Main history scroll view + our MudTextView subclass (we hand-roll
+            // the pair rather than NSTextView.scrollableTextView() so we get the
+            // copyWithCodes(_:) action and hyperlink routing).
             let scrollView = NSScrollView()
             scrollView.hasVerticalScroller = true
             scrollView.hasHorizontalScroller = false
@@ -38,8 +40,47 @@
             scrollView.scrollerStyle = .overlay
             scrollView.autohidesScrollers = true
             scrollView.borderType = .noBorder
-            scrollView.translatesAutoresizingMaskIntoConstraints = false
+            let textView = makeTextView()
+            scrollView.documentView = textView
 
+            // Live-tail pane: a small bottom mirror of the latest lines, shown
+            // only when scrolled up (see SplitOutputContainer).
+            let tailScrollView = NSScrollView()
+            tailScrollView.hasVerticalScroller = false
+            tailScrollView.hasHorizontalScroller = false
+            tailScrollView.drawsBackground = true
+            tailScrollView.backgroundColor = NSColor(palette.defaultBackground)
+            tailScrollView.borderType = .noBorder
+            let tailTextView = makeTextView()
+            tailScrollView.documentView = tailTextView
+
+            let lineHeight = NSLayoutManager().defaultLineHeight(
+                for: tailTextView.font ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
+            )
+            let tailHeight = ceil(lineHeight * CGFloat(Self.tailLineCount)) + 16 // inset slack
+
+            let container = SplitOutputContainer(
+                scrollView: scrollView,
+                tailScrollView: tailScrollView,
+                tailHeight: tailHeight
+            )
+
+            let coordinator = RenderCoordinator(textView: textView, palette: palette)
+            coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
+            context.coordinator.renderCoordinator = coordinator
+            let storeRef = store
+            Task { @MainActor in
+                await coordinator.attach(to: storeRef)
+            }
+
+            return container
+        }
+
+        public func updateNSView(_: NSView, context _: Context) {}
+
+        /// Build a configured read-only `MudTextView` (used for both the main
+        /// history view and the live-tail mirror).
+        private func makeTextView() -> MudTextView {
             let textView = MudTextView()
             textView.onCommand = onCommand
             textView.delegate = textView // self-delegate for hyperlink clicks
@@ -56,23 +97,8 @@
                 height: CGFloat.greatestFiniteMagnitude
             )
             configure(textView)
-
-            scrollView.documentView = textView
-
-            let coordinator = RenderCoordinator(
-                textView: textView,
-                palette: palette
-            )
-            context.coordinator.renderCoordinator = coordinator
-            let storeRef = store
-            Task { @MainActor in
-                await coordinator.attach(to: storeRef)
-            }
-
-            return scrollView
+            return textView
         }
-
-        public func updateNSView(_: NSScrollView, context _: Context) {}
 
         public func makeCoordinator() -> Coordinator {
             Coordinator()
