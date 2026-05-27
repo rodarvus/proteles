@@ -189,6 +189,19 @@ extension Mapper {
 
     // MARK: - Custom exits (cexits)
 
+    /// The current room's custom (non-cardinal) exits, read from the in-memory
+    /// graph — the data source for the Rich Exits feature's clickable custom
+    /// tokens. Cardinal exits come from GMCP `room.info`, so they're excluded
+    /// here. Sorted by command for a stable display order. Empty when the
+    /// current room is unknown or has no custom exits.
+    public func currentRoomCustomExits() -> [RichExits.CustomExit] {
+        guard let uid = currentRoomUID, let room = graph.rooms[uid] else { return [] }
+        return room.exits.values
+            .filter { !RichExits.isCardinalDirection($0.dir) }
+            .map { RichExits.CustomExit(command: $0.dir, destination: $0.to) }
+            .sorted { $0.command < $1.command }
+    }
+
     /// `mapper cexits [filter|here]` — list custom (non-cardinal) exits.
     private func listCustomExits(_ arg: String) -> [ScriptEffect] {
         let filter = arg.isEmpty ? nil

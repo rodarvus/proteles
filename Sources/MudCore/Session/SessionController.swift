@@ -142,6 +142,20 @@ public actor SessionController {
     /// Drop empty MUD lines from output; off by default (`Omit_Blank_Lines`).
     public internal(set) var omitBlankLines = false
 
+    /// Rewrite Aardwolf's exits line into clickable direction hyperlinks in the
+    /// main output (Rich Exits); off by default. When on, the controller sends
+    /// `tags exits on` after login so the line is detectable, rebuilds it from
+    /// ``richExitsCardinals`` (GMCP) + ``richExitsCustomExits`` (mapper), and
+    /// gags the tag-toggle confirmation. See ``RichExits``.
+    public internal(set) var richExitsEnabled = false
+    /// Whether `tags exits on` has been sent this session (one-shot per connect).
+    var sentExitsTag = false
+    /// The latest room's cardinal exits (from GMCP `room.info`), cached so the
+    /// exits-line rewrite has them ready when the tagged line arrives.
+    var richExitsCardinals: [RichExits.Cardinal] = []
+    /// The latest room's custom exits (from the mapper graph), cached likewise.
+    var richExitsCustomExits: [RichExits.CustomExit] = []
+
     /// Drop behaviour; defaults to ``ReconnectPolicy/disabled`` (app sets standard).
     public var reconnectPolicy: ReconnectPolicy
 
@@ -308,6 +322,9 @@ public actor SessionController {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         gmcpHandshakeSent = false
+        sentExitsTag = false
+        richExitsCardinals = []
+        richExitsCustomExits = []
         await gmcpState.reset()
         await chatStore.reset()
         await mapStore.reset()

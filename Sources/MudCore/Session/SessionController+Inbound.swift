@@ -76,6 +76,12 @@ extension SessionController {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
             }
         }
+        // Rich Exits: cache the new room's cardinal (GMCP) + custom (mapper)
+        // exits so the exits-line rewrite has them ready, and one-shot enable
+        // Aardwolf's exits tag now that we're logged in.
+        if richExitsEnabled, message.package.lowercased() == "room.info" {
+            await refreshRichExits()
+        }
         if let scriptEngine {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
             // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
@@ -94,6 +100,37 @@ extension SessionController {
         // Load the armed dinv once the character is active (its init keys off the
         // first char.base broadcast it sees while active — see D-32).
         if armedDinvShouldLoad(for: message) { await loadPendingDinv() }
+    }
+
+    /// Refresh the cached Rich Exits data from the current GMCP room (cardinals)
+    /// and the mapper graph (custom exits), and — on the first call per session —
+    /// enable Aardwolf's exits tag so the exits line becomes detectable. Safe to
+    /// call when disconnected (caches clear; the tag command is a no-op).
+    func refreshRichExits() async {
+        let exits = await gmcpState.state.room?.exits
+        richExitsCardinals = RichExits.cardinals(fromExits: exits)
+        richExitsCustomExits = await mapper?.currentRoomCustomExits() ?? []
+        if !sentExitsTag {
+            sentExitsTag = true
+            try? await dispatchCommand("tags exits on")
+        }
+    }
+
+    /// Apply the Rich Exits transform to an outgoing line: when enabled, rewrite
+    /// the tagged exits line into clickable directions (from the cached
+    /// cardinals + custom exits) and flag the tag-toggle confirmation for
+    /// gagging. Returns the line to append + whether it should be suppressed.
+    func applyRichExits(_ line: Line, source: Line) -> (line: Line, gag: Bool) {
+        guard richExitsEnabled else { return (line, false) }
+        if RichExits.isTagConfirmation(line.text) { return (line, true) }
+        guard RichExits.isTaggedExitsLine(line.text) else { return (line, false) }
+        let rendered = RichExits.render(
+            cardinals: richExitsCardinals,
+            customExits: richExitsCustomExits,
+            id: source.id,
+            timestamp: source.timestamp
+        )
+        return (rendered, false)
     }
 
     /// True when dinv is armed-but-unloaded and `message` is an active

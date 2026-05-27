@@ -273,6 +273,9 @@ private struct ProtelesCommands: Commands {
     /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
     /// the same key and pushes it to the session.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    /// Rich Exits: make room exits (incl. custom exits) clickable in the main
+    /// output. Persisted in UserDefaults; ``ContentView`` pushes it to the session.
+    @AppStorage("richExits") private var richExits = false
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -339,6 +342,11 @@ private struct ProtelesCommands: Commands {
             // completely-empty MUD lines from the main output. Persists via
             // @AppStorage; ContentView pushes the value to the session.
             Toggle("Omit Blank Lines", isOn: $omitBlankLines)
+
+            // Make room exits (incl. custom exits) clickable in the main output
+            // (native equivalent of Aardwolf-Rich-Exits, no miniwindow). Enabling
+            // turns on Aardwolf's `tags exits` so the line is detectable.
+            Toggle("Rich Exits", isOn: $richExits)
         }
     }
 

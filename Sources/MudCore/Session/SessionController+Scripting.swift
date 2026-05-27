@@ -29,8 +29,12 @@ public extension SessionController {
         // runtime), so feed it the original text regardless of the user gag —
         // and let *its* gag suppress the line too (cp info/check scrape output).
         let sndGag = await applySearchAndDestroyLine(line.text)
-        if !disposition.gag, !sndGag, !omitBlank {
-            await scrollbackStore.append(disposition.replacement ?? line)
+        // Rich Exits: rewrite the tagged exits line into clickable directions,
+        // and gag the tag-toggle confirmation. Runs after scripts/S&D so they
+        // still see the raw line.
+        let (outLine, richExitsGag) = applyRichExits(disposition.replacement ?? line, source: line)
+        if !disposition.gag, !sndGag, !omitBlank, !richExitsGag {
+            await scrollbackStore.append(outLine)
         }
         await applyScriptEffects(disposition.effects)
         await rearmTimerLoopIfScriptScheduled()

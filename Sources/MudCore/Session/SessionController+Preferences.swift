@@ -27,4 +27,22 @@ public extension SessionController {
     func setKeepAliveEnabled(_ enabled: Bool) {
         keepAliveEnabled = enabled
     }
+
+    /// Enable/disable Rich Exits (clickable exit hyperlinks in the main output).
+    /// Enabling turns on Aardwolf's exits tag + caches the current room's exits;
+    /// disabling turns the tag back off so the raw `{exits}` line never shows.
+    func setRichExitsEnabled(_ enabled: Bool) async {
+        guard richExitsEnabled != enabled else { return }
+        richExitsEnabled = enabled
+        if enabled {
+            await refreshRichExits()
+        } else {
+            if sentExitsTag {
+                sentExitsTag = false
+                try? await dispatchCommand("tags exits off")
+            }
+            richExitsCardinals = []
+            richExitsCustomExits = []
+        }
+    }
 }

@@ -454,4 +454,24 @@ struct MapperCommandTests {
         // Room 1 is gone from the reloaded graph.
         #expect(await mapper.graph.rooms["1"] == nil)
     }
+
+    @Test("currentRoomCustomExits returns only the current room's non-cardinal exits")
+    func currentRoomCustomExits() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room 1, cardinal exit n→2
+        // Add a custom exit; the cardinal n→2 must be excluded.
+        _ = await mapper.handleCommand("mapper fullcexit {enter portal} 1 3 0")
+        let customs = await mapper.currentRoomCustomExits()
+        #expect(customs.map(\.command) == ["enter portal"])
+        #expect(customs.first?.destination == "3")
+    }
+
+    @Test("currentRoomCustomExits is empty for a room with only cardinal exits")
+    func currentRoomCustomExitsEmpty() async throws {
+        let (mapper, url) = try seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        await seed(mapper) // current room 1, only cardinal n→2
+        #expect(await mapper.currentRoomCustomExits().isEmpty)
+    }
 }

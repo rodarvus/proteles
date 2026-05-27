@@ -23,6 +23,8 @@ struct ContentView: View {
     /// "Omit Blank Lines" display preference (View menu); pushed to the session
     /// on launch and whenever it changes. Same UserDefaults key as the toggle.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    /// Rich Exits: clickable exit hyperlinks in the main output (View menu).
+    @AppStorage("richExits") private var richExits = false
     /// Output font size (Appearance preference). Changing it recreates the
     /// output view, which re-renders the scrollback at the new size.
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
@@ -62,6 +64,9 @@ struct ContentView: View {
             }
             .task(id: omitBlankLines) {
                 await session.setOmitBlankLines(omitBlankLines)
+            }
+            .task(id: richExits) {
+                await session.setRichExitsEnabled(richExits)
             }
             .task(id: autoReconnect) {
                 await session.setReconnectEnabled(autoReconnect)
