@@ -13,18 +13,30 @@
         private let store: ScrollbackStore
         private let palette: ColorPalette
         private let fontSize: CGFloat
+        private let fontName: String
         private let onCommand: ((String) -> Void)?
 
         public init(
             store: ScrollbackStore,
             palette: ColorPalette = .xtermDefault,
             fontSize: CGFloat = 13,
+            fontName: String = "",
             onCommand: ((String) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
             self.fontSize = fontSize
+            self.fontName = fontName
             self.onCommand = onCommand
+        }
+
+        /// The base output font: the named family if available, else the system
+        /// monospaced font. Bold/italic variants derive from this in the builder.
+        private var baseFont: NSFont {
+            if !fontName.isEmpty, let named = NSFont(name: fontName, size: fontSize) {
+                return named
+            }
+            return .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
 
         /// Number of lines kept in the live-tail pane (the Mudlet-style split
@@ -61,9 +73,7 @@
             let tailTextView = makeTextView()
             tailScrollView.documentView = tailTextView
 
-            let lineHeight = NSLayoutManager().defaultLineHeight(
-                for: tailTextView.font ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
-            )
+            let lineHeight = NSLayoutManager().defaultLineHeight(for: tailTextView.font ?? baseFont)
             let tailHeight = ceil(lineHeight * CGFloat(Self.tailLineCount)) + 16 // inset slack
 
             let container = SplitOutputContainer(
@@ -128,10 +138,7 @@
             textView.allowsUndo = false
             textView.backgroundColor = NSColor(palette.defaultBackground)
             textView.textContainerInset = NSSize(width: 8, height: 8)
-            textView.font = NSFont.monospacedSystemFont(
-                ofSize: fontSize,
-                weight: .regular
-            )
+            textView.font = baseFont
             textView.textContainer?.widthTracksTextView = true
             textView.textContainer?.lineFragmentPadding = 0
         }

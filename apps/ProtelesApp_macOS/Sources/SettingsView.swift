@@ -37,11 +37,33 @@ private struct GeneralSettingsView: View {
 /// Output appearance.
 private struct AppearanceSettingsView: View {
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
+    @AppStorage("outputFontName") private var outputFontName = ""
+
+    /// Monospaced families that ship with macOS, plus the system default ("").
+    private static let fontChoices: [(label: String, name: String)] = [
+        ("System Monospaced", ""),
+        ("Menlo", "Menlo"),
+        ("Monaco", "Monaco"),
+        ("Courier New", "Courier New"),
+        ("PT Mono", "PTMono-Regular"),
+        ("Andale Mono", "AndaleMono")
+    ]
+
+    private var sampleFont: Font {
+        outputFontName.isEmpty
+            ? .system(size: outputFontSize, design: .monospaced)
+            : .custom(outputFontName, fixedSize: outputFontSize)
+    }
 
     var body: some View {
         Form {
             Section("Game Output") {
-                LabeledContent("Font size") {
+                Picker("Font", selection: $outputFontName) {
+                    ForEach(Self.fontChoices, id: \.name) { choice in
+                        Text(choice.label).tag(choice.name)
+                    }
+                }
+                LabeledContent("Size") {
                     HStack(spacing: 10) {
                         Slider(value: $outputFontSize, in: 9...24, step: 1)
                             .frame(width: 180)
@@ -52,7 +74,7 @@ private struct AppearanceSettingsView: View {
                     }
                 }
                 Text("The quick brown fox jumps over the lazy dog")
-                    .font(.system(size: outputFontSize, design: .monospaced))
+                    .font(sampleFont)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(.secondary)
@@ -66,6 +88,7 @@ private struct AppearanceSettingsView: View {
 private struct ConnectionSettingsView: View {
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
+    @AppStorage("keepAlive") private var keepAlive = true
 
     var body: some View {
         Form {
@@ -73,6 +96,13 @@ private struct ConnectionSettingsView: View {
                 Toggle("Reconnect automatically", isOn: $autoReconnect)
                 Text("After a dropped connection, retry with increasing backoff. "
                     + "Takes effect on the next disconnect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Keep the connection alive when idle", isOn: $keepAlive)
+                Text("Send a silent keep-alive periodically so Aardwolf doesn't "
+                    + "disconnect a quiet session for being idle.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

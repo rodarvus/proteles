@@ -39,7 +39,8 @@ extension SessionController {
     /// threshold. `sendRaw` updates ``lastOutboundActivity``, so the NOP itself
     /// re-arms the cadence.
     private func sendKeepAliveIfIdle() async {
-        guard state == .connected,
+        guard keepAliveEnabled,
+              state == .connected,
               Self.shouldSendKeepAlive(
                   now: Date(), lastActivity: lastOutboundActivity, interval: keepAliveInterval
               )

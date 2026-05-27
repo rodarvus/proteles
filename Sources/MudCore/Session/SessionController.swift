@@ -97,6 +97,9 @@ public actor SessionController {
     var keepAliveTask: Task<Void, Never>?
     var lastOutboundActivity = Date.distantPast
     let keepAliveInterval: TimeInterval // injectable so tests use a short value
+    /// Anti-idle on/off (Connection preference). When false the loop still runs
+    /// but sends nothing — so toggling it back on resumes without a reconnect.
+    var keepAliveEnabled = true
     var recorder: SessionRecorder?
     /// MUSHclient's `m_bPluginProcessingSend` re-entrancy guard: true while
     /// `OnPluginSend` runs, so a send it issues (dinv's bypass) skips the hook.

@@ -20,4 +20,12 @@ struct SessionControllerConnectionPrefsTests {
         await session.setAutoRecord(false)
         #expect(await session.autoRecord == false)
     }
+
+    @Test("setKeepAliveEnabled toggles the anti-idle flag (default on)")
+    func keepAliveToggle() async {
+        let session = SessionController()
+        #expect(await session.keepAliveEnabled, "anti-idle defaults on")
+        await session.setKeepAliveEnabled(false)
+        #expect(await session.keepAliveEnabled == false)
+    }
 }

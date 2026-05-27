@@ -20,4 +20,11 @@ public extension SessionController {
     func setAutoRecord(_ enabled: Bool) {
         autoRecord = enabled
     }
+
+    /// Enable/disable the anti-idle keep-alive (telnet NOP). Applies on the
+    /// next cadence tick; the loop keeps running so re-enabling needs no
+    /// reconnect.
+    func setKeepAliveEnabled(_ enabled: Bool) {
+        keepAliveEnabled = enabled
+    }
 }

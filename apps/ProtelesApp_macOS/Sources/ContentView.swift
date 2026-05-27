@@ -26,9 +26,12 @@ struct ContentView: View {
     /// Output font size (Appearance preference). Changing it recreates the
     /// output view, which re-renders the scrollback at the new size.
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
+    /// Output font family ("" = system monospaced). Recreates the output view.
+    @AppStorage("outputFontName") private var outputFontName = ""
     /// Connection preferences (pushed to the session like omitBlankLines).
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
+    @AppStorage("keepAlive") private var keepAlive = true
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -58,6 +61,9 @@ struct ContentView: View {
             }
             .task(id: autoRecordSessions) {
                 await session.setAutoRecord(autoRecordSessions)
+            }
+            .task(id: keepAlive) {
+                await session.setKeepAliveEnabled(keepAlive)
             }
             .task {
                 // Feed Search-and-Destroy's published window model to the panel.
@@ -110,9 +116,11 @@ struct ContentView: View {
             MudOutputView(
                 store: session.scrollbackStore,
                 fontSize: CGFloat(outputFontSize),
+                fontName: outputFontName,
                 onCommand: { command in Task { try? await session.send(command) } }
             )
-            .id(outputFontSize) // recreate (and re-render) when the font size changes
+            // Recreate (and re-render) when the output font family/size changes.
+            .id("\(outputFontName)|\(outputFontSize)")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
             // the game output, layered over it — not over the side dock.
