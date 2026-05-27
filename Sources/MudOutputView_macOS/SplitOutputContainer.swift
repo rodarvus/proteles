@@ -22,6 +22,9 @@
         let scrollView: NSScrollView
         let tailScrollView: NSScrollView
         private let separator = NSBox()
+        /// Translucent "jump to latest" affordance, shown with the tail; clicking
+        /// it scrolls the history back to the bottom (which dismisses the split).
+        private let jumpButton = NSButton()
 
         /// Reveal the tail once scrolled more than this many points above the
         /// bottom (a couple of points of slop so a pin-to-bottom doesn't flicker
@@ -34,10 +37,12 @@
             super.init(frame: .zero)
 
             separator.boxType = .separator
+            configureJumpButton()
             tailScrollView.isHidden = true
             separator.isHidden = true
+            jumpButton.isHidden = true
 
-            for sub in [scrollView, tailScrollView, separator] {
+            for sub in [scrollView, tailScrollView, separator, jumpButton] {
                 sub.translatesAutoresizingMaskIntoConstraints = false
                 addSubview(sub)
             }
@@ -55,7 +60,14 @@
                 separator.leadingAnchor.constraint(equalTo: leadingAnchor),
                 separator.trailingAnchor.constraint(equalTo: trailingAnchor),
                 separator.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor),
-                separator.heightAnchor.constraint(equalToConstant: 1)
+                separator.heightAnchor.constraint(equalToConstant: 1),
+
+                // Floats at the bottom-right of the history area, just above the
+                // live-tail pane.
+                jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+                jumpButton.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor, constant: -10),
+                jumpButton.widthAnchor.constraint(equalToConstant: 28),
+                jumpButton.heightAnchor.constraint(equalToConstant: 28)
             ])
 
             scrollView.contentView.postsBoundsChangedNotifications = true
@@ -72,8 +84,51 @@
             fatalError("init(coder:) has not been implemented")
         }
 
+        /// A borderless, translucent down-arrow disc — elegant at rest, and
+        /// obvious in intent (jump to the newest output). It brightens on hover.
+        private func configureJumpButton() {
+            jumpButton.isBordered = false
+            jumpButton.bezelStyle = .regularSquare
+            jumpButton.imagePosition = .imageOnly
+            jumpButton.refusesFirstResponder = true
+            jumpButton.image = NSImage(
+                systemSymbolName: "arrow.down.circle.fill",
+                accessibilityDescription: "Scroll to latest"
+            )?.withSymbolConfiguration(.init(pointSize: 22, weight: .regular))
+            jumpButton.contentTintColor = .white
+            jumpButton.alphaValue = 0.55
+            jumpButton.toolTip = "Jump to the latest output"
+            jumpButton.target = self
+            jumpButton.action = #selector(jumpToBottom)
+        }
+
+        @objc private func jumpToBottom() {
+            (scrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            updateTailVisibility()
+        }
+
         @objc private func scrollPositionChanged() {
             updateTailVisibility()
+        }
+
+        /// Brighten the jump button while hovered (still translucent, but clearly
+        /// interactive). Tracking the whole view is fine — it's a tiny disc.
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect],
+                owner: self
+            ))
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            super.mouseMoved(with: event)
+            guard !jumpButton.isHidden else { return }
+            let point = convert(event.locationInWindow, from: nil)
+            let hovering = jumpButton.frame.insetBy(dx: -6, dy: -6).contains(point)
+            jumpButton.animator().alphaValue = hovering ? 0.95 : 0.55
         }
 
         override func layout() {
@@ -93,6 +148,8 @@
             guard show == tailScrollView.isHidden else { return } // state changed
             tailScrollView.isHidden = !show
             separator.isHidden = !show
+            jumpButton.isHidden = !show
+            jumpButton.alphaValue = 0.55 // reset hover brightness when re-shown
             if show {
                 (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
             }
