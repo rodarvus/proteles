@@ -267,22 +267,41 @@ struct ProtelesApp: App {
 
 /// Strips the empty "Format" menu AppKit leaves behind even after
 /// `CommandGroup(replacing: .textFormatting) {}` — the editable command field
-/// still contributes a Font/Text container. Done in the delegate so the timing
-/// is deterministic (the main menu is fully built by
-/// `applicationDidFinishLaunching`) and re-checked on activation so it can't
-/// reappear if SwiftUI rebuilds the menu bar. A MUD client has no rich text.
+/// still contributes a Font/Text container. SwiftUI installs (and re-installs)
+/// the menu bar at times we can't pin down, so a one-shot removal misses; we
+/// instead observe `NSMenu` item additions and drop Format whenever it (re)
+/// appears. A MUD client has no rich-text formatting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
-        removeFormatMenu()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(menuItemAdded),
+            name: NSMenu.didAddItemNotification,
+            object: nil
+        )
+        // SwiftUI builds the menu on a detached NSMenu and swaps it into
+        // NSApp.mainMenu after launch, so the observer can miss it. Sweep the
+        // launch window with a few delayed passes too.
+        for delay in [0.0, 0.2, 0.5, 1.0, 2.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.removeFormatMenu()
+            }
+        }
     }
 
     func applicationDidBecomeActive(_: Notification) {
         removeFormatMenu()
     }
 
+    @objc private func menuItemAdded() {
+        removeFormatMenu()
+    }
+
     private func removeFormatMenu() {
         guard let mainMenu = NSApp.mainMenu,
-              let index = mainMenu.items.firstIndex(where: { $0.title == "Format" })
+              let index = mainMenu.items.firstIndex(where: {
+                  $0.title == "Format" || $0.submenu?.title == "Format"
+              })
         else { return }
         mainMenu.removeItem(at: index)
     }
