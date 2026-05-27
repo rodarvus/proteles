@@ -92,10 +92,10 @@ public struct AreaExitMarker: Sendable, Equatable {
 }
 
 /// A laid-out map: rooms placed on an integer grid by a fan-out BFS from the
-/// current room, plus the connectors between them. A faithful port of the
-/// Aardwolf `aardmapper.lua` `draw_room` algorithm (grid placement +
-/// collision→stub handling), kept as a pure value type so the layout is
-/// unit-testable without any UI.
+/// current room, plus the connectors between them. Uses the same general
+/// grid-placement approach Aardwolf mappers do (BFS fan-out with
+/// collision→stub handling) — an independent implementation, kept as a pure
+/// value type so the layout is unit-testable without any UI.
 ///
 /// Cardinal exits map to orthogonal cells; **up renders to the NE cell, down
 /// to the SW** (matching the original). Diagonal/custom-command exits aren't

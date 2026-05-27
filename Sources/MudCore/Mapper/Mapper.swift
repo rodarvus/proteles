@@ -2,7 +2,9 @@ import Foundation
 
 /// The live map: an in-memory ``RoomGraph`` kept warm for pathfinding and
 /// rendering, fed by Aardwolf GMCP and written through to a ``MapperStore``
-/// (PLAN.md §7.7). A faithful native port of `aard_GMCP_mapper`'s ingestion:
+/// (PLAN.md §7.7). An independent Swift implementation of Aardwolf's GMCP
+/// mapping protocol (`room.info`/`room.area`/`room.sectors`); it reads/writes
+/// the same on-disk DB format for compatibility with `aard_GMCP_mapper`:
 ///
 ///   - `room.info` upserts the current room + its exits (the MUD supplies
 ///     destination vnums, so links are explicit — no inference). Unmappable

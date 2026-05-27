@@ -2,7 +2,8 @@ import Foundation
 
 /// The `mapper …` command surface (goto/walkto/where/find/thisroom/
 /// unmapped/area/notes/depth/blink), split out of the Mapper actor to keep
-/// its body within the type-length budget. Faithful to aard_GMCP_mapper.
+/// its body within the type-length budget. Mirrors `aard_GMCP_mapper`'s command
+/// names so the muscle memory carries over (the implementation is our own).
 extension Mapper {
     // MARK: - Commands
 

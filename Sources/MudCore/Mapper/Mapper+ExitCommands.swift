@@ -2,7 +2,8 @@ import Foundation
 
 /// The `mapper` portal / custom-exit / findpath / purge command surface,
 /// split from Mapper+Commands.swift to keep each file within the length
-/// budget. Faithful to aard_GMCP_mapper (verified vs the live Aardwolf.db).
+/// budget. Mirrors `aard_GMCP_mapper`'s command names + DB format for
+/// compatibility (verified vs the live Aardwolf.db); implementation is our own.
 extension Mapper {
     /// Portals / custom-exit / findpath / purge subcommands, split from
     /// ``handleSecondaryCommand`` to keep each within the complexity budget.

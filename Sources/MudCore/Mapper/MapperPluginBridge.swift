@@ -26,10 +26,10 @@ public struct MapperCallResult: Sendable, Equatable {
     }
 }
 
-/// Serialises path-find results into the exact `found_paths`/`unfound_paths`
-/// Lua literals the Aardwolf mapper broadcasts (ids 500/501), so existing
-/// listener plugins parse them unchanged. A faithful, pure port of
-/// `aardmapper.lua`'s `full_find` broadcast payloads (`serialize.save_simple`).
+/// Serialises path-find results into the same `found_paths`/`unfound_paths`
+/// Lua-literal broadcast format the Aardwolf mapper uses (ids 500/501), so
+/// existing listener plugins parse them unchanged — a wire-format
+/// interoperability contract, implemented independently as a pure function.
 public enum MapperPluginBridge {
     /// Broadcast id for "found paths" (a `{[uid] = {path=…, reason=…}}` map).
     public static let foundPathsBroadcast = 500
