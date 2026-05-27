@@ -26,6 +26,9 @@ struct ContentView: View {
     /// Output font size (Appearance preference). Changing it recreates the
     /// output view, which re-renders the scrollback at the new size.
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
+    /// Connection preferences (pushed to the session like omitBlankLines).
+    @AppStorage("autoReconnect") private var autoReconnect = true
+    @AppStorage("autoRecordSessions") private var autoRecordSessions = true
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
@@ -49,6 +52,12 @@ struct ContentView: View {
             }
             .task(id: omitBlankLines) {
                 await session.setOmitBlankLines(omitBlankLines)
+            }
+            .task(id: autoReconnect) {
+                await session.setReconnectEnabled(autoReconnect)
+            }
+            .task(id: autoRecordSessions) {
+                await session.setAutoRecord(autoRecordSessions)
             }
             .task {
                 // Feed Search-and-Destroy's published window model to the panel.

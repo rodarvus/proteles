@@ -2,11 +2,6 @@ import Foundation
 
 /// Applying scripting decisions (triggers/aliases) to the live session.
 public extension SessionController {
-    /// Set the blank-line omission preference (from the UI's persisted toggle).
-    func setOmitBlankLines(_ enabled: Bool) {
-        omitBlankLines = enabled
-    }
-
     /// Whether `line` should be withheld from the main output given the
     /// blank-line preference: only *completely empty* text (matching the
     /// reference's `^$`, so a whitespace-only line is kept).

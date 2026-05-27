@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             AppearanceSettingsView()
                 .tabItem { Label("Appearance", systemImage: "textformat.size") }
+            ConnectionSettingsView()
+                .tabItem { Label("Connection", systemImage: "network") }
         }
         .frame(width: 480)
     }
@@ -53,6 +55,32 @@ private struct AppearanceSettingsView: View {
                     .font(.system(size: outputFontSize, design: .monospaced))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Connection behaviour.
+private struct ConnectionSettingsView: View {
+    @AppStorage("autoReconnect") private var autoReconnect = true
+    @AppStorage("autoRecordSessions") private var autoRecordSessions = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Reconnect automatically", isOn: $autoReconnect)
+                Text("After a dropped connection, retry with increasing backoff. "
+                    + "Takes effect on the next disconnect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Record sessions automatically", isOn: $autoRecordSessions)
+                Text("Save a replayable capture of each session locally (under the "
+                    + "app's Application Support folder). Takes effect on the next connection.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
