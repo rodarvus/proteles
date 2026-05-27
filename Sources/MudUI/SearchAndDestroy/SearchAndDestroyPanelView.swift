@@ -46,8 +46,6 @@ public struct SearchAndDestroyPanelView: View {
         VStack(spacing: 0) {
             header(snd)
             Divider()
-            toolbar
-            Divider()
             List {
                 ForEach(snd.targets) { target in
                     targetRow(target)
@@ -72,6 +70,9 @@ public struct SearchAndDestroyPanelView: View {
                 Text("Search & Destroy").font(.subheadline.weight(.semibold))
                 Text(remainingSummary(snd)).font(.caption2).foregroundStyle(.secondary)
             }
+            // Actions sit right of the campaign label (was a separate toolbar
+            // row — folded in here to save vertical space).
+            actions
             Spacer()
         }
         .padding(.horizontal, 11).padding(.vertical, 9)
@@ -83,11 +84,12 @@ public struct SearchAndDestroyPanelView: View {
         return "\(snd.targets.count) targets · \(alive) left"
     }
 
-    // MARK: - Toolbar
+    // MARK: - Actions
 
-    private var toolbar: some View {
+    /// The original miniwindow's action buttons (→ S&D aliases), now inline in
+    /// the header.
+    private var actions: some View {
         HStack(spacing: 6) {
-            // The original miniwindow's action buttons → S&D aliases.
             commandButton(
                 "⚔ xcp",
                 command: "xcp",
@@ -96,11 +98,8 @@ public struct SearchAndDestroyPanelView: View {
             )
             commandButton("Next →", command: "nx", help: "Go to the next target")
             commandButton("Refresh", command: "xgui ref", help: "Refresh the target list")
-            Spacer()
             gearMenu
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(SnDPalette.toolbar)
     }
 
     private func commandButton(
@@ -214,6 +213,5 @@ enum SnDPalette {
     static let unlikely = Color(red: 0.44, green: 0.44, blue: 0.46)
     static let dead = Color(red: 0.42, green: 0.42, blue: 0.46)
     static let currentRow = Color(red: 1.0, green: 0.18, blue: 0.57).opacity(0.14)
-    static let toolbar = Color(red: 0.07, green: 0.07, blue: 0.08)
     static let button = Color(red: 0.11, green: 0.11, blue: 0.13)
 }

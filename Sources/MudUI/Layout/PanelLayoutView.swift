@@ -118,8 +118,11 @@ public struct PanelLayoutView: View {
     }
 }
 
-/// A panel's title bar (icon + title + close) above its content. Gives every
-/// non-output panel a consistent, discoverable header.
+/// Chrome for a docked panel. There's no title bar — to save vertical space the
+/// controls (drag-to-move grip, arrange menu, close) are embedded as a compact
+/// capsule overlaid on the top-right of the panel's own content, revealed on
+/// hover. Each panel already carries its own header (room/campaign/channel), so
+/// a separate title row would be redundant.
 struct PanelChrome<Content: View>: View {
     let kind: PanelKind
     let onClose: () -> Void
@@ -128,44 +131,37 @@ struct PanelChrome<Content: View>: View {
     @State private var hovering = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: kind.systemImage)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(kind.title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .opacity(hovering ? 1 : 0)
-                arrangeMenu()
-                    .foregroundStyle(.tertiary)
-                    .opacity(hovering ? 1 : 0)
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.caption2.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
-                .opacity(hovering ? 1 : 0)
-                .help("Hide \(kind.title)")
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topTrailing) { controls }
+            .onHover { hovering = $0 }
+    }
+
+    /// Floating control capsule (drag grip · arrange · close), shown on hover so
+    /// it stays out of the way until needed. The grip is the drag source for
+    /// drag-to-redock; the whole capsule is draggable too.
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            arrangeMenu()
+                .foregroundStyle(.secondary)
+            Button(action: onClose) {
+                Image(systemName: "xmark").font(.caption2.weight(.semibold))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.bar)
-            .contentShape(Rectangle())
-            .panelDragSource(kind)
-            .help("Drag to move \(kind.title)")
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(.separator).frame(height: 1)
-            }
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Hide \(kind.title)")
         }
-        .onHover { hovering = $0 }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+        .contentShape(Capsule())
+        .panelDragSource(kind)
+        .help("Drag to move \(kind.title)")
+        .padding(6)
+        .opacity(hovering ? 1 : 0)
     }
 }

@@ -22,64 +22,32 @@ public struct MapPanelView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Graphical / ASCII switch — only when the server ASCII map exists.
-            if !model.asciiMap.isEmpty {
-                Picker("View", selection: Binding(
-                    get: { model.viewMode },
-                    set: { model.setViewMode($0) }
-                )) {
-                    ForEach(MapPanelModel.ViewMode.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(6)
-                Divider()
+        // Graphical only — the server ASCII map now lives in the floating Text
+        // Map window (no in-panel Graphical/Text switch needed any more).
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { model.start() }
+            .alert(
+                model.importAlert?.title ?? "",
+                isPresented: Binding(
+                    get: { model.importAlert != nil },
+                    set: { if !$0 { model.importAlert = nil } }
+                )
+            ) {
+                Button("OK") { model.importAlert = nil }
+            } message: {
+                Text(model.importAlert?.message ?? "")
             }
-            content
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { model.start() }
-        .alert(
-            model.importAlert?.title ?? "",
-            isPresented: Binding(
-                get: { model.importAlert != nil },
-                set: { if !$0 { model.importAlert = nil } }
-            )
-        ) {
-            Button("OK") { model.importAlert = nil }
-        } message: {
-            Text(model.importAlert?.message ?? "")
-        }
     }
 
-    /// The active map view: ASCII when selected + available, else the
-    /// graphical layout (or its empty state).
+    /// The active map view: the graphical layout, or its empty state.
     @ViewBuilder
     private var content: some View {
-        if model.viewMode == .ascii, !model.asciiMap.isEmpty {
-            asciiBody
-        } else if model.layout.isEmpty {
+        if model.layout.isEmpty {
             emptyState
         } else {
             mapBody
         }
-    }
-
-    /// The server's captured `<MAPSTART>…<MAPEND>` block, styled + monospaced.
-    private var asciiBody: some View {
-        ScrollView([.horizontal, .vertical]) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(model.asciiMap.enumerated()), id: \.offset) { _, line in
-                    Text(line.attributedText())
-                        .font(.system(.body, design: .monospaced))
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .background(MapPalette.background)
     }
 
     private var emptyState: some View {
