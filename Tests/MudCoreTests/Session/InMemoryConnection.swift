@@ -18,6 +18,12 @@ final class InMemoryConnection: MudConnection, @unchecked Sendable {
         (states, statesContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
+    /// Every outbound chunk as raw bytes, in send order (for asserting telnet
+    /// sequences like the anti-idle `IAC NOP` that aren't UTF-8 text).
+    var sentBytes: [[UInt8]] {
+        lock.withLock { sends }
+    }
+
     /// Every outbound chunk, decoded as UTF-8 and split into lines (the session
     /// appends `\r\n`). Order-preserving.
     var sentLines: [String] {

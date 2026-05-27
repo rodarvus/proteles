@@ -91,6 +91,12 @@ public actor SessionController {
     var timerTask: Task<Void, Never>?
     /// Drains the mapper's system-note stream (delayed cexit results) to output.
     var mapperNotesTask: Task<Void, Never>?
+    /// Anti-idle (see `SessionController+KeepAlive`): a telnet `IAC NOP` sent
+    /// when outbound-quiet for ``keepAliveInterval`` keeps Aardwolf's
+    /// command-idle disconnect from firing on a connected-but-quiet session.
+    var keepAliveTask: Task<Void, Never>?
+    var lastOutboundActivity = Date.distantPast
+    let keepAliveInterval: TimeInterval // injectable so tests use a short value
     var recorder: SessionRecorder?
     /// MUSHclient's `m_bPluginProcessingSend` re-entrancy guard: true while
     /// `OnPluginSend` runs, so a send it issues (dinv's bypass) skips the hook.
@@ -138,28 +144,28 @@ public actor SessionController {
 
     /// The endpoint / credentials of the most recent ``connect(to:autologin:)``,
     /// retained so an autoreconnect can re-establish the same session.
-    private var lastEndpoint: NetworkConnection.Endpoint?
-    private var lastAutologinPlan: AutologinPlan?
+    var lastEndpoint: NetworkConnection.Endpoint?
+    var lastAutologinPlan: AutologinPlan?
 
     /// The running backoff loop, if any.
-    private var reconnectTask: Task<Void, Never>?
+    var reconnectTask: Task<Void, Never>?
 
     /// True between an unexpected drop and either a successful reconnect
     /// or giving up. While set, transient `.disconnected` transitions
     /// from a failing attempt are suppressed so the UI stays on
     /// `.connecting`.
-    private var isReconnecting = false
+    var isReconnecting = false
 
     /// Set by ``disconnect()`` so the drop handler knows not to
     /// autoreconnect.
-    private var userInitiatedDisconnect = false
+    var userInitiatedDisconnect = false
 
     /// Set when the user sends a quit command (see ``quitCommands``), so a
     /// server-initiated close that follows is treated as a clean logout —
     /// not an unexpected drop to autoreconnect from. Cleared by any other
     /// command (e.g. if the quit needed confirming and the user kept
     /// playing) and on each fresh connect.
-    private var expectsCleanClose = false
+    var expectsCleanClose = false
 
     /// Commands that mean "log me out" — a server close right after one is
     /// expected, not a dropped link. Aardwolf's is `quit`.
@@ -186,14 +192,11 @@ public actor SessionController {
     }
 
     /// When true, ``connect(to:)`` opens a fresh recording at
-    /// ``autoRecordingURL`` so the capture includes every byte from the first
-    /// one — crucial for replayable recordings, because Aardwolf completes the
-    /// MCCP2 handshake within milliseconds of TCP-up. Mutable at runtime.
+    /// ``autoRecordingURL`` from the first byte (Aardwolf finishes the MCCP2
+    /// handshake within ms of TCP-up, so a late start misses it). Mutable.
     public var autoRecord: Bool
 
-    /// Where ``autoRecord`` writes. Defaults to
-    /// ``SessionRecorder/defaultRecordingURL(now:fileManager:)`` (under
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/recordings/`).
+    /// Where ``autoRecord`` writes (default: under the app's `recordings/`).
     /// Tests inject a temp-dir builder so they don't litter real recordings.
     public let autoRecordingURL: @Sendable () -> URL?
 
@@ -204,11 +207,13 @@ public actor SessionController {
         scriptEngine: ScriptEngine? = nil,
         autoRecord: Bool = false,
         reconnectPolicy: ReconnectPolicy = .disabled,
+        keepAliveInterval: TimeInterval = 120,
         autoRecordingURL: @escaping @Sendable () -> URL? = {
             try? SessionRecorder.defaultRecordingURL()
         },
         makeConnection: @escaping @Sendable () -> any MudConnection = { NetworkConnection() }
     ) {
+        self.keepAliveInterval = keepAliveInterval
         self.makeConnection = makeConnection
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
@@ -292,7 +297,7 @@ public actor SessionController {
     /// loop. When `surfaceFailureState` is true a failure emits
     /// `.disconnected`; the reconnect loop passes false so the UI stays on
     /// `.connecting` between attempts.
-    private func establish(
+    func establish(
         to endpoint: NetworkConnection.Endpoint,
         autologin plan: AutologinPlan?,
         surfaceFailureState: Bool
@@ -419,6 +424,7 @@ public actor SessionController {
     /// Send raw bytes verbatim (no line terminator added).
     public func sendRaw(_ bytes: [UInt8]) async throws {
         guard let connection else { throw SessionError.notConnected }
+        lastOutboundActivity = Date()
         do {
             try await connection.send(bytes)
         } catch let error as NetworkConnection.ConnectionError {
@@ -448,94 +454,9 @@ public actor SessionController {
         }
     }
 
-    /// React to the inbound byte stream ending on its own (remote close):
-    /// flush any trailing line, tear the session down, then autoreconnect (if
-    /// the policy allows and it wasn't a user disconnect/clean quit) or surface
-    /// `.disconnected`.
-    private func handleByteStreamEnded() async {
-        guard connection != nil else { return }
-        await flushOnDisconnect()
-        teardownSession()
-
-        let shouldReconnect = reconnectPolicy.isEnabled
-            && !userInitiatedDisconnect
-            && !expectsCleanClose
-            && lastEndpoint != nil
-        if shouldReconnect {
-            beginReconnect()
-        } else {
-            updateState(.disconnected)
-        }
-    }
-
-    /// Forward an underlying-connection transition onto the durable
-    /// stream, suppressing the transient `.disconnected` of a failed
-    /// attempt while a reconnect cycle is in progress.
-    private func forwardConnectionState(_ newState: State) {
-        if isReconnecting, newState == .disconnected { return }
-        updateState(newState)
-    }
-
-    /// Drive the exponential-backoff reconnect loop. Surfaces
-    /// `.connecting` for the duration; ends by either re-establishing the
-    /// session or, once ``ReconnectPolicy/maxAttempts`` is hit, emitting
-    /// `.disconnected`.
-    private func beginReconnect() {
-        guard let endpoint = lastEndpoint else {
-            updateState(.disconnected)
-            return
-        }
-        isReconnecting = true
-        updateState(.connecting)
-
-        let policy = reconnectPolicy
-        let plan = lastAutologinPlan
-        reconnectTask?.cancel()
-        reconnectTask = Task { [weak self] in
-            var attempt = 1
-            while !Task.isCancelled {
-                if policy.maxAttempts > 0, attempt > policy.maxAttempts {
-                    await self?.reconnectExhausted()
-                    return
-                }
-                try? await Task.sleep(for: policy.delay(forAttempt: attempt))
-                if Task.isCancelled { return }
-                let reconnected = await self?.reconnectAttempt(
-                    to: endpoint,
-                    autologin: plan
-                ) ?? false
-                if reconnected { return }
-                attempt += 1
-            }
-        }
-    }
-
-    /// One reconnection attempt. Returns true on success (loop stops) or
-    /// if the user disconnected in the meantime (loop should bail).
-    private func reconnectAttempt(
-        to endpoint: NetworkConnection.Endpoint,
-        autologin plan: AutologinPlan?
-    ) async -> Bool {
-        guard !userInitiatedDisconnect else { return true }
-        do {
-            try await establish(to: endpoint, autologin: plan, surfaceFailureState: false)
-            isReconnecting = false
-            return true
-        } catch {
-            // Stay visibly "connecting" for the next attempt.
-            updateState(.connecting)
-            return false
-        }
-    }
-
-    private func reconnectExhausted() {
-        isReconnecting = false
-        updateState(.disconnected)
-    }
-
     /// Update the mirrored state and republish it. Deduplicates so the
     /// durable stream never emits the same state twice in a row.
-    private func updateState(_ newState: State) {
+    func updateState(_ newState: State) {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
@@ -571,8 +492,13 @@ public actor SessionController {
     /// on a dead session (remote drops also cancel it via teardownSession).
     private func syncTimerLoop(to newState: State) {
         switch newState {
-        case .connected: restartTimerLoop()
-        case .disconnected: timerTask?.cancel(); timerTask = nil
+        case .connected:
+            restartTimerLoop()
+            lastOutboundActivity = Date() // a fresh connect counts as activity
+            startKeepAlive()
+        case .disconnected:
+            timerTask?.cancel(); timerTask = nil
+            keepAliveTask?.cancel(); keepAliveTask = nil
         default: break
         }
     }
@@ -580,7 +506,7 @@ public actor SessionController {
     /// Cancel the per-session tasks and drop the connection so the next
     /// ``connect(to:autologin:)`` starts clean. Idempotent. Does *not*
     /// emit a state transition — callers do that explicitly.
-    private func teardownSession() {
+    func teardownSession() {
         processTask?.cancel()
         processTask = nil
         stateForwardTask?.cancel()
@@ -589,6 +515,8 @@ public actor SessionController {
         // on a dropped session (re-armed by updateState on the next connect).
         timerTask?.cancel()
         timerTask = nil
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
         recorder?.close()
         recorder = nil
         transcript?.close()

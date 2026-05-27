@@ -137,7 +137,7 @@ public actor NetworkConnection {
             host: NWEndpoint.Host(endpoint.host),
             port: port
         )
-        let conn = NWConnection(to: nwEndpoint, using: .tcp)
+        let conn = NWConnection(to: nwEndpoint, using: Self.tcpParameters())
         connection = conn
 
         transition(to: .connecting)
@@ -170,6 +170,20 @@ public actor NetworkConnection {
         }
 
         startReceiveLoop(on: conn)
+    }
+
+    /// TCP parameters with **keepalive enabled** — the Network.framework
+    /// equivalent of MUSHclient's `SIO_KEEPALIVE_VALS` (doc.cpp): after ~2 min
+    /// idle the OS sends keepalive probes, so a NAT/firewall in front of a quiet
+    /// session doesn't silently drop the socket. (Aardwolf's *command*-idle
+    /// disconnect is handled separately by the session's anti-idle NOP.)
+    nonisolated static func tcpParameters() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 120 // seconds idle before the first probe
+        tcp.keepaliveInterval = 30 // seconds between probes
+        tcp.keepaliveCount = 4 // probes before giving up
+        return NWParameters(tls: nil, tcp: tcp)
     }
 
     /// Resolve a still-pending connect with `error`, tearing down the
