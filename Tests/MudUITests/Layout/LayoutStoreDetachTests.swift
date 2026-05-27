@@ -56,13 +56,51 @@ struct LayoutStoreDetachTests {
         #expect(store.layout.contains(.output))
     }
 
-    @Test("Reset re-docks everything and clears detached windows")
+    @Test("Reset re-docks detached panels but keeps the default float (Text Map)")
     func resetClearsDetached() {
         let store = makeStore()
         store.detach(.map)
         store.detach(.channels)
         store.resetToDefault()
         #expect(store.detached.isEmpty)
-        #expect(store.layout == .standard)
+        #expect(store.floating == LayoutStore.defaultFloating)
+        #expect(!store.layout.contains(.asciiMap), "the default-float Text Map stays out of the dock")
+    }
+
+    // MARK: - Floating miniwindows
+
+    @Test("The Text Map floats by default and isn't in the dock")
+    func textMapFloatsByDefault() {
+        let store = makeStore()
+        #expect(store.isFloating(.asciiMap))
+        #expect(!store.layout.contains(.asciiMap))
+        #expect(store.isVisible(.asciiMap))
+    }
+
+    @Test("Floating a panel removes it from the dock; docking returns it")
+    func floatAndDock() {
+        let store = makeStore()
+        store.float(.channels)
+        #expect(store.isFloating(.channels))
+        #expect(!store.layout.contains(.channels))
+        store.dockFloating(.channels)
+        #expect(!store.isFloating(.channels))
+        #expect(store.layout.contains(.channels))
+    }
+
+    @Test("Toggling a floating panel off hides it")
+    func toggleHidesFloating() {
+        let store = makeStore()
+        store.toggle(.asciiMap) // floating by default → hide
+        #expect(!store.isFloating(.asciiMap))
+        #expect(!store.isVisible(.asciiMap))
+    }
+
+    @Test("Detaching a floating panel moves it to its own window")
+    func detachFromFloating() {
+        let store = makeStore()
+        store.detach(.asciiMap) // was floating
+        #expect(store.isDetached(.asciiMap))
+        #expect(!store.isFloating(.asciiMap))
     }
 }

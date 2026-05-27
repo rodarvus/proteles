@@ -27,6 +27,33 @@ public struct PanelLayoutView: View {
         self.content = content
     }
 
+    /// The panel-arrangement menu shared by chrome + tab strips: float top-right
+    /// or open in a separate window.
+    static func arrangeMenu(
+        _ kind: PanelKind,
+        store: LayoutStore,
+        onDetach: @escaping (PanelKind) -> Void
+    ) -> some View {
+        Menu {
+            Button {
+                store.float(kind)
+            } label: {
+                Label("Float Top-Right", systemImage: "pip")
+            }
+            Button {
+                onDetach(kind)
+            } label: {
+                Label("Open in Window", systemImage: "macwindow.on.rectangle")
+            }
+        } label: {
+            Image(systemName: "ellipsis").font(.caption2.weight(.semibold))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Move \(kind.title) — float or open in a window")
+    }
+
     public var body: some View {
         render(store.layout, path: [])
     }
@@ -69,7 +96,7 @@ public struct PanelLayoutView: View {
                 PanelChrome(
                     kind: kind,
                     onClose: { store.close(kind) },
-                    onDetach: { onDetach(kind) },
+                    arrangeMenu: { AnyView(Self.arrangeMenu(kind, store: store, onDetach: onDetach)) },
                     content: { content(kind) }
                 )
             }
@@ -96,7 +123,7 @@ public struct PanelLayoutView: View {
 struct PanelChrome<Content: View>: View {
     let kind: PanelKind
     let onClose: () -> Void
-    let onDetach: () -> Void
+    let arrangeMenu: () -> AnyView
     @ViewBuilder let content: Content
     @State private var hovering = false
 
@@ -115,14 +142,9 @@ struct PanelChrome<Content: View>: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .opacity(hovering ? 1 : 0)
-                Button(action: onDetach) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.caption2.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
-                .opacity(hovering ? 1 : 0)
-                .help("Open \(kind.title) in its own window")
+                arrangeMenu()
+                    .foregroundStyle(.tertiary)
+                    .opacity(hovering ? 1 : 0)
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))

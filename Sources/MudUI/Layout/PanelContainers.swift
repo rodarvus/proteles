@@ -143,15 +143,9 @@ struct TabContainer: View {
                     .help("Drag to move \(kind.title)")
                 }
                 Spacer(minLength: 4)
-                Button {
-                    onDetach(panels[selected])
-                } label: {
-                    Image(systemName: "rectangle.portrait.and.arrow.right").font(.caption2.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
-                .padding(.trailing, 4)
-                .help("Open \(panels[selected].title) in its own window")
+                PanelLayoutView.arrangeMenu(panels[selected], store: store, onDetach: onDetach)
+                    .foregroundStyle(.tertiary)
+                    .padding(.trailing, 4)
                 Button {
                     store.close(panels[selected])
                 } label: {

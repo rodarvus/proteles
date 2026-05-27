@@ -16,25 +16,45 @@ public final class LayoutStore {
     /// so the app can re-open them on launch.
     public private(set) var detached: Set<PanelKind> = []
 
+    /// Panels shown as fixed top-right floating miniwindows over the game output
+    /// (not in the dock tree). Persisted. The Text Map floats by default.
+    public private(set) var floating: Set<PanelKind> = []
+
+    /// Panels that float by default on a fresh install (the compact Text Map
+    /// reads best as a top-right HUD rather than a dock tile).
+    public static let defaultFloating: Set<PanelKind> = [.asciiMap]
+
     private let defaultsKey: String
     private let detachedKey: String
+    private let floatingKey: String
 
     /// Load the persisted layout for `persistenceKey` (per world), or the
     /// shipped default. A corrupt/absent value falls back to `.standard`.
     public init(persistenceKey: String = "com.proteles.layout.default") {
         defaultsKey = persistenceKey
         detachedKey = persistenceKey + ".detached"
+        floatingKey = persistenceKey + ".floating"
         let stored = UserDefaults.standard.data(forKey: persistenceKey)
             .flatMap { try? JSONDecoder().decode(PanelLayout.self, from: $0) }
         layout = stored?.renormalized() ?? .standard
         let storedDetached = UserDefaults.standard.array(forKey: detachedKey) as? [String] ?? []
         detached = Set(storedDetached.compactMap(PanelKind.init(rawValue:)))
+        // First run with floating support → seed the defaults; else load.
+        if let storedFloating = UserDefaults.standard.array(forKey: floatingKey) as? [String] {
+            floating = Set(storedFloating.compactMap(PanelKind.init(rawValue:)))
+        } else {
+            floating = Self.defaultFloating
+        }
+        // A floating/detached panel must not also be in the dock tree.
+        for kind in floating.union(detached) {
+            layout = layout.removing(kind)
+        }
     }
 
-    /// Whether `kind` is currently shown — in the dock tree *or* a detached
-    /// window (drives the Panels-menu checkmark).
+    /// Whether `kind` is currently shown — in the dock tree, a detached window,
+    /// or a floating miniwindow (drives the Panels-menu checkmark).
     public func isVisible(_ kind: PanelKind) -> Bool {
-        layout.contains(kind) || detached.contains(kind)
+        layout.contains(kind) || detached.contains(kind) || floating.contains(kind)
     }
 
     /// Whether `kind` is currently in its own window.
@@ -42,11 +62,19 @@ public final class LayoutStore {
         detached.contains(kind)
     }
 
+    /// Whether `kind` is currently a floating top-right miniwindow.
+    public func isFloating(_ kind: PanelKind) -> Bool {
+        floating.contains(kind)
+    }
+
     /// Show/hide a panel (Panels menu). A detached panel hides by closing its
     /// window; a docked one is removed; a hidden one is re-inserted into the dock.
     public func toggle(_ kind: PanelKind) {
         if detached.contains(kind) {
             hideDetached(kind) // its window observes `isDetached` and dismisses
+        } else if floating.contains(kind) {
+            floating.remove(kind) // hide the miniwindow
+            save()
         } else {
             layout = layout.toggling(kind)
             save()
@@ -66,6 +94,7 @@ public final class LayoutStore {
     public func detach(_ kind: PanelKind) {
         guard kind.isClosable, !detached.contains(kind) else { return }
         detached.insert(kind)
+        floating.remove(kind)
         layout = layout.removing(kind)
         save()
     }
@@ -86,6 +115,24 @@ public final class LayoutStore {
         save()
     }
 
+    // MARK: - Float / dock (top-right miniwindow)
+
+    /// Lift `kind` out of the dock into a fixed top-right floating miniwindow.
+    public func float(_ kind: PanelKind) {
+        guard kind.isClosable, !floating.contains(kind) else { return }
+        floating.insert(kind)
+        detached.remove(kind)
+        layout = layout.removing(kind)
+        save()
+    }
+
+    /// Return a floating `kind` to the dock.
+    public func dockFloating(_ kind: PanelKind) {
+        guard floating.remove(kind) != nil else { return }
+        if !layout.contains(kind) { layout = layout.inserting(kind) }
+        save()
+    }
+
     /// Persist new divider fractions for the split at `path` (divider drag).
     public func setFractions(_ fractions: [Double], at path: [Int]) {
         layout = layout.settingFractions(fractions, at: path)
@@ -103,6 +150,10 @@ public final class LayoutStore {
     public func resetToDefault() {
         layout = .standard
         detached.removeAll()
+        floating = Self.defaultFloating
+        for kind in floating {
+            layout = layout.removing(kind)
+        }
         save()
     }
 
@@ -119,5 +170,6 @@ public final class LayoutStore {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         UserDefaults.standard.set(detached.map(\.rawValue), forKey: detachedKey)
+        UserDefaults.standard.set(floating.map(\.rawValue), forKey: floatingKey)
     }
 }
