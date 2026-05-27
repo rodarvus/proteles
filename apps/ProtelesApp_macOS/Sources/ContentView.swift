@@ -17,6 +17,9 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
+    /// Drives the "Save Layout…" name prompt.
+    @State private var showingSavePreset = false
+    @State private var newPresetName = ""
     /// "Omit Blank Lines" display preference (View menu); pushed to the session
     /// on launch and whenever it changes. Same UserDefaults key as the toggle.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
@@ -49,6 +52,13 @@ struct ContentView: View {
                 for await json in session.publishedModels {
                     snd.update(json: json)
                 }
+            }
+            .alert("Save Layout Preset", isPresented: $showingSavePreset) {
+                TextField("Preset name", text: $newPresetName)
+                Button("Save") { layout.savePreset(named: newPresetName) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Save the current panel arrangement so you can re-apply it later.")
             }
             .onAppear {
                 wireSearchAndDestroy()
@@ -113,6 +123,19 @@ struct ContentView: View {
                 }
             }
             Divider()
+            if !layout.presets.isEmpty {
+                Menu("Apply Layout") {
+                    ForEach(layout.presets) { preset in
+                        Button(preset.name) { layout.applyPreset(preset) }
+                    }
+                }
+                Menu("Delete Layout") {
+                    ForEach(layout.presets) { preset in
+                        Button(preset.name) { layout.deletePreset(named: preset.name) }
+                    }
+                }
+            }
+            Button("Save Layout…") { newPresetName = ""; showingSavePreset = true }
             Button("Reset Layout") { layout.resetToDefault() }
         } label: {
             Image(systemName: "rectangle.3.group")

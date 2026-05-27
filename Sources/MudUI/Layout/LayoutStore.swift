@@ -35,16 +35,26 @@ public final class LayoutStore {
 
     public private(set) var dropHighlight: DropHighlight?
 
+    /// Saved, named arrangements the user can re-apply (shared across worlds).
+    public private(set) var presets: [LayoutPreset] = []
+
     private let defaultsKey: String
     private let detachedKey: String
     private let floatingKey: String
+    /// Presets are global (shared across worlds), so by default they use a
+    /// fixed key independent of the per-world layout key.
+    private let presetsKey: String
 
     /// Load the persisted layout for `persistenceKey` (per world), or the
     /// shipped default. A corrupt/absent value falls back to `.standard`.
-    public init(persistenceKey: String = "com.proteles.layout.default") {
+    public init(
+        persistenceKey: String = "com.proteles.layout.default",
+        presetsKey: String = "com.proteles.layout.presets"
+    ) {
         defaultsKey = persistenceKey
         detachedKey = persistenceKey + ".detached"
         floatingKey = persistenceKey + ".floating"
+        self.presetsKey = presetsKey
         let stored = UserDefaults.standard.data(forKey: persistenceKey)
             .flatMap { try? JSONDecoder().decode(PanelLayout.self, from: $0) }
         layout = stored?.renormalized() ?? .standard
@@ -60,6 +70,8 @@ public final class LayoutStore {
         for kind in floating.union(detached) {
             layout = layout.removing(kind)
         }
+        presets = UserDefaults.standard.data(forKey: presetsKey)
+            .flatMap { try? JSONDecoder().decode([LayoutPreset].self, from: $0) } ?? []
     }
 
     /// Whether `kind` is currently shown — in the dock tree, a detached window,
@@ -174,6 +186,41 @@ public final class LayoutStore {
         guard next != layout else { return }
         layout = next
         save()
+    }
+
+    // MARK: - Layout presets
+
+    /// Save the current docked arrangement (+ which panels float) under `name`,
+    /// overwriting any preset with the same name. Detached windows aren't part
+    /// of a preset. A blank name is ignored.
+    public func savePreset(named name: String) {
+        let preset = LayoutPreset(name: name, layout: layout, floating: Array(floating))
+        presets = presets.upserting(preset)
+        savePresets()
+    }
+
+    /// Apply a saved preset: restore its dock tree and floating panels, and
+    /// return any detached panels to the dock (their windows close themselves).
+    public func applyPreset(_ preset: LayoutPreset) {
+        detached.removeAll() // detached windows observe this and dismiss
+        floating = Set(preset.floating)
+        layout = preset.layout.renormalized()
+        for kind in floating {
+            layout = layout.removing(kind)
+        }
+        save()
+    }
+
+    /// Delete the named preset.
+    public func deletePreset(named name: String) {
+        presets = presets.removing(named: name)
+        savePresets()
+    }
+
+    private func savePresets() {
+        if let data = try? JSONEncoder().encode(presets) {
+            UserDefaults.standard.set(data, forKey: presetsKey)
+        }
     }
 
     // MARK: - Drag-to-redock highlight

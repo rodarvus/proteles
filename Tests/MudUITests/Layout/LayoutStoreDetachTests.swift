@@ -6,9 +6,11 @@ import Testing
 @MainActor
 @Suite("LayoutStore — detachable windows")
 struct LayoutStoreDetachTests {
-    /// A store on a throwaway UserDefaults key so tests don't touch real layout.
+    /// A store on throwaway UserDefaults keys so tests don't touch real
+    /// layout/presets.
     private func makeStore() -> LayoutStore {
-        LayoutStore(persistenceKey: "test.layout.\(UUID().uuidString)")
+        let id = UUID().uuidString
+        return LayoutStore(persistenceKey: "test.layout.\(id)", presetsKey: "test.presets.\(id)")
     }
 
     @Test("Detaching pulls a panel out of the dock but keeps it visible")
@@ -102,5 +104,46 @@ struct LayoutStoreDetachTests {
         store.detach(.asciiMap) // was floating
         #expect(store.isDetached(.asciiMap))
         #expect(!store.isFloating(.asciiMap))
+    }
+
+    // MARK: - Presets
+
+    @Test("Saving a preset captures the current layout + floating panels")
+    func savePresetCaptures() {
+        let store = makeStore()
+        store.float(.channels)
+        store.savePreset(named: "Mine")
+        #expect(store.presets.map(\.name) == ["Mine"])
+        #expect(Set(store.presets[0].floating).contains(.channels))
+    }
+
+    @Test("Applying a preset restores its layout and floats, and re-docks detached")
+    func applyPresetRestores() {
+        let store = makeStore()
+        store.savePreset(named: "Base") // default arrangement (Text Map floats)
+        store.detach(.map)
+        store.float(.channels)
+        store.applyPreset(store.presets[0])
+        #expect(store.detached.isEmpty, "apply returns detached panels to the dock")
+        #expect(store.isFloating(.asciiMap), "preset's floating set is restored")
+        #expect(!store.isFloating(.channels), "channels wasn't floating in the preset")
+        #expect(store.layout.contains(.map), "the detached map is back in the dock")
+    }
+
+    @Test("Deleting a preset removes it")
+    func deletePreset() {
+        let store = makeStore()
+        store.savePreset(named: "Temp")
+        store.deletePreset(named: "Temp")
+        #expect(store.presets.isEmpty)
+    }
+
+    @Test("Presets persist across store instances (same presets key)")
+    func presetsPersist() {
+        let key = "test.presets.\(UUID().uuidString)"
+        let first = LayoutStore(persistenceKey: "test.layout.\(UUID().uuidString)", presetsKey: key)
+        first.savePreset(named: "Shared")
+        let second = LayoutStore(persistenceKey: "test.layout.\(UUID().uuidString)", presetsKey: key)
+        #expect(second.presets.map(\.name) == ["Shared"])
     }
 }
