@@ -27,12 +27,13 @@ extension View {
 }
 
 /// Wraps a panel so it accepts a dropped ``PanelKind`` and shows where it'll
-/// land. Tracks size (to classify the point) and the live highlight zone.
+/// land. The highlight lives in the ``LayoutStore`` (one shared value), so it
+/// can't get orphaned by a missed `dropExited`; this only tracks size (to
+/// classify the drop point) locally.
 private struct PanelDropTarget: ViewModifier {
     let target: PanelKind
     let store: LayoutStore
     @State private var size: CGSize = .zero
-    @State private var activeZone: DropZone?
 
     func body(content: Content) -> some View {
         content
@@ -44,8 +45,8 @@ private struct PanelDropTarget: ViewModifier {
                 }
             )
             .overlay {
-                if let zone = activeZone {
-                    DropZoneHighlight(zone: zone)
+                if let highlight = store.dropHighlight, highlight.target == target {
+                    DropZoneHighlight(zone: highlight.zone)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
@@ -53,8 +54,7 @@ private struct PanelDropTarget: ViewModifier {
             .onDrop(of: [.plainText], delegate: PanelDropDelegate(
                 target: target,
                 store: store,
-                size: { size },
-                activeZone: $activeZone
+                size: { size }
             ))
     }
 }
@@ -65,28 +65,27 @@ private struct PanelDropDelegate: DropDelegate {
     let target: PanelKind
     let store: LayoutStore
     let size: () -> CGSize
-    @Binding var activeZone: DropZone?
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.plainText])
     }
 
     func dropEntered(info: DropInfo) {
-        activeZone = zone(at: info.location)
+        store.setDropHighlight(target, zone(at: info.location))
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        activeZone = zone(at: info.location)
+        store.setDropHighlight(target, zone(at: info.location))
         return DropProposal(operation: .move)
     }
 
     func dropExited(info _: DropInfo) {
-        activeZone = nil
+        store.clearDropHighlight(forTarget: target)
     }
 
     func performDrop(info: DropInfo) -> Bool {
         let landingZone = zone(at: info.location)
-        activeZone = nil
+        store.clearDropHighlight()
         guard let provider = info.itemProviders(for: [.plainText]).first else { return false }
         let store = store
         let target = target

@@ -24,6 +24,17 @@ public final class LayoutStore {
     /// reads best as a top-right HUD rather than a dock tile).
     public static let defaultFloating: Set<PanelKind> = [.asciiMap]
 
+    /// Where a drag-to-redock preview is currently shown — a *single* shared
+    /// value rather than per-panel view state. Entering any target overwrites
+    /// the previous one, so a highlight can never be orphaned if SwiftUI drops
+    /// a `dropExited` callback (which used to leave it stuck on screen).
+    public struct DropHighlight: Equatable, Sendable {
+        public let target: PanelKind
+        public let zone: DropZone
+    }
+
+    public private(set) var dropHighlight: DropHighlight?
+
     private let defaultsKey: String
     private let detachedKey: String
     private let floatingKey: String
@@ -163,6 +174,22 @@ public final class LayoutStore {
         guard next != layout else { return }
         layout = next
         save()
+    }
+
+    // MARK: - Drag-to-redock highlight
+
+    /// Show the drop preview for `target`/`zone` (a drag is hovering it).
+    public func setDropHighlight(_ target: PanelKind, _ zone: DropZone) {
+        let next = DropHighlight(target: target, zone: zone)
+        if dropHighlight != next { dropHighlight = next }
+    }
+
+    /// Clear the drop preview. With a `target`, only clears if that target is
+    /// the one currently highlighted (so a stale `dropExited` from a panel the
+    /// drag already left can't wipe the panel it's now over).
+    public func clearDropHighlight(forTarget target: PanelKind? = nil) {
+        if let target, dropHighlight?.target != target { return }
+        dropHighlight = nil
     }
 
     private func save() {
