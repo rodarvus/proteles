@@ -12,13 +12,24 @@ import Foundation
 /// until a directory is set). The db handle's methods (`exec`, `nrows`,
 /// `prepare`, …) run natively — only the open path is validated.
 extension LuaRuntime {
+    /// Serialises `luaopen_lsqlite3` across all Lua states. lsqlite3 caches its
+    /// metatable registry refs in **file-static C globals** (`sqlite_*_meta_ref`)
+    /// that it (re)writes on every module-open. Two `LuaRuntime`s opening it
+    /// concurrently (e.g. the shared engine + the S&D host on different threads)
+    /// race those globals — corrupting a `lua_State` and crashing elsewhere,
+    /// non-deterministically. Module-open is fast and once-per-runtime, so a
+    /// process-wide lock around it is free and removes the race.
+    private static let openLock = NSLock()
+
     /// Load `lsqlite3` and replace its raw global `sqlite3` with a guarded
     /// wrapper. Called from `init` after the sandbox is applied.
     nonisolated func installSQLite() {
-        // Open the C library; it leaves its module table on the stack and
-        // registers a raw `sqlite3` global. Stash the table, then build the
-        // guarded wrapper from it in Lua.
+        // Open the C library (serialised — see `openLock`); it leaves its module
+        // table on the stack and registers a raw `sqlite3` global. Stash the
+        // table, then build the guarded wrapper from it in Lua.
+        Self.openLock.lock()
         _ = proteles_open_lsqlite3(UnsafeMutableRawPointer(state))
+        Self.openLock.unlock()
         clua_setglobal(state, "__lsqlite3_raw") // pops the module table
 
         if luaL_loadstring(state, Self.sqliteWrapperScript) == 0 {
