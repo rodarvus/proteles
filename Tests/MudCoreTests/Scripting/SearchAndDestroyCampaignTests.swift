@@ -262,6 +262,17 @@ struct SearchAndDestroyCampaignTests {
             "the where match must render the room list; got \(matchEffects)"
         )
 
+        // `go 1` must walk to the listed room (goto_number → goto_room_id →
+        // do_mapper_goto). The user reported `go` and `nx` both dead after xcp.
+        let goEffects = await host.expandCommand("go 1")
+        #expect(
+            (goEffects ?? []).contains { effect in
+                guard case .execute(let cmd) = effect else { return false }
+                return cmd == "mapper goto 1" || cmd == "mapper walkto 1"
+            },
+            "go 1 must drive a mapper goto/walkto for the listed room; got \(goEffects ?? [])"
+        )
+
         // nx must now walk gotoList → a mapper goto for the found room (uid 1),
         // NOT "No more rooms" (the empty-gotoList symptom the user reported).
         let nxEffects = await host.expandCommand("nx")
