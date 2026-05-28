@@ -151,44 +151,45 @@ mapper re-import, changed the picture entirely: navigation **no longer locks**
 - `xcp 1` correctly resolved `X-runto: zoo, room ID: 5920` (verified: room 5920
   *is* zoo "Which way now?" in the live DB) and called `mapper goto`. **S&D did
   its job.**
-- The mapper's path used a **from-anywhere portal exit** and landed at the wrong
-  room. The map DB stores these as `dir = "dinv portal use <serial>", fromuid =
-  "*", touid = <room>` — **keyed by the dinv portal serial**. Serials rotate
-  every session, so the stored edge `dinv portal use 3672026293 → 995` actually
-  warped to **26151** (Aardwolf Plaza Hotel) this session, then `run 2n3e3s` →
-  **gelidus**. So `mapper goto` routes through a stale portal to the wrong place.
-- **Reference grounding:** `aard_GMCP_mapper`'s `create_portal(keyword,
-  destination, …)` / `map_portal` store portals **by stable keyword** (recall
-  portals detected by `"home"`/`"recall"`), never by serial. Our serial-keyed
-  storage/traversal is the defect.
+- The mapper's path used a **from-anywhere portal exit** and the portal step
+  landed at the wrong room. The map DB stores these as `dir = "dinv portal use
+  <serial>", fromuid = "*", touid = <room>`. The stored edge `dinv portal use
+  3672026293 → 995` should have reached 995, but this session the portal step
+  reached **26151** (Aardwolf Plaza Hotel), then `run 2n3e3s` → **gelidus**.
+- **CORRECTION (user, authoritative): serials do NOT rotate.** The serial is part
+  of the stable Aardwolf item id. So "stale/rotating serial" is **wrong** — an
+  earlier mis-read of mine. The recorded `→ 995` is correct *and* the serial is
+  the same item; the failure is therefore in **how the portal was *used***.
+  **Leading hypothesis (user): dinv, with an empty/unbuilt database, got lost
+  handling `dinv portal use <serial>`** and the resulting `hold …; enter`
+  reached the wrong room (26151). Pending: a dinv DB **rebuild** + a fresh
+  `xcp` re-test to confirm.
 - Secondary: `con` ran but the room was empty ("You see no one here but
   yourself!") because navigation landed in the wrong place; `nx` → "No more
   rooms" (empty gotoList). Both are downstream of the nav bug. consider no
   longer hangs.
 
-**Definitive DB proof (the plan was correct; only the serial was stale):**
+**Definitive DB proof (the mapper's route was correct):**
 `dinv portal use 3672026293 → 995` ("Wide Path in the Petting Zoo", area
 `petstore`) is the *only* portal into zoo/petstore, and petstore borders zoo —
 tracing `2n3e3s` from 995 walks `995→5948→5945→5946→5940→5923→5917→5911→5920`,
 landing exactly on target 5920 (zoo). So the mapper's route (portal→995, then
-`2n3e3s`→5920) was perfect; the serial just rotated this session and the portal
-reached **26151** (immhomes) instead of 995, so the walk ran from the wrong
-room. (immhomes *is* a hub — its 6 exits go to gelidus/alagh/southern/abend/
-uncharted/aylor — but **zoo is not** one of its shortcuts; the hub is just where
-the stale serial dumped us.)
+`2n3e3s`→5920) was perfect; only the **portal step** failed to reach 995 (it
+reached immhomes 26151), so the walk ran from the wrong room. (immhomes *is* a
+hub — its 6 exits go to gelidus/alagh/southern/abend/uncharted/aylor — but
+**zoo is not** one of its shortcuts; the hub is just where the bad portal hop
+dumped us.)
 
-**Action:** the real fix is a **mapper** change:
-1. **Root fix** — store/traverse from-anywhere portals by a **stable identity**
-   (the reference keys them by portal *keyword* via `create_portal`), re-resolving
-   the current dinv serial at use time; stop persisting/pathfinding raw serials.
-2. **Cheap safety mitigation** — after a portal hop, the speedwalk should
-   **verify `room.info` matches the expected room** before continuing; on
-   mismatch, abort with a clear note rather than blindly walking from the wrong
-   place (which is what sent us into gelidus).
-Tracked as a separate mapper task (NO-GUESSING: read `mapper.lua`/
-`aard_GMCP_mapper` portal handling + how the native mapper captures the
-`dinv portal use <serial>` exit, + the live DB, first). The S&D host-level work
-above stands; **S&D is not the cause of the "wrong place" navigation.**
+**Action (pending the dinv-rebuild re-test):**
+- **Most likely:** a rebuilt dinv DB fixes the portal-use, and `xcp` navigates
+  correctly with **no mapper change** — confirm first.
+- **Defensive, regardless:** after a portal hop the speedwalk should **verify
+  `room.info` matches the expected room** before continuing; on mismatch, abort
+  with a clear note rather than blindly walking from the wrong place (what sent
+  us into gelidus). This is a cheap mapper safety net worth having either way.
+The S&D host-level work above stands; **S&D is not the cause of the "wrong
+place" navigation.** (NO-GUESSING: re-test, then read the relevant dinv/mapper
+portal-use path before any change.)
 
 ## 4. Fix plan (functional + UI parity, prioritised)
 
