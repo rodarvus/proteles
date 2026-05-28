@@ -166,12 +166,29 @@ mapper re-import, changed the picture entirely: navigation **no longer locks**
   rooms" (empty gotoList). Both are downstream of the nav bug. consider no
   longer hangs.
 
-**Action:** the real fix is a **mapper** change — store/traverse from-anywhere
-portals by a **stable keyword** (re-resolving the current serial at use time),
-matching the reference; stop pathfinding through serial-keyed edges. Tracked as
-a separate mapper task (NO-GUESSING: read `mapper.lua`/`aard_GMCP_mapper` portal
-handling + the live DB first). The S&D host-level work above stands; S&D is not
-the cause of the "wrong place" navigation.
+**Definitive DB proof (the plan was correct; only the serial was stale):**
+`dinv portal use 3672026293 → 995` ("Wide Path in the Petting Zoo", area
+`petstore`) is the *only* portal into zoo/petstore, and petstore borders zoo —
+tracing `2n3e3s` from 995 walks `995→5948→5945→5946→5940→5923→5917→5911→5920`,
+landing exactly on target 5920 (zoo). So the mapper's route (portal→995, then
+`2n3e3s`→5920) was perfect; the serial just rotated this session and the portal
+reached **26151** (immhomes) instead of 995, so the walk ran from the wrong
+room. (immhomes *is* a hub — its 6 exits go to gelidus/alagh/southern/abend/
+uncharted/aylor — but **zoo is not** one of its shortcuts; the hub is just where
+the stale serial dumped us.)
+
+**Action:** the real fix is a **mapper** change:
+1. **Root fix** — store/traverse from-anywhere portals by a **stable identity**
+   (the reference keys them by portal *keyword* via `create_portal`), re-resolving
+   the current dinv serial at use time; stop persisting/pathfinding raw serials.
+2. **Cheap safety mitigation** — after a portal hop, the speedwalk should
+   **verify `room.info` matches the expected room** before continuing; on
+   mismatch, abort with a clear note rather than blindly walking from the wrong
+   place (which is what sent us into gelidus).
+Tracked as a separate mapper task (NO-GUESSING: read `mapper.lua`/
+`aard_GMCP_mapper` portal handling + how the native mapper captures the
+`dinv portal use <serial>` exit, + the live DB, first). The S&D host-level work
+above stands; **S&D is not the cause of the "wrong place" navigation.**
 
 ## 4. Fix plan (functional + UI parity, prioritised)
 
