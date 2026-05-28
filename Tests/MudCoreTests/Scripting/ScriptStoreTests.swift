@@ -117,6 +117,49 @@ struct ScriptStoreTests {
         }
     }
 
+    @Test("Macros round-trip through disk and update/remove by id")
+    func macrosRoundTrip() async throws {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        var macro = Macro(
+            name: "North",
+            chord: KeyChord(keyCode: KeyCode.keypad8, isKeypad: true),
+            action: .command("n")
+        )
+        let store = ScriptStore(url: url)
+        try await store.load()
+        try await store.addMacro(macro)
+
+        let reopened = ScriptStore(url: url)
+        try await reopened.load()
+        #expect(await reopened.macros == [macro])
+
+        macro.action = .command("north")
+        try await store.updateMacro(macro)
+        #expect(await store.macros.first?.action == .command("north"))
+
+        try await store.removeMacro(id: macro.id)
+        #expect(await store.macros.isEmpty)
+    }
+
+    @Test("A document written before macros existed still loads (missing key = empty)")
+    func decodesMissingMacrosKey() async throws {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // Simulate a pre-macros script file: triggers present, no `macros` key.
+        let legacy = """
+        { "triggers": [], "aliases": [], "timers": [] }
+        """
+        try Data(legacy.utf8).write(to: url)
+
+        let store = ScriptStore(url: url)
+        try await store.load()
+        #expect(await store.macros.isEmpty)
+        #expect(await store.triggers.isEmpty)
+    }
+
     @Test("ScriptEngine.reload replaces the whole automation set")
     func engineReloadReplaces() async throws {
         let engine = try ScriptEngine()

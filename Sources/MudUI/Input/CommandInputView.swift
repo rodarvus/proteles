@@ -30,13 +30,23 @@ import SwiftUI
 /// hardware-keyboard story to support yet).
 public struct CommandInputView: View {
     private let onSubmit: (String) -> Void
+    private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)?
 
-    public init(onSubmit: @escaping (String) -> Void) {
+    /// - Parameters:
+    ///   - onSubmit: called with the line when the user presses Enter.
+    ///   - onMacroKey: given a key chord (and whether the input is empty),
+    ///     return `true` to indicate a macro consumed the keypress (the key is
+    ///     then swallowed, not typed). Used for keypad/chord navigation.
+    public init(
+        onSubmit: @escaping (String) -> Void,
+        onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil
+    ) {
         self.onSubmit = onSubmit
+        self.onMacroKey = onMacroKey
     }
 
     public var body: some View {
-        CommandField(onSubmit: onSubmit)
+        CommandField(onSubmit: onSubmit, onMacroKey: onMacroKey)
             .frame(height: 20)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -54,6 +64,7 @@ public struct CommandInputView: View {
     /// macOS command field. See ``CommandInputView`` for behaviour.
     private struct CommandField: NSViewRepresentable {
         let onSubmit: (String) -> Void
+        let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
 
         func makeCoordinator() -> Coordinator {
             Coordinator(onSubmit: onSubmit)
@@ -61,6 +72,7 @@ public struct CommandInputView: View {
 
         func makeNSView(context: Context) -> NSTextField {
             let field = AutoFocusTextField()
+            field.onMacroKey = onMacroKey
             field.delegate = context.coordinator
             // Stable id so the output view can find + refocus the command field
             // when the user types after selecting text (always-focused input).
@@ -78,8 +90,9 @@ public struct CommandInputView: View {
             return field
         }
 
-        func updateNSView(_: NSTextField, context: Context) {
+        func updateNSView(_ nsView: NSTextField, context: Context) {
             context.coordinator.onSubmit = onSubmit
+            (nsView as? AutoFocusTextField)?.onMacroKey = onMacroKey
         }
 
         @MainActor
@@ -291,6 +304,10 @@ public struct CommandInputView: View {
         /// can remove it when the field leaves its window.
         private var keyMonitor: Any?
 
+        /// Macro pre-filter: returns `true` if a bound macro consumed the key
+        /// (so it's swallowed, not typed). See ``CommandInputView``.
+        var onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             NotificationCenter.default.removeObserver(
@@ -308,8 +325,27 @@ public struct CommandInputView: View {
                 object: window
             )
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                self?.redirect(event) ?? event
+                guard let self else { return event }
+                // A bound macro (keypad/modifier/function chord, or a bare key
+                // in Navigation mode) consumes the key before it's typed.
+                if fireMacroIfMatch(event) { return nil }
+                return redirect(event)
             }
+        }
+
+        /// Offer `event` to the macro engine. Only keypresses aimed at our key
+        /// window count (so key-capture in the Scripts editor is unaffected).
+        /// The engine decides whether the chord fires given the input state.
+        private func fireMacroIfMatch(_ event: NSEvent) -> Bool {
+            guard let onMacroKey, let window, window.isKeyWindow, event.window === window
+            else { return false }
+            return onMacroKey(makeKeyChord(from: event), currentInputText.isEmpty)
+        }
+
+        /// The live text in the command line (the field editor's contents while
+        /// editing, else the field value).
+        private var currentInputText: String {
+            currentEditor()?.string ?? stringValue
         }
 
         @objc private func focusSoon() {
@@ -359,9 +395,11 @@ public struct CommandInputView: View {
 #else
 
     /// Fallback command field for platforms without AppKit (no hardware
-    /// keyboard handling yet): a plain submit-and-clear text field.
+    /// keyboard handling yet): a plain submit-and-clear text field. `onMacroKey`
+    /// is accepted for API parity but unused (no key monitor off macOS).
     private struct CommandField: View {
         let onSubmit: (String) -> Void
+        let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
         @State private var command = ""
         @FocusState private var focused: Bool
 
