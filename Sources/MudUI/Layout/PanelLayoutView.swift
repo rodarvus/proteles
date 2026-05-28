@@ -35,10 +35,15 @@ public struct PanelLayoutView: View {
         onDetach: @escaping (PanelKind) -> Void
     ) -> some View {
         Menu {
-            Button {
-                store.float(kind)
-            } label: {
-                Label("Float Top-Right", systemImage: "pip")
+            // Floating is a compact top-right HUD designed for the bounded Text
+            // Map; other panels have no intrinsic size and would collapse, so
+            // they open in a real window instead.
+            if kind == .asciiMap {
+                Button {
+                    store.float(kind)
+                } label: {
+                    Label("Float Top-Right", systemImage: "pip")
+                }
             }
             Button {
                 onDetach(kind)

@@ -35,6 +35,12 @@ public final class LayoutStore {
 
     public private(set) var dropHighlight: DropHighlight?
 
+    /// Where each hidden/detached panel last sat in the dock, so re-showing it
+    /// restores its position instead of dumping it at the bottom. Session-scoped
+    /// (the persisted `layout` already captures positions across launches).
+    private struct AnchorSlot { let anchor: PanelKind; let zone: DropZone }
+    private var lastSlot: [PanelKind: AnchorSlot] = [:]
+
     /// Saved, named arrangements the user can re-apply (shared across worlds).
     public private(set) var presets: [LayoutPreset] = []
 
@@ -98,16 +104,37 @@ public final class LayoutStore {
         } else if floating.contains(kind) {
             floating.remove(kind) // hide the miniwindow
             save()
+        } else if layout.contains(kind) {
+            rememberSlot(kind)
+            layout = layout.removing(kind)
+            save()
         } else {
-            layout = layout.toggling(kind)
+            layout = restoredInsert(kind)
             save()
         }
     }
 
     /// Hide a docked panel (its ✕ button).
     public func close(_ kind: PanelKind) {
+        rememberSlot(kind)
         layout = layout.removing(kind)
         save()
+    }
+
+    /// Record where `kind` currently sits, so a later re-show restores it there.
+    private func rememberSlot(_ kind: PanelKind) {
+        if let slot = layout.anchorSlot(for: kind) {
+            lastSlot[kind] = AnchorSlot(anchor: slot.anchor, zone: slot.zone)
+        }
+    }
+
+    /// Re-insert `kind`, restoring its last slot when the anchor is still
+    /// docked; otherwise the default right-rail insert.
+    private func restoredInsert(_ kind: PanelKind) -> PanelLayout {
+        if let slot = lastSlot[kind], layout.contains(slot.anchor) {
+            return layout.inserting(kind, near: slot.anchor, zone: slot.zone)
+        }
+        return layout.inserting(kind)
     }
 
     // MARK: - Detach / re-dock
@@ -116,6 +143,7 @@ public final class LayoutStore {
     /// in response to ``detached`` gaining the panel.
     public func detach(_ kind: PanelKind) {
         guard kind.isClosable, !detached.contains(kind) else { return }
+        rememberSlot(kind)
         detached.insert(kind)
         floating.remove(kind)
         layout = layout.removing(kind)
@@ -126,7 +154,7 @@ public final class LayoutStore {
     public func redock(_ kind: PanelKind) {
         guard detached.contains(kind) else { return }
         detached.remove(kind)
-        if !layout.contains(kind) { layout = layout.inserting(kind) }
+        if !layout.contains(kind) { layout = restoredInsert(kind) }
         save()
     }
 
@@ -141,8 +169,11 @@ public final class LayoutStore {
     // MARK: - Float / dock (top-right miniwindow)
 
     /// Lift `kind` out of the dock into a fixed top-right floating miniwindow.
+    /// Only the Text Map self-sizes into the compact HUD; other panels would
+    /// collapse, so floating them is rejected (they open in a window instead).
     public func float(_ kind: PanelKind) {
-        guard kind.isClosable, !floating.contains(kind) else { return }
+        guard kind == .asciiMap, !floating.contains(kind) else { return }
+        rememberSlot(kind)
         floating.insert(kind)
         detached.remove(kind)
         layout = layout.removing(kind)
@@ -152,7 +183,7 @@ public final class LayoutStore {
     /// Return a floating `kind` to the dock.
     public func dockFloating(_ kind: PanelKind) {
         guard floating.remove(kind) != nil else { return }
-        if !layout.contains(kind) { layout = layout.inserting(kind) }
+        if !layout.contains(kind) { layout = restoredInsert(kind) }
         save()
     }
 
@@ -177,6 +208,8 @@ public final class LayoutStore {
         for kind in floating {
             layout = layout.removing(kind)
         }
+        dropHighlight = nil // a drag preview can't survive a reset
+        lastSlot.removeAll() // positions are meaningless after a reset
         save()
     }
 
