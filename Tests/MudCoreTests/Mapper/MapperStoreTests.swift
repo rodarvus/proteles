@@ -186,6 +186,30 @@ struct MapperStoreTests {
         #expect(try dest.room(uid: "6")?.notes == "imported note")
     }
 
+    @Test("Import brings the terrain palette (environments) so rooms aren't grey")
+    func importBringsEnvironments() throws {
+        // Source: a MUSHclient DB with a populated sector palette + a room.
+        let sourceURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        try makeMUSHclientV11(at: sourceURL)
+        let sourceQueue = try DatabaseQueue(path: sourceURL.path)
+        try sourceQueue.write { db in
+            try db.execute(sql: """
+            INSERT INTO environments(uid,name,color) VALUES('2','city',7),('1','inside',7)
+            """)
+        }
+
+        let destURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: destURL) }
+        let dest = try MapperStore(url: destURL)
+        let summary = try dest.importIncremental(from: sourceURL)
+
+        #expect(summary.environments == 2, "the terrain palette must be imported, else rooms render grey")
+        let environments = try dest.loadEnvironments()
+        #expect(environments.contains { $0.name == "city" && $0.color == 7 })
+        #expect(environments.contains { $0.name == "inside" && $0.color == 7 })
+    }
+
     @Test("Importing a non-mapper file throws notAMapperDatabase")
     func importInvalid() throws {
         let bogusURL = tempURL()

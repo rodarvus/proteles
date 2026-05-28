@@ -220,7 +220,8 @@ public final class MapPanelModel {
         }
         return """
         Added \(summary.rooms.formatted()) rooms, \(summary.areas.formatted()) areas, \
-        \(summary.exits.formatted()) exits, and \(summary.notes.formatted()) notes.
+        \(summary.exits.formatted()) exits, \(summary.notes.formatted()) notes, and \
+        \(summary.environments.formatted()) terrain colours.
         """
     }
 
