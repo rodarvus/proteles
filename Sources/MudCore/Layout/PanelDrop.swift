@@ -1,22 +1,18 @@
 import Foundation
 
 /// Where a dragged panel is dropped relative to the panel it's dropped *onto*
-/// (drag-to-redock — `docs/UI_REVAMP.md`). The four edges create a split; the
-/// centre merges into a tab group.
+/// (drag-to-redock — `docs/UI_REVAMP.md`). A drag-drop always picks an edge so
+/// the dropped panel **splits/inserts** (never stacks). `.center` (tab-merge)
+/// remains for programmatic use but is never produced by ``at(x:y:width:height:)``.
 public enum DropZone: String, Sendable, CaseIterable {
     case leading, trailing, top, bottom, center
 
-    /// Classify a drop point within a panel's bounds: the central
-    /// `centerFraction`×`centerFraction` box is `.center` (tab-merge);
-    /// otherwise the nearest edge. Pure (takes plain numbers) so it's unit-
-    /// testable without any UI geometry types.
-    public static func at(
-        x: Double, y: Double, width: Double, height: Double, centerFraction: Double = 0.34
-    ) -> DropZone {
-        guard width > 0, height > 0 else { return .center }
+    /// Classify a drop point within a panel's bounds to its **nearest edge**, so
+    /// a dropped panel splits/inserts on that side. Pure (takes plain numbers)
+    /// so it's unit-testable without any UI geometry types.
+    public static func at(x: Double, y: Double, width: Double, height: Double) -> DropZone {
+        guard width > 0, height > 0 else { return .top }
         let nx = x / width, ny = y / height // normalized 0…1
-        let half = centerFraction / 2
-        if abs(nx - 0.5) < half, abs(ny - 0.5) < half { return .center }
         let toLeft = nx, toRight = 1 - nx, toTop = ny, toBottom = 1 - ny
         let nearest = min(toLeft, toRight, toTop, toBottom)
         if nearest == toLeft { return .leading }
@@ -58,6 +54,50 @@ public extension PanelLayout {
             Self.combine(kind, with: targetNode, zone: zone)
         }
         return combined.collapsed().renormalized()
+    }
+
+    /// Insert an **absent** `kind` adjacent to `anchor` at `zone` (used to
+    /// restore a re-shown panel to where it was hidden from). Falls back to the
+    /// default right-rail insert if `kind` is already present or `anchor` is gone.
+    func inserting(_ kind: PanelKind, near anchor: PanelKind, zone: DropZone) -> PanelLayout {
+        guard !contains(kind), contains(anchor) else { return inserting(kind) }
+        let combined = replacingNode(holding: anchor) { node in
+            Self.combine(kind, with: node, zone: zone)
+        }
+        return combined.collapsed().renormalized()
+    }
+
+    /// Describe where `kind` currently sits as an adjacent panel + the side it
+    /// occupies, so it can be restored there later. `nil` if `kind` is the only
+    /// panel or isn't found.
+    func anchorSlot(for kind: PanelKind) -> (anchor: PanelKind, zone: DropZone)? {
+        guard case .split(let axis, let items) = self,
+              let index = items.firstIndex(where: { $0.node.contains(kind) })
+        else { return nil }
+        // Descend to the innermost split holding `kind` first, so the anchor is
+        // its closest neighbour (not a far-away ancestor sibling).
+        if let deeper = items[index].node.anchorSlot(for: kind) { return deeper }
+        // `kind` is a direct child here → anchor to an adjacent sibling. Prefer
+        // the sibling *after* it (so it restores before that one); else before.
+        let before: DropZone = axis == .vertical ? .top : .leading
+        let after: DropZone = axis == .vertical ? .bottom : .trailing
+        if index + 1 < items.count, let anchor = items[index + 1].node.firstLeaf {
+            return (anchor, before)
+        }
+        if index - 1 >= 0, let anchor = items[index - 1].node.firstLeaf {
+            return (anchor, after)
+        }
+        return nil
+    }
+
+    /// The first panel in depth-first order (a deterministic representative of
+    /// a subtree, used as a re-dock anchor).
+    var firstLeaf: PanelKind? {
+        switch self {
+        case .leaf(let kind): kind
+        case .tabs(let panels, _): panels.first
+        case .split(_, let items): items.lazy.compactMap(\.node.firstLeaf).first
+        }
     }
 
     /// Build the node that replaces the target's slot once `kind` docks at

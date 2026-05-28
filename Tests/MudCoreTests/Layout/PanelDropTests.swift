@@ -16,15 +16,16 @@ struct PanelDropTests {
 
     // MARK: - Zone geometry
 
-    @Test("DropZone.at classifies the centre and the four edges")
+    @Test("DropZone.at always picks the nearest edge (never centre — drops split)")
     func zoneClassification() {
-        #expect(DropZone.at(x: 50, y: 50, width: 100, height: 100) == .center)
         #expect(DropZone.at(x: 5, y: 50, width: 100, height: 100) == .leading)
         #expect(DropZone.at(x: 95, y: 50, width: 100, height: 100) == .trailing)
         #expect(DropZone.at(x: 50, y: 5, width: 100, height: 100) == .top)
         #expect(DropZone.at(x: 50, y: 95, width: 100, height: 100) == .bottom)
+        // A dead-centre point resolves to an edge, never .center.
+        #expect(DropZone.at(x: 50, y: 50, width: 100, height: 100) != .center)
         // Degenerate bounds never crash.
-        #expect(DropZone.at(x: 0, y: 0, width: 0, height: 0) == .center)
+        #expect(DropZone.at(x: 0, y: 0, width: 0, height: 0) != .center)
     }
 
     // MARK: - Moves
@@ -82,6 +83,42 @@ struct PanelDropTests {
     func normalizedAfterMove() {
         let moved = PanelLayout.standard.moving(.map, onto: .channels, zone: .top)
         assertNormalized(moved)
+    }
+
+    // MARK: - Re-show position memory
+
+    @Test("anchorSlot describes a panel's neighbour + side; restore round-trips")
+    func restoreSlotRoundTrips() {
+        let layout = PanelLayout.standard
+        // map is the top of the right rail, above the [hunt, asciiMap] tab group.
+        guard let slot = layout.anchorSlot(for: .map) else {
+            Issue.record("no anchor slot for map")
+            return
+        }
+        #expect(slot.anchor == .hunt)
+        #expect(slot.zone == .top)
+
+        let hidden = layout.removing(.map)
+        #expect(!hidden.contains(.map))
+
+        let restored = hidden.inserting(.map, near: slot.anchor, zone: slot.zone)
+        #expect(restored.contains(.map))
+        #expect(occurrences(of: .map, in: restored) == 1)
+        // Restoring puts map back in an equivalent slot (above hunt again).
+        #expect(restored.anchorSlot(for: .map)?.anchor == .hunt)
+        #expect(restored.anchorSlot(for: .map)?.zone == .top)
+    }
+
+    @Test("Restoring near a vanished anchor falls back to a default insert")
+    func restoreFallback() {
+        // Hide map and its whole anchor tab group, then try to restore near hunt.
+        let layout = PanelLayout.standard
+            .removing(.map)
+            .removing(.hunt)
+            .removing(.asciiMap)
+        let restored = layout.inserting(.map, near: .hunt, zone: .top)
+        #expect(restored.contains(.map)) // still inserted (fallback path)
+        #expect(occurrences(of: .map, in: restored) == 1)
     }
 
     // MARK: - Helpers
