@@ -143,6 +143,9 @@ public actor SessionController {
     /// Per-profile world-data dir (`GetInfo(66)` + lsqlite3 sandbox root).
     var worldDataDirectory: String?
 
+    /// Latest raw GMCP JSON per package (lowercased key), replayed on re-attach.
+    var latestGMCPByPackage: [String: String] = [:]
+
     /// Subscribers notified when a ``Mapper`` is attached (the map panel
     /// rebinds); subscribe/yield logic lives in the +Scripting extension.
     var mapperAttachmentSubscribers: [UUID: AsyncStream<Mapper>.Continuation] = [:]
@@ -376,6 +379,7 @@ public actor SessionController {
         helpCaptureActive = false
         helpCaptureBuffer = []
         await gmcpState.reset()
+        latestGMCPByPackage.removeAll()
         await chatStore.reset()
         await mapStore.reset()
 
@@ -525,22 +529,19 @@ public actor SessionController {
         }
     }
 
-    /// Update the mirrored state and republish it. Deduplicates so the
-    /// durable stream never emits the same state twice in a row.
+    /// Update the mirrored state and republish it (deduplicated so the durable
+    /// stream never emits the same state twice in a row).
     func updateState(_ newState: State) {
         guard newState != state else { return }
         state = newState
         connectionStatesContinuation.yield(newState)
         syncTimerLoop(to: newState)
-        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap). S&D
-        // auto-detects an already-running campaign itself (its init hook runs
-        // do_cp_info once initialised); the panel's gear menu offers a manual
-        // re-check as a fallback.
+        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap; its
+        // init hook auto-detects an already-running campaign).
         if let searchAndDestroy {
             Task { await searchAndDestroy.setConnected(newState == .connected) }
         }
-        // Keep scripts' `proteles.isConnected` in sync and drive plugin
-        // connect/disconnect lifecycle callbacks.
+        // Keep scripts' `isConnected` in sync + drive plugin lifecycle callbacks.
         if let scriptEngine {
             Task { [weak self] in
                 await scriptEngine.setConnected(newState == .connected)
@@ -559,8 +560,7 @@ public actor SessionController {
     }
 
     /// Drive the timer loop with the connection: start on connect (re-arms
-    /// timers on reconnect), stop on disconnect so recurring timers don't spin
-    /// on a dead session (remote drops also cancel it via teardownSession).
+    /// timers on reconnect), stop on disconnect (teardownSession also cancels it).
     private func syncTimerLoop(to newState: State) {
         switch newState {
         case .connected:
