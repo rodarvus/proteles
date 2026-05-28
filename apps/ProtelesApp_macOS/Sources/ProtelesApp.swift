@@ -256,6 +256,18 @@ struct ProtelesApp: App {
         }
         .windowResizability(.contentSize)
 
+        // In-game Help reader: a dedicated, normal-level window (not a dock
+        // tile, not a floating panel). Auto-opened by ContentView when a help
+        // article is captured; width-capped (~90 chars) since help is
+        // pre-wrapped at ~76 columns.
+        Window("Help", id: ProtelesApp.helpWindowID) {
+            HelpPanelView(model: help)
+                .frame(minWidth: 520, idealWidth: 740, maxWidth: 820, minHeight: 380, maxHeight: .infinity)
+                .navigationTitle("Help")
+        }
+        .defaultSize(width: 740, height: 640)
+        .windowResizability(.contentSize)
+
         Window("Plugins", id: ProtelesApp.pluginsWindowID) {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
@@ -275,6 +287,7 @@ struct ProtelesApp: App {
     static let worldsWindowID = "worlds"
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
+    static let helpWindowID = "help"
 
     /// `~/Library/Application Support/com.proteles.ProtelesApp/logs` — where
     /// user session logs are written (used by the log-file builder + the
@@ -411,8 +424,8 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("U", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.info)) { Text("Character") }
                 .keyboardShortcut("I", modifiers: [.command, .shift])
-            Toggle(isOn: panelBinding(.help)) { Text("Help") }
-                .keyboardShortcut("H", modifiers: [.command, .control])
+            Button("Help") { openWindow(id: ProtelesApp.helpWindowID) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
 
             Divider()
 
