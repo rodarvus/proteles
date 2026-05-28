@@ -18,6 +18,10 @@ extension SessionController {
             await dispatchGMCP(GMCPMessage(package: package, json: json))
         case .reloadPlugin(let id):
             await reloadPlugin(id: id)
+        case .chatCapture(let text, let channel):
+            // Bridge `CallPlugin(<chat-capture>, "storeFromOutside", …)` to native
+            // chat (rsocial/hadar_spellup); `text` may carry Aardwolf @-codes.
+            await chatStore.append(channel: channel.isEmpty ? "Capture" : channel, player: "", message: text)
         default:
             break
         }

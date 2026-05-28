@@ -138,8 +138,7 @@ public actor LuaRuntime {
         case jsonDecode
         case jsonEncode
         case echoAard, echoAnsi, simulate
-        case colourNote, hyperlink
-        case mapperCall
+        case colourNote, hyperlink, mapperCall, chatCapture
         case sqliteAllowed
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
@@ -367,6 +366,7 @@ public actor LuaRuntime {
         setHostFunction("colourNote", .colourNote)
         setHostFunction("hyperlink", .hyperlink)
         setHostFunction("mapperCall", .mapperCall)
+        setHostFunction("chatCapture", .chatCapture)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
         setHostFunction("publish", .publish)
         setHostFunction("enableTrigger", .enableTrigger)
@@ -402,8 +402,8 @@ public actor LuaRuntime {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .hyperlink, .mapperCall, .publish, .enableTrigger, .enableTimer, .enableGroup, .doAfter,
-             .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin:
+             .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
+             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin:
             recordEffect(function, arguments)
             return []
         case .call:

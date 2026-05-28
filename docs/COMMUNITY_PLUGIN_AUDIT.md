@@ -42,12 +42,13 @@ blocker. So most are text/trigger/GMCP plugins that should run.
 
 ## Shim gaps surfaced (actionable, in rough priority)
 
-1. **`addxml` helper module is missing.** MUSHclient's `addxml` lets a plugin
-   add triggers/aliases/timers from Lua tables (`addxml.trigger{ match=…,
-   … }`). Only `message_gagger` here needs it, but it's a common corpus helper.
-   *Fix:* a small `addxml` shim mapping `addxml.trigger/alias/timer{…}` →
-   `AddTriggerEx`/`AddAlias`/`AddTimer` (we already have those). Low effort,
-   needs a test. **Recommended.**
+1. ✅ **`addxml` helper module — DONE.** A clean-room `addxml` shim now maps
+   `addxml.trigger/alias/timer{…}` → `AddTriggerEx`/`AddAlias`/`AddTimer`
+   (booleans accept Lua `true`/`1` or MUSHclient `"y"`/`"n"`), registered for
+   `require`. `macro`/`save` degrade gracefully. *Remaining for full
+   message_gagger:* the `group` attribute isn't yet honoured for bulk
+   `DeleteTriggerGroup`, and its `messages_to_gag.txt` read needs a sandboxed
+   `io.lines` path — separate follow-ups.
 
 2. **`async` is an inert stub** — any plugin whose *purpose* is networking
    silently no-ops (mudbin's pastebin upload; the GitHub self-updaters in
@@ -56,11 +57,11 @@ blocker. So most are text/trigger/GMCP plugins that should run.
    only mudbin is *functionally* blocked (the updaters are non-essential and we
    distribute plugins differently anyway). **Defer unless mudbin matters.**
 
-3. **`CallPlugin` to the Chat Capture plugin (`b5558…`) isn't bridged.**
-   We bridge the GMCP handler + mapper; add a third bridge so plugins that
-   register/route channels (rsocial, hadar_spellup, and others in the corpus)
-   reach our native chat capture — mirroring `Mapper+PluginBridge`. Medium
-   effort. **Recommended** (unblocks 2 here + more corpus-wide).
+3. ✅ **`CallPlugin` to the Chat Capture plugin (`b5558…`) — DONE.**
+   `CallPlugin(<chat-capture id>, "storeFromOutside", text, tab)` now bridges to
+   native chat (a `.chatCapture` effect → `ChatStore.append` under the tab name,
+   `@`-codes parsed), mirroring the GMCP/mapper bridges. Unblocks rsocial +
+   hadar_spellup's chat routing corpus-wide.
 
 4. **Sandboxed user-file reads.** `message_gagger` reads `messages_to_gag.txt`
    from the world files dir (`GetInfo(56)`). The shim's `io` is sandboxed to the

@@ -19,8 +19,82 @@ extension LuaRuntime {
         "pairsbykeys": pairsByKeysSource,
         "serialize": serializeSource,
         "json": jsonSource,
-        "aardwolf_colors": aardwolfColorsSource
+        "aardwolf_colors": aardwolfColorsSource,
+        "addxml": addxmlSource
     ]
+
+    /// `addxml` (clean-room): add triggers/aliases/timers from an attribute
+    /// table, the way MUSHclient's `addxml.lua` does — but mapped onto our
+    /// compat `AddTriggerEx`/`AddAlias`/`AddTimer` instead of building XML +
+    /// `ImportXML`. Same call surface the corpus uses
+    /// (`addxml.trigger{ match=…, send=…, … }`). Booleans accept Lua `true`/`1`
+    /// or MUSHclient `"y"`/`"n"`. `macro`/`save` degrade gracefully (macros are
+    /// a separate feature; `save` needs object introspection we don't expose).
+    /// Note: the `group` attribute is accepted but not yet honoured for bulk
+    /// `DeleteTriggerGroup` (a separate shim gap).
+    private static let addxmlSource = """
+    addxml = {}
+    local function truthy(v) return v == true or v == 1 or v == "y" or v == "yes" or v == "1" end
+    local function falsy(v) return v == false or v == 0 or v == "n" or v == "no" or v == "0" end
+    local _seq = 0
+    local function autoname(prefix) _seq = _seq + 1; return prefix .. "_addxml_" .. _seq end
+
+    local function triggerFlags(t)
+      local f = falsy(t.enabled) and 0 or trigger_flag.Enabled
+      if truthy(t.regexp) or truthy(t.regular_expression) then f = f + trigger_flag.RegularExpression end
+      if truthy(t.ignore_case) then f = f + trigger_flag.IgnoreCase end
+      if truthy(t.keep_evaluating) then f = f + trigger_flag.KeepEvaluating end
+      if truthy(t.omit_from_output) then f = f + trigger_flag.OmitFromOutput end
+      if truthy(t.omit_from_log) then f = f + trigger_flag.OmitFromLog end
+      if truthy(t.expand_variables) then f = f + trigger_flag.ExpandVariables end
+      if truthy(t.temporary) then f = f + trigger_flag.Temporary end
+      if truthy(t.one_shot) then f = f + trigger_flag.OneShot end
+      return f
+    end
+    function addxml.trigger(t)
+      assert(type(t) == "table", "addxml.trigger requires a table")
+      local name = t.name or autoname("trigger")
+      AddTriggerEx(name, t.match or "", t.send or "", triggerFlags(t),
+        custom_colour.NoChange, "", "", t.script or "",
+        tonumber(t.send_to) or sendto.world, tonumber(t.sequence) or 100)
+      return name
+    end
+
+    local function aliasFlags(t)
+      local f = falsy(t.enabled) and 0 or alias_flag.Enabled
+      if truthy(t.regexp) or truthy(t.regular_expression) then f = f + alias_flag.RegularExpression end
+      if truthy(t.ignore_case) then f = f + alias_flag.IgnoreCase end
+      if truthy(t.omit_from_output) then f = f + alias_flag.OmitFromOutput end
+      if truthy(t.omit_from_log) then f = f + alias_flag.OmitFromLogFile end
+      if truthy(t.temporary) then f = f + alias_flag.Temporary end
+      if truthy(t.one_shot) then f = f + alias_flag.OneShot end
+      return f
+    end
+    function addxml.alias(t)
+      assert(type(t) == "table", "addxml.alias requires a table")
+      local name = t.name or autoname("alias")
+      AddAlias(name, t.match or "", t.send or "", aliasFlags(t), t.script or "")
+      return name
+    end
+
+    local function timerFlags(t)
+      local f = falsy(t.enabled) and 0 or timer_flag.Enabled
+      if truthy(t.one_shot) then f = f + timer_flag.OneShot end
+      if truthy(t.temporary) then f = f + timer_flag.Temporary end
+      return f
+    end
+    function addxml.timer(t)
+      assert(type(t) == "table", "addxml.timer requires a table")
+      local name = t.name or autoname("timer")
+      AddTimer(name, tonumber(t.hour) or 0, tonumber(t.minute) or 0, tonumber(t.second) or 0,
+        t.send or "", timerFlags(t), t.script or "")
+      return name
+    end
+
+    function addxml.macro(t) return (type(t) == "table" and t.name) or nil end
+    function addxml.save(which, name) return nil end
+    return addxml
+    """
 
     /// The load-bearing `aardwolf_colors` functions (clean-room): the 4 the
     /// corpus uses on Aardwolf `@`-colour codes — `strip_colours`,

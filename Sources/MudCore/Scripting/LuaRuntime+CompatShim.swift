@@ -198,6 +198,14 @@ public extension LuaRuntime {
       if id == "b6eae87ccedd84f510b74714" then
         proteles.mapperCall(fn, ...); return error_code.eOK
       end
+      -- Aardwolf Chat Capture plugin: storeFromOutside(text, tab, foreground)
+      -- adds a line under a tab. Bridge it to native chat (rsocial, hadar
+      -- spellup, …) so captured lines land in the Channels panel.
+      if id == "b555825a4a5700c35fa80780" and fn == "storeFromOutside" then
+        local args = {...}
+        proteles.chatCapture(args[1] or "", args[2] or "")
+        return error_code.eOK
+      end
       return error_code.eOK, proteles.call(fn, ...)
     end
     function BroadcastPlugin(msg, text)

@@ -55,15 +55,14 @@ extension LuaRuntime {
     nonisolated func recordEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
         switch function {
         case .mapperCall: recordMapperCall(arguments)
+        case .chatCapture:
+            effects.append(.chatCapture(
+                text: Self.argString(arguments, 0),
+                channel: Self.argOptionalString(arguments, 1) ?? ""
+            ))
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
-        case .enableTrigger:
-            effects.append(.enableTrigger(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
-        case .enableTimer:
-            effects.append(.enableTimer(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
-        case .enableAlias:
-            effects.append(.enableAlias(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
-        case .enableGroup:
-            effects.append(.enableGroup(name: Self.argString(arguments, 0), on: Self.argBool(arguments, 1)))
+        case .enableTrigger, .enableTimer, .enableAlias, .enableGroup:
+            effects.append(Self.enableEffect(function, arguments))
         case .doAfter:
             effects.append(.scheduleAfter(
                 seconds: Self.argDouble(arguments, 0),
@@ -84,6 +83,21 @@ extension LuaRuntime {
                 group: Self.argString(arguments, 1)
             ))
         default: recordOutputEffect(function, arguments)
+        }
+    }
+
+    /// Map an `enable*(name, on)` host call to its effect (collapsed so
+    /// ``recordEffect`` stays within the complexity budget).
+    private nonisolated static func enableEffect(
+        _ function: HostFunction, _ arguments: [LuaValue]
+    ) -> ScriptEffect {
+        let name = argString(arguments, 0)
+        let on = argBool(arguments, 1)
+        switch function {
+        case .enableTimer: return .enableTimer(name: name, on: on)
+        case .enableAlias: return .enableAlias(name: name, on: on)
+        case .enableGroup: return .enableGroup(name: name, on: on)
+        default: return .enableTrigger(name: name, on: on)
         }
     }
 

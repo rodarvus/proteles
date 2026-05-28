@@ -31,6 +31,24 @@ struct CompatShimTests {
         #expect(!effects.contains { if case .mapperCall = $0 { true } else { false } })
     }
 
+    @Test("CallPlugin storeFromOutside to the chat-capture id bridges to native chat")
+    func callPluginChatCapture() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run(
+            "CallPlugin('b555825a4a5700c35fa80780', 'storeFromOutside', '@Ghi there@w', 'RP')"
+        )
+        #expect(effects == [.chatCapture(text: "@Ghi there@w", channel: "RP")])
+    }
+
+    @Test("storeFromOutside without a tab still bridges (empty channel)")
+    func callPluginChatCaptureNoTab() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run(
+            "CallPlugin('b555825a4a5700c35fa80780', 'storeFromOutside', 'plain text')"
+        )
+        #expect(effects == [.chatCapture(text: "plain text", channel: "")])
+    }
+
     @Test("Note echoes; ColourNote emits a single styled segment")
     func output() async throws {
         let lua = try await shimmed()
@@ -108,6 +126,39 @@ struct CompatShimTests {
             .addAlias(name: "a1", pattern: "^sleep$", flags: 1 + 128, script: "fn"),
             .enableAlias(name: "a1", on: false)
         ])
+    }
+
+    @Test("addxml.trigger maps an attribute table to AddTriggerEx flags + body")
+    func addxmlTrigger() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        require "addxml"
+        addxml.trigger { name = "gag1", match = "^junk$", regexp = true,
+          omit_from_output = true, enabled = true, sequence = 50,
+          send_to = 12, send = "gagged = gagged + 1" }
+        """)
+        // Enabled(1) + RegularExpression(32) + OmitFromOutput(4) = 37; send_to=12
+        // (script) runs the `send` text as Lua, so it's the trigger body.
+        #expect(effects == [
+            .addTrigger(name: "gag1", pattern: "^junk$", flags: 37, script: "gagged = gagged + 1")
+        ])
+    }
+
+    @Test("addxml.alias maps to AddAlias; MUSHclient y/n booleans accepted")
+    func addxmlAlias() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        require "addxml"
+        addxml.alias { name = "a1", match = "^go$", regexp = "y", script = "fn" }
+        """)
+        // Enabled(1) + RegularExpression(128) = 129.
+        #expect(effects == [.addAlias(name: "a1", pattern: "^go$", flags: 129, script: "fn")])
+    }
+
+    @Test("addxml is require-able and returns the module table")
+    func addxmlRequire() async throws {
+        let lua = try await shimmed()
+        #expect(try await lua.number("type(require('addxml').trigger) == 'function' and 1 or 0") == 1)
     }
 
     @Test("IsTrigger/IsTimer/IsAlias report existence via eOK / not-found codes")

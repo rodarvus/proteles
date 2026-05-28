@@ -105,6 +105,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// The host runs it and delivers any resulting broadcasts (e.g. the
     /// 500/501 path results) back through `OnPluginBroadcast`.
     case mapperCall(function: String, args: [String])
+    /// A plugin asked the native Chat Capture plugin to store a line from
+    /// outside (`CallPlugin(<chat-capture id>, "storeFromOutside", text, tab)`)
+    /// — the bridge to native chat for rsocial/hadar_spellup etc. The host
+    /// appends it to the ``ChatStore`` under `channel` (falling back to a
+    /// generic capture channel). `text` may carry Aardwolf `@`-codes.
+    case chatCapture(text: String, channel: String)
     /// A plugin published a structured snapshot (JSON) of its model for a
     /// native panel to render — the inverse of GMCP-in (e.g. Search-and-
     /// Destroy's window state). The host decodes + forwards it to the UI.
