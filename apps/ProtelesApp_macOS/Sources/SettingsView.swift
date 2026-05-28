@@ -1,3 +1,4 @@
+import AppKit
 import MudCore
 import SwiftUI
 
@@ -13,6 +14,8 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "textformat.size") }
             ConnectionSettingsView()
                 .tabItem { Label("Connection", systemImage: "network") }
+            LoggingSettingsView()
+                .tabItem { Label("Logging", systemImage: "doc.text") }
         }
         .frame(width: 480)
     }
@@ -170,6 +173,41 @@ private struct ConnectionSettingsView: View {
                     + "app's Application Support folder). Takes effect on the next connection.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Readable session logs (distinct from the replayable recording).
+private struct LoggingSettingsView: View {
+    @AppStorage("sessionLogging") private var sessionLogging = false
+    @AppStorage("sessionLogFormat") private var sessionLogFormat = "text"
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Save a readable log of each session", isOn: $sessionLogging)
+                Text("Write a per-session log you can read later. Takes effect on the "
+                    + "next connection.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Format") {
+                Picker("Log format", selection: $sessionLogFormat) {
+                    Text("Plain text").tag("text")
+                    Text("HTML (preserves colour)").tag("html")
+                }
+                .pickerStyle(.radioGroup)
+            }
+            Section {
+                Button("Reveal Logs in Finder") {
+                    guard let directory = ProtelesApp.logsDirectory() else { return }
+                    try? FileManager.default.createDirectory(
+                        at: directory, withIntermediateDirectories: true
+                    )
+                    NSWorkspace.shared.open(directory)
+                }
             }
         }
         .formStyle(.grouped)

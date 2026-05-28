@@ -36,6 +36,10 @@ struct ContentView: View {
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
     @AppStorage("keepAlive") private var keepAlive = true
+    /// User session logging (Logging preferences); pushed to the session, takes
+    /// effect on the next connect.
+    @AppStorage("sessionLogging") private var sessionLogging = false
+    @AppStorage("sessionLogFormat") private var sessionLogFormat = "text"
     /// Selected colour theme (Appearance preference). Drives the output palette
     /// and the app-wide light/dark chrome appearance.
     @AppStorage("themeID") private var themeID = Theme.default.id
@@ -90,6 +94,12 @@ struct ContentView: View {
             }
             .task(id: keepAlive) {
                 await session.setKeepAliveEnabled(keepAlive)
+            }
+            .task(id: sessionLogging) {
+                await session.setLoggingEnabled(sessionLogging)
+            }
+            .task(id: sessionLogFormat) {
+                await session.setLogFormat(sessionLogFormat == "html" ? .html : .text)
             }
             .task(id: themeID) {
                 // Flip the whole app's chrome (panels, materials, gauges) to
