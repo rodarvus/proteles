@@ -35,6 +35,31 @@ struct PluginHostTests {
         #expect(scopes["com.test.echo"]?["loaded"] == "yes")
     }
 
+    @Test("The `world` global proxies field access to the world API (world.Note(...))")
+    func worldGlobalProxies() async throws {
+        // Some MUSHclient plugins call the API as fields on the global `world`
+        // object (`world.Note(...)` ≡ `Note(...)`). Without a `world` shim that
+        // indexes nil and errors ("attempt to index global 'world'").
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.test.world" name="World Test"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          world.Note("via world: " .. tostring(world.GetPluginID() == GetPluginID()))
+        end
+        ]]></script>
+        </muclient>
+        """)
+        let engine = try ScriptEngine()
+        let effects = await engine.loadPlugin(plugin)
+        // world.Note routed to Note (→ echo); world.GetPluginID matched GetPluginID.
+        #expect(effects.contains(.echo("via world: true")))
+        #expect(!effects.contains { effect in
+            if case .echo(let text) = effect { return text.contains("attempt to index") }
+            if case .note(let text, _, _) = effect { return text.contains("attempt to index") }
+            return false
+        })
+    }
+
     @Test("A registered plugin trigger fires in the plugin's context")
     func registeredTriggerFires() async throws {
         let plugin = try MUSHclientPluginLoader.parse(xml: echoPlugin)

@@ -178,6 +178,15 @@ public extension LuaRuntime {
       return proteles.info(n) -- 1 = name, 19 = version (others → nil)
     end
 
+    -- MUSHclient also exposes the whole world API as fields on a global `world`
+    -- object: `world.Note(...)` is equivalent to `Note(...)`. Some plugins call
+    -- it that way, so proxy field access to the matching global (resolved at
+    -- call time, so functions defined later in this chunk are reachable). The
+    -- dot form (`world.Foo(...)`) is the common idiom; a colon call would pass
+    -- `world` as an extra leading arg, which these globals ignore for the
+    -- no-arg/string cases plugins use.
+    world = setmetatable({}, { __index = function(_, key) return _G[key] end })
+
     -- GMCP ------------------------------------------------------------------
     function Send_GMCP_Packet(text) proteles.sendGMCP(tostring(text)); return error_code.eOK end
 
