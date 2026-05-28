@@ -143,6 +143,15 @@ public final class ScriptsModel {
         await session.scriptEngine?.removeTrigger(id: id)
     }
 
+    public func duplicateTrigger(id: UUID) async {
+        guard let original = triggers.first(where: { $0.id == id }) else { return }
+        let copy = original.duplicated()
+        try? await store?.addTrigger(copy)
+        await refresh()
+        selectedTriggerID = copy.id
+        try? await session.scriptEngine?.addTrigger(copy)
+    }
+
     public func binding(forTrigger id: UUID) -> Binding<Trigger>? {
         guard triggers.contains(where: { $0.id == id }) else { return nil }
         return Binding(
@@ -180,6 +189,15 @@ public final class ScriptsModel {
         await session.scriptEngine?.removeAlias(id: id)
     }
 
+    public func duplicateAlias(id: UUID) async {
+        guard let original = aliases.first(where: { $0.id == id }) else { return }
+        let copy = original.duplicated()
+        try? await store?.addAlias(copy)
+        await refresh()
+        selectedAliasID = copy.id
+        try? await session.scriptEngine?.addAlias(copy)
+    }
+
     public func binding(forAlias id: UUID) -> Binding<Alias>? {
         guard aliases.contains(where: { $0.id == id }) else { return nil }
         return Binding(
@@ -215,6 +233,15 @@ public final class ScriptsModel {
         await refresh()
         selectedTimerID = timers.first?.id
         await session.removeTimer(id: id)
+    }
+
+    public func duplicateTimer(id: UUID) async {
+        guard let original = timers.first(where: { $0.id == id }) else { return }
+        let copy = original.duplicated()
+        try? await store?.addTimer(copy)
+        await refresh()
+        selectedTimerID = copy.id
+        _ = try? await session.addTimer(copy)
     }
 
     public func binding(forTimer id: UUID) -> Binding<MudTimer>? {
@@ -269,6 +296,14 @@ public final class ScriptsModel {
         try? await store.replace(with: document)
         await refresh()
         selectedMacroID = macros.first?.id
+    }
+
+    public func duplicateMacro(id: UUID) async {
+        guard let original = macros.first(where: { $0.id == id }) else { return }
+        let copy = original.duplicated()
+        try? await store?.addMacro(copy)
+        await refresh()
+        selectedMacroID = copy.id
     }
 
     public func binding(forMacro id: UUID) -> Binding<Macro>? {

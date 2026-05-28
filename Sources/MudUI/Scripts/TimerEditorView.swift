@@ -31,6 +31,7 @@ private extension TimerSchedule {
 /// ``ScriptsModel/binding(forTimer:)``.
 struct TimerEditorView: View {
     @Binding var timer: MudTimer
+    @State private var showOptions = false
 
     var body: some View {
         Form {
@@ -55,10 +56,12 @@ struct TimerEditorView: View {
                 .lineLimit(1...8)
             }
 
-            Section("Options") {
-                Toggle("Enabled", isOn: $timer.enabled)
-                TextField("Label", text: $timer.label.orEmpty())
-                TextField("Group", text: $timer.group.orEmpty())
+            Section {
+                DisclosureGroup("Options", isExpanded: $showOptions) {
+                    Toggle("Enabled", isOn: $timer.enabled)
+                    TextField("Label", text: $timer.label.orEmpty())
+                    TextField("Group", text: $timer.group.orEmpty())
+                }
             }
         }
         .formStyle(.grouped)

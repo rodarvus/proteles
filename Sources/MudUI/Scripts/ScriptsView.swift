@@ -2,16 +2,23 @@ import MudCore
 import SwiftUI
 
 /// The "Scripts" window: a tabbed master-detail editor for a world's
-/// triggers, aliases, and timers (PLAN.md §8.6).
+/// triggers, aliases, timers, and macros (PLAN.md §8.6).
 ///
 /// Each tab is a list + detail editor in the same shape as the Worlds
 /// manager. Edits bind live through ``ScriptsModel`` so they persist and
-/// take effect in the running session immediately.
+/// take effect in the running session immediately. List rows carry an
+/// enable toggle + a Duplicate/Delete context menu; deletion confirms first.
 public struct ScriptsView: View {
     @Bindable private var model: ScriptsModel
+    @State private var deleteRequest: DeleteRequest?
 
     public init(model: ScriptsModel) {
         self.model = model
+    }
+
+    /// A pending deletion awaiting confirmation (carries the target's id).
+    private enum DeleteRequest: Equatable {
+        case trigger(UUID), alias(UUID), timer(UUID), macro(UUID)
     }
 
     public var body: some View {
@@ -27,6 +34,16 @@ public struct ScriptsView: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
+        .confirmationDialog(
+            "Delete this item?",
+            isPresented: deletePresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { Task { await performDelete() } }
+            Button("Cancel", role: .cancel) { deleteRequest = nil }
+        } message: {
+            Text("This removes it from the running session and can't be undone.")
+        }
     }
 
     // MARK: - Triggers
@@ -38,17 +55,26 @@ public struct ScriptsView: View {
                     ScriptRow(
                         title: title(trigger.pattern.text, fallback: "New Trigger"),
                         subtitle: trigger.sendText ?? trigger.script ?? "—",
-                        enabled: trigger.enabled
+                        isEnabled: model.binding(forTrigger: trigger.id)?.enabled
+                            ?? .constant(trigger.enabled)
                     )
                     .tag(trigger.id)
+                    .contextMenu {
+                        rowMenu(
+                            duplicate: { await model.duplicateTrigger(id: trigger.id) },
+                            delete: { deleteRequest = .trigger(trigger.id) }
+                        )
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
-                addRemoveToolbar(
+                itemToolbar(
                     add: { await model.addTrigger() },
-                    remove: { await model.removeSelectedTrigger() },
-                    canRemove: model.selectedTriggerID != nil
+                    duplicate: { if let id = model.selectedTriggerID { await model.duplicateTrigger(id: id) }
+                    },
+                    requestDelete: { if let id = model.selectedTriggerID { deleteRequest = .trigger(id) } },
+                    canModify: model.selectedTriggerID != nil
                 )
             }
         } detail: {
@@ -69,17 +95,25 @@ public struct ScriptsView: View {
                     ScriptRow(
                         title: title(alias.pattern.text, fallback: "New Alias"),
                         subtitle: alias.sendText ?? "—",
-                        enabled: alias.enabled
+                        isEnabled: model.binding(forAlias: alias.id)?.enabled
+                            ?? .constant(alias.enabled)
                     )
                     .tag(alias.id)
+                    .contextMenu {
+                        rowMenu(
+                            duplicate: { await model.duplicateAlias(id: alias.id) },
+                            delete: { deleteRequest = .alias(alias.id) }
+                        )
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
-                addRemoveToolbar(
+                itemToolbar(
                     add: { await model.addAlias() },
-                    remove: { await model.removeSelectedAlias() },
-                    canRemove: model.selectedAliasID != nil
+                    duplicate: { if let id = model.selectedAliasID { await model.duplicateAlias(id: id) } },
+                    requestDelete: { if let id = model.selectedAliasID { deleteRequest = .alias(id) } },
+                    canModify: model.selectedAliasID != nil
                 )
             }
         } detail: {
@@ -100,17 +134,25 @@ public struct ScriptsView: View {
                     ScriptRow(
                         title: timer.label?.isEmpty == false ? timer.label! : "Timer",
                         subtitle: Self.timerSummary(timer),
-                        enabled: timer.enabled
+                        isEnabled: model.binding(forTimer: timer.id)?.enabled
+                            ?? .constant(timer.enabled)
                     )
                     .tag(timer.id)
+                    .contextMenu {
+                        rowMenu(
+                            duplicate: { await model.duplicateTimer(id: timer.id) },
+                            delete: { deleteRequest = .timer(timer.id) }
+                        )
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
-                addRemoveToolbar(
+                itemToolbar(
                     add: { await model.addTimer() },
-                    remove: { await model.removeSelectedTimer() },
-                    canRemove: model.selectedTimerID != nil
+                    duplicate: { if let id = model.selectedTimerID { await model.duplicateTimer(id: id) } },
+                    requestDelete: { if let id = model.selectedTimerID { deleteRequest = .timer(id) } },
+                    canModify: model.selectedTimerID != nil
                 )
             }
         } detail: {
@@ -131,21 +173,27 @@ public struct ScriptsView: View {
                     ScriptRow(
                         title: macroTitle(macro),
                         subtitle: macro.action.text.isEmpty ? "—" : macro.action.text,
-                        enabled: macro.enabled
+                        isEnabled: model.binding(forMacro: macro.id)?.enabled
+                            ?? .constant(macro.enabled)
                     )
                     .tag(macro.id)
+                    .contextMenu {
+                        rowMenu(
+                            duplicate: { await model.duplicateMacro(id: macro.id) },
+                            delete: { deleteRequest = .macro(macro.id) }
+                        )
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { Task { await model.addMacro() } } label: {
-                        Label("Add", systemImage: "plus")
-                    }
-                    Button { Task { await model.removeSelectedMacro() } } label: {
-                        Label("Remove", systemImage: "minus")
-                    }
-                    .disabled(model.selectedMacroID == nil)
+                itemToolbar(
+                    add: { await model.addMacro() },
+                    duplicate: { if let id = model.selectedMacroID { await model.duplicateMacro(id: id) } },
+                    requestDelete: { if let id = model.selectedMacroID { deleteRequest = .macro(id) } },
+                    canModify: model.selectedMacroID != nil
+                )
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Restore Default Keypad Layout") {
                             Task { await model.restoreDefaultMacros() }
@@ -175,16 +223,56 @@ public struct ScriptsView: View {
         text.isEmpty ? fallback : text
     }
 
+    private var deletePresented: Binding<Bool> {
+        Binding(get: { deleteRequest != nil }, set: { if !$0 { deleteRequest = nil } })
+    }
+
+    private func performDelete() async {
+        switch deleteRequest {
+        case .trigger(let id):
+            model.selectedTriggerID = id
+            await model.removeSelectedTrigger()
+        case .alias(let id):
+            model.selectedAliasID = id
+            await model.removeSelectedAlias()
+        case .timer(let id):
+            model.selectedTimerID = id
+            await model.removeSelectedTimer()
+        case .macro(let id):
+            model.selectedMacroID = id
+            await model.removeSelectedMacro()
+        case nil:
+            break
+        }
+        deleteRequest = nil
+    }
+
+    @ViewBuilder
+    private func rowMenu(
+        duplicate: @escaping () async -> Void,
+        delete: @escaping () -> Void
+    ) -> some View {
+        Button("Duplicate") { Task { await duplicate() } }
+        Button("Delete", role: .destructive, action: delete)
+    }
+
     @ToolbarContentBuilder
-    private func addRemoveToolbar(
+    private func itemToolbar(
         add: @escaping () async -> Void,
-        remove: @escaping () async -> Void,
-        canRemove: Bool
+        duplicate: @escaping () async -> Void,
+        requestDelete: @escaping () -> Void,
+        canModify: Bool
     ) -> some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { Task { await add() } } label: { Label("Add", systemImage: "plus") }
-            Button { Task { await remove() } } label: { Label("Remove", systemImage: "minus") }
-                .disabled(!canRemove)
+            Button { Task { await duplicate() } } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+            .disabled(!canModify)
+            Button(role: .destructive, action: requestDelete) {
+                Label("Remove", systemImage: "minus")
+            }
+            .disabled(!canModify)
         }
     }
 
@@ -210,18 +298,16 @@ public struct ScriptsView: View {
     }
 }
 
-/// One row in a scripts list: title, a dimmed subtitle, and a dot that
-/// fades when the item is disabled.
+/// One row in a scripts list: an enable checkbox, a title, and a dimmed
+/// subtitle. The row dims when disabled.
 private struct ScriptRow: View {
     let title: String
     let subtitle: String
-    let enabled: Bool
+    @Binding var isEnabled: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(enabled ? Color.green : Color.secondary.opacity(0.4))
-                .frame(width: 7, height: 7)
+            enableToggle
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.body.monospaced())
@@ -234,6 +320,15 @@ private struct ScriptRow: View {
             Spacer()
         }
         .padding(.vertical, 2)
-        .opacity(enabled ? 1 : 0.6)
+        .opacity(isEnabled ? 1 : 0.6)
+    }
+
+    private var enableToggle: some View {
+        Toggle("Enabled", isOn: $isEnabled)
+            .labelsHidden()
+            .help("Enable or disable this item")
+        #if os(macOS)
+            .toggleStyle(.checkbox)
+        #endif
     }
 }

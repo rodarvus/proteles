@@ -5,6 +5,7 @@ import SwiftUI
 /// ``ScriptsModel/binding(forAlias:)``.
 struct AliasEditorView: View {
     @Binding var alias: Alias
+    @State private var showOptions = false
 
     var body: some View {
         Form {
@@ -15,6 +16,18 @@ struct AliasEditorView: View {
                 TextField("Pattern", text: patternText)
                     .font(.body.monospaced())
                 Toggle("Case sensitive", isOn: $alias.caseSensitive)
+                if alias.pattern.isInvalid(caseSensitive: alias.caseSensitive) {
+                    Label(
+                        "This pattern won't compile — check the regex.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
+            }
+
+            Section("Test") {
+                PatternTestView(pattern: alias.pattern, caseSensitive: alias.caseSensitive)
             }
 
             Section("Action") {
@@ -33,12 +46,14 @@ struct AliasEditorView: View {
                 .lineLimit(1...10)
             }
 
-            Section("Options") {
-                Toggle("Enabled", isOn: $alias.enabled)
-                Toggle("Keep evaluating later aliases", isOn: $alias.keepEvaluating)
-                Toggle("One-shot (remove after firing)", isOn: $alias.oneShot)
-                TextField("Sequence", value: $alias.sequence, format: .number.grouping(.never))
-                TextField("Group", text: $alias.group.orEmpty())
+            Section {
+                DisclosureGroup("Options", isExpanded: $showOptions) {
+                    Toggle("Enabled", isOn: $alias.enabled)
+                    Toggle("Keep evaluating later aliases", isOn: $alias.keepEvaluating)
+                    Toggle("One-shot (remove after firing)", isOn: $alias.oneShot)
+                    TextField("Sequence", value: $alias.sequence, format: .number.grouping(.never))
+                    TextField("Group", text: $alias.group.orEmpty())
+                }
             }
         }
         .formStyle(.grouped)
