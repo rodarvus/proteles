@@ -15,18 +15,24 @@
         private let fontSize: CGFloat
         private let fontName: String
         private let onCommand: ((String) -> Void)?
+        /// Whether to show the Mudlet-style live-tail split (a bottom mirror of
+        /// the newest lines while scrolled up). Pointless for static content
+        /// like a captured help article, so the Help window turns it off.
+        private let showsLiveTail: Bool
 
         public init(
             store: ScrollbackStore,
             palette: ColorPalette = .xtermDefault,
             fontSize: CGFloat = 13,
             fontName: String = "",
+            showsLiveTail: Bool = true,
             onCommand: ((String) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
             self.fontSize = fontSize
             self.fontName = fontName
+            self.showsLiveTail = showsLiveTail
             self.onCommand = onCommand
         }
 
@@ -57,6 +63,18 @@
             scrollView.borderType = .noBorder
             let textView = makeTextView()
             scrollView.documentView = textView
+
+            // Static content (the Help window): a plain scroll view, no live-tail
+            // split — there's nothing "streaming" to mirror.
+            if !showsLiveTail {
+                let coordinator = RenderCoordinator(textView: textView, palette: palette)
+                context.coordinator.renderCoordinator = coordinator
+                let storeRef = store
+                Task { @MainActor in
+                    await coordinator.attach(to: storeRef)
+                }
+                return scrollView
+            }
 
             // Live-tail pane: a small bottom mirror of the latest lines, shown
             // only when scrolled up (see SplitOutputContainer). Scroll gestures

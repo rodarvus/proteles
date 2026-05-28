@@ -25,6 +25,7 @@ struct HelpPanelView: View {
                     palette: Theme.with(id: themeID).palette,
                     fontSize: CGFloat(outputFontSize),
                     fontName: outputFontName,
+                    showsLiveTail: false,
                     onCommand: { command in model.onCommand?(command) }
                 )
                 .id(model.renderToken)

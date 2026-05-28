@@ -84,16 +84,18 @@ struct ContentView: View {
             .task(id: richExits) {
                 await session.setRichExitsEnabled(richExits)
             }
-            // Help capture is on only while the Help panel is visible.
-            .task(id: layout.isVisible(.help)) {
-                await session.setHelpCaptureEnabled(layout.isVisible(.help))
+            // Help is captured to the dedicated Help window (always on, so
+            // `help <topic>` can auto-open it); never printed inline.
+            .task {
+                await session.setHelpCaptureEnabled(true)
             }
-            // Feed captured help articles to the Help panel; route its link
-            // clicks + search back to the session.
+            // Feed captured help articles to the Help window, auto-opening it,
+            // and route its link clicks + search back to the session.
             .task {
                 help.onCommand = { command in Task { try? await session.send(command) } }
                 for await article in session.helpArticles {
                     await help.apply(article)
+                    openWindow(id: ProtelesApp.helpWindowID)
                 }
             }
             .task(id: autoReconnect) {
