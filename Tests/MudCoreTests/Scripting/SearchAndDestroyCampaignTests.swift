@@ -138,6 +138,86 @@ struct SearchAndDestroyCampaignTests {
         #expect(model?.targets.isEmpty == false, "the published model must carry targets")
     }
 
+    @Test("xcp <n> on a built target routes navigation to the mapper")
+    func xcpNavigatesToTarget() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snd-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let host = try await Self.hostWithBuiltCampaign(dir: dir)
+        let model = await host.model.flatMap(SearchAndDestroyModel.decode)
+        #expect((model?.targetCount ?? 0) > 0, "precondition: the target list must be built")
+
+        // The bug under test: after the list exists, `xcp 1` must drive
+        // navigation — an immediate mapper goto for a resolvable target, or (as
+        // here, where the fake area has no default start room) a start-room
+        // lookup + a scheduled continuation — never a silent no-op. The
+        // area-target nav *continuation* is audited as the live failure suspect.
+        let effects = await host.expandCommand("xcp 1")
+        #expect(effects != nil, "xcp 1 must be handled by an S&D alias")
+        let scheduled = await host.takeDidScheduleTimer()
+        let navigated = (effects ?? []).contains { effect in
+            if case .execute(let cmd) = effect { return cmd.hasPrefix("mapper") }
+            if case .send(let cmd) = effect { return cmd.hasPrefix("mapper") }
+            if case .sendNoEcho(let cmd) = effect { return cmd.hasPrefix("areas ") }
+            return false
+        }
+        #expect(
+            navigated || scheduled,
+            "xcp 1 must drive navigation; got effects: \(effects ?? []), scheduled: \(scheduled)"
+        )
+    }
+
+    /// A host whose campaign target list holds one mob (`a dog` in `War of the
+    /// Wizards`, room 1), via hermetic DBs + the cp scrape. Shared by the
+    /// navigation tests.
+    private static func hostWithBuiltCampaign(dir: URL) async throws -> SearchAndDestroyHost {
+        let host = try SearchAndDestroyHost()
+        await host.configure(directory: dir.path)
+        try await host.load()
+        _ = try await host.run("""
+        local m = sqlite3.open(GetInfo(66) .. WorldName() .. ".db")
+        m:exec[[CREATE TABLE areas (uid TEXT NOT NULL, name TEXT, texture TEXT,
+          color TEXT, flags TEXT NOT NULL DEFAULT '', PRIMARY KEY(uid));
+          CREATE TABLE rooms (uid TEXT NOT NULL, name TEXT, area TEXT, terrain TEXT, PRIMARY KEY(uid));
+          INSERT INTO areas (uid, name) VALUES ('wow', 'War of the Wizards');
+          INSERT INTO rooms (uid, name, area) VALUES ('1', 'A kennel', 'wow');]]
+        m:close()
+        local s = sqlite3.open(GetInfo(66) .. "/SnDdb.db")
+        s:exec[[CREATE TABLE mobs (mob TEXT NOT NULL COLLATE NOCASE,
+          room TEXT NOT NULL COLLATE NOCASE, roomid INTEGER NOT NULL,
+          zone TEXT NOT NULL, seen_count INTEGER NOT NULL DEFAULT 0,
+          kill_count INTEGER NOT NULL DEFAULT 0, UNIQUE(mob, roomid));
+          CREATE TABLE mob_keyword_exceptions (area_name TEXT NOT NULL,
+          mob_name TEXT NOT NULL, keyword TEXT NOT NULL, UNIQUE(area_name, mob_name));
+          INSERT INTO mobs (mob, room, roomid, zone) VALUES ('a dog', 'A kennel', 1, 'wow');]]
+        s:close()
+        """)
+        _ = await host.applyGMCP(package: "char.status", json: #"{"level":"150","state":"3"}"#)
+        _ = await host.applyGMCP(package: "char.base", json: #"{"tier":"0"}"#)
+
+        func feed(_ lines: [String]) async {
+            for line in lines {
+                _ = await host.process(line)
+            }
+        }
+        _ = await host.scanForActivity()
+        await feed([
+            "Level Taken........: [ 150 ]",
+            "The targets for this campaign are:",
+            "Find and kill 1 * a dog (War of the Wizards)",
+            ""
+        ])
+        _ = try await host.run(#"EnableTrigger("trg_cp_check_line", true)"#)
+        await feed([
+            "You still have to kill * a dog (War of the Wizards)",
+            "Note: Dead means that the target is dead, not that you have killed it.",
+            ""
+        ])
+        return host
+    }
+
     @Test("auto-detects an in-progress campaign on connect (no manual cp)")
     func autoDetectsCampaignOnConnect() async throws {
         let host = try SearchAndDestroyHost()
