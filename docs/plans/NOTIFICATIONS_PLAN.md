@@ -78,3 +78,34 @@ Everything else (keyword rules, HP thresholds) the user adds.
 ## Effort
 Medium. The matcher + rules + Preferences is the bulk; the UNUserNotifications
 layer is small. No new dependencies.
+
+---
+
+## Phase-2 build decisions (for approval — 2026-05-28)
+
+Phase-1 shipped (D-49) + the in-focus toggle (delivery opt-out of
+suppress-when-focused). Phase-2 = `proteles.notify` + custom keyword rules +
+per-channel, full set (user-chosen). Open decisions + my recommendations:
+
+1. **Persistence — recommend GLOBAL (not per-world).** The plan said per-world,
+   but the shipped phase-1 prefs (enabled/tells/mention/in-focus) are global
+   `@AppStorage`. Keep custom rules global too (a `Codable [NotificationRule]`
+   in UserDefaults pushed to the session matcher) for consistency + no new
+   per-world store. Easy to migrate to per-world later if wanted.
+2. **Per-channel meaning — confirm.** Two readings: (a) **`.channel(name)`
+   rules** = "notify on any line on channel X" (the plan's model), or (b) a
+   **deny-list** that mutes spammy channels from the tells/mention alerts.
+   Recommend (a) `.channel(name)` rules (composable with the rule model) **plus**
+   a small per-rule "only on channel(s)" filter so a keyword rule can be scoped.
+3. **Custom-keyword scope — recommend ALL output.** `.keyword(regex)` matches
+   any incoming line (the powerful case: alert on a mob/word anywhere), not just
+   chat. `proteles.notify` covers the scripter path; the keyword list is the
+   non-scripter front-end.
+4. **Lean rule model for v1** — `NotificationRule { id, label?, trigger
+   (.keyword(TriggerPattern) | .channel(String)), enabled }`. Defer the plan's
+   title/body templates + tokens + per-rule sound to phase-3 polish.
+
+Build order once approved: `proteles.notify` host call (`.notify` effect + Lua
+binding, gated by master-enable) → `NotificationMatcher` keyword/channel rules
+(pure + tested, reusing `PatternMatcher`) → global persistence + push wiring →
+Preferences ▸ Notifications rule-list UI.
