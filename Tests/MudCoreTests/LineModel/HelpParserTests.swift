@@ -95,4 +95,52 @@ struct HelpParserTests {
         #expect(article.title == "Help search")
         #expect(article.isSearch)
     }
+
+    // MARK: - Real-format tag handling (from a live capture)
+
+    @Test("makeArticle drops {helpbody}/{/helpbody} marker lines")
+    func dropsBodyMarkers() {
+        let body = [
+            line("{helpkeywords}Help Keywords : CONSIDER."),
+            line("{helpbody}"),
+            line("Syntax: consider <monster>"),
+            line("{/helpbody}")
+        ]
+        let article = HelpParser.makeArticle(from: body, isSearch: false)
+        #expect(!article.lines.contains { $0.text.contains("{helpbody}") })
+        #expect(!article.lines.contains { $0.text.contains("{/helpbody}") })
+        #expect(article.lines.contains { $0.text == "Syntax: consider <monster>" })
+    }
+
+    @Test("The {helpkeywords} inline prefix is stripped from the keyword line")
+    func stripsKeywordsTag() {
+        let body = [line("{helpkeywords}Help Keywords : CONSIDER.")]
+        let article = HelpParser.makeArticle(from: body, isSearch: false)
+        #expect(article.lines.first?.text == "Help Keywords : CONSIDER.")
+        #expect(!(article.lines.first?.text.contains("{helpkeywords}") ?? true))
+    }
+
+    @Test("Each help keyword becomes a help <keyword> link")
+    func linkifiesKeywords() {
+        let result = HelpParser.linkifyHelpKeywords(line("Help Keywords : Maxstats Maxtrains."))
+        let links = result.runs.compactMap(\.link?.action)
+        #expect(links.contains(.sendCommand("help Maxstats")))
+        #expect(links.contains(.sendCommand("help Maxtrains")))
+        // The "Help Keywords" label itself is never linked.
+        #expect(!links.contains(.sendCommand("help Help")))
+    }
+
+    @Test("Title is derived from the help keyword(s) when present")
+    func titleFromKeywords() {
+        let body = [
+            line("----------------------------------------"),
+            line("{helpkeywords}Help Keywords : CONSIDER."),
+            line("Help Category : Information."),
+            line("{helpbody}"),
+            line("body"),
+            line("{/helpbody}")
+        ]
+        let article = HelpParser.makeArticle(from: body, isSearch: false)
+        #expect(article.title == "CONSIDER")
+    }
 }
