@@ -191,6 +191,30 @@ The S&D host-level work above stands; **S&D is not the cause of the "wrong
 place" navigation.** (NO-GUESSING: re-test, then read the relevant dinv/mapper
 portal-use path before any change.)
 
+### Post-dinv-rebuild transcript (2026-05-28 18:13) — nav fixed; real bug isolated
+
+After rebuilding the dinv DB, `xcp 1` **navigates correctly**: the portal step now
+does `remove …; get 3672026293 <bag>; hold 3672026293; enter` → **995 (petstore)**
+→ `run 2ne; open east; e; …; run 3s` → walks the zoo to **5920** (target). So the
+earlier wrong-place was the **empty dinv DB** mishandling the portal (now fixed).
+Serials are stable, as the user said.
+
+**The reproduced "commands stop after xcp 1" is now isolated.** On arrival S&D
+runs a mob search (`where fathe`, `where 2.fathe`, `where 3.fathe` — quick-where/
+`search_rooms` iterating instances). Then the user's `xcp 2`/`xcp 3`/`xcp 4`/`con`
+**produce no S&D navigation and don't execute** — ~3–4 s later a burst of **empty
+`SEND` lines** fires (bare newlines), while a plain `l` still works.
+
+**Hypothesis (harness-testable, same class as dinv D-42):** S&D's `where`-response
+/ QuickWhere trigger isn't matching in our port (format/compile/enable), so the
+post-arrival search never resolves; a gating callback times out (~3–4 s) and the
+command path blanks, swallowing subsequent commands. **Next pin:** read the
+reference QuickWhere/`where` trigger patterns + the live `where`/`<MAPSTART>`
+response format, then a harness test: drive the search, `process()` a real `where`
+response, assert the trigger fires + the search completes (no empty-send loop).
+This is the original "commands stop after xcp 1" — now reproducible + scoped to
+S&D's post-arrival search, not the mapper or dispatch.
+
 ## 4. Fix plan (functional + UI parity, prioritised)
 
 **P0 — Get a deterministic repro (no guessing).**
