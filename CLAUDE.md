@@ -4,49 +4,81 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-27)
+## Current status (2026-05-28)
 
-**Shipped `v0.2.3`** (built on the `v0.1.0`/`v0.2.0` foundation — native mapper,
-lsqlite3, Search-and-Destroy, dinv, tiled panel dock). Headlines since `v0.2.0`:
-**MIT licensing** + a clean copyleft-free binary (S&D unbundled to a
-download-on-request installer), an **iTerm2-inspired theme gallery** (10 themes
-+ contrast clamp), a first **Preferences** pass (connection/fonts/themes/
-anti-idle), a **live-tail scroll split**, **saved layout presets**, and an **app
-icon** (the amber/rust aardwolf squircle). Read **PLAN.md** for the full status
-table + decision log (D-01…D-45). ~893 tests, four gates green.
+**Shipped `v0.2.3`** (native mapper, lsqlite3, Search-and-Destroy, dinv, tiled
+panel dock, MIT relicense + clean binary, iTerm2 theme gallery, first
+Preferences pass, app icon). Read **PLAN.md** for the full status table +
+decision log (D-01…D-49). **~928 tests, four gates green.**
 
-**Unreleased on `main` (post-`v0.2.3`):** the app icon, a version-from-bundle
-fix, **drag-to-redock**, **detachable windows**, **Rich Exits** (D-45), and menu
-fixes (single View menu, no empty Format menu). No release cut yet — ship these
-when the user asks.
+**Unreleased on `main` (post-`v0.2.3`, NOT yet in a cut release):**
+- App icon + version-from-bundle fix.
+- **UI revamp finish:** drag-to-redock, detachable windows, menu fixes (single
+  View menu, no empty Format menu).
+- **Rich Exits** (D-45) — clickable room exits (cardinals + custom) in the main
+  window.
+- **Help panel** (D-46) — `help <topic>` captured to a dedicated panel with
+  clickable cross-refs + search + back/forward.
+- **Mapper colour fix** — palette seeded from the persisted `environments`
+  table + handshake now requests `sectors` (aylor was all-grey).
+- **Shim wins:** `addxml` helper module + a `CallPlugin`→native-chat bridge
+  (Chat Capture id) — see `docs/COMMUNITY_PLUGIN_AUDIT.md`.
+- **Phase-7 features (MVPs):** **Inventory Serials** (native plugin),
+  **Session Logging** (text/HTML, Preferences ▸ Logging), **Notifications**
+  (tells/mentions, Preferences ▸ Notifications).
 
-### NEXT SESSION — start here: Help panel, then Phase 7
+### NEXT SESSION — start here: MacroEngine (then continue the order)
 
-**The UI revamp's headline items are DONE:** drag-to-redock, detachable windows,
-theming, and **Rich Exits** (clickable room exits in the main window, D-45) all
-shipped. Foundation: a Codable split-tree (`PanelKind` + `PanelLayout` in
-MudCore, unit-tested) rendered by `PanelLayoutView`/`SplitContainer`/
-`TabContainer` in MudUI; layout persists per world. Design in
-**`docs/UI_REVAMP.md`**. **NPC-scan was dropped** (user's call). Remaining UI
-items, rough priority:
-1. **Help panel** (next — user approved the approach in principle): capture
-   Aardwolf's server-side `help <topic>` output into a dedicated Help panel,
-   make help cross-references **clickable** (reuse the D-40 link primitive →
-   `help <topic>`), and add back/forward history. **Research the reference +
-   live help output before designing (NO-GUESSING); PROPOSE first.**
-2. **Text Map content polish**; **divider min-sizes / feel** — minor.
+**The current workstream is Phase 7.** The agreed implementation order (the
+research/plan for each is in **`docs/plans/`**):
+1. **MacroEngine** ← **resume here.** Keybindings + one-key/keypad navigation;
+   plan in **`docs/plans/MACRO_ENGINE_PLAN.md`**. Pure `MacroEngine`+`KeyChord`
+   in MudCore (start here — testable), an app-level `NSEvent` local monitor, and
+   a key-capture editor (folds into the Scripts editor). The one-key-on-macOS
+   problem is solved in the plan (modifier/function chords always fire; numpad
+   fires; bare keys only in an opt-in "Navigation mode"). A **command-button
+   bar** is the natural fast-follow (design `MacroAction` to serve both).
+2. **Scripts-editor rework** (issue #4) — `docs/plans/SCRIPTS_EDITOR_REWORK_PLAN.md`
+   (alias = pattern field + actions textarea; grouped forms; a "Test" panel).
+3. **Personal plugin install** (local path / URL) — `docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`.
+4. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md` (run-via-shim collection, then
+   a native Swift Charts panel reading its SQLite DB).
+5. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate UX with a real VI
+   player before shipping).
+6. **Remaining Preferences tabs** + fold in the phase-2 follow-ups.
 
-**dinv is DONE** (D-42 build + D-43 finale; tracker closed). The
-aardwolfclientpackage triage is COMPLETE (`docs/AARDPACKAGE_PORTING.md`). No
-active generic-shim plugin work remains.
+**Phase-2 follow-ups (tracked):** Inventory Serials → keyring/vault + colour
+command; Logging → rotation/retention + per-world + input filtering;
+Notifications → `proteles.notify` host call + custom/GMCP rules.
 
-**Deferred buckets** (when their gates clear): **TTS** (accessibility; design
-recorded, D-41); **soundpack** (gated on the GPLv3 asset-licensing enquiry);
-bundled **`aard_inventory_serials`** (still pending). **Phase 7 proper** (all
-unblocked): **Notifications** (tells/mentions/named events), **Logging**
-(per-session HTML/text with rotation + UI), **MacroEngine** + Scripts-editor UX
-rework (issue #4), remaining Preferences tabs. **Issues #1/#2 (copy @-codes /
-HTML) are DONE (D-39) and CLOSED.**
+**Reference:** `docs/plans/MUDLET_GAP_ANALYSIS.md` ranks remaining Mudlet gaps;
+`docs/NOTARIZATION.md` covers the Phase-8 release/signing workflow.
+
+### ⚠️ Privacy (hard rule)
+The user has **personal/installed plugins** that must **NEVER** be named or even
+acknowledged as existing in anything committed/pushed to GitHub (repo files,
+commit messages, docs). If documenting the capability, describe it generically
+("local plugins", "install plugins from a local path / arbitrary URL" — see
+`docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`). A leak happened once and was
+scrubbed from history via force-push; do not repeat it. Sweep before pushing:
+`git grep -i <names>` must be empty.
+
+### Live-verification backlog (user tests interactively)
+Committed + gate-green but awaiting the user's live check: **Help panel**,
+**mapper colours** (reconnect first), **Inventory Serials**, **Session Logging**,
+**Notifications**. The MVPs that capture/parse live Aardwolf output (Help,
+inventory serials) may need a real-format tweak — isolated + easy to adjust.
+
+### Gotchas to remember
+- **600-line file budget** (swiftlint `file_length` warning → `--strict` error).
+  `SessionController.swift` + its `+Scripting`/`+Inbound` extensions ride the
+  edge; new code there often needs a compensating compaction. Prefer new
+  `SessionController+Feature.swift` extension files for feature logic.
+- **New app-target files need `xcodegen generate`** before `xcodebuild` (the
+  `.xcodeproj` is generated + gitignored). New MudCore/MudUI files don't (SwiftPM).
+- **Actor `init` can't call isolated methods** — inline the work (mapper palette
+  seed, log header) or use a `nonisolated static` helper.
+- Build test apps to `/tmp/proteles-build/...`, never into the repo tree.
 
 Discipline reminder: per-plugin verdict-first; PROPOSE then wait for approval
 (§7/§11); none run through the generic shim.

@@ -3,12 +3,14 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.2.3` — daily-usable.** Connect, play, script, map, and run the
-> Aardwolf plugin ecosystem today — with a **tiled, resizable window** (drag
-> panels to re-dock or tear them into their own windows), a **theme gallery**,
-> **clickable room exits**, the **dinv inventory manager** working end-to-end,
-> and the Aardwolf plugin package ported natively. **MIT-licensed**, no signed
-> download yet — build from source (below). Design lives in **[PLAN.md](PLAN.md)**.
+> **Status: `v0.2.3` — daily-usable** (with a lot more on `main`, unreleased).
+> Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
+> with a **tiled, resizable window** (drag panels to re-dock or tear them into
+> their own windows), a **theme gallery**, **clickable room exits**, an in-game
+> **Help reader**, **session logging**, **notifications**, the **dinv inventory
+> manager**, and the Aardwolf plugin package ported natively. **MIT-licensed**,
+> no signed download yet — build from source (below). Design lives in
+> **[PLAN.md](PLAN.md)**.
 
 ---
 
@@ -45,6 +47,17 @@ for the modern Mac — no Wine, no VM, no emulator.
 - **Rich Exits** (View ▸ Rich Exits): makes the room's exits — cardinals *and*
   custom exits like `enter portal` — clickable right in the game output, so a
   click walks you there. Right in the main window; no separate panel.
+- **In-game Help reader** (View ▸ Help): `help <topic>` is captured into a
+  dedicated panel with **clickable cross-references** (click a "Related Helps"
+  topic to follow it), a search field, and back/forward history.
+- **Inventory Serials** (Plugins window toggle): `inventory` lists items
+  grouped with serial numbers, flag colours, and counts.
+
+**Notifications & logging**
+- **Notifications** (Preferences ▸ Notifications): native macOS notifications
+  on **tells** and **name-mentions** while Proteles is in the background.
+- **Session logging** (Preferences ▸ Logging): save a readable per-session log
+  as plain text or colour-preserving **HTML**.
 
 **Scripting**
 - User **triggers / aliases / timers** edited in a GUI (⇧⌘T), persisted
@@ -151,7 +164,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~893 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~928 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -162,7 +175,8 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-45).
+  the append-only decision log (D-01…D-49). Phase-7 feature plans live in
+  **[docs/plans/](docs/plans/)**.
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
 
