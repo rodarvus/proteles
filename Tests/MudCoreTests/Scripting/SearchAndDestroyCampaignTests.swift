@@ -181,6 +181,7 @@ struct SearchAndDestroyCampaignTests {
         m:exec[[CREATE TABLE areas (uid TEXT NOT NULL, name TEXT, texture TEXT,
           color TEXT, flags TEXT NOT NULL DEFAULT '', PRIMARY KEY(uid));
           CREATE TABLE rooms (uid TEXT NOT NULL, name TEXT, area TEXT, terrain TEXT, PRIMARY KEY(uid));
+          CREATE TABLE bookmarks (uid TEXT NOT NULL, notes TEXT, PRIMARY KEY(uid));
           INSERT INTO areas (uid, name) VALUES ('wow', 'War of the Wizards');
           INSERT INTO rooms (uid, name, area) VALUES ('1', 'A kennel', 'wow');]]
         m:close()
@@ -216,6 +217,74 @@ struct SearchAndDestroyCampaignTests {
             ""
         ])
         return host
+    }
+
+    @Test("qw → search_rooms populates gotoList → nx walks it to the mapper")
+    func quickWherePopulatesGotoListAndNxWalksIt() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snd-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let host = try await Self.hostWithBuiltCampaign(dir: dir)
+
+        // Stand in the target area ("wow"). A real room.info payload sets
+        // current_room.arid, which qw_match's search uses as the area filter and
+        // set_adhoc_target uses as the target's area. `details` must be present
+        // (the room.info handler does string.match(ri.details, "maze")).
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":999,"name":"@GA kennel@w","zone":"wow","details":"safe","exits":{}}"#
+        )
+
+        // `qw <mob>` arms the quick-where triggers and sends `where <mob>`.
+        let qwEffects = await host.expandCommand("qw dog")
+        #expect(qwEffects != nil, "qw must be handled by an S&D alias")
+        #expect(
+            (qwEffects ?? []).contains { effect in
+                if case .send(let cmd) = effect { return cmd.lowercased().contains("where") }
+                if case .sendNoEcho(let cmd) = effect { return cmd.lowercased().contains("where") }
+                return false
+            },
+            "qw must send a `where` query; got \(qwEffects ?? [])"
+        )
+
+        // The MUD's `where` output: mob name in a 30-char field, a space, then
+        // the room name (the trg_quick_where_match pattern is
+        // `^(?<mobname>.{30}) (?<roomname>[^ (0-9].*)$`).
+        let whereLine = "a dog".padding(toLength: 30, withPad: " ", startingAt: 0) + " A kennel"
+        let matchEffects = await host.process(whereLine).effects
+        // search_rooms_results renders the clickable room list; if the chain
+        // breaks (trigger doesn't fire, or the mapper-DB query is empty) the
+        // list never renders and gotoList stays empty.
+        #expect(
+            Self.effectText(matchEffects).contains { $0.contains("Location") || $0.contains("go ") },
+            "the where match must render the room list; got \(matchEffects)"
+        )
+
+        // nx must now walk gotoList → a mapper goto for the found room (uid 1),
+        // NOT "No more rooms" (the empty-gotoList symptom the user reported).
+        let nxEffects = await host.expandCommand("nx")
+        let walked = (nxEffects ?? []).contains { effect in
+            if case .execute(let cmd) = effect { return cmd.contains("mapper goto 1") }
+            return false
+        }
+        let noMore = Self.effectText(nxEffects ?? []).contains { $0.contains("No more rooms") }
+        #expect(walked, "nx must drive a mapper goto for the quick-where result; got \(nxEffects ?? [])")
+        #expect(!noMore, "nx must not report an empty gotoList after a successful quick-where")
+    }
+
+    /// Flattens the visible text of output effects (note/colourNote/echo) for
+    /// substring assertions — S&D's InfoNote/print/ColourTell all surface here.
+    private static func effectText(_ effects: [ScriptEffect]) -> [String] {
+        effects.compactMap { effect in
+            switch effect {
+            case .note(let text, _, _): text
+            case .echo(let text), .echoAard(let text), .echoAnsi(let text): text
+            case .colourNote(let segments): segments.map(\.text).joined()
+            default: nil
+            }
+        }
     }
 
     @Test("auto-detects an in-progress campaign on connect (no manual cp)")

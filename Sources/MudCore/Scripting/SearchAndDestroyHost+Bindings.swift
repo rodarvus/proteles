@@ -22,6 +22,16 @@ extension SearchAndDestroyHost {
       setfenv(2, m)  -- the calling chunk's environment becomes the module
     end
 
+    -- Capture the Lua built-ins our output primitives call into upvalues. S&D's
+    -- `search_rooms` assigns `select = string.format(...)` WITHOUT `local`, so
+    -- the first quick-where/search that renders a result list clobbers the
+    -- global `select` with a string — and our print/ColourTell shims call
+    -- `select()`/`unpack()`. On MUSHclient that clobber is harmless (its `print`
+    -- is a C primitive and core never CALLS select()); here it would silently
+    -- break ALL subsequent output (qw/go/nx render nothing). Bind the originals
+    -- now so the shims are immune (parity with the os.clock/math.random fixes).
+    local select, unpack = select, unpack
+
     -- Output + comms ---------------------------------------------------------
     function Send(s) proteles.send(s); return 0 end
     function SendNoEcho(s) proteles.sendNoEcho(s); return 0 end

@@ -47,6 +47,27 @@ struct SearchAndDestroyDispatchTests {
         #expect(match?.named["mob_name"] == "a city guard")
     }
 
+    @Test("Output primitives survive an upstream global `select` clobber")
+    func outputSurvivesSelectClobber() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // S&D's `search_rooms` does `select = string.format(...)` WITHOUT `local`
+        // — the first quick-where/search that renders a result list clobbers
+        // Lua's built-in `select` with a string. Our print/ColourTell shims call
+        // select()/unpack(), so without capturing the originals this silently
+        // breaks ALL subsequent S&D output (the room list, go/nx, consider).
+        let effects = try await host.run("select = 'clobbered'; print('still here')")
+        #expect(
+            effects.contains { effect in
+                if case .colourNote(let segs) = effect {
+                    return segs.contains { $0.text.contains("still here") }
+                }
+                return false
+            },
+            "print must still produce output after `select` is clobbered; got \(effects)"
+        )
+    }
+
     @Test("Aliases match S&D commands and pass non-commands through")
     func aliasMatching() async throws {
         let host = try SearchAndDestroyHost()

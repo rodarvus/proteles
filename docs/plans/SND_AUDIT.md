@@ -215,6 +215,37 @@ response, assert the trigger fires + the search completes (no empty-send loop).
 This is the original "commands stop after xcp 1" — now reproducible + scoped to
 S&D's post-arrival search, not the mapper or dispatch.
 
+### ROOT CAUSE FOUND + FIXED (2026-05-28, harness-proven) — the `select` clobber
+
+The hypothesis above was *close but wrong on the mechanism*. A new end-to-end
+harness test (`quickWherePopulatesGotoListAndNxWalksIt`) drives a built campaign
+→ `qw <mob>` → a synthetic `where` line → `nx`, asserting through effects. It
+showed the QuickWhere trigger **does** compile, enable, fire, and match (a probe
+confirmed the `^(?<mobname>.{30}) (?<roomname>…)$` pattern matches a real `where`
+line) — so the trigger was never the problem. Stepping the chain with a `pcall`
+wrapper surfaced the actual fault:
+
+> S&D's `search_rooms` (core.lua) assigns **`select = string.format(...)` without
+> `local`**. The first quick-where/search that returns a result row therefore
+> **clobbers Lua's built-in global `select`** with an SQL string. Our curated
+> `print`/`ColourTell` output shims **call `select()`** (and `__snd_flush` calls
+> `unpack()`); after the clobber every output call errors, and **a Lua error
+> discards *all* effects accumulated in that chunk — including `Send`s** (same
+> failure class as the dinv D-42 "error eats the publish"). So after the first
+> search renders, the room list never appears and `go`/`nx`/`consider` produce
+> nothing → "commands stop after xcp 1", `nx` → "No more rooms" (empty gotoList).
+
+On MUSHclient this is a harmless latent footgun (its `print` is a C primitive and
+core never *calls* `select()`; a full scan confirms the only `select`-as-function
+callers are our shims). **Fix (curated-binding shim, never a core.lua edit —
+parity with the `os.clock`/`math.random` overrides):** capture `local select,
+unpack = select, unpack` at the top of the host bindings so the output primitives
+bind the originals as upvalues and are immune to the upstream global clobber.
+A focused regression (`outputSurvivesSelectClobber`) pins it. With the fix the
+harness chain renders the full room list and `nx` drives `Execute("mapper goto
+1")`. A scan for other accidental global clobbers of built-ins our bindings use
+found none (line 4865's `type` is a function-local).
+
 ## 4. Fix plan (functional + UI parity, prioritised)
 
 **P0 — Get a deterministic repro (no guessing).**
