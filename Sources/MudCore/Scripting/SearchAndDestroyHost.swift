@@ -40,6 +40,12 @@ public actor SearchAndDestroyHost {
     /// session knows to re-arm its timer loop. Cleared by ``takeDidScheduleTimer``.
     private var didScheduleTimer = false
 
+    /// Palette used to resolve a matched line's ANSI colours into the
+    /// MUSHclient-style `styles` ints S&D's scan/consider re-render needs.
+    /// Defaults to xterm (matching ``SessionLogger``); the app sets it from the
+    /// active theme so scan/con colours match the surrounding output.
+    private var renderPalette: ColorPalette = .xtermDefault
+
     public init() throws {
         runtime = try LuaRuntime()
     }
@@ -190,14 +196,54 @@ public actor SearchAndDestroyHost {
     /// all set it, so its internal command output never reaches the window).
     /// Enable/disable effects S&D's Lua emitted are applied to the host's own
     /// engines, not returned.
-    public func process(_ line: String) async -> (effects: [ScriptEffect], gag: Bool) {
+    public func process(
+        _ line: String,
+        runs: [StyledRun] = []
+    ) async -> (effects: [ScriptEffect], gag: Bool) {
+        let styles = Self.styleRuns(text: line, runs: runs, palette: renderPalette)
         var out: [ScriptEffect] = []
         var gag = false
         for firing in triggers.process(line) {
             if firing.gag { gag = true }
-            out += await applyFiring(send: firing.send, script: firing.script, match: firing.match)
+            out += await applyFiring(
+                send: firing.send,
+                script: firing.script,
+                match: firing.match,
+                styles: styles
+            )
         }
         return (out, gag)
+    }
+
+    /// Set the palette S&D uses to resolve a matched line's ANSI colours for the
+    /// scan/consider re-render (so they match the user's active theme). Call
+    /// when the theme changes; defaults to xterm.
+    public func setRenderPalette(_ palette: ColorPalette) {
+        renderPalette = palette
+    }
+
+    /// Convert a matched line's styled runs into MUSHclient-style `styles` runs
+    /// (resolving each run's ANSI fore/back to a BGR-packed int via `palette`),
+    /// so S&D's scan/consider handlers re-render the line in colour.
+    static func styleRuns(text: String, runs: [StyledRun], palette: ColorPalette) -> [ScriptStyleRun] {
+        guard !runs.isEmpty else { return [] }
+        let nsText = text as NSString
+        return runs.compactMap { run in
+            let lower = run.utf16Range.lowerBound
+            let length = run.utf16Range.count
+            guard lower >= 0, lower + length <= nsText.length else { return nil }
+            return ScriptStyleRun(
+                text: nsText.substring(with: NSRange(location: lower, length: length)),
+                textColour: bgrInt(palette.resolveForeground(run.style.foreground)),
+                backColour: bgrInt(palette.resolveBackground(run.style.background))
+            )
+        }
+    }
+
+    /// Pack an `RGB` into the BGR int MUSHclient's `RGBColourToName` decodes
+    /// (red in the low byte, then green, then blue).
+    private static func bgrInt(_ rgb: RGB) -> Int {
+        Int(rgb.red) | (Int(rgb.green) << 8) | (Int(rgb.blue) << 16)
     }
 
     /// Offer a typed command to S&D's aliases. Returns the resulting effects,
@@ -260,21 +306,31 @@ public actor SearchAndDestroyHost {
         return consume(effects)
     }
 
-    private func applyFiring(send: String?, script: String?, match: TriggerMatch?) async -> [ScriptEffect] {
+    private func applyFiring(
+        send: String?,
+        script: String?,
+        match: TriggerMatch?,
+        styles: [ScriptStyleRun] = []
+    ) async -> [ScriptEffect] {
         var out: [ScriptEffect] = []
         if let send, !send.isEmpty { out.append(.send(send)) }
         if let script, !script.isEmpty {
-            await out += consume(runScript(script, match: match))
+            await out += consume(runScript(script, match: match, styles: styles))
         }
         return out
     }
 
-    private func runScript(_ script: String, match: TriggerMatch?) async -> [ScriptEffect] {
+    private func runScript(
+        _ script: String,
+        match: TriggerMatch?,
+        styles: [ScriptStyleRun] = []
+    ) async -> [ScriptEffect] {
         do {
             return try await runtime.runScript(
                 script,
                 matches: match?.captures ?? [],
-                named: match?.named ?? [:]
+                named: match?.named ?? [:],
+                styles: styles
             )
         } catch {
             return []
@@ -343,16 +399,15 @@ public actor SearchAndDestroyHost {
 
     /// Register a trigger at runtime into the host's TriggerEngine (S&D's
     /// scan/consider matchers via `AddTriggerEx`). The script name becomes the
-    /// MUSHclient-style call `fn(name, matches[0], matches, styles)`. MUSHclient
-    /// passes a 4th `styles` array (the matched line's colour runs); S&D's
-    /// `consider_trigger` iterates it when overwrite-con is on (the default), so
-    /// omitting it crashes `ipairs(nil)` and kills the consider output. We don't
-    /// reconstruct style runs on the dynamic fire path, so pass an empty table —
-    /// the handler iterates zero runs and still renders its own coloured line.
+    /// MUSHclient-style call `fn(name, matches[0], matches, styles or {})`.
+    /// MUSHclient passes a 4th `styles` array (the matched line's colour runs);
+    /// S&D's `consider_trigger`/`scan_mob` iterate it to re-render the line, so
+    /// the runtime sets the `styles` global per fire (`or {}` guards the no-line
+    /// paths). Omitting it crashed `ipairs(nil)` and killed scan/consider output.
     private func addDynamicTrigger(name: String, pattern: String, flags: Int, script: String) {
         let isRegex = flags & TriggerFlag.regularExpression != 0
         let call = script.isEmpty ? nil
-            : "\(script)(\(Self.luaString(name)), matches[0], matches, {})"
+            : "\(script)(\(Self.luaString(name)), matches[0], matches, styles or {})"
         let trigger = Trigger(
             name: name,
             pattern: isRegex ? .regex(pattern) : .wildcard(pattern),

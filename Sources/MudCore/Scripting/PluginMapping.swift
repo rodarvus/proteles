@@ -92,12 +92,11 @@ enum PluginMapping {
         if let function = nonEmpty(attributes["script"]) {
             // MUSHclient calls script(name, line, wildcards, styles); matches[0]
             // is the whole match, `matches` is the wildcard table, and the 4th
-            // arg is the matched line's colour runs. We don't reconstruct style
-            // runs on the trigger-fire path, so pass an empty table — S&D's
-            // scan/consider handlers iterate it (`ipairs(style)`) and crash on
-            // nil, which gags the line but discards the re-render (scan/con
-            // appear to hang). Extra args are ignored by 3-param handlers.
-            let call = "\(function)(\(luaString(name ?? "")), matches[0], matches, {})"
+            // arg is the matched line's colour runs (the runtime sets the
+            // `styles` global per fire; `or {}` guards the paths that don't, so
+            // S&D's scan/consider handlers iterate it instead of crashing on
+            // nil). Extra args are ignored by 3-param handlers.
+            let call = "\(function)(\(luaString(name ?? "")), matches[0], matches, styles or {})"
             // A trigger may have *both* a script function and a `<send>` body:
             // MUSHclient runs the function AND dispatches the send-text per
             // `send_to`. Dropping the body silently breaks state machines like

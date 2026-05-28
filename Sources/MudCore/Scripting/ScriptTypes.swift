@@ -32,6 +32,24 @@ public enum LuaValue: Sendable, Equatable {
 /// (async) network/scrollback APIs directly from inside `pcall` — keeps
 /// the C↔Swift boundary synchronous and the script engine unit-testable
 /// without a live session.
+/// One coloured segment of a matched line, supplied to a trigger's script as
+/// MUSHclient's 4th `styles` argument (an array of `{text, textcolour,
+/// backcolour, style, length}`). `textColour`/`backColour` are BGR-packed ints
+/// (red in the low byte) — the form MUSHclient's `RGBColourToName` decodes — so
+/// handlers like Search-and-Destroy's `scan_mob`/`consider_trigger` can
+/// re-render the matched line in its original colours.
+public struct ScriptStyleRun: Sendable, Equatable {
+    public let text: String
+    public let textColour: Int
+    public let backColour: Int
+
+    public init(text: String, textColour: Int, backColour: Int) {
+        self.text = text
+        self.textColour = textColour
+        self.backColour = backColour
+    }
+}
+
 public enum ScriptEffect: Sendable, Equatable {
     /// Send a command to the MUD (raw, as `proteles.send`).
     case send(String)
