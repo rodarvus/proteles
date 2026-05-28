@@ -315,9 +315,11 @@ public final class MapperStore: Sendable {
         public var areas = 0
         public var exits = 0
         public var notes = 0
+        /// Terrain-palette rows (the sector name→colour table) brought in.
+        public var environments = 0
 
         public var total: Int {
-            rooms + areas + exits + notes
+            rooms + areas + exits + notes + environments
         }
 
         public var isEmpty: Bool {
@@ -389,6 +391,10 @@ public final class MapperStore: Sendable {
         summary.areas = try insertIgnore(db, table: "areas", columns: "uid, name, texture, color, flags")
         summary.exits = try insertIgnore(db, table: "exits", columns: "dir, fromuid, touid, level")
         summary.notes = try insertIgnore(db, table: "bookmarks", columns: "uid, notes")
+        // The sector palette (terrain name→colour). Without this, imported rooms
+        // have no colour and the whole map renders grey — the env table is how
+        // the reference mapper colours rooms (verified against a live Aardwolf.db).
+        summary.environments = try insertIgnore(db, table: "environments", columns: "uid, name, color")
         return summary
     }
 
