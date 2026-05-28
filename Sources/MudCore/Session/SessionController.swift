@@ -235,6 +235,18 @@ public actor SessionController {
     /// Tests inject a temp-dir builder so they don't litter real recordings.
     public let autoRecordingURL: @Sendable () -> URL?
 
+    /// User-facing session logging (readable text/HTML, distinct from the binary
+    /// recording + debug transcript). Off by default. The app supplies a
+    /// per-session file URL via ``logFileURL``.
+    public var loggingEnabled = false
+    public var logFormat: SessionLogFormat = .text
+    /// Produces a fresh per-session log file URL at connect (nil = no logging).
+    public let logFileURL: @Sendable (SessionLogFormat) -> URL?
+    /// The open logger for the current session (nil when not logging).
+    var sessionLogger: SessionLogger?
+    /// Drains the scrollback stream into ``sessionLogger``.
+    var logDrainTask: Task<Void, Never>?
+
     public init(
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
         gmcpState: GMCPStateStore = GMCPStateStore(),
@@ -246,6 +258,9 @@ public actor SessionController {
         autoRecordingURL: @escaping @Sendable () -> URL? = {
             try? SessionRecorder.defaultRecordingURL()
         },
+        loggingEnabled: Bool = false,
+        logFormat: SessionLogFormat = .text,
+        logFileURL: @escaping @Sendable (SessionLogFormat) -> URL? = { _ in nil },
         makeConnection: @escaping @Sendable () -> any MudConnection = { NetworkConnection() }
     ) {
         self.keepAliveInterval = keepAliveInterval
@@ -274,6 +289,9 @@ public actor SessionController {
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
+        self.loggingEnabled = loggingEnabled
+        self.logFormat = logFormat
+        self.logFileURL = logFileURL
     }
 
     /// True if MCCP2 has been negotiated and the inbound byte stream is
@@ -377,6 +395,7 @@ public actor SessionController {
             recorder = try? SessionRecorder(url: url)
             transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
         }
+        startSessionLogIfEnabled()
 
         startProcessingLoop(on: conn)
         restartTimerLoop()
@@ -567,6 +586,7 @@ public actor SessionController {
         recorder = nil
         transcript?.close()
         transcript = nil
+        stopSessionLog()
         autologin = nil
         connection = nil
         dinvLoaded = false // reloads on the next active char.status (e.g. reconnect)

@@ -76,7 +76,13 @@ struct ProtelesApp: App {
         session = SessionController(
             scriptEngine: scriptEngine,
             autoRecord: true,
-            reconnectPolicy: .standard
+            reconnectPolicy: .standard,
+            logFileURL: { format in
+                guard let directory = ProtelesApp.logsDirectory() else { return nil }
+                let stamp = ProtelesApp.logTimestampFormatter.string(from: Date())
+                let ext = format == .html ? "html" : "txt"
+                return directory.appendingPathComponent("session-\(stamp).\(ext)")
+            }
         )
 
         // Register the built-in native plugins (ported from the Aardwolf
@@ -269,6 +275,22 @@ struct ProtelesApp: App {
     static let worldsWindowID = "worlds"
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
+
+    /// `~/Library/Application Support/com.proteles.ProtelesApp/logs` — where
+    /// user session logs are written (used by the log-file builder + the
+    /// "Open Log Folder" menu item).
+    static func logsDirectory() -> URL? {
+        guard let base = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else { return nil }
+        return base.appendingPathComponent("com.proteles.ProtelesApp/logs", isDirectory: true)
+    }
+
+    static let logTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        return formatter
+    }()
 }
 
 /// Strips the empty "Format" menu AppKit leaves behind even after
