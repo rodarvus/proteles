@@ -7,15 +7,33 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
     public var triggers: [Trigger]
     public var aliases: [Alias]
     public var timers: [MudTimer]
+    public var macros: [Macro]
 
     public init(
         triggers: [Trigger] = [],
         aliases: [Alias] = [],
-        timers: [MudTimer] = []
+        timers: [MudTimer] = [],
+        macros: [Macro] = []
     ) {
         self.triggers = triggers
         self.aliases = aliases
         self.timers = timers
+        self.macros = macros
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case triggers, aliases, timers, macros
+    }
+
+    /// A collection missing from the file decodes as empty rather than failing
+    /// the whole load, so documents written before a collection existed (e.g.
+    /// a pre-macros script file) still open. Encoding stays synthesized.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        triggers = try container.decodeIfPresent([Trigger].self, forKey: .triggers) ?? []
+        aliases = try container.decodeIfPresent([Alias].self, forKey: .aliases) ?? []
+        timers = try container.decodeIfPresent([MudTimer].self, forKey: .timers) ?? []
+        macros = try container.decodeIfPresent([Macro].self, forKey: .macros) ?? []
     }
 }
 
@@ -41,6 +59,7 @@ public actor ScriptStore {
     public private(set) var triggers: [Trigger] = []
     public private(set) var aliases: [Alias] = []
     public private(set) var timers: [MudTimer] = []
+    public private(set) var macros: [Macro] = []
 
     public init(url: URL) {
         self.url = url
@@ -48,7 +67,7 @@ public actor ScriptStore {
 
     /// A snapshot of the current document (for loading into a engine).
     public var document: ScriptDocument {
-        ScriptDocument(triggers: triggers, aliases: aliases, timers: timers)
+        ScriptDocument(triggers: triggers, aliases: aliases, timers: timers, macros: macros)
     }
 
     // MARK: - Load
@@ -149,6 +168,29 @@ public actor ScriptStore {
         try persist()
     }
 
+    // MARK: - Macros
+
+    public func addMacro(_ macro: Macro) throws {
+        macros.append(macro)
+        try persist()
+    }
+
+    public func updateMacro(_ macro: Macro) throws {
+        guard let index = macros.firstIndex(where: { $0.id == macro.id }) else {
+            throw StoreError.notFound(macro.id)
+        }
+        macros[index] = macro
+        try persist()
+    }
+
+    public func removeMacro(id: UUID) throws {
+        guard macros.contains(where: { $0.id == id }) else {
+            throw StoreError.notFound(id)
+        }
+        macros.removeAll { $0.id == id }
+        try persist()
+    }
+
     // MARK: - Disk
 
     /// Recommended per-profile location:
@@ -179,6 +221,7 @@ public actor ScriptStore {
         triggers = document.triggers
         aliases = document.aliases
         timers = document.timers
+        macros = document.macros
     }
 
     private func persist() throws {

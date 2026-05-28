@@ -21,14 +21,20 @@ public final class ScriptsModel {
     public private(set) var triggers: [Trigger] = []
     public private(set) var aliases: [Alias] = []
     public private(set) var timers: [MudTimer] = []
+    public private(set) var macros: [Macro] = []
 
     public var selectedTriggerID: UUID?
     public var selectedAliasID: UUID?
     public var selectedTimerID: UUID?
+    public var selectedMacroID: UUID?
 
     private let session: SessionController
     private var store: ScriptStore?
     private var profileID: UUID?
+    /// Live keypress→action lookup, kept in sync with ``macros``. Held here
+    /// (main-actor, value type) so the command field's key monitor can match
+    /// a chord inline; the session has no macro engine of its own.
+    private var macroEngine = MacroEngine()
     /// The active world's data dir, kept so Search-and-Destroy can be (re)loaded
     /// after a download-on-first-use install without reloading the whole world.
     private var worldDataDir: URL?
@@ -50,6 +56,7 @@ public final class ScriptsModel {
         try? await store.load()
         self.store = store
         profileID = id
+        await seedDefaultMacrosIfNeeded(store: store, profileID: id)
         await refresh()
         await session.loadScripts(store.document)
         // Hydrate persisted plugin/script variables before loading plugins,
@@ -230,6 +237,72 @@ public final class ScriptsModel {
         )
     }
 
+    // MARK: - Macros
+
+    /// The action a keypress should fire, or `nil` if no macro is bound or its
+    /// tier forbids firing right now. Synchronous (main-actor) so the command
+    /// field's key monitor can decide inline whether to swallow the key.
+    public func matchMacro(_ chord: KeyChord, context: MacroContext) -> MacroAction? {
+        macroEngine.match(chord, context: context)?.action
+    }
+
+    public func addMacro() async {
+        let new = Macro(chord: KeyChord(keyCode: 0), action: .command(""))
+        try? await store?.addMacro(new)
+        await refresh()
+        selectedMacroID = new.id
+    }
+
+    public func removeSelectedMacro() async {
+        guard let id = selectedMacroID else { return }
+        try? await store?.removeMacro(id: id)
+        await refresh()
+        selectedMacroID = macros.first?.id
+    }
+
+    /// Replace all macros with the built-in keypad layout (a "Restore
+    /// defaults" action). Overwrites the user's current set.
+    public func restoreDefaultMacros() async {
+        guard let store else { return }
+        var document = await store.document
+        document.macros = MacroEngine.defaultNavigationMacros()
+        try? await store.replace(with: document)
+        await refresh()
+        selectedMacroID = macros.first?.id
+    }
+
+    public func binding(forMacro id: UUID) -> Binding<Macro>? {
+        guard macros.contains(where: { $0.id == id }) else { return nil }
+        return Binding(
+            get: { [weak self] in
+                self?.macros.first { $0.id == id }
+                    ?? Macro(chord: KeyChord(keyCode: 0), action: .command(""))
+            },
+            set: { [weak self] newValue in
+                guard let self else { return }
+                if let index = macros.firstIndex(where: { $0.id == id }) {
+                    macros[index] = newValue
+                    macroEngine.replaceAll(macros)
+                }
+                Task { try? await self.store?.updateMacro(newValue) }
+            }
+        )
+    }
+
+    /// On a profile's first load, seed the built-in keypad layout — once per
+    /// profile (deleting them won't re-seed). Existing profiles created before
+    /// this feature get the defaults on their next load.
+    private func seedDefaultMacrosIfNeeded(store: ScriptStore, profileID: UUID) async {
+        let key = "com.proteles.macrosSeeded.\(profileID.uuidString)"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        var document = await store.document
+        if document.macros.isEmpty {
+            document.macros = MacroEngine.defaultNavigationMacros()
+            try? await store.replace(with: document)
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     // MARK: - Private
 
     /// Open (or create) the per-world map store and load its graph. The DB
@@ -248,5 +321,7 @@ public final class ScriptsModel {
         triggers = document.triggers
         aliases = document.aliases
         timers = document.timers
+        macros = document.macros
+        macroEngine.replaceAll(document.macros)
     }
 }

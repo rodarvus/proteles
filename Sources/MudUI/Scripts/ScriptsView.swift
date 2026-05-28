@@ -22,6 +22,8 @@ public struct ScriptsView: View {
                 .tabItem { Label("Aliases", systemImage: "text.cursor") }
             timersTab
                 .tabItem { Label("Timers", systemImage: "timer") }
+            macrosTab
+                .tabItem { Label("Macros", systemImage: "keyboard") }
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
@@ -118,6 +120,53 @@ public struct ScriptsView: View {
                 unavailable("No Timer Selected", systemImage: "timer")
             }
         }
+    }
+
+    // MARK: - Macros
+
+    private var macrosTab: some View {
+        NavigationSplitView {
+            List(selection: $model.selectedMacroID) {
+                ForEach(model.macros) { macro in
+                    ScriptRow(
+                        title: macroTitle(macro),
+                        subtitle: macro.action.text.isEmpty ? "—" : macro.action.text,
+                        enabled: macro.enabled
+                    )
+                    .tag(macro.id)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button { Task { await model.addMacro() } } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    Button { Task { await model.removeSelectedMacro() } } label: {
+                        Label("Remove", systemImage: "minus")
+                    }
+                    .disabled(model.selectedMacroID == nil)
+                    Menu {
+                        Button("Restore Default Keypad Layout") {
+                            Task { await model.restoreDefaultMacros() }
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
+        } detail: {
+            if let id = model.selectedMacroID, let binding = model.binding(forMacro: id) {
+                MacroEditorView(macro: binding)
+            } else {
+                unavailable("No Macro Selected", systemImage: "keyboard")
+            }
+        }
+    }
+
+    private func macroTitle(_ macro: Macro) -> String {
+        if let name = macro.name, !name.isEmpty { return name }
+        return KeyChordFormatter.describe(macro.chord)
     }
 
     // MARK: - Helpers

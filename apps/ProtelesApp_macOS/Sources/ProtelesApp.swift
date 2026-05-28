@@ -350,6 +350,9 @@ private struct ProtelesCommands: Commands {
     /// Rich Exits: make room exits (incl. custom exits) clickable in the main
     /// output. Persisted in UserDefaults; ``ContentView`` pushes it to the session.
     @AppStorage("richExits") private var richExits = false
+    /// Keyboard "Navigation mode" (bare-key macros fire on an empty input).
+    /// Shared with ``ContentView`` via the same UserDefaults key.
+    @AppStorage("navigationMode") private var navigationMode = false
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -426,6 +429,14 @@ private struct ProtelesCommands: Commands {
             // (native equivalent of Aardwolf-Rich-Exits, no miniwindow). Enabling
             // turns on Aardwolf's `tags exits` so the line is detectable.
             Toggle("Rich Exits", isOn: $richExits)
+
+            Divider()
+
+            // Keyboard navigation mode: while on, bare-key macros fire on an
+            // empty input line (keypad/chord macros fire regardless). A "NAV"
+            // chip on the command input shows when it's active.
+            Toggle("Navigation Mode", isOn: $navigationMode)
+                .keyboardShortcut("n", modifiers: [.command, .option])
         }
     }
 

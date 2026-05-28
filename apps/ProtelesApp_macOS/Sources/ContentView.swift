@@ -49,6 +49,10 @@ struct ContentView: View {
     /// Selected colour theme (Appearance preference). Drives the output palette
     /// and the app-wide light/dark chrome appearance.
     @AppStorage("themeID") private var themeID = Theme.default.id
+    /// Keyboard "Navigation mode" (⌥⌘N, View menu). While on, bare-key macros
+    /// fire on an empty input line; keypad/chord macros fire regardless. Shared
+    /// with the menu toggle via the same UserDefaults key.
+    @AppStorage("navigationMode") private var navigationMode = false
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -188,8 +192,31 @@ struct ContentView: View {
             .overlay(alignment: .topTrailing) {
                 FloatingPanelLayer(store: layout) { kind in panelContent(kind) }
             }
-            CommandInputView { command in
-                Task { try? await session.send(command) }
+            CommandInputView(
+                onSubmit: { command in Task { try? await session.send(command) } },
+                onMacroKey: { chord, inputIsEmpty in
+                    let context = MacroContext(
+                        inputIsEmpty: inputIsEmpty,
+                        navigationModeOn: navigationMode
+                    )
+                    guard let action = scripts.matchMacro(chord, context: context) else {
+                        return false
+                    }
+                    Task { await session.fire(action) }
+                    return true
+                }
+            )
+            .overlay(alignment: .trailing) {
+                if navigationMode {
+                    Text("NAV")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor, in: Capsule())
+                        .padding(.trailing, 12)
+                        .help("Navigation mode: bare keys send movement while the input line is empty.")
+                }
             }
             GaugeBarView(state: connectionState, gmcp: gmcp)
         }
