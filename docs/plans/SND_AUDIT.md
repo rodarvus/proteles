@@ -246,6 +246,22 @@ harness chain renders the full room list and `nx` drives `Execute("mapper goto
 1")`. A scan for other accidental global clobbers of built-ins our bindings use
 found none (line 4865's `type` is a function-local).
 
+**Second, independent bug — `consider` (`con`) crashed on a missing `styles`
+arg.** With the `select` fix in place a consider harness test
+(`considerTriggerFiresCleanly`) surfaced a separate fault: S&D's
+`consider_trigger` (registered via `AddTriggerEx` in `setup_scan_con_triggers`)
+iterates a **4th `styles` argument** — the matched line's colour runs, which
+MUSHclient passes to *every* script trigger — inside the `is_con_overwritten()`
+branch (overwrite-con defaults to **on**). Our dynamic-trigger fire path
+(`SearchAndDestroyHost.addDynamicTrigger`) generated `fn(name, matches[0],
+matches)` with no 4th arg, so `ipairs(style)` got nil and threw: the consider
+line was gagged (`OmitFromOutput`) but the replacement output crashed → consider
+produced nothing. Fix (curated, not a core.lua edit): pass an **empty table** as
+the 4th arg — we don't reconstruct style runs on the dynamic fire path, so the
+handler iterates zero runs and still renders its own coloured mob/level line.
+Extra args are ignored by 3-param handlers (`scan_mob`, qw_match etc.), so this
+is safe across the board.
+
 ## 4. Fix plan (functional + UI parity, prioritised)
 
 **P0 — Get a deterministic repro (no guessing).**
