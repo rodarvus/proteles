@@ -96,6 +96,36 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.evaluate("__con_mob") == "a city guard")
     }
 
+    @Test("Static scan triggers run without crashing on a nil style arg")
+    func scanFlowRunsCleanly() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Static S&D triggers (scan_location_current_room, scan_mob, …) take a
+        // 4th MUSHclient `styles` arg; without it `ipairs(style)` throws and the
+        // scan re-render is discarded (scan appears to hang). Wrap the handler
+        // to prove it now runs cleanly, and that the {/scan} end still fires.
+        _ = try await host.run("""
+        __scan_loc_ok = nil; __scan_loc_err = nil; __scan_end_ran = false
+        local __loc = scan_location_current_room
+        scan_location_current_room = function(name, line, w, style)
+          local ok, err = pcall(__loc, name, line, w, style)
+          __scan_loc_ok = ok; __scan_loc_err = tostring(err)
+        end
+        local __end = scan_end
+        scan_end = function(...) __scan_end_ran = true; return __end(...) end
+        """)
+        _ = await host.process("{scan}") // scan_start → enables the "scan" group
+        let loc = await host.process("Right here you see:")
+        #expect(loc.gag, "scan output lines are gagged (OmitFromOutput)")
+        let err = await host.evaluate("tostring(__scan_loc_err)") ?? "nil"
+        #expect(
+            await host.evaluate("tostring(__scan_loc_ok)") == "true",
+            "scan_location_current_room must run without error; err=\(err)"
+        )
+        _ = await host.process("{/scan}") // scan_end
+        #expect(await host.evaluate("tostring(__scan_end_ran)") == "true", "the {/scan} end must fire")
+    }
+
     @Test("Aliases match S&D commands and pass non-commands through")
     func aliasMatching() async throws {
         let host = try SearchAndDestroyHost()
