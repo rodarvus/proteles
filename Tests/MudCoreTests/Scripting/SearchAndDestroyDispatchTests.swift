@@ -68,6 +68,34 @@ struct SearchAndDestroyDispatchTests {
         )
     }
 
+    @Test("A consider line fires the dynamic con trigger without crashing")
+    func considerTriggerFiresCleanly() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // setup_scan_con_triggers registers the con_<i> dynamic triggers
+        // (group "consider", script consider_trigger) via AddTriggerEx. With
+        // overwrite-con ON (the default), consider_trigger iterates its 4th
+        // `style` arg — which MUSHclient passes but our dynamic-trigger call
+        // must too, else ipairs(nil) throws and the consider output dies.
+        _ = try await host.run("""
+        setup_scan_con_triggers()
+        __con_ok = nil; __con_err = nil; __con_mob = nil
+        local __orig = consider_trigger
+        consider_trigger = function(name, line, w, style)
+          local ok, err = pcall(__orig, name, line, w, style)
+          __con_ok = ok; __con_err = tostring(err); __con_mob = w and w.mob_name
+        end
+        """)
+        let result = await host.process("No Problem! a city guard is weak compared to you.")
+        #expect(result.gag, "a consider outcome line must be gagged (OmitFromOutput)")
+        let conErr = await host.evaluate("tostring(__con_err)") ?? "nil"
+        #expect(
+            await host.evaluate("tostring(__con_ok)") == "true",
+            "consider_trigger must run without error; err=\(conErr)"
+        )
+        #expect(await host.evaluate("__con_mob") == "a city guard")
+    }
+
     @Test("Aliases match S&D commands and pass non-commands through")
     func aliasMatching() async throws {
         let host = try SearchAndDestroyHost()
