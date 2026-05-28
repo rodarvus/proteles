@@ -105,31 +105,42 @@ Command surface (from `search-and-destroy/Search_and_Destroy.xml` + `lua/`):
   carried by the `xg_draw_window` bridge → "can't see the list of rooms in my
   targets". Need to map which displays publish vs. which are dropped.
 
-### Harness findings (proven offline — `SearchAndDestroyCampaignTests`)
+### Harness findings (proven offline — 3 new tests, all green)
 
-Drove the real `SearchAndDestroyHost` through a campaign scrape → `xcp 1`
-(`xcpNavigatesToTarget`). Results:
-- **Host-level command dispatch WORKS.** `expandCommand("xcp 1")` matches the
-  S&D alias, fires `xcp_arg`, and drives navigation — so the break is **not** at
-  the alias/dispatch layer (one SUSPECTED item cleared).
-- **Area-target navigation hinges on start-room resolution.** For an area
-  target with no `areaDefaultStartRooms` entry, `xcp 1` emits
-  `X-runto: No default start room is defined for area: <a>`, then
-  `SendNoEcho("areas 1 299 keywords <a>")` + schedules a continuation timer —
-  i.e. it asks the MUD for the area's rooms and waits for an `areas`-lookup
-  trigger to capture the reply and *continue* the goto. **This continuation
-  chain (areas-lookup → resolve room → `do_mapper_goto`) is the prime live
-  suspect for "dies after xcp 1"**: if the lookup trigger isn't enabled/doesn't
-  fire/doesn't resume, navigation stalls and follow-on commands wait on it.
-  (Live, areas in `areaDefaultStartRooms` skip this and go straight to
-  `mapper goto`; the break would bite areas not in that table, or the express/
-  mapper-movement path.)
+Drove the real `SearchAndDestroyHost` through campaign + arrival flows:
 
-**Next harness step (to pin it):** simulate the `areas … keywords` MUD reply +
-assert S&D captures it and emits the follow-up `mapper goto` — and/or a
-session-level `InMemoryConnection` test driving `xcp 1` → simulated GMCP arrival
-→ assert the on-arrival action (`consider`/`qw`/`ht`) fires. A live transcript
-of the exact `xcp 1` → stuck sequence would pin it fastest.
+1. **Command dispatch WORKS** (`xcpNavigatesToTarget`). `expandCommand("xcp 1")`
+   matches the alias, fires `xcp_arg`, and drives navigation. **SUSPECT CLEARED.**
+2. **`current_room` tracking WORKS** (`roomInfoUpdatesCurrentRoom`) — *with a
+   realistic `room.info`*. A GMCP `room.info` (with `zone` + **`details`**) fired
+   through `OnPluginBroadcast` sets `current_room.arid`, and `execute_in_area`
+   then runs its action immediately when already in the area. The `id ==
+   plugin_id_gmcp_handler` check also matches (`3e7dedbe…`). **SUSPECT CLEARED.**
+   - **Fragility noted:** `OnPluginBroadcast` does `string.match(ri.details,
+     "maze")` (L422) — a `room.info` lacking `details` throws and aborts the
+     handler (this bit my first test). Live payloads carry `details`; if Aardwolf
+     ever omits it for some room, arrival would silently stall. Cheap guard.
+3. **The `execute_in_area` poll timer WORKS** (`executeInAreaPollFiresOnArrival`).
+   When not yet in the area, the 0.1 s timer is enabled; once `room.info` reports
+   the target zone (+ char state "3"), driving `fireTimers` runs the on-arrival
+   action. **SUSPECT CLEARED** (at the host level, when timers are fired).
+
+**Conclusion: the host-level S&D flow is sound.** The live "dies after xcp 1" is
+therefore at the **session layer**, narrowed to two candidates:
+- **The session timer loop firing S&D's recurring timers.** The poll only works
+  if the loop actually fires `execute_in_area_timer` every 0.1 s. The re-arm
+  (`takeDidScheduleTimer`) covers `DoAfter` one-shots but **not** `EnableTimer`
+  enabling a recurring timer; the always-on `quest_timer`/`state_change_timer`
+  (1 s) *should* keep the loop alive (≤1 s latency) — needs a session-level test
+  to confirm the loop fires the 0.1 s poll, not just the 1 s timers.
+- **`mapper goto` movement (prime suspect).** If `Execute("mapper goto <id>")`
+  doesn't actually walk the player (path/room-id), `room.info` never reaches the
+  target zone → arrival never happens → stuck, and `go`/`nx` fail too.
+
+**Next pin:** a session-level `InMemoryConnection` test driving `xcp 1` → assert
+(a) the timer loop fires the poll and (b) `mapper goto` emits movement; OR a
+**live transcript of `xcp 1` → stuck** (does the player actually walk?). The
+existing transcripts never captured that sequence.
 
 ## 4. Fix plan (functional + UI parity, prioritised)
 

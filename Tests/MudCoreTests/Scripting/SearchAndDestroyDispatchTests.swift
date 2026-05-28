@@ -188,6 +188,66 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.evaluate(#"gmcp("char.status.level")"#) == "150")
     }
 
+    @Test("GMCP room.info updates current_room so execute_in_area detects arrival")
+    func roomInfoUpdatesCurrentRoom() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Project a real Aardwolf room.info payload (from a live capture) and
+        // fire S&D's OnPluginBroadcast, which sets current_room.arid =
+        // gmcp("room.info").zone. The `details` field matters: the handler does
+        // string.match(ri.details, "maze"), so a payload missing it aborts.
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"""
+            { "num": 2339, "name": "@GA Light Provisions Room@w", "zone": "light",
+              "terrain": "inside", "details": "safe,shop,healer,questor",
+              "exits": { "n": 2343, "e": 2341 } }
+            """#
+        )
+        // execute_in_area runs its func immediately when already in the target
+        // area (current_room.arid == arid). If room.info didn't reach
+        // current_room, this never fires — which is the prime "dies after xcp 1"
+        // suspect (the arrival poll never completes its on-arrival action).
+        _ = try await host.run(
+            "snd_arrived = false; execute_in_area('light', function() snd_arrived = true end)"
+        )
+        #expect(
+            await host.evaluate("tostring(snd_arrived)") == "true",
+            "room.info must update current_room.arid so the on-arrival action fires"
+        )
+    }
+
+    @Test("execute_in_area's poll timer runs the on-arrival action once the room updates")
+    func executeInAreaPollFiresOnArrival() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Start in a different area → execute_in_area enables the 0.1s poll timer
+        // (the real flow: the player is walking there via mapper goto).
+        _ = await host.applyGMCP(package: "char.status", json: #"{"state":"3"}"#)
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":1,"zone":"other","details":"","exits":{}}"#
+        )
+        _ = try await host.run(
+            "snd_arrived = false; execute_in_area('light', function() snd_arrived = true end)"
+        )
+        #expect(await host.evaluate("tostring(snd_arrived)") == "false", "not yet in area → deferred")
+
+        // Arrive: room.info zone becomes the target. The poll must now detect it.
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":2339,"zone":"light","details":"safe","exits":{}}"#
+        )
+        let base = Date()
+        for index in 0..<8 {
+            _ = await host.fireTimers(at: base.addingTimeInterval(0.2 * Double(index)))
+        }
+        #expect(
+            await host.evaluate("tostring(snd_arrived)") == "true",
+            "the execute_in_area poll timer must detect arrival and run the on-arrival action"
+        )
+    }
+
     @Test("process() runs incoming lines through S&D's triggers without crashing")
     func processLineIsSafe() async throws {
         let host = try SearchAndDestroyHost()
