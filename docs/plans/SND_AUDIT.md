@@ -142,6 +142,37 @@ therefore at the **session layer**, narrowed to two candidates:
 **live transcript of `xcp 1` → stuck** (does the player actually walk?). The
 existing transcripts never captured that sequence.
 
+### Resolution from a live transcript (2026-05-28 18:03) — S&D is exonerated
+
+A live `cp check → xcp 1 → go → xcp 2..6 → con → nx` transcript, after the D-54
+mapper re-import, changed the picture entirely: navigation **no longer locks**
+(the morning's symptom is gone). What's left is a **mapper bug, not S&D**:
+
+- `xcp 1` correctly resolved `X-runto: zoo, room ID: 5920` (verified: room 5920
+  *is* zoo "Which way now?" in the live DB) and called `mapper goto`. **S&D did
+  its job.**
+- The mapper's path used a **from-anywhere portal exit** and landed at the wrong
+  room. The map DB stores these as `dir = "dinv portal use <serial>", fromuid =
+  "*", touid = <room>` — **keyed by the dinv portal serial**. Serials rotate
+  every session, so the stored edge `dinv portal use 3672026293 → 995` actually
+  warped to **26151** (Aardwolf Plaza Hotel) this session, then `run 2n3e3s` →
+  **gelidus**. So `mapper goto` routes through a stale portal to the wrong place.
+- **Reference grounding:** `aard_GMCP_mapper`'s `create_portal(keyword,
+  destination, …)` / `map_portal` store portals **by stable keyword** (recall
+  portals detected by `"home"`/`"recall"`), never by serial. Our serial-keyed
+  storage/traversal is the defect.
+- Secondary: `con` ran but the room was empty ("You see no one here but
+  yourself!") because navigation landed in the wrong place; `nx` → "No more
+  rooms" (empty gotoList). Both are downstream of the nav bug. consider no
+  longer hangs.
+
+**Action:** the real fix is a **mapper** change — store/traverse from-anywhere
+portals by a **stable keyword** (re-resolving the current serial at use time),
+matching the reference; stop pathfinding through serial-keyed edges. Tracked as
+a separate mapper task (NO-GUESSING: read `mapper.lua`/`aard_GMCP_mapper` portal
+handling + the live DB first). The S&D host-level work above stands; S&D is not
+the cause of the "wrong place" navigation.
+
 ## 4. Fix plan (functional + UI parity, prioritised)
 
 **P0 — Get a deterministic repro (no guessing).**
