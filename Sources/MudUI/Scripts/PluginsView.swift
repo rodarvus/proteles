@@ -77,6 +77,20 @@ public struct PluginsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Section("Personal") {
+                ForEach(model.localPlugins) { plugin in
+                    LocalPluginRowView(plugin: plugin) { enabled in
+                        Task { await model.setLocalEnabled(enabled, id: plugin.id) }
+                    }
+                    .tag(PluginSelection.local(plugin.id))
+                }
+                if model.localPlugins.isEmpty {
+                    Text("Add a plugin from a local folder to run your own privately — "
+                        + "it loads in place and is never copied here.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         .toolbar {
@@ -84,12 +98,15 @@ public struct PluginsView: View {
                 Button(action: beginImport) {
                     Label("Import…", systemImage: "square.and.arrow.down")
                 }
+                Button(action: beginAddLocal) {
+                    Label("Add Local…", systemImage: "folder.badge.plus")
+                }
                 Button {
                     Task { await removeSelected() }
                 } label: {
                     Label("Remove", systemImage: "trash")
                 }
-                .disabled(model.selectedImportedURL == nil)
+                .disabled(model.selectedImportedURL == nil && model.selectedLocal == nil)
             }
         }
     }
@@ -109,6 +126,8 @@ public struct PluginsView: View {
             NativePluginDetail(plugin: native)
         } else if let plugin = selectedImportedPlugin {
             InstalledPluginDetail(plugin: plugin, report: model.report(for: plugin.id))
+        } else if let local = model.selectedLocal {
+            LocalPluginDetail(plugin: local)
         } else {
             ContentUnavailableView(
                 "No Plugin Selected",
@@ -135,6 +154,23 @@ public struct PluginsView: View {
         #endif
     }
 
+    private func beginAddLocal() {
+        #if os(macOS)
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.xml]
+            panel.allowsMultipleSelection = false
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = true
+            panel.directoryURL = FileManager.default
+                .urls(for: .documentDirectory, in: .userDomainMask).first
+            panel.message = "Choose a personal plugin — its .xml file, or the folder that contains it. "
+                + "It loads in place from your disk and is never copied into Proteles."
+            panel.prompt = "Add"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            Task { await model.addLocalPlugin(at: url) }
+        #endif
+    }
+
     private func install(_ pending: PendingImport) {
         isInstalling = true
         Task {
@@ -146,9 +182,11 @@ public struct PluginsView: View {
     }
 
     private func removeSelected() async {
-        guard let url = model.selectedImportedURL,
-              let plugin = model.installed.first(where: { $0.id == url }) else { return }
-        await model.remove(plugin)
+        if let plugin = selectedImportedPlugin {
+            await model.remove(plugin)
+        } else if let local = model.selectedLocal {
+            await model.removeLocal(id: local.id)
+        }
     }
 }
 
@@ -201,6 +239,30 @@ private struct NativePluginRowView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(plugin.name).lineLimit(1)
                 Text(plugin.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(get: { plugin.enabled }, set: onToggle))
+                .labelsHidden()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// A personal plugin row: name + source path, an enable toggle, and a marker
+/// for a reference whose file no longer resolves to a plugin.
+private struct LocalPluginRowView: View {
+    let plugin: LocalPluginRow
+    let onToggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: plugin
+                .parsed ? "person.crop.square.filled.and.at.rectangle" : "exclamationmark.triangle.fill")
+                .foregroundStyle(plugin.parsed ? Color.accentColor : .orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(plugin.name).lineLimit(1)
+                Text(plugin.parsed ? plugin.path : "File not found")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
             Toggle("", isOn: Binding(get: { plugin.enabled }, set: onToggle))
@@ -322,6 +384,48 @@ private struct InstalledPluginDetail: View {
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(.orange)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+    }
+}
+
+/// The detail pane for a personal plugin: identity, enabled state, and the
+/// on-disk source — emphasising that it loads in place (never copied here).
+private struct LocalPluginDetail: View {
+    let plugin: LocalPluginRow
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plugin.name).font(.title2.bold())
+                    Text("Personal · loaded in place").font(.caption).foregroundStyle(.secondary)
+                }
+                Label(
+                    plugin.enabled ? "Enabled" : "Disabled",
+                    systemImage: plugin.enabled ? "checkmark.circle.fill" : "pause.circle.fill"
+                )
+                .font(.callout)
+                .foregroundStyle(plugin.enabled ? Color.green : .secondary)
+
+                if !plugin.parsed {
+                    Label(
+                        "The referenced file couldn't be found or parsed as a plugin.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SOURCE").font(.caption.bold()).foregroundStyle(.secondary)
+                    Text(plugin.path).font(.callout.monospaced()).textSelection(.enabled)
+                    Text("This plugin runs from your own disk and is never copied into Proteles. "
+                        + "Removing it here drops the reference only — the file is untouched.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }

@@ -40,11 +40,25 @@ public struct BuiltInFeatureRow: Identifiable, Sendable, Equatable {
     public let commands: [String]
 }
 
+/// A **personal** plugin referenced in place from the user's own disk (never
+/// copied into app-support), shown in the Plugins window with its parsed name,
+/// source path, and per-world enabled state.
+public struct LocalPluginRow: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let name: String
+    public let path: String
+    /// `false` if the referenced path no longer resolves to a parseable plugin.
+    public let parsed: Bool
+    public var enabled: Bool
+}
+
 /// What's selected in the Plugins window: a built-in native plugin (by id),
-/// an imported `.xml` plugin (by file URL), or a built-in feature (by id).
+/// an imported `.xml` plugin (by file URL), a personal plugin (by reference
+/// id), or a built-in feature (by id).
 public enum PluginSelection: Hashable, Sendable {
     case native(String)
     case imported(URL)
+    case local(UUID)
     case feature(String)
 }
 
@@ -57,6 +71,8 @@ public enum PluginSelection: Hashable, Sendable {
 @Observable
 public final class PluginsModel {
     public private(set) var installed: [InstalledPlugin] = []
+    /// Personal plugins referenced in place from the user's own disk.
+    public private(set) var localPlugins: [LocalPluginRow] = []
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
 
@@ -111,6 +127,7 @@ public final class PluginsModel {
 
     private let session: SessionController
     private var directory: URL?
+    private var localStore: LocalPluginStore?
     private var resync: (@MainActor () async -> Void)?
 
     public init(session: SessionController) {
@@ -134,6 +151,12 @@ public final class PluginsModel {
     public var selectedNative: NativePluginRow? {
         guard case .native(let id) = selection else { return nil }
         return nativePlugins.first { $0.id == id }
+    }
+
+    /// The selected personal plugin, if one is selected.
+    public var selectedLocal: LocalPluginRow? {
+        guard case .local(let id) = selection else { return nil }
+        return localPlugins.first { $0.id == id }
     }
 
     /// Load the built-in native plugins' current enabled state from the
@@ -166,7 +189,64 @@ public final class PluginsModel {
     public func prepare(directory: URL, resync: @escaping @MainActor () async -> Void) {
         self.directory = directory
         self.resync = resync
+        // Personal-plugin references live beside the imported plugins (the
+        // loader scans only `.xml`, so the `.json` is ignored there).
+        localStore = LocalPluginStore(url: directory.appendingPathComponent("local-plugins.json"))
         refresh()
+    }
+
+    /// Load the world's personal-plugin references from disk into displayable
+    /// rows (parsing each referenced `.xml` for its name). Call when the window
+    /// appears, alongside ``refreshNative()``.
+    public func refreshLocal() async {
+        guard let localStore else { localPlugins = []; return }
+        try? await localStore.load()
+        localPlugins = await localStore.plugins.map { reference in
+            let plugin = LocalPluginStore.resolvePluginXML(at: reference.url)
+                .flatMap { try? Data(contentsOf: $0) }
+                .flatMap { try? MUSHclientPluginLoader.parse($0) }
+            let name = (plugin?.name).flatMap { $0.isEmpty ? nil : $0 } ?? reference.url.lastPathComponent
+            return LocalPluginRow(
+                id: reference.id,
+                name: name,
+                path: reference.path,
+                parsed: plugin != nil,
+                enabled: reference.enabled
+            )
+        }
+    }
+
+    /// Reference a personal plugin at `url` (a `.xml` or its folder), load it
+    /// live, and persist the reference per-world. Returns `false` if the path
+    /// doesn't resolve to a plugin `.xml`.
+    @discardableResult
+    public func addLocalPlugin(at url: URL) async -> Bool {
+        guard let localStore, LocalPluginStore.resolvePluginXML(at: url) != nil else { return false }
+        let reference = LocalPluginReference(path: url.path)
+        try? await localStore.add(reference)
+        await refreshLocal()
+        await resync?()
+        selection = .local(reference.id)
+        return true
+    }
+
+    /// Drop a personal-plugin reference (the file on disk is untouched) and
+    /// re-sync so it stops loading.
+    public func removeLocal(id: UUID) async {
+        guard let localStore else { return }
+        try? await localStore.remove(id: id)
+        if selection == .local(id) { selection = nil }
+        await refreshLocal()
+        await resync?()
+    }
+
+    /// Toggle a personal plugin for this world and re-sync (a disabled plugin
+    /// isn't reloaded).
+    public func setLocalEnabled(_ enabled: Bool, id: UUID) async {
+        guard let localStore else { return }
+        try? await localStore.setEnabled(enabled, id: id)
+        await refreshLocal()
+        await resync?()
     }
 
     /// Re-scan the directory for `.xml` plugins.
