@@ -70,6 +70,29 @@ enabling those tags is a known, cheap pattern.
 3. Should a personal plugin's SQLite DB live under the same per-character sandbox
    root as the bundled plugins? (Recommended — consistent + sandboxed.)
 
+## Security / trust model (for approval — 2026-05-28)
+Installing from a local folder or arbitrary URL runs **third-party Lua**. The
+trust posture I'd ship (for your sign-off):
+- Personal plugins run in the **same per-plugin sandboxed Lua environment** as
+  the bundled corpus (`setfenv` scoping, curated `proteles.*` only) + the
+  **lsqlite3 sandbox** (open-path-only today; harden `ATTACH` deny per CLAUDE.md
+  before/with this). No raw filesystem, no process spawn, no network unless we
+  expose a helper.
+- **URL install = explicit, user-initiated action** with a confirmation showing
+  the source URL before download; never automatic. Local-folder load is a file
+  picker. No silent fetch/update of personal plugins.
+- **Integrity:** record only the user-chosen reference (path/URL) in the
+  per-world profile (local data). Optional later: pin a content hash so a
+  changed remote prompts re-confirm. Recommend defer hashing to a follow-up.
+- **No allow-listing / signing** for v1 — it's the user installing their own
+  plugins knowingly (parity with MUSHclient, where any `.xml` can be added).
+  The sandbox is the guardrail.
+- **Privacy:** the capability + UI are described generically; specific personal
+  plugins are never named in code, commits, or docs (CLAUDE.md hard rule).
+
+Recommend: **local-folder load first** (no network, simplest, lowest risk),
+URL install as a fast-follow behind the confirmation flow.
+
 ## Effort
 Low–medium. The shim + loader + installer pattern already exist; this is mostly a
 Plugins-window action + a reference-persistence path + reusing the S&D installer.
