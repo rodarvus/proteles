@@ -27,22 +27,43 @@ struct PluginImporterTests {
         #expect(r.findings.allSatisfy { $0.severity == .ok })
     }
 
-    @Test("Miniwindow use makes the plugin unsupported")
-    func miniwindowUnsupported() throws {
+    @Test("Miniwindow use is a caveat (commands work; the custom panel doesn't show)")
+    func miniwindowCaveat() throws {
         let r = try report("""
         function OnPluginInstall() WindowCreate("w", 0, 0, 100, 100, 1, 0, 0) end
         """)
-        #expect(r.verdict == .unsupported)
-        #expect(r.findings.contains { $0.severity == .error && $0.message.contains("miniwindow") })
+        // A self-drawn window is a limitation, not a blocker — the plugin's
+        // commands/automations still run, so this is "works with caveats".
+        #expect(r.verdict == .worksWithCaveats)
+        #expect(r.findings.contains { $0.severity == .warning && $0.message.contains("window") })
     }
 
-    @Test("A partial API (EnableTrigger) yields caveats, not a hard failure")
-    func partialCaveats() throws {
+    @Test("EnableTrigger is fully supported (no longer flagged a caveat)")
+    func enableTriggerSupported() throws {
+        // EnableTrigger/Timer/Group route to the host engines now — they were
+        // stale "no-op pending" warnings before the dinv/S&D work landed.
         let r = try report("""
         function go() EnableTrigger("t", true); Note("done") end
         """)
-        #expect(r.verdict == .worksWithCaveats)
-        #expect(r.findings.contains { $0.severity == .warning && $0.message.contains("EnableTrigger") })
+        #expect(r.verdict == .supported)
+        #expect(r.findings.allSatisfy { $0.severity == .ok })
+    }
+
+    @Test("AddTriggerEx is supported; a script AddTimer is the one real caveat")
+    func runtimeAutomationsClassification() throws {
+        // AddTriggerEx/AddAlias are real now (so: supported, no warning).
+        let triggers = try report(#"function go() AddTriggerEx("t","^x$","",0,-1,0,"","fn",12,100) end"#)
+        #expect(triggers.verdict == .supported)
+        // AddTimer becomes a one-shot, so a repeating script timer is a caveat.
+        let timer = try report(#"function go() AddTimer("t",0,0,5,"",0,"fn") end"#)
+        #expect(timer.verdict == .worksWithCaveats)
+        #expect(timer.findings.contains { $0.severity == .warning && $0.message.contains("once") })
+    }
+
+    @Test("A plugin that loads companion files is steered to “Add Local…”")
+    func companionFilesHint() throws {
+        let r = try report(#"dofile(GetPluginInfo(GetPluginID(), 20) .. "x_db.lua")"#)
+        #expect(r.findings.contains { $0.severity == .warning && $0.message.contains("Add Local") })
     }
 
     @Test("require of a bundled lib is OK; an unknown lib is a caveat")
@@ -74,10 +95,10 @@ struct PluginImporterTests {
 
     @Test("ColourNote is a supported call (whole-word, not a substring trip)")
     func wordBoundary() throws {
-        // ColourNote is now fully supported (multi-colour styled runs), and
-        // "Note" must not double-count inside "ColourNote".
+        // ColourNote is fully supported; "Note" must not double-count inside
+        // "ColourNote" — so the single call is counted exactly once.
         let r = try report(#"function f() ColourNote("white", "", "x") end"#)
         #expect(r.verdict == .supported)
-        #expect(r.findings.contains { $0.message.contains("ColourNote") && $0.severity == .ok })
+        #expect(r.findings.contains { $0.message.contains("Uses 1 supported") && $0.severity == .ok })
     }
 }

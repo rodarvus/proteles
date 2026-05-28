@@ -55,32 +55,40 @@ public struct PluginImportReport: Sendable, Equatable {
 /// and classifies each. It can't *run* the plugin, so it reports likely
 /// compatibility, not a guarantee.
 public enum PluginImporter {
-    /// World-API methods that are fully supported by the shim.
+    /// World-API methods the shim fully supports (real implementations, not
+    /// stubs). Covers output/comms, variables/identity, the GMCP bridge,
+    /// runtime + declarative automations and their group/name toggles, deferred
+    /// actions, clickable links, plugin reload, and module loading — i.e. the
+    /// surface the dinv/Search-and-Destroy work hardened.
     private static let supported: Set<String> = [
+        // Output + comms
         "Send", "SendNoEcho", "Execute", "Note", "Tell", "AnsiNote",
-        "ColourNote", "ColourTell",
+        "ColourNote", "ColourTell", "print",
+        // Variables / identity / GMCP
         "GetVariable", "SetVariable", "DeleteVariable", "GetPluginVariable",
-        "GetPluginID", "BroadcastPlugin", "IsConnected", "Send_GMCP_Packet", "Trim",
-        "print", "require", "dofile", "loadstring"
+        "GetPluginID", "GetPluginInfo", "BroadcastPlugin", "IsConnected",
+        "Send_GMCP_Packet", "Trim", "CallPlugin",
+        // Automations (runtime + group/name toggles — wired to the host engines)
+        "AddTriggerEx", "AddTrigger", "AddAlias", "DeleteTrigger",
+        "EnableTrigger", "EnableTimer", "EnableGroup", "EnableAlias",
+        "EnableTriggerGroup", "EnableTimerGroup",
+        // Deferred / lifecycle / links
+        "DoAfter", "DoAfterSpecial", "ReloadPlugin", "Hyperlink", "MakeHyperlink",
+        // Modules
+        "require", "dofile", "loadstring"
     ]
 
-    /// Methods that work but with limitations — message per method.
+    /// Methods that work but with a limitation a player might actually notice —
+    /// phrased in plain language (no internal jargon).
     private static let partial: [String: String] = [
-        "GetInfo": "common values only; some return stubs",
-        "GetPluginInfo": "plugin directory (infotype 20) only",
-        "CallPlugin": "forwards to exported functions; no per-plugin call routing",
-        "EnableTrigger": "currently a no-op (name-based enable pending)",
-        "EnableTimer": "currently a no-op (name-based enable pending)",
-        "EnableGroup": "currently a no-op (name-based enable pending)"
+        "AddTimer": "a repeating timer created in script fires only once "
+            + "(declarative `<timers>` and one-off waits/`DoAfter` work normally)"
     ]
 
-    /// Methods that are not implemented — message per method.
+    /// Methods that genuinely can't run, so the player should know — plain
+    /// language, no jargon.
     private static let unsupported: [String: String] = [
-        "AddTriggerEx": "programmatic triggers aren't supported (declarative `<triggers>` are)",
-        "AddAlias": "programmatic aliases aren't supported (declarative `<aliases>` are)",
-        "AddTimer": "programmatic timers aren't supported (declarative `<timers>` are)",
-        "SetCursor": "not supported",
-        "Hyperlink": "clickable hyperlinks aren't supported yet"
+        "luacom": "uses Windows-only automation (COM) that can't run on macOS"
     ]
 
     /// Helper libraries Proteles bundles for `require`.
@@ -97,49 +105,59 @@ public enum PluginImporter {
         let script = plugin.script
         var findings: [PluginImportReport.Finding] = []
 
-        // Supported methods used → one summary line.
-        let usedSupported = supported.filter { contains(script, word: $0) }.sorted()
+        // One reassuring line for the supported surface (no method list — that
+        // detail is noise for the player; what matters is what *won't* work).
+        let usedSupported = supported.filter { contains(script, word: $0) }
         if !usedSupported.isEmpty {
-            let list = usedSupported.joined(separator: ", ")
             findings.append(.init(
                 severity: .ok,
-                message: "Uses \(usedSupported.count) supported call(s): \(list)"
+                message: "Uses \(usedSupported.count) supported MUSHclient call(s)."
             ))
         }
 
-        // Partial / unsupported methods → one finding each.
+        // Genuine limitations a player would notice (one finding each).
         for method in partial.keys.sorted() where contains(script, word: method) {
-            findings.append(.init(severity: .warning, message: "`\(method)`: \(partial[method] ?? "")"))
+            findings.append(.init(severity: .warning, message: partial[method] ?? ""))
         }
         for method in unsupported.keys.sorted() where contains(script, word: method) {
-            findings.append(.init(severity: .error, message: "`\(method)`: \(unsupported[method] ?? "")"))
+            findings.append(.init(severity: .error, message: unsupported[method] ?? ""))
         }
 
-        // Miniwindows (any Window* call) and Windows COM.
+        // Miniwindows: a warning, not a blocker. The plugin's commands and
+        // automations still run; only its self-drawn on-screen panel is absent
+        // (Proteles doesn't host plugin windows yet).
         if script.range(of: "\\bWindow[A-Za-z]+\\b", options: .regularExpression) != nil {
             findings.append(.init(
-                severity: .error,
-                message: "Uses miniwindows (Window*) — not supported; needs a native port"
+                severity: .warning,
+                message: "Draws its own on-screen window, which Proteles doesn't show yet — "
+                    + "its commands still work, but you won't see that custom panel."
             ))
         }
-        if contains(script, word: "luacom") {
-            findings.append(.init(severity: .error, message: "Uses luacom (Windows COM) — not supported"))
+
+        // Companion files: a plugin that loads sibling Lua from its own folder
+        // needs the whole folder, which Import (a single-file copy) won't bring.
+        if loadsCompanionFiles(script) {
+            findings.append(.init(
+                severity: .warning,
+                message: "Loads companion files from its own folder. Add it with “Add Local…” "
+                    + "(pointing at its folder) so they're found — Import copies only the .xml."
+            ))
         }
 
-        // require'd libraries.
-        for library in requiredLibraries(in: script) {
+        // require'd libraries (luacom is reported above as unsupported).
+        for library in requiredLibraries(in: script) where library != "luacom" {
             if bundledLibraries.contains(library) {
-                findings.append(.init(severity: .ok, message: "Requires `\(library)` — bundled"))
+                findings.append(.init(severity: .ok, message: "Uses the bundled `\(library)` helper."))
             } else if stubbedLibraries.contains(library) {
                 findings.append(.init(
                     severity: .warning,
-                    message: "Requires `\(library)` — stubbed; the plugin loads, but its "
-                        + "network/background features won't run"
+                    message: "Its online-update / background-download features (`\(library)`) won't run; "
+                        + "everything else loads."
                 ))
             } else {
                 findings.append(.init(
                     severity: .warning,
-                    message: "Requires `\(library)` — not bundled; must be in the plugin's folder"
+                    message: "Needs a helper file (`\(library).lua`) alongside the plugin in its folder."
                 ))
             }
         }
@@ -160,6 +178,14 @@ public enum PluginImporter {
 
     private static func contains(_ source: String, word: String) -> Bool {
         let pattern = "\\b" + NSRegularExpression.escapedPattern(for: word) + "\\b"
+        return source.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// True if the script `dofile`s a file built from its own directory
+    /// (`dofile(GetPluginInfo(…, 20) .. "x.lua")` / `dofile(GetInfo(60) .. …)`)
+    /// — i.e. it has sibling modules that must travel with it.
+    private static func loadsCompanionFiles(_ source: String) -> Bool {
+        let pattern = #"dofile\s*\(\s*Get(PluginInfo|Info)\b"#
         return source.range(of: pattern, options: .regularExpression) != nil
     }
 
