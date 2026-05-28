@@ -47,16 +47,23 @@ public struct NotificationMatcher: Sendable, Equatable {
             return ProtelesNotification(title: "Tell from \(from)", body: message)
         }
 
-        if notifyOnMention,
-           let name = characterName?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
-           sender.caseInsensitiveCompare(name) != .orderedSame, // not your own line
-           Self.mentions(message, name: name)
-        {
+        if mentionFires(message: message, sender: sender, characterName: characterName) {
             let who = sender.isEmpty ? "You were mentioned" : "\(sender) mentioned you"
             let location = chatLine.channel.isEmpty ? "" : " on \(chatLine.channel)"
             return ProtelesNotification(title: who + location, body: message)
         }
         return nil
+    }
+
+    /// Whether a non-tell `message` mentions the player by name — only when
+    /// mentions are enabled, the player has a name, and it isn't a line they
+    /// sent themselves.
+    private func mentionFires(message: String, sender: String, characterName: String?) -> Bool {
+        guard notifyOnMention,
+              let name = characterName?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
+              sender.caseInsensitiveCompare(name) != .orderedSame
+        else { return false }
+        return Self.mentions(message, name: name)
     }
 
     /// Case-insensitive, whole-word containment of `name` in `text` (so "al"
