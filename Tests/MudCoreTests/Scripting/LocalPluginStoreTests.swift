@@ -83,6 +83,56 @@ struct LocalPluginStoreTests {
         #expect(LocalPluginStore.resolvePluginXML(at: txt) == nil)
     }
 
+    @Test("A plugin's dofile(GetPluginInfo(id,20)..file) resolves its sibling module")
+    func siblingModuleResolves() async throws {
+        // Reproduces the personal-plugin load failure: GetPluginInfo(id, 20) is
+        // the plugin's directory and MUSHclient returns it WITH a trailing
+        // separator, so `GetPluginInfo(id,20) .. "x_db.lua"` must land in the
+        // folder — not mangle into `<folder><file>` (`…/plugplug_db.lua`). The
+        // fix is SessionController.directoryPath (trailing slash); exercise it.
+        let folder = try tempDir().appendingPathComponent("plug", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data(#"Note("SIB_OK")"#.utf8).write(to: folder.appendingPathComponent("sib.lua"))
+        let xml = """
+        <muclient><plugin id="aaaaaaaaaaaaaaaaaaaaaaaa" name="SibTest"/>
+        <script><![CDATA[
+        dofile(GetPluginInfo(GetPluginID(), 20) .. "sib.lua")
+        ]]></script>
+        </muclient>
+        """
+
+        let engine = try ScriptEngine()
+        await engine.setModuleSearchPaths([folder.path])
+        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        let context = PluginContext(
+            pluginID: plugin.id,
+            pluginName: plugin.name,
+            pluginDirectory: SessionController.directoryPath(folder),
+            worldDirectory: folder.path,
+            appDirectory: folder.path
+        )
+        let effects = await engine.loadPlugin(plugin, context: context)
+
+        // Flatten any text-bearing effect (the shim routes Note → .echo).
+        let texts = effects.compactMap { effect -> String? in
+            switch effect {
+            case .echo(let text), .echoAard(let text), .echoAnsi(let text): text
+            case .note(let text, _, _): text
+            case .colourNote(let segments): segments.map(\.text).joined()
+            default: nil
+            }
+        }
+        #expect(
+            !texts.contains { $0.lowercased().contains("cannot open") },
+            "the sibling dofile must resolve (no open failure); got \(texts)"
+        )
+        #expect(
+            texts.contains { $0.contains("SIB_OK") },
+            "the dofile'd sibling must run — GetPluginInfo(id,20) must end in a separator"
+        )
+    }
+
     @Test("resolvePluginXML: a folder yields its .xml, preferring a name match")
     func resolveFolder() throws {
         let root = try tempDir()

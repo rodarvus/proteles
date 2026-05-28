@@ -35,7 +35,7 @@ public extension SessionController {
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
-                pluginDirectory: directory.path,
+                pluginDirectory: Self.directoryPath(directory),
                 worldDirectory: worldDir,
                 appDirectory: worldDir
             )
@@ -72,7 +72,7 @@ public extension SessionController {
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
-                pluginDirectory: xml.deletingLastPathComponent().path,
+                pluginDirectory: Self.directoryPath(xml.deletingLastPathComponent()),
                 worldDirectory: worldDir,
                 appDirectory: worldDir
             )
@@ -80,5 +80,15 @@ public extension SessionController {
         }
         await persistVariablesIfDirty()
         restartTimerLoop()
+    }
+
+    /// A directory path with a guaranteed trailing slash. MUSHclient's
+    /// `GetInfo(60)` / `GetPluginInfo(id, 20)` return the plugin directory with a
+    /// trailing separator, and plugins concatenate file names onto it
+    /// (`GetPluginInfo(id, 20) .. "x_db.lua"`); without the slash that mangles
+    /// into `…/<folder><file>` (e.g. `…/plugins/myplugmyplug_db.lua`).
+    static func directoryPath(_ url: URL) -> String {
+        let path = url.path
+        return path.hasSuffix("/") ? path : path + "/"
     }
 }
