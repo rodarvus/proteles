@@ -69,6 +69,7 @@ extension SessionController {
     /// packets from the native GMCP handler) so they take the same path.
     func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
+        latestGMCPByPackage[message.package.lowercased()] = message.json
         await gmcpState.apply(message)
         if let chatLine = await chatStore.ingest(message) { await notifyForChat(chatLine) }
         if let mapper {

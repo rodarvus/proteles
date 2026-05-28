@@ -85,11 +85,35 @@ public extension SessionController {
         return true
     }
 
-    /// Attach the live Search-and-Destroy host (already configured + loaded)
-    /// and start its timer loop. Call when a world loads.
-    func attachSearchAndDestroy(_ host: SearchAndDestroyHost) {
+    /// Attach the live Search-and-Destroy host (already configured + loaded),
+    /// replay the current GMCP snapshot so it's initialised (not stuck in an
+    /// "unknown state" until the next `char.status`), and start its timer loop.
+    /// Call when a world loads or when the host is re-created mid-session (a DB
+    /// import or plugin change re-runs the world load).
+    func attachSearchAndDestroy(_ host: SearchAndDestroyHost) async {
         searchAndDestroy = host
+        // The connect-time state handler only fires on a transition, so a host
+        // attached mid-session must be told it's connected + given the current
+        // GMCP snapshot, or its first xcp sits in an "unknown state".
+        if state == .connected {
+            await host.setConnected(true)
+            await replayGMCPSnapshot(to: host)
+        }
         restartTimerLoop()
+    }
+
+    /// Replay the latest per-package GMCP snapshot into `host` so it's
+    /// initialised immediately. Order: char.base/status first (tier/state),
+    /// then room.info (sets current_room), then the rest — so a freshly
+    /// re-attached host has a ready character + a known room right away.
+    func replayGMCPSnapshot(to host: SearchAndDestroyHost) async {
+        let priority = ["char.base", "char.status", "room.info"]
+        let ordered = priority.filter { latestGMCPByPackage[$0] != nil }
+            + latestGMCPByPackage.keys.filter { !priority.contains($0) }.sorted()
+        for package in ordered {
+            guard let json = latestGMCPByPackage[package] else { continue }
+            await applyScriptEffects(host.applyGMCP(package: package, json: json))
+        }
     }
 
     /// Print a system note to the main output (used by UI flows like database
