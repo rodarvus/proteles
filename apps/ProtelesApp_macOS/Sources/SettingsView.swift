@@ -221,6 +221,7 @@ private struct NotificationsSettingsView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("notifyOnTells") private var notifyOnTells = true
     @AppStorage("notifyOnMention") private var notifyOnMention = true
+    @AppStorage("notifyWhenFocused") private var notifyWhenFocused = false
 
     var body: some View {
         Form {
@@ -234,6 +235,14 @@ private struct NotificationsSettingsView: View {
             Section("Notify me about") {
                 Toggle("Tells", isOn: $notifyOnTells)
                 Toggle("My name mentioned on a channel", isOn: $notifyOnMention)
+            }
+            .disabled(!notificationsEnabled)
+            Section("Delivery") {
+                Toggle("Also notify while Proteles is in focus", isOn: $notifyWhenFocused)
+                Text("By default, notifications are suppressed while Proteles is the "
+                    + "active app. Turn this on to be notified even then.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .disabled(!notificationsEnabled)
         }
