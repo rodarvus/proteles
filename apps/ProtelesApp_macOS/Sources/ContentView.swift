@@ -46,6 +46,9 @@ struct ContentView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("notifyOnTells") private var notifyOnTells = true
     @AppStorage("notifyOnMention") private var notifyOnMention = true
+    /// Deliver notifications even while Proteles is frontmost (opt-out of
+    /// suppress-when-focused).
+    @AppStorage("notifyWhenFocused") private var notifyWhenFocused = false
     /// Selected colour theme (Appearance preference). Drives the output palette
     /// and the app-wide light/dark chrome appearance.
     @AppStorage("themeID") private var themeID = Theme.default.id
@@ -119,6 +122,9 @@ struct ContentView: View {
             }
             .task(id: "\(notifyOnTells)|\(notifyOnMention)") {
                 await session.setNotificationRules(tells: notifyOnTells, mention: notifyOnMention)
+            }
+            .task(id: notifyWhenFocused) {
+                notifications.notifyWhenFocused = notifyWhenFocused
             }
             .task {
                 for await note in session.notifications {

@@ -11,6 +11,10 @@ final class NotificationController {
     private let center = UNUserNotificationCenter.current()
     private var requestedAuthorization = false
 
+    /// When true, post notifications even while Proteles is frontmost (the user
+    /// opted out of suppress-when-focused). Synced from a preference.
+    var notifyWhenFocused = false
+
     /// Ask for notification permission once (on first enable). Safe to call
     /// repeatedly — the system only prompts the first time.
     func requestAuthorizationIfNeeded() {
@@ -21,7 +25,7 @@ final class NotificationController {
 
     /// Post a notification, honouring suppress-when-focused.
     func post(_ note: ProtelesNotification) {
-        if note.suppressWhenFocused, NSApp.isActive { return }
+        if note.suppressWhenFocused, NSApp.isActive, !notifyWhenFocused { return }
         let content = UNMutableNotificationContent()
         content.title = note.title
         content.body = note.body
