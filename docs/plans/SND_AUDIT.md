@@ -105,6 +105,32 @@ Command surface (from `search-and-destroy/Search_and_Destroy.xml` + `lua/`):
   carried by the `xg_draw_window` bridge → "can't see the list of rooms in my
   targets". Need to map which displays publish vs. which are dropped.
 
+### Harness findings (proven offline — `SearchAndDestroyCampaignTests`)
+
+Drove the real `SearchAndDestroyHost` through a campaign scrape → `xcp 1`
+(`xcpNavigatesToTarget`). Results:
+- **Host-level command dispatch WORKS.** `expandCommand("xcp 1")` matches the
+  S&D alias, fires `xcp_arg`, and drives navigation — so the break is **not** at
+  the alias/dispatch layer (one SUSPECTED item cleared).
+- **Area-target navigation hinges on start-room resolution.** For an area
+  target with no `areaDefaultStartRooms` entry, `xcp 1` emits
+  `X-runto: No default start room is defined for area: <a>`, then
+  `SendNoEcho("areas 1 299 keywords <a>")` + schedules a continuation timer —
+  i.e. it asks the MUD for the area's rooms and waits for an `areas`-lookup
+  trigger to capture the reply and *continue* the goto. **This continuation
+  chain (areas-lookup → resolve room → `do_mapper_goto`) is the prime live
+  suspect for "dies after xcp 1"**: if the lookup trigger isn't enabled/doesn't
+  fire/doesn't resume, navigation stalls and follow-on commands wait on it.
+  (Live, areas in `areaDefaultStartRooms` skip this and go straight to
+  `mapper goto`; the break would bite areas not in that table, or the express/
+  mapper-movement path.)
+
+**Next harness step (to pin it):** simulate the `areas … keywords` MUD reply +
+assert S&D captures it and emits the follow-up `mapper goto` — and/or a
+session-level `InMemoryConnection` test driving `xcp 1` → simulated GMCP arrival
+→ assert the on-arrival action (`consider`/`qw`/`ht`) fires. A live transcript
+of the exact `xcp 1` → stuck sequence would pin it fastest.
+
 ## 4. Fix plan (functional + UI parity, prioritised)
 
 **P0 — Get a deterministic repro (no guessing).**
