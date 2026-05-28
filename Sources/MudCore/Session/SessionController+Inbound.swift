@@ -70,7 +70,7 @@ extension SessionController {
     func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
         await gmcpState.apply(message)
-        await chatStore.ingest(message)
+        if let chatLine = await chatStore.ingest(message) { await notifyForChat(chatLine) }
         if let mapper {
             for packet in await mapper.ingest(package: message.package, json: message.json) {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"

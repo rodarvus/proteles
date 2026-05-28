@@ -16,6 +16,8 @@ struct ContentView: View {
     let snd: SnDPanelModel
     /// In-game Help panel: receives captured help articles + drives navigation.
     let help: HelpPanelModel
+    /// Posts session notifications (tells/mentions) as macOS notifications.
+    @State private var notifications = NotificationController()
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
@@ -40,6 +42,10 @@ struct ContentView: View {
     /// effect on the next connect.
     @AppStorage("sessionLogging") private var sessionLogging = false
     @AppStorage("sessionLogFormat") private var sessionLogFormat = "text"
+    /// Notifications (Notifications preferences); pushed to the session.
+    @AppStorage("notificationsEnabled") private var notificationsEnabled = false
+    @AppStorage("notifyOnTells") private var notifyOnTells = true
+    @AppStorage("notifyOnMention") private var notifyOnMention = true
     /// Selected colour theme (Appearance preference). Drives the output palette
     /// and the app-wide light/dark chrome appearance.
     @AppStorage("themeID") private var themeID = Theme.default.id
@@ -100,6 +106,18 @@ struct ContentView: View {
             }
             .task(id: sessionLogFormat) {
                 await session.setLogFormat(sessionLogFormat == "html" ? .html : .text)
+            }
+            .task(id: notificationsEnabled) {
+                await session.setNotificationsEnabled(notificationsEnabled)
+                if notificationsEnabled { notifications.requestAuthorizationIfNeeded() }
+            }
+            .task(id: "\(notifyOnTells)|\(notifyOnMention)") {
+                await session.setNotificationRules(tells: notifyOnTells, mention: notifyOnMention)
+            }
+            .task {
+                for await note in session.notifications {
+                    notifications.post(note)
+                }
             }
             .task(id: themeID) {
                 // Flip the whole app's chrome (panels, materials, gauges) to

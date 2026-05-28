@@ -79,6 +79,13 @@ public actor SessionController {
     public nonisolated let helpArticles: AsyncStream<HelpArticle>
     nonisolated let helpArticlesContinuation: AsyncStream<HelpArticle>.Continuation
 
+    /// User notifications (tells/mentions); the app subscribes + posts them.
+    public nonisolated let notifications: AsyncStream<ProtelesNotification>
+    nonisolated let notificationsContinuation: AsyncStream<ProtelesNotification>.Continuation
+    /// Notifications master toggle (off by default) + which built-in rules fire.
+    public var notificationsEnabled = false
+    public var notificationMatcher = NotificationMatcher()
+
     /// The current connection (`nil` between sessions); fresh per connect (the
     /// byte stream finishes on disconnect). ``MudConnection`` so tests inject one.
     var connection: (any MudConnection)?
@@ -281,11 +288,10 @@ public actor SessionController {
         )
         publishedModels = models
         publishedModelsContinuation = modelsContinuation
-        let (articles, articlesContinuation) = AsyncStream<HelpArticle>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
-        helpArticles = articles
-        helpArticlesContinuation = articlesContinuation
+        (helpArticles, helpArticlesContinuation) =
+            AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        (notifications, notificationsContinuation) =
+            AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL

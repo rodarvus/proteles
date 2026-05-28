@@ -16,6 +16,8 @@ struct SettingsView: View {
                 .tabItem { Label("Connection", systemImage: "network") }
             LoggingSettingsView()
                 .tabItem { Label("Logging", systemImage: "doc.text") }
+            NotificationsSettingsView()
+                .tabItem { Label("Notifications", systemImage: "bell") }
         }
         .frame(width: 480)
     }
@@ -209,6 +211,31 @@ private struct LoggingSettingsView: View {
                     NSWorkspace.shared.open(directory)
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// macOS notifications for tells / mentions.
+private struct NotificationsSettingsView: View {
+    @AppStorage("notificationsEnabled") private var notificationsEnabled = false
+    @AppStorage("notifyOnTells") private var notifyOnTells = true
+    @AppStorage("notifyOnMention") private var notifyOnMention = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Show notifications", isOn: $notificationsEnabled)
+                Text("Post a macOS notification for important events while Proteles is "
+                    + "in the background. You'll be asked for permission the first time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Notify me about") {
+                Toggle("Tells", isOn: $notifyOnTells)
+                Toggle("My name mentioned on a channel", isOn: $notifyOnMention)
+            }
+            .disabled(!notificationsEnabled)
         }
         .formStyle(.grouped)
     }
