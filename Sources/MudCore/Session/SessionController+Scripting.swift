@@ -379,47 +379,6 @@ public extension SessionController {
         }
     }
 
-    /// Discover and load every MUSHclient `.xml` plugin in `directory` into
-    /// the live engine: parse each, scope it with a ``PluginContext`` rooted
-    /// at the directory (so `require`/`dofile`/`GetInfo` resolve there), run
-    /// it (firing `OnPluginInstall`), and apply the resulting effects. Call
-    /// after ``loadScripts(_:)`` (which resets the engines) and before
-    /// connecting. No-op without a script engine or plugins.
-    func loadPlugins(fromDirectory directory: URL) async {
-        guard let scriptEngine else { return }
-        loadedPluginsDirectory = directory
-        let entries = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
-        )) ?? []
-        let xmlFiles = entries
-            .filter { $0.pathExtension.lowercased() == "xml" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        guard !xmlFiles.isEmpty else { return }
-
-        // Plugins resolve their own files (and dofile targets) here.
-        await scriptEngine.setModuleSearchPaths([directory.path])
-        for url in xmlFiles {
-            guard let data = try? Data(contentsOf: url),
-                  let plugin = try? MUSHclientPluginLoader.parse(data)
-            else { continue }
-            // GetInfo(66)/(67) → the world-data dir (trailing slash so
-            // `GetInfo(66)..WorldName()..".db"` resolves to the mapper DB).
-            let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
-            let context = PluginContext(
-                pluginID: plugin.id,
-                pluginName: plugin.name,
-                pluginDirectory: directory.path,
-                worldDirectory: worldDir,
-                appDirectory: worldDir
-            )
-            await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-        }
-        // OnPluginInstall may have set variables; persist them.
-        await persistVariablesIfDirty()
-        // Plugins may have registered timers.
-        restartTimerLoop()
-    }
-
     // MARK: - Timers
 
     /// Add a timer to the script engine and (re)start the driving loop so the
