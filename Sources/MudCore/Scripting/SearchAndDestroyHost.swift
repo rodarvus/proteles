@@ -343,11 +343,16 @@ public actor SearchAndDestroyHost {
 
     /// Register a trigger at runtime into the host's TriggerEngine (S&D's
     /// scan/consider matchers via `AddTriggerEx`). The script name becomes the
-    /// MUSHclient-style call `fn(name, matches[0], matches)`.
+    /// MUSHclient-style call `fn(name, matches[0], matches, styles)`. MUSHclient
+    /// passes a 4th `styles` array (the matched line's colour runs); S&D's
+    /// `consider_trigger` iterates it when overwrite-con is on (the default), so
+    /// omitting it crashes `ipairs(nil)` and kills the consider output. We don't
+    /// reconstruct style runs on the dynamic fire path, so pass an empty table —
+    /// the handler iterates zero runs and still renders its own coloured line.
     private func addDynamicTrigger(name: String, pattern: String, flags: Int, script: String) {
         let isRegex = flags & TriggerFlag.regularExpression != 0
         let call = script.isEmpty ? nil
-            : "\(script)(\(Self.luaString(name)), matches[0], matches)"
+            : "\(script)(\(Self.luaString(name)), matches[0], matches, {})"
         let trigger = Trigger(
             name: name,
             pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
