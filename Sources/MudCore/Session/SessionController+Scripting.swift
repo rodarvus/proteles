@@ -21,7 +21,7 @@ public extension SessionController {
         guard let scriptEngine else {
             // S&D matches the raw line on its own runtime; its scrape triggers
             // gag their own command output (cp info/check) from the window.
-            let sndGag = await applySearchAndDestroyLine(line.text)
+            let sndGag = await applySearchAndDestroyLine(line)
             if !sndGag, !omitBlank { await scrollbackStore.append(line) }
             return
         }
@@ -29,7 +29,7 @@ public extension SessionController {
         // S&D matches the raw line independently of the user's scripts (its own
         // runtime), so feed it the original text regardless of the user gag —
         // and let *its* gag suppress the line too (cp info/check scrape output).
-        let sndGag = await applySearchAndDestroyLine(line.text)
+        let sndGag = await applySearchAndDestroyLine(line)
         // Rich Exits: rewrite the tagged exits line into clickable directions,
         // and gag the tag-toggle confirmation. Runs after scripts/S&D so they
         // still see the raw line.
@@ -46,17 +46,17 @@ public extension SessionController {
     /// whether S&D gagged the line (`omit_from_output`). No-op (false) when no
     /// S&D host is attached.
     @discardableResult
-    private func applySearchAndDestroyLine(_ text: String) async -> Bool {
+    private func applySearchAndDestroyLine(_ line: Line) async -> Bool {
         guard let searchAndDestroy else { return false }
-        let result = await searchAndDestroy.process(text)
+        // `runs` = MUSHclient's 4th `styles` arg (S&D scan/consider re-render from it).
+        let result = await searchAndDestroy.process(line.text, runs: line.runs)
         await applyScriptEffects(result.effects)
         await rearmTimerLoopIfSnDScheduled()
         return result.gag
     }
 
-    /// If S&D scheduled a `DoAfter`/`DoAfterSpecial` one-shot during the last
-    /// dispatch, restart the timer loop so it fires (the loop exits when no
-    /// timers remain, so a deferral scheduled while idle wouldn't otherwise run).
+    /// If S&D scheduled a `DoAfter`/`DoAfterSpecial` one-shot, restart the timer
+    /// loop so it fires (the loop exits when no timers remain — an idle deferral).
     internal func rearmTimerLoopIfSnDScheduled() async {
         if await searchAndDestroy?.takeDidScheduleTimer() == true {
             restartTimerLoop()

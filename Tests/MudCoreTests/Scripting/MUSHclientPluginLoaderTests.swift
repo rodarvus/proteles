@@ -67,7 +67,7 @@ struct MUSHclientPluginLoaderTests {
         #expect(trigger.name == "OnTell")
         // The 4th arg is MUSHclient's `styles` (empty — we don't reconstruct
         // colour runs on the trigger-fire path); extra args are harmless.
-        #expect(trigger.script == #"HandleTell("OnTell", matches[0], matches, {})"#)
+        #expect(trigger.script == #"HandleTell("OnTell", matches[0], matches, styles or {})"#)
         #expect(trigger.sequence == 50)
     }
 
@@ -89,7 +89,7 @@ struct MUSHclientPluginLoaderTests {
         let trigger = try #require(plugin.triggers.first)
         #expect(trigger.sendText == nil) // nothing goes to the world
         let script = try #require(trigger.script)
-        #expect(script.contains(#"cp_check_line("trg_cp_check_line", matches[0], matches, {})"#))
+        #expect(script.contains(#"cp_check_line("trg_cp_check_line", matches[0], matches, styles or {})"#))
         #expect(script.contains(#"EnableTrigger("trg_cp_check_end", true)"#))
     }
 
@@ -106,7 +106,7 @@ struct MUSHclientPluginLoaderTests {
         let plugin = try MUSHclientPluginLoader.parse(xml: xml)
         let trigger = try #require(plugin.triggers.first)
         #expect(trigger.sendText == "north") // body → world
-        #expect(trigger.script == #"onGo("t", matches[0], matches, {})"#)
+        #expect(trigger.script == #"onGo("t", matches[0], matches, styles or {})"#)
     }
 
     @Test("Wildcard, ignore_case, keep_evaluating, omit_from_output, group map")

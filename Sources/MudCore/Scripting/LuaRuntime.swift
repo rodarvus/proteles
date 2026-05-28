@@ -232,9 +232,11 @@ public actor LuaRuntime {
     public func runScript(
         _ script: String,
         matches captures: [String] = [],
-        named: [String: String] = [:]
+        named: [String: String] = [:],
+        styles: [ScriptStyleRun] = []
     ) throws -> [ScriptEffect] {
         setMatchGlobals(captures, named)
+        setStyleGlobal(styles)
         return try run(script)
     }
 
@@ -474,29 +476,6 @@ public actor LuaRuntime {
             }
         default: break
         }
-    }
-
-    /// Set the `matches` (0-based) + `named` globals from trigger captures.
-    /// Named captures also go on `matches` by name (MUSHclient's wildcards
-    /// table carries both, read as `wildcards.<name>`).
-    func setMatchGlobals(_ captures: [String], _ named: [String: String]) {
-        lua_createtable(state, Int32(captures.count), Int32(named.count))
-        for (index, value) in captures.enumerated() {
-            lua_pushstring(state, value)
-            lua_rawseti(state, -2, Int32(index))
-        }
-        for (key, value) in named {
-            lua_pushstring(state, value)
-            lua_setfield(state, -2, key)
-        }
-        clua_setglobal(state, "matches")
-
-        lua_createtable(state, 0, Int32(named.count))
-        for (key, value) in named {
-            lua_pushstring(state, value)
-            lua_setfield(state, -2, key)
-        }
-        clua_setglobal(state, "named")
     }
 
     // MARK: - Calling Lua from Swift (event bus / RPC)

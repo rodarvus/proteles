@@ -126,6 +126,38 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.evaluate("tostring(__scan_end_ran)") == "true", "the {/scan} end must fire")
     }
 
+    @Test("A matched line's colour runs reach the trigger's `styles` arg")
+    func styledRunsReachTriggerStyles() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // A trigger that re-renders the matched line from its 4th `styles` arg,
+        // exactly like S&D's scan/consider handlers (RGBColourToName(textcolour)).
+        _ = try await host.run("""
+        function on_styled(name, line, w, style)
+          for i, s in ipairs(style) do
+            ColourTell(RGBColourToName(s.textcolour), "", s.text)
+          end
+          print("")
+        end
+        AddTriggerEx("t_styled", "^a green mob$", "",
+                     trigger_flag.Enabled + trigger_flag.RegularExpression,
+                     -1, 0, "", "on_styled", sendto.script, 100)
+        """)
+        // Feed the line with a bright-green foreground run over the whole text.
+        let text = "a green mob"
+        let green = StyleAttributes(foreground: .brightNamed(.green))
+        let runs = [StyledRun(utf16Range: 0..<text.utf16.count, style: green)]
+        let effects = await host.process(text, runs: runs).effects
+        // xtermDefault bright green = RGB(0,255,0) → BGR int → "#00ff00".
+        #expect(
+            effects.contains { effect in
+                guard case .colourNote(let segs) = effect else { return false }
+                return segs.contains { $0.text == "a green mob" && $0.foreground == "#00ff00" }
+            },
+            "the trigger must receive the line's colour runs in `styles`; got \(effects)"
+        )
+    }
+
     @Test("Aliases match S&D commands and pass non-commands through")
     func aliasMatching() async throws {
         let host = try SearchAndDestroyHost()
