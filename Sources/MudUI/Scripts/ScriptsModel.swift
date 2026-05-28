@@ -94,6 +94,13 @@ public final class ScriptsModel {
         if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
             await session.loadPlugins(fromDirectory: pluginsDirectory)
         }
+        // Then this world's local plugins, referenced in place from the
+        // user's own disk (never copied here); modules resolve from their folder.
+        if let localURL = try? LocalPluginStore.defaultStoreURL(forProfile: id) {
+            let localStore = LocalPluginStore(url: localURL)
+            try? await localStore.load()
+            await session.loadLocalPlugins(localStore.plugins)
+        }
         // dinv (D-32): its per-character DB lives under the world-data dir (the
         // sqlite root). Armed here; loaded once the character is active (D-32).
         // The `aard_GMCP_handler` blocker is resolved (D-33); the [dinv-DBG]

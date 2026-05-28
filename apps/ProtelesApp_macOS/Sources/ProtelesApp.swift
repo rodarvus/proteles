@@ -279,6 +279,7 @@ struct ProtelesApp: App {
                         await scripts.load(forProfile: id)
                     }
                     await plugins.refreshNative()
+                    await plugins.refreshLocal()
                 }
         }
         .windowResizability(.contentSize)
