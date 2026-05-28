@@ -6,6 +6,7 @@ import SwiftUI
 /// running session immediately.
 struct TriggerEditorView: View {
     @Binding var trigger: Trigger
+    @State private var showOptions = false
 
     var body: some View {
         Form {
@@ -16,6 +17,14 @@ struct TriggerEditorView: View {
                 TextField("Pattern", text: patternText)
                     .font(.body.monospaced())
                 Toggle("Case sensitive", isOn: $trigger.caseSensitive)
+                if trigger.pattern.isInvalid(caseSensitive: trigger.caseSensitive) {
+                    Label(
+                        "This pattern won't compile — check the regex.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
             }
 
             Section("Action") {
@@ -25,13 +34,19 @@ struct TriggerEditorView: View {
                     .lineLimit(3...10)
             }
 
-            Section("Options") {
-                Toggle("Enabled", isOn: $trigger.enabled)
-                Toggle("Gag (hide the matched line)", isOn: $trigger.gag)
-                Toggle("Keep evaluating later triggers", isOn: $trigger.continueEvaluation)
-                Toggle("One-shot (remove after firing)", isOn: $trigger.oneShot)
-                TextField("Sequence", value: $trigger.sequence, format: .number.grouping(.never))
-                TextField("Group", text: $trigger.group.orEmpty())
+            Section("Test") {
+                PatternTestView(pattern: trigger.pattern, caseSensitive: trigger.caseSensitive)
+            }
+
+            Section {
+                DisclosureGroup("Options", isExpanded: $showOptions) {
+                    Toggle("Enabled", isOn: $trigger.enabled)
+                    Toggle("Gag (hide the matched line)", isOn: $trigger.gag)
+                    Toggle("Keep evaluating later triggers", isOn: $trigger.continueEvaluation)
+                    Toggle("One-shot (remove after firing)", isOn: $trigger.oneShot)
+                    TextField("Sequence", value: $trigger.sequence, format: .number.grouping(.never))
+                    TextField("Group", text: $trigger.group.orEmpty())
+                }
             }
         }
         .formStyle(.grouped)
