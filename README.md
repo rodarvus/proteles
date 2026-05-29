@@ -8,7 +8,9 @@ for the modern Mac — no Wine, no VM, no emulator.
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
 > their own windows), a **theme gallery**, **clickable room exits**, an in-game
 > **Help reader**, **session logging**, **notifications**, the **dinv inventory
-> manager**, and the Aardwolf plugin package ported natively. **MIT-licensed**,
+> manager**, the Aardwolf plugin package ported natively, and a **discoverable
+> plugin library** (add MUSHclient plugins from your Mac or a URL, all under
+> `~/Documents/Proteles/`). **MIT-licensed**,
 > no signed download yet — build from source (below). Design lives in
 > **[PLAN.md](PLAN.md)**.
 
@@ -64,15 +66,18 @@ for the modern Mac — no Wine, no VM, no emulator.
   per-world, applied live.
 - A real Lua 5.1 engine (`proteles.*`) with a live `gmcp` table + event bus.
 
-**Plugins**
-- Drop in a **MUSHclient `.xml` plugin** and it runs through the `mush.lua`
-  compatibility shim (per-plugin sandboxed environments). The **Plugins**
-  window (⇧⌘P) imports them with a plain-language compatibility report.
-- **Run your own plugins privately** — **Add Local…** points Proteles at a
-  plugin (a `.xml` or its folder) **on your own disk** and runs it *in place*,
-  resolving its companion `.lua` modules from its folder. Nothing is copied into
-  the app; only a per-world reference is stored, so personal plugins stay on
-  your machine.
+**Plugins — a discoverable library**
+- Add a **MUSHclient `.xml` plugin** from the **Plugins** window (⇧⌘P) —
+  **Add Plugin… ▸ From your Mac** (a `.xml`, its folder, or its loose files) or
+  **▸ From a URL** (a raw `.xml`, or a repo/zip) — with a plain-language
+  compatibility report before it goes in. It runs through the `mush.lua`
+  compatibility shim (per-plugin sandboxed environments).
+- Every plugin lives in its **own discoverable folder** under
+  **`~/Documents/Proteles/Plugins/<name>/`** — navigate to it, hand-edit it,
+  **Reveal in Finder**, **Update**/refresh from its source, or **Export** it as a
+  zip to share. Per-character databases/state sit beside it under `data/`; the
+  world-wide mapper + Search-and-Destroy databases live in
+  `~/Documents/Proteles/Databases/`.
 - The **dinv inventory manager** (~26k lines of Lua) runs end-to-end through the
   shim: `dinv build` identifies your whole inventory **including items inside
   containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
@@ -169,7 +174,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~928 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1007 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -180,7 +185,7 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-49). Phase-7 feature plans live in
+  the append-only decision log (D-01…D-62). Phase-7 feature plans live in
   **[docs/plans/](docs/plans/)**.
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
