@@ -23,15 +23,24 @@ struct SettingsView: View {
     }
 }
 
-/// Display behaviour.
+/// Display + input behaviour.
 private struct GeneralSettingsView: View {
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    @AppStorage("commandSpellCheck") private var commandSpellCheck = false
 
     var body: some View {
         Form {
             Section {
                 Toggle("Omit blank lines", isOn: $omitBlankLines)
                 Text("Hide completely empty lines from the game output.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Command Input") {
+                Toggle("Check spelling as you type", isOn: $commandSpellCheck)
+                Text("Show spell-check squiggles in the command line. Visual only — "
+                    + "auto-correct and smart quotes stay off so commands like "
+                    + "cast 'armor' are never altered.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

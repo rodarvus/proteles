@@ -49,6 +49,10 @@ struct ContentView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("notifyOnTells") private var notifyOnTells = true
     @AppStorage("notifyOnMention") private var notifyOnMention = true
+    /// Spell-check squiggles in the command input (General preference). Visual
+    /// only; auto-correct/smart-quotes stay off regardless (they'd mangle
+    /// commands). Default off — a command line squiggles a lot of game words.
+    @AppStorage("commandSpellCheck") private var commandSpellCheck = false
     /// Deliver notifications even while Proteles is frontmost (opt-out of
     /// suppress-when-focused).
     @AppStorage("notifyWhenFocused") private var notifyWhenFocused = false
@@ -222,7 +226,8 @@ struct ContentView: View {
                     Task { await session.fire(action) }
                     return true
                 },
-                vocabulary: { makeCompletionVocabulary() }
+                vocabulary: { makeCompletionVocabulary() },
+                spellChecking: commandSpellCheck
             )
             .overlay(alignment: .trailing) {
                 if navigationMode {
