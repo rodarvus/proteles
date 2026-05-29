@@ -8,7 +8,10 @@
         @Test("export zips the plugin dir, excluding data/")
         func excludesData() throws {
             let fm = FileManager.default
-            let root = fm.temporaryDirectory.appendingPathComponent("exp-\(UUID().uuidString)", isDirectory: true)
+            let root = fm.temporaryDirectory.appendingPathComponent(
+                "exp-\(UUID().uuidString)",
+                isDirectory: true
+            )
             let plugin = root.appendingPathComponent("MyPlugin", isDirectory: true)
             try fm.createDirectory(
                 at: plugin.appendingPathComponent("data/char", isDirectory: true),

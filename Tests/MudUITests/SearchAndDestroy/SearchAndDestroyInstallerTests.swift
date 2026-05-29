@@ -34,12 +34,11 @@
             #expect(fileManager.fileExists(atPath: install.appendingPathComponent("core.lua").path))
             #expect(fileManager.fileExists(atPath: install.appendingPathComponent("constants.lua").path))
 
-            // Pointing the asset accessor at the install dir reports installed.
-            let previous = SearchAndDestroyAssets.installDirectory
-            defer { SearchAndDestroyAssets.installDirectory = previous }
-            SearchAndDestroyAssets.installDirectory = install
-            #expect(SearchAndDestroyAssets.isInstalled)
-            #expect(SearchAndDestroyAssets.core == "-- core")
+            // Reading the asset accessor at the install dir reports installed.
+            // Use the `in:` accessors (not the shared global) so this stays
+            // hermetic under `--parallel`.
+            #expect(SearchAndDestroyAssets.isInstalled(in: install))
+            #expect(SearchAndDestroyAssets.core(in: install) == "-- core")
         }
     }
 #endif
