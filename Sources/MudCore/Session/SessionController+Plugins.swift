@@ -41,7 +41,7 @@ public extension SessionController {
             paths[plugin.id] = (code: directory, data: dataDir)
             // `GetInfo(66)` (world dir) AND `GetInfo(85)` (state files dir) point
             // at the plugin's own data dir, so a plugin that builds its DB/state
-            // path from either finds it there (e.g. the plugin's state path).
+            // path from either finds it there (e.g. a DB-backed plugin's state).
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,

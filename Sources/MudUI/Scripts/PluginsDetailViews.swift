@@ -288,7 +288,7 @@ struct ReportBody: View {
             }
 
             if report.findings.isEmpty {
-                Text("Nothing notable — uses no scripted world API.")
+                Text("Works as it does in MUSHclient — nothing to set up.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
@@ -316,25 +316,22 @@ struct VerdictBadge: View {
 
     private var text: String {
         switch verdict {
-        case .supported: "Fully supported"
-        case .worksWithCaveats: "Works with caveats"
-        case .unsupported: "Limited support"
+        case .ready: "Ready to use"
+        case .needsAttention: "Check setup"
         }
     }
 
     private var symbol: String {
         switch verdict {
-        case .supported: "checkmark.seal.fill"
-        case .worksWithCaveats: "exclamationmark.triangle.fill"
-        case .unsupported: "xmark.octagon.fill"
+        case .ready: "checkmark.seal.fill"
+        case .needsAttention: "exclamationmark.triangle.fill"
         }
     }
 
     private var tint: Color {
         switch verdict {
-        case .supported: .green
-        case .worksWithCaveats: .orange
-        case .unsupported: .red
+        case .ready: .green
+        case .needsAttention: .orange
         }
     }
 }
@@ -364,17 +361,15 @@ struct FindingRow: View {
 
     private var symbol: String {
         switch finding.severity {
-        case .ok: "checkmark.circle.fill"
+        case .info: "info.circle.fill"
         case .warning: "exclamationmark.triangle.fill"
-        case .error: "xmark.octagon.fill"
         }
     }
 
     private var tint: Color {
         switch finding.severity {
-        case .ok: .green
+        case .info: .secondary
         case .warning: .orange
-        case .error: .red
         }
     }
 }
