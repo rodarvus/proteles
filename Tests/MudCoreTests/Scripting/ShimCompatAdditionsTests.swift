@@ -13,6 +13,26 @@ struct ShimCompatAdditionsTests {
         return lua
     }
 
+    @Test("require returns an already-loaded stdlib library (string/math)")
+    func requireStdlib() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo(tostring(require("string") == string))
+        proteles.echo(tostring(require("math") == math))
+        """)
+        #expect(effects == [.echo("true"), .echo("true")])
+    }
+
+    @Test("Accelerator / AcceleratorTo are defined and return eOK")
+    func acceleratorStubs() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo(tostring(AcceleratorTo("Ctrl+P", "x", 12) == error_code.eOK))
+        proteles.echo(type(Accelerator))
+        """)
+        #expect(effects == [.echo("true"), .echo("function")])
+    }
+
     @Test("check() passes eOK through and errors on a non-eOK code")
     func checkGuard() async throws {
         let lua = try await shimmed()
