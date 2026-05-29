@@ -73,7 +73,8 @@ extension SessionController {
             pluginName: plugin.name,
             pluginDirectory: Self.directoryPath(paths.code),
             worldDirectory: dataDir,
-            appDirectory: dataDir
+            appDirectory: dataDir,
+            stateDirectory: dataDir
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         await persistVariablesIfDirty()

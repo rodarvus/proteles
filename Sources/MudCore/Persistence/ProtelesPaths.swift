@@ -56,17 +56,19 @@ public enum ProtelesPaths {
     }
 
     /// A plugin's **per-character** data directory,
-    /// `Plugins/<dirName>/data/<profile>/` (created) — where its SQLite DB +
+    /// `Plugins/<dirName>/data/<character>/` (created) — where its SQLite DB +
     /// saved state live (code is shared across characters; data is not).
+    /// `character` is a readable, filesystem-safe key (the character name) so the
+    /// path is navigable, not an opaque UUID.
     public static func pluginDataDirectory(
         named dirName: String,
-        profile: UUID,
+        character: String,
         fileManager: FileManager = .default
     ) throws -> URL {
         try ensure(
             pluginDirectory(named: dirName, fileManager: fileManager)
                 .appendingPathComponent("data", isDirectory: true)
-                .appendingPathComponent(profile.uuidString, isDirectory: true),
+                .appendingPathComponent(character, isDirectory: true),
             fileManager
         )
     }
