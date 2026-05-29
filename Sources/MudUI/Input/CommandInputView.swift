@@ -34,6 +34,7 @@ public struct CommandInputView: View {
     private let onSubmit: (String) -> Void
     private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)?
     private let vocabulary: (@MainActor () -> CompletionVocabulary)?
+    private let spellChecking: Bool
 
     /// - Parameters:
     ///   - onSubmit: called with the line when the user presses Enter.
@@ -43,27 +44,38 @@ public struct CommandInputView: View {
     ///   - vocabulary: called on demand for the current completion vocabulary
     ///     (live GMCP nouns + recent output words + verbs/aliases). `nil`
     ///     disables word completion (only history recall remains).
+    ///   - spellChecking: show red spell-check squiggles as you type (visual
+    ///     only; never alters text). Auto-correct / smart quotes / dashes are
+    ///     *always* disabled on the command line regardless — they'd silently
+    ///     mangle commands like `cast 'armor'`.
     public init(
         onSubmit: @escaping (String) -> Void,
         onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil,
-        vocabulary: (@MainActor () -> CompletionVocabulary)? = nil
+        vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
+        spellChecking: Bool = false
     ) {
         self.onSubmit = onSubmit
         self.onMacroKey = onMacroKey
         self.vocabulary = vocabulary
+        self.spellChecking = spellChecking
     }
 
     public var body: some View {
-        CommandField(onSubmit: onSubmit, onMacroKey: onMacroKey, vocabulary: vocabulary)
-            .frame(height: 20)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.background)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(.separator)
-                    .frame(height: 1)
-            }
+        CommandField(
+            onSubmit: onSubmit,
+            onMacroKey: onMacroKey,
+            vocabulary: vocabulary,
+            spellChecking: spellChecking
+        )
+        .frame(height: 20)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.background)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.separator)
+                .frame(height: 1)
+        }
     }
 }
 
@@ -74,6 +86,7 @@ public struct CommandInputView: View {
         let onSubmit: (String) -> Void
         let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
+        let spellChecking: Bool
 
         func makeCoordinator() -> Coordinator {
             Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
@@ -82,6 +95,7 @@ public struct CommandInputView: View {
         func makeNSView(context: Context) -> NSTextField {
             let field = AutoFocusTextField()
             field.onMacroKey = onMacroKey
+            field.spellChecking = spellChecking
             field.delegate = context.coordinator
             // Stable id so the output view can find + refocus the command field
             // when the user types after selecting text (always-focused input).
@@ -103,6 +117,10 @@ public struct CommandInputView: View {
             context.coordinator.onSubmit = onSubmit
             context.coordinator.vocabulary = vocabulary
             (nsView as? AutoFocusTextField)?.onMacroKey = onMacroKey
+            if let field = nsView as? AutoFocusTextField {
+                field.spellChecking = spellChecking
+                field.applyTextEditingPolicy() // re-apply if toggled while focused
+            }
         }
 
         @MainActor
@@ -280,6 +298,32 @@ public struct CommandInputView: View {
         /// Macro pre-filter: returns `true` if a bound macro consumed the key
         /// (so it's swallowed, not typed). See ``CommandInputView``.
         var onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+
+        /// Show spell-check squiggles as you type (visual only). Auto-correct
+        /// and smart substitutions are always off (see ``applyTextEditingPolicy``).
+        var spellChecking = false
+
+        /// Configure the (shared) field editor for a *command* line: never
+        /// auto-correct or smart-substitute (those silently rewrite commands —
+        /// e.g. smart quotes turn `cast 'armor'` into curly quotes the MUD
+        /// won't parse), and toggle continuous spell-checking per the setting.
+        /// Re-applied whenever we take focus or the setting changes, because the
+        /// window's field editor is shared and reused across fields.
+        func applyTextEditingPolicy() {
+            guard let editor = currentEditor() as? NSTextView else { return }
+            editor.isAutomaticQuoteSubstitutionEnabled = false
+            editor.isAutomaticDashSubstitutionEnabled = false
+            editor.isAutomaticTextReplacementEnabled = false
+            editor.isAutomaticSpellingCorrectionEnabled = false
+            editor.isGrammarCheckingEnabled = false
+            editor.isContinuousSpellCheckingEnabled = spellChecking
+        }
+
+        override func becomeFirstResponder() -> Bool {
+            let became = super.becomeFirstResponder()
+            if became { applyTextEditingPolicy() }
+            return became
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
