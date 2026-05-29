@@ -420,6 +420,7 @@ struct ContentView: View {
         }
 
         if let active = worlds.activeProfile, active.autoconnect {
+            ProtelesApp.logContext.worldName = active.name
             await scripts.load(forProfile: active.id)
             try? await session.connect(
                 to: active.endpoint,
