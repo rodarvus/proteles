@@ -37,6 +37,11 @@ public final class ScriptsModel {
     /// (main-actor, value type) so the command field's key monitor can match
     /// a chord inline; the session has no macro engine of its own.
     private var macroEngine = MacroEngine()
+    /// Accelerators registered by plugins (`Accelerator`/`AcceleratorTo`) —
+    /// transient (never persisted), re-registered when plugins load. Kept apart
+    /// from the user's stored macros so a user-macro edit doesn't drop them; both
+    /// are merged into ``macroEngine`` by ``syncMacroEngine()``.
+    private var pluginMacros: [Macro] = []
 
     public init(session: SessionController) {
         self.session = session
@@ -56,6 +61,11 @@ public final class ScriptsModel {
         try? await store.load()
         self.store = store
         profileID = id
+        pluginMacros = [] // a new world reload re-registers plugin accelerators
+        // Plugin Accelerator/AcceleratorTo keybinds register into our MacroEngine.
+        await session.scriptEngine?.setAcceleratorRegistrar { [weak self] macro in
+            Task { @MainActor in self?.addPluginMacro(macro) }
+        }
         scriptScope = await store.scope
         await seedDefaultMacrosIfNeeded(store: store, profileID: id)
         await refresh()
@@ -341,7 +351,7 @@ public final class ScriptsModel {
                 guard let self else { return }
                 if let index = macros.firstIndex(where: { $0.id == id }) {
                     macros[index] = newValue
-                    macroEngine.replaceAll(macros)
+                    syncMacroEngine()
                 }
                 Task { try? await self.store?.updateMacro(newValue) }
             }
@@ -381,6 +391,21 @@ public final class ScriptsModel {
         aliases = document.aliases
         timers = document.timers
         macros = document.macros
-        macroEngine.replaceAll(document.macros)
+        syncMacroEngine()
+    }
+
+    /// Rebuild the live macro lookup from the user's stored macros + the
+    /// transient plugin-registered accelerators.
+    private func syncMacroEngine() {
+        macroEngine.replaceAll(macros + pluginMacros)
+    }
+
+    /// Register a plugin's `Accelerator`/`AcceleratorTo` keybind into the live
+    /// engine (transient). Replaces any existing binding on the same chord, so
+    /// the last registration wins (matching MUSHclient's AcceleratorTo).
+    public func addPluginMacro(_ macro: Macro) {
+        pluginMacros.removeAll { $0.chord == macro.chord }
+        pluginMacros.append(macro)
+        syncMacroEngine()
     }
 }

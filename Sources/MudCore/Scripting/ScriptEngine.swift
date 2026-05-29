@@ -79,10 +79,9 @@ public actor ScriptEngine {
     }
 
     /// Atomically replace a trigger (remove + re-add in a single actor call).
-    /// The editor's live-apply must use this rather than separate
-    /// `removeTrigger`/`addTrigger` calls: two `await`s can interleave with
-    /// other in-flight edit tasks (actor reentrancy) and leave duplicate
-    /// registrations with the same id — the cause of a trigger firing N×.
+    /// Live-apply uses this, not separate `removeTrigger`/`addTrigger` calls:
+    /// two `await`s can interleave with other edit tasks (actor reentrancy) and
+    /// leave duplicate same-id registrations — a trigger firing N×.
     public func updateTrigger(_ trigger: Trigger) {
         triggers.remove(id: trigger.id)
         try? triggers.add(trigger)
@@ -251,11 +250,9 @@ public actor ScriptEngine {
         }
     }
 
-    /// Replace the entire automation set with `document`'s (e.g. when the
-    /// active world changes). Any runtime-only automations a script created
-    /// are cleared along with the old set. The Lua runtime's globals and
-    /// event handlers are left intact — only the trigger/alias/timer tables
-    /// reset. The host should restart its timer loop afterwards.
+    /// Replace the whole automation set with `document`'s (e.g. on world change);
+    /// runtime-only automations clear with the old set. Lua globals/handlers stay
+    /// intact — only the trigger/alias/timer tables reset; host restarts the loop.
     public func reload(_ document: ScriptDocument, now: Date = Date()) async {
         triggers = TriggerEngine()
         aliases = AliasEngine()
@@ -350,6 +347,11 @@ public actor ScriptEngine {
         await runtime.setDialogProvider(provider)
     }
 
+    /// Install the accelerator registrar (plugin keybinds → MacroEngine).
+    public func setAcceleratorRegistrar(_ registrar: (@Sendable (Macro) -> Void)?) async {
+        await runtime.setAcceleratorRegistrar(registrar)
+    }
+
     /// Register a helper library available to `require name`.
     public func registerModule(_ name: String, source: String) async {
         await runtime.registerModule(name, source: source)
@@ -439,12 +441,10 @@ public actor ScriptEngine {
             }
             if let script = firing.script {
                 let owner = automationOwners[firing.triggerID]
-                // Plugin triggers follow MUSHclient: %1/%0/%<name> in the script
-                // body are substituted with captures before it runs (dinv's
-                // dynamic triggers dispatch via `fn("%1","%2",…)`). Captures are
-                // Lua-string-escaped so a backslash/quote in the matched line
-                // (e.g. dinv's `{ \dinv … }` marker) can't break the body. User
-                // scripts (no owner) run verbatim so literal `%` isn't mangled.
+                // Plugin triggers follow MUSHclient: %1/%0/%<name> in the body
+                // are substituted with (Lua-string-escaped) captures before it
+                // runs, so a backslash/quote in the matched line can't break it;
+                // user scripts (no owner) run verbatim so literal `%` survives.
                 let body = owner == nil ? script : firing.match.expandForScript(script)
                 await disposition.effects.append(contentsOf: runOwnedScript(
                     body,

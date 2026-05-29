@@ -23,14 +23,38 @@ struct ShimCompatAdditionsTests {
         #expect(effects == [.echo("true"), .echo("true")])
     }
 
-    @Test("Accelerator / AcceleratorTo are defined and return eOK")
-    func acceleratorStubs() async throws {
+    @Test("Accelerator / AcceleratorTo register a MacroEngine binding via the registrar")
+    func acceleratorBridge() async throws {
         let lua = try await shimmed()
+        let box = MacroBox()
+        await lua.setAcceleratorRegistrar { box.append($0) }
         let effects = try await lua.run("""
-        proteles.echo(tostring(AcceleratorTo("Ctrl+P", "x", 12) == error_code.eOK))
-        proteles.echo(type(Accelerator))
+        proteles.echo(tostring(AcceleratorTo("Ctrl+P", "score", 12) == error_code.eOK))
+        Accelerator("Alt+F4", "quit")
         """)
-        #expect(effects == [.echo("true"), .echo("function")])
+        #expect(effects == [.echo("true")])
+        let macros = box.all
+        #expect(macros.count == 2)
+        // AcceleratorTo with sendto.script (12) → run `send` as Lua.
+        #expect(macros.first?.action == .script("score"))
+        #expect(macros.first?.chord.modifiers.contains(.control) == true)
+        // Accelerator (no sendto) → send as a command.
+        #expect(macros.last?.action == .command("quit"))
+        #expect(macros.last?.chord.isFunctionKey == true)
+    }
+
+    /// Thread-safe sink for the test's accelerator registrar (the host calls it
+    /// synchronously on the script executor).
+    final class MacroBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var macros: [Macro] = []
+        func append(_ macro: Macro) {
+            lock.withLock { macros.append(macro) }
+        }
+
+        var all: [Macro] {
+            lock.withLock { macros }
+        }
     }
 
     @Test("utils dialogs route through the injected provider and map results")
