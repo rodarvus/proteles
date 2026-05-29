@@ -4,83 +4,80 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-28)
+## Current status (2026-05-29)
 
 **Shipped `v0.2.3`** (native mapper, lsqlite3, Search-and-Destroy, dinv, tiled
 panel dock, MIT relicense + clean binary, iTerm2 theme gallery, first
 Preferences pass, app icon). Read **PLAN.md** for the full status table +
-decision log (D-01…D-58). **~982 tests, four gates green.**
+decision log (D-01…D-62). **~1007 tests, four gates green.**
 
-**Unreleased on `main` (post-`v0.2.3`, NOT yet in a cut release):**
-- UI-revamp finish (drag-to-redock, detachable windows, menu fixes); **Rich
-  Exits** (D-45); **Help panel** (D-46/D-52); **mapper colour fix** (D-47);
-  **shim wins** (D-48 — `addxml`, `CallPlugin`→native-chat bridge).
-- **Phase-7 features:** **Inventory Serials**, **Session Logging**,
-  **Notifications** (D-49); the **MacroEngine** (D-50); the **Scripts-editor UX
-  rework** (D-51).
-- **Search-and-Destroy fully live-verified (D-55/D-56):** xcp/go/nx/consider/scan
-  all work, scan/consider render in real colours. Root-caused via the harness —
-  the `select`-global clobber + the missing MUSHclient `styles` 4th trigger arg.
-- **Local-plugin install Phase 1 (D-57):** "Add Local…" runs a user's own
-  plugin from a local path **in place** (per-world reference, never copied).
-- **Plugin-compat hardening from live testing (D-58):** plugin-dir trailing
-  slash (sibling `dofile`s), a `world` global proxy, an honest "does it work?"
-  compatibility report, and **GMCP replay on S&D re-attach** (xcp no longer
-  stuck "unknown state" after a mid-session reload).
-- **~28 commits unpushed on `main`** — push only after a `git grep` privacy
-  sweep (see Privacy below); the user gates pushes.
+**Unreleased on `main` — preparing `v0.3.0`** (cut when the user gives the green
+flag; ~13 commits unpushed, push gated on a privacy sweep):
+- UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
+  **Help panel** (D-46/D-52); **mapper colour fix** (D-47); **shim wins** (D-48).
+- **Phase-7 features:** Inventory Serials, Session Logging, Notifications (D-49);
+  **MacroEngine** (D-50); **Scripts-editor UX rework** (D-51).
+- **Search-and-Destroy fully live-verified** (D-55/D-56).
+- **Empty-line / bare-Enter fix (D-60)** — a loaded catch-all alias was
+  swallowing it; an empty line now goes raw to the MUD, bypassing alias/mapper/
+  S&D expansion (MUSHclient parity).
+- **Plugin Library — Phases A/B/C (D-59 plan → D-61 shipped):** ONE unified
+  MUSHclient-plugin mechanism under **`~/Documents/Proteles/`**, replacing the old
+  "imported vs personal" split (and the D-57 local-plugin framing). One
+  self-contained, discoverable dir per plugin (`Plugins/<name>/`); **global** DBs
+  in `Databases/` (mapper `Aardwolf.db`, S&D `SnDdb.db`); per-character data in
+  `Plugins/<name>/data/<character>/`, keyed by the **readable character name**;
+  explicit-add registry; **Add Plugin…** (From your Mac / From a URL); per-row
+  enable / Reveal in Finder / Update / Remove / **Export** (zip to share); user
+  **scripts relocated** to `Scripts/` split by kind with a per-kind global toggle.
+- **Community-plugin shim hardening (D-62)** — a 12-plugin *load audit* (each
+  actually run through the shim, not eyeballed) closed: lenient XML (raw `<`/`>`
+  in attribute values, e.g. `(?<named>)` regexes), `GetPluginName`, `gmcp()`→`""`
+  for a missing path, a clean-room `telnet_options`, `check`, `SaveState`,
+  `CallPlugin gmcpval`, `dofile` Windows-backslash paths, a sandboxed `io`, and a
+  state path for imported plugins.
 
 ### NEXT SESSION — start here
 
-**Done since last session:** MacroEngine (D-50), Scripts-editor rework (D-51),
-S&D fully live-verified + colour parity (D-55/D-56), local-plugin install
-Phase 1 (D-57), plugin-compat hardening (D-58). **The current workstream is
-still Phase 7.** First, decide with the user where to go — then proceed. The
-candidates (plans in **`docs/plans/`**), roughly in priority order:
+**Done this session:** empty-line/bare-Enter fix (D-60); the **Plugin Library
+A/B/C** (D-59 plan → D-61) — the `~/Documents/Proteles` data home, unified import
+(Mac/URL), export, readable per-character data dirs, scripts split by kind + a
+per-kind global toggle; **community-plugin shim hardening** from a 12-plugin load
+audit (D-62); S&D asset/installer tests made hermetic. **Docs refreshed for a
+`v0.3.0` cut — cut the release only when the user gives the green flag**
+(`docs/NOTARIZATION.md` = the Phase-8 signing/notarization workflow).
 
-1. **OPEN BUG — "mapper loses its DB" (NO-GUESSING).** A live report after
-   reload churn. Not reproduced from code: the schema is `CREATE IF NOT EXISTS`
-   and a re-attached `Mapper` reloads the graph from the same on-disk DB, so the
-   DB shouldn't go empty. **Don't guess-fix.** When the user next hits it, get:
-   (a) do `mapper where`/`find` *also* return nothing (DB-level loss) or is only
-   the visual Map panel blank (display/binding)? (b) what precedes it —
-   reconnect / plugin load / DB import? plus the auto-written session transcript.
-   Likely related to the *full world reload* (`ScriptsModel.load`) that
-   re-attaches mapper + S&D on every plugin/DB op — that churn is what surfaced
-   the S&D re-attach bug (D-58); a lighter resync may be the real fix.
-2. **Personal-plugin install Phase 2** — the URL/network installer + consent
-   flow (`docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`). **Deferred for explicit
-   approval** (network + third-party-code consent). Phase 1 (local path) shipped.
-3. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md` (run-via-shim collection, then
-   a native Swift Charts panel reading its SQLite DB).
-4. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate UX with a real VI
-   player before shipping).
-5. **Remaining Preferences tabs** + the **phase-2 follow-ups**
+**Confirmed by the user (no longer pending live-verification):** Help panel,
+mapper colours, Inventory Serials, Session Logging, Notifications.
+
+**Awaiting the user's live check:** the whole **Plugin Library** (import from
+Mac/URL, export, the tree, scripts split + global toggle) and the **12 audited
+community plugins** (load-clean offline; runtime trigger/command behaviour is the
+user's live test).
+
+**Candidates after 0.3.0** (plans in `docs/plans/`; user picks):
+1. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md`.
+2. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate with a real VI player).
+3. **Remaining Preferences tabs** + **phase-2 follow-ups**
    (`docs/plans/PHASE2_FOLLOWUPS.md`): Inventory Serials → keyring/vault + colour
-   command; Logging → rotation/retention + per-world + input filtering;
-   Notifications phase-2 (task #16 — in-focus toggle + custom words/regex +
-   per-channel); the S&D-tests-hermetic quick win.
+   command; Logging rotation/retention + per-world + input filtering;
+   Notifications phase-2. (The old "local-plugin URL install Phase 2" is
+   **done** — it's the Library's "From a URL". The S&D-tests-hermetic win is **done**.)
 
 **Reference:** `docs/plans/MUDLET_GAP_ANALYSIS.md` ranks remaining Mudlet gaps;
-`docs/NOTARIZATION.md` covers the Phase-8 release/signing workflow.
+**`docs/KNOWN_ISSUES.md`** holds de-prioritised issues — currently the
+"mapper loses its DB after reload churn" report (NO-GUESSING; needs a repro +
+transcript; re-check against the new global `Databases/` path).
 
 ### ⚠️ Privacy (hard rule)
-The user has **personal/installed plugins** that must **NEVER** be named or even
+The user has **private/local plugins** that must **NEVER** be named or even
 acknowledged as existing in anything committed/pushed to GitHub (repo files,
-commit messages, docs). If documenting the capability, describe it generically
-("local plugins", "install plugins from a local path / arbitrary URL" — see
-`docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`). A leak happened once and was
-scrubbed from history via force-push; do not repeat it. Sweep before pushing:
-`git grep -i <names>` must be empty.
-
-### Live-verification backlog (user tests interactively)
-**Live-verified this session:** Search-and-Destroy end-to-end
-(xcp/go/nx/consider/scan, incl. colour parity); local-plugin "Add Local…"
-(multi-file plugins load in place). Committed + gate-green but still awaiting
-the user's live check: **Help panel**, **mapper colours** (reconnect first),
-**Inventory Serials**, **Session Logging**, **Notifications**.
-**OPEN live bug:** "mapper loses its DB after reload churn" — needs a repro +
-transcript before fixing (NO-GUESSING; see the NEXT SESSION block + D-58).
+commit messages, docs). The plugin mechanism is documented generically — the
+**Plugin Library** ("add a plugin from your Mac or a URL"; see
+`docs/plans/PLUGIN_LIBRARY_PLAN.md`) — and a user's actual plugin names never
+appear. A leak happened once and was scrubbed via force-push; do not repeat it.
+Sweep before pushing: `git grep -i <names>` **and**
+`git log -p origin/main..HEAD | grep -i <names>` must both be empty.
 
 ### Gotchas to remember
 - **600-line file budget** (swiftlint `file_length` warning → `--strict` error).
