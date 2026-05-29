@@ -163,6 +163,47 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Set a runtime trigger's group (MUSHclient `SetTriggerOption(.,"group",.)`),
     /// so `EnableTriggerGroup` can toggle it.
     case setTriggerGroup(name: String, group: String)
+    /// Perform an outbound HTTP(S) request for a plugin's `async` helper. The
+    /// host runs it off-actor (URLSession), then re-enters the script engine
+    /// with the response to fire the plugin's stored Lua callback (kept in the
+    /// runtime keyed by `request.id`). Allowed freely (MUSHclient parity).
+    case httpRequest(HTTPRequest)
+}
+
+/// An outbound HTTP request a plugin's `async` helper asked for (the network
+/// half of `doAsyncRemoteRequest`/`HEAD`/`GETFILE`). `id` keys the stored Lua
+/// callback in the ``LuaRuntime``; the host performs the request and re-enters
+/// the engine with the response.
+public struct HTTPRequest: Sendable, Equatable {
+    public enum Method: String, Sendable {
+        case get = "GET", post = "POST", head = "HEAD"
+    }
+
+    public let id: Int
+    public let url: String
+    public let method: Method
+    /// POST body, or nil for GET/HEAD.
+    public let body: String?
+    /// A GETFILE target path (the response body is written there, inside the
+    /// plugin sandbox), or nil for a normal request.
+    public let savePath: String?
+    public let timeout: Double
+
+    public init(
+        id: Int,
+        url: String,
+        method: Method,
+        body: String? = nil,
+        savePath: String? = nil,
+        timeout: Double
+    ) {
+        self.id = id
+        self.url = url
+        self.method = method
+        self.body = body
+        self.savePath = savePath
+        self.timeout = timeout
+    }
 }
 
 /// One coloured segment of a ``ScriptEffect/colourNote(_:)`` line. `text`

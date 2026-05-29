@@ -36,18 +36,17 @@ struct WaitModuleTests {
     </muclient>
     """
 
-    @Test("require \"async\" loads as an inert stub (plugin script doesn't abort)")
-    func asyncStubLoads() async throws {
-        // The autobypass case: a plugin that `require "async"` (HTTP helper we
-        // can't provide) must still load and define its alias function, with
-        // async.* calls becoming harmless no-ops — not abort the whole script
-        // and leave the alias undefined.
+    @Test("require \"async\" loads the native HTTP module (plugin script doesn't abort)")
+    func asyncModuleLoads() async throws {
+        // A plugin that `require "async"` loads and gets the native HTTP module:
+        // `async.doAsyncRemoteRequest` is a real function (the reference's public
+        // entry point), so the plugin's alias is defined and usable.
         let xml = """
         <muclient>
         <plugin id="com.test.asyncuser" name="AsyncUser"/>
         <script><![CDATA[
         require "async"
-        function go_alias() Send("loaded; async.request is " .. type(async.request)) end
+        function go_alias() Send("loaded; doAsyncRemoteRequest is " .. type(async.doAsyncRemoteRequest)) end
         ]]></script>
         <aliases><alias match="go" enabled="y" script="go_alias" send_to="12"/></aliases>
         </muclient>
@@ -56,9 +55,9 @@ struct WaitModuleTests {
         let engine = try ScriptEngine()
         await engine.loadPlugin(parsed)
         let effects = await engine.expandInput("go")
-        // The alias function exists (script didn't abort) and async.request is
-        // a callable no-op.
-        #expect(effects.contains(.send("loaded; async.request is function")))
+        // The alias function exists (script didn't abort) and the async module's
+        // public entry point is a real function.
+        #expect(effects.contains(.send("loaded; doAsyncRemoteRequest is function")))
     }
 
     @Test("require \"wait\" loads (no 'module not found')")

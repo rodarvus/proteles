@@ -61,7 +61,7 @@ public struct PluginImportReport: Sendable, Equatable {
 public enum PluginImporter {
     /// Helper libraries Proteles bundles for `require`/`dofile` (the single
     /// source of truth is the shim's registration — kept in sync here). `wait`,
-    /// `check` and the inert `async` stub are registered separately.
+    /// `check`, `async`, and the dependency-nag stubs are registered separately.
     private static var bundledLibraries: Set<String> {
         Set(LuaRuntime.standardHelpers.keys)
             .union(["wait", "check", "async", "checkplugin", "aard_requirements"])
@@ -94,13 +94,6 @@ public enum PluginImporter {
                 severity: .info,
                 message: "Uses a Windows-only feature (sharing data with other programs) that "
                     + "can't run on macOS — the rest of the plugin works."
-            ))
-        }
-        if requiredLibraries(in: script).contains("async") {
-            findings.append(.init(
-                severity: .info,
-                message: "Talks to the internet (the `async` helper), which Proteles doesn't "
-                    + "support yet — those parts won't work."
             ))
         }
 
@@ -136,8 +129,9 @@ public enum PluginImporter {
         var missing: Set<String> = []
 
         for name in requiredLibraries(in: script) {
-            // luacom/async are reported as info notes above, not missing files.
-            if name == "luacom" || name == "async" { continue }
+            // luacom gets a COM info note above; not a missing file. (`async` is
+            // bundled, so the next check already covers it.)
+            if name == "luacom" { continue }
             if standardLibraries.contains(name) || bundledLibraries.contains(name) { continue }
             if availableFiles.contains((name + ".lua").lowercased()) { continue }
             missing.insert(name + ".lua")
