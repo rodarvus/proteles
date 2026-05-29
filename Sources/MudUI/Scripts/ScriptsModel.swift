@@ -35,9 +35,6 @@ public final class ScriptsModel {
     /// (main-actor, value type) so the command field's key monitor can match
     /// a chord inline; the session has no macro engine of its own.
     private var macroEngine = MacroEngine()
-    /// The active world's data dir, kept so Search-and-Destroy can be (re)loaded
-    /// after a download-on-first-use install without reloading the whole world.
-    private var worldDataDir: URL?
 
     public init(session: SessionController) {
         self.session = session
@@ -70,50 +67,46 @@ public final class ScriptsModel {
         if let nativeURL = try? NativePluginStore.defaultStoreURL(forProfile: id) {
             await session.attachNativePluginStore(NativePluginStore(url: nativeURL))
         }
-        // The per-profile world-data dir: the lsqlite3 sandbox root + the
-        // GetInfo(66) plugins use to find the mapper DB / keep their own DBs.
-        // Attach it before loading the mapper + plugins.
-        let worldDataDir = try? MapperStore.worldDataDirectory(forProfile: id)
-        self.worldDataDir = worldDataDir
-        if let worldDataDir {
-            await session.attachWorldDataDirectory(worldDataDir.path)
+        // The lsqlite3 sandbox root spans the whole ~/Documents/Proteles tree, so
+        // each plugin can reach its own per-character data dir (and the global
+        // Databases/) while nothing outside is reachable. Attach before loading.
+        if let home = try? ProtelesPaths.home() {
+            await session.attachWorldDataDirectory(home.path)
         }
-        // Attach the per-world live map (GMCP feeds it once connected).
-        if let mapper = Self.makeMapper(forProfile: id) {
+        // Attach the live map, backed by the global Databases/Aardwolf.db.
+        if let mapper = Self.makeMapper() {
             await session.attachMapper(mapper)
         }
-        // Attach the native Search-and-Destroy host (if S&D is installed): its
-        // own sandboxed runtime + curated bindings, pointed at the world-data
-        // dir. Inert when S&D isn't installed (host.load throws); the user can
-        // install it on demand (see installSearchAndDestroy()).
-        if let worldDataDir {
-            await loadSearchAndDestroyHost(worldDataDir: worldDataDir)
-        }
+        // Attach the native Search-and-Destroy host (if installed): its own
+        // sandboxed runtime, pointed at the global Databases/ dir (its
+        // SnDdb.db). Inert when S&D isn't installed (host.load throws).
+        await loadSearchAndDestroyHost()
         // Then load this world's enabled library plugins (after the script reset
         // above, so their triggers/timers survive). Each lives in its own
-        // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59).
+        // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59), with
+        // its per-character data under <plugin>/data/<profile>/.
         if let libraryURL = try? PluginLibraryStore.defaultStoreURL() {
             let library = PluginLibraryStore(url: libraryURL)
             try? await library.load()
             let directories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
-            await session.loadPlugins(directories: directories)
+            await session.loadPlugins(directories: directories, profile: id)
         }
-        // dinv (D-32): its per-character DB lives under the world-data dir (the
-        // sqlite root). Armed here; loaded once the character is active (D-32).
-        // The `aard_GMCP_handler` blocker is resolved (D-33); the [dinv-DBG]
-        // trace stays installed until dinv is verified solid end-to-end.
-        if let worldDataDir {
-            await session.armBundledDinv(stateDirectory: worldDataDir.path)
+        // dinv (D-32): its per-character DB lives under Plugins/dinv/data/<profile>/.
+        // Armed here; loaded once the character is active.
+        if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", profile: id) {
+            await session.armBundledDinv(stateDirectory: dinvData.path)
         }
     }
 
     // MARK: - Search-and-Destroy (user-installed plugin)
 
-    /// Build, load, and attach the S&D host for `worldDataDir`. No-op-ish when
-    /// S&D isn't installed (load throws; the host just isn't attached).
-    private func loadSearchAndDestroyHost(worldDataDir: URL) async {
-        guard let host = try? SearchAndDestroyHost() else { return }
-        await host.configure(directory: worldDataDir.path)
+    /// Build, load, and attach the S&D host, pointed at the global Databases/
+    /// dir (where its SnDdb.db lives). No-op-ish when S&D isn't installed (load
+    /// throws; the host just isn't attached).
+    private func loadSearchAndDestroyHost() async {
+        guard let databases = try? ProtelesPaths.databasesDirectory(),
+              let host = try? SearchAndDestroyHost() else { return }
+        await host.configure(directory: databases.path)
         try? await host.load()
         await session.attachSearchAndDestroy(host)
     }
@@ -123,9 +116,7 @@ public final class ScriptsModel {
     public func installSearchAndDestroy() async throws {
         #if os(macOS)
             try await SearchAndDestroyInstaller.install()
-            if let worldDataDir {
-                await loadSearchAndDestroyHost(worldDataDir: worldDataDir)
-            }
+            await loadSearchAndDestroyHost()
         #endif
     }
 
@@ -345,10 +336,10 @@ public final class ScriptsModel {
     // MARK: - Private
 
     /// Open (or create) the per-world map store and load its graph. The DB
-    /// lives in the world-data dir as `<WorldName>.db` (migrating any legacy
-    /// `mapper/<id>.db`), so plugins find it at `GetInfo(66)..WorldName()..".db"`.
-    private static func makeMapper(forProfile id: UUID) -> Mapper? {
-        guard let url = try? MapperStore.worldDatabaseURL(forProfile: id, worldName: "Aardwolf"),
+    /// lives in the global `~/Documents/Proteles/Databases/Aardwolf.db` — one
+    /// map of Aardwolf shared across characters (D-59).
+    private static func makeMapper() -> Mapper? {
+        guard let url = try? ProtelesPaths.mapperDatabaseURL(),
               let store = try? MapperStore(url: url)
         else { return nil }
         return try? Mapper(store: store)

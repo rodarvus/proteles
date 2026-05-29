@@ -333,9 +333,10 @@ public extension SessionController {
         await scriptEngine.applyNativePluginEnabled(document.enabled)
     }
 
-    /// Attach the per-profile world-data directory: the lsqlite3 sandbox root
-    /// and `GetInfo(66)` for loaded plugins (so they find the mapper DB and
-    /// keep their own SQLite stores here). Call when a world loads.
+    /// Attach the lsqlite3 sandbox root (the `~/Documents/Proteles` tree), so
+    /// plugins can open SQLite files anywhere under it — their own per-character
+    /// data dirs and the global `Databases/` — but nothing outside. Call when a
+    /// world loads. (Per-plugin `GetInfo(66)` is set in the loader.)
     func attachWorldDataDirectory(_ path: String) async {
         worldDataDirectory = path
         await scriptEngine?.setSQLiteDirectory(path)

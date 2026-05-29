@@ -112,7 +112,9 @@ public actor SessionController {
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
-    var loadedPluginDirectories: [String: URL] = [:] // plugin id → its dir, for ReloadPlugin disk re-read
+    /// Plugin id → its code + per-character data directories, for ReloadPlugin
+    /// disk re-read and `GetInfo(66)` resolution.
+    var loadedPluginPaths: [String: (code: URL, data: URL)] = [:]
     /// Timestamped `.log` beside ``recorder``: local events the wire omits.
     var transcript: SessionTranscript?
     /// Per-world persistence for scoped script/plugin variables (write-through).
@@ -132,7 +134,7 @@ public actor SessionController {
     /// publishes is forwarded to ``publishedModels``.
     public internal(set) var searchAndDestroy: SearchAndDestroyHost?
 
-    /// Per-profile world-data dir (`GetInfo(66)` + lsqlite3 sandbox root).
+    /// The lsqlite3 sandbox root: the `~/Documents/Proteles` tree.
     var worldDataDirectory: String?
 
     /// Latest raw GMCP JSON per package (lowercased key), replayed on re-attach.

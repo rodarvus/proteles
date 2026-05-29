@@ -298,7 +298,7 @@ struct ContentView: View {
     /// Empty the active world's `SnDdb.db` (development/testing): confirm, then
     /// delete all areas/mobs/keywords/history so importing can be re-tested.
     private func resetSearchAndDestroyDatabase() {
-        guard let profileID = worlds.activeProfileID else {
+        guard worlds.activeProfileID != nil else {
             Task { await session.echoSystemNote("[S&D] Connect to a world first, then reset.") }
             return
         }
@@ -312,7 +312,7 @@ struct ContentView: View {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         Task {
             do {
-                let url = try SearchAndDestroyStore.defaultStoreURL(forProfile: profileID)
+                let url = try SearchAndDestroyStore.defaultStoreURL()
                 try SearchAndDestroyStore(url: url).empty()
                 await session.echoSystemNote("[S&D] Database reset to empty (testing).")
             } catch {
@@ -324,7 +324,7 @@ struct ContentView: View {
     /// Pick an existing `SnDdb.db` and incrementally merge it into the active
     /// profile's S&D database (adds areas/mobs/history we don't already have).
     private func importSearchAndDestroyDatabase() {
-        guard let profileID = worlds.activeProfileID else {
+        guard worlds.activeProfileID != nil else {
             Task { await session.echoSystemNote("[S&D] Connect to a world first, then import.") }
             return
         }
@@ -341,7 +341,7 @@ struct ContentView: View {
         Task {
             defer { if accessing { source.stopAccessingSecurityScopedResource() } }
             do {
-                let url = try SearchAndDestroyStore.defaultStoreURL(forProfile: profileID)
+                let url = try SearchAndDestroyStore.defaultStoreURL()
                 let store = try SearchAndDestroyStore(url: url)
                 let summary = try store.importIncremental(from: source)
                 await session.echoSystemNote(
