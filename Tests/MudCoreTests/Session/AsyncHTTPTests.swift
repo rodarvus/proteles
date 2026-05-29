@@ -1,0 +1,102 @@
+import Foundation
+@testable import MudCore
+import Testing
+
+/// The `async` HTTP helper end-to-end: a plugin's `doAsyncRemoteRequest`
+/// performs a request through an injected ``HTTPClient`` and the host re-enters
+/// the engine to fire the plugin's Lua callback — driving the real
+/// ``SessionController`` + ``LuaRuntime`` path (no live network).
+@Suite("async HTTP — request → callback", .serialized)
+struct AsyncHTTPTests {
+    /// A canned HTTP client; records requests, returns a fixed response.
+    final class StubHTTPClient: HTTPClient, @unchecked Sendable {
+        private let lock = NSLock()
+        private let response: HTTPResponse
+        private var seen: [HTTPRequest] = []
+
+        init(_ response: HTTPResponse) {
+            self.response = response
+        }
+
+        var requests: [HTTPRequest] {
+            lock.withLock { seen }
+        }
+
+        func perform(_ request: HTTPRequest) async -> HTTPResponse {
+            lock.withLock { seen.append(request) }
+            return response
+        }
+    }
+
+    /// Poll `condition` until true or the deadline — the HTTP completion fires
+    /// on a detached task, so the assertion must wait for it.
+    private func eventually(_ condition: @Sendable () async -> Bool) async -> Bool {
+        for _ in 0..<200 {
+            if await condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return await condition()
+    }
+
+    private func plugin(_ body: String) -> String {
+        """
+        <muclient>
+        <plugin id="cccccccccccccccccccccccc" name="Net"/>
+        <aliases><alias match="^go$" enabled="y" regexp="y" send_to="12" script="go"/></aliases>
+        <script><![CDATA[
+        require "async"
+        \(body)
+        ]]></script>
+        </muclient>
+        """
+    }
+
+    @Test("doAsyncRemoteRequest fires the callback with the response")
+    func requestFiresCallback() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: plugin("""
+        function go()
+          async.doAsyncRemoteRequest("https://example.com/x", function(retval, page, status)
+            Send("got:" .. tostring(page) .. ":" .. tostring(status))
+          end, "HTTPS", 5)
+        end
+        """)))
+        let conn = InMemoryConnection()
+        let client = StubHTTPClient(HTTPResponse(
+            retval: 1, page: "OK", status: 200, headers: "", fullStatus: "HTTP 200", timedOut: false
+        ))
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn }, httpClient: client)
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("go")
+
+        #expect(await eventually { conn.sentLines.contains("got:OK:200") })
+        #expect(client.requests.first?.method == .post ? false : true) // GET (no body)
+        await controller.disconnect()
+    }
+
+    @Test("A POST body is sent and a timeout routes to the timeout callback")
+    func postAndTimeout() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: plugin("""
+        function go()
+          async.doAsyncRemoteRequest("http://example.com/p", function() end, "HTTP", 1,
+            function(url) Send("timeout:" .. tostring(url)) end, "payload=1")
+        end
+        """)))
+        let conn = InMemoryConnection()
+        let client = StubHTTPClient(HTTPResponse(
+            retval: 0, page: "", status: 0, headers: "", fullStatus: "timed out", timedOut: true
+        ))
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn }, httpClient: client)
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("go")
+
+        #expect(await eventually { conn.sentLines.contains("timeout:http://example.com/p") })
+        // The request carried the POST body.
+        #expect(client.requests.first?.method == .post)
+        #expect(client.requests.first?.body == "payload=1")
+        await controller.disconnect()
+    }
+}

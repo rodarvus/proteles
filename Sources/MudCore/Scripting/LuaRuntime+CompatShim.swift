@@ -30,11 +30,11 @@ public extension LuaRuntime {
         registerModule("wait", source: MUSHHelperAssets.lua("wait") ?? "")
         registerModule("check", source: MUSHHelperAssets.lua("check") ?? "")
         // `async` is the Aardwolf HTTP/background-thread helper (LuaSocket +
-        // SSL + llthreads). Proteles has no network helper, so we register an
-        // inert stub: `require "async"` succeeds (a plugin's script loads and
-        // its non-network commands work) and any `async.*(...)` is a no-op.
-        // Real outbound HTTP is a deferred feature — docs/plans/ASYNC_HTTP_PLAN.md.
-        registerModule("async", source: Self.asyncStubSource)
+        // SSL + llthreads upstream). Proteles implements it natively over
+        // URLSession: `doAsyncRemoteRequest`/`HEAD`/`GETFILE` route to
+        // `proteles.__http`, the host performs the request and fires the
+        // callback (see `LuaRuntime+HTTP`). docs/plans/ASYNC_HTTP_PLAN.md.
+        registerModule("async", source: Self.asyncModuleSource)
         // `checkplugin` + `aard_requirements` are the Aardwolf package's
         // dependency-nag framework: a plugin `dofile`s `aard_requirements.lua`
         // (which `require`s `checkplugin` and calls `do_plugin_check_now`) to
@@ -46,11 +46,34 @@ public extension LuaRuntime {
         registerModule("aard_requirements", source: "-- Proteles no-op: see checkplugin stub.")
     }
 
-    /// Inert `async` module: every field is a no-op function, so plugins that
-    /// `require "async"` load and their network calls quietly do nothing.
-    internal nonisolated static let asyncStubSource = """
-    local function noop() return nil end
-    async = setmetatable({}, { __index = function() return noop end })
+    /// Native `async` module (clean-room) over `proteles.__http`. Exposes the
+    /// reference's `doAsyncRemoteRequest`/`HEAD`/`GETFILE` with the same
+    /// signatures, so plugins (e.g. a stat-sync that POSTs to a clan site) run
+    /// unmodified. A string callback is `loadstring`d to a function, as upstream
+    /// does. The host fires the callback with `(retval, page, status, headers,
+    /// full_status, url, body)`.
+    internal nonisolated static let asyncModuleSource = """
+    async = {}
+    local function as_func(cb)
+      if type(cb) == "string" then return loadstring(cb) end
+      return cb
+    end
+    local function protocol_for(url, p)
+      if p and p ~= "" then return p end
+      return tostring(url):lower():find("^https:") and "HTTPS" or "HTTP"
+    end
+    function async.doAsyncRemoteRequest(url, callback, protocol, timeout, on_timeout, body)
+      proteles.__http("request", tostring(url), protocol_for(url, protocol),
+        tonumber(timeout) or 30, body, as_func(callback), as_func(on_timeout))
+    end
+    function async.HEAD(url, callback, protocol, timeout, on_timeout)
+      proteles.__http("head", tostring(url), protocol_for(url, protocol),
+        tonumber(timeout) or 30, nil, as_func(callback), as_func(on_timeout))
+    end
+    function async.GETFILE(url, callback, protocol, file_name, timeout, on_timeout)
+      proteles.__http("getfile", tostring(url), protocol_for(url, protocol),
+        tonumber(timeout) or 30, file_name, as_func(callback), as_func(on_timeout))
+    end
     return async
     """
 

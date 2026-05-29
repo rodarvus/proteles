@@ -126,15 +126,8 @@ extension LuaRuntime {
     /// Route an effect-recording host call to the right recorder (mapper
     /// calls have a distinct shape; everything else is an inert output effect).
     nonisolated func recordEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
+        if recordSpecialCall(function, arguments) { return }
         switch function {
-        case .mapperCall: recordMapperCall(arguments)
-        case .chatCapture:
-            effects.append(.chatCapture(
-                text: Self.argString(arguments, 0),
-                channel: Self.argOptionalString(arguments, 1) ?? ""
-            ))
-        case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
-        case .accelerator: registerAccelerator(arguments)
         case .aardwolfTelnet:
             effects.append(.aardwolfTelnet(
                 option: Int(Self.argDouble(arguments, 0)),
@@ -149,13 +142,7 @@ extension LuaRuntime {
                 body: Self.argString(arguments, 1)
             ))
         case .addTrigger, .addAlias:
-            let name = Self.argString(arguments, 0)
-            let pattern = Self.argString(arguments, 1)
-            let flags = Int(Self.argDouble(arguments, 2))
-            let script = Self.argString(arguments, 3)
-            effects.append(function == .addAlias
-                ? .addAlias(name: name, pattern: pattern, flags: flags, script: script)
-                : .addTrigger(name: name, pattern: pattern, flags: flags, script: script))
+            effects.append(Self.addAutomationEffect(function, arguments))
         case .setTriggerGroup:
             effects.append(.setTriggerGroup(
                 name: Self.argString(arguments, 0),
@@ -163,6 +150,39 @@ extension LuaRuntime {
             ))
         default: recordOutputEffect(function, arguments)
         }
+    }
+
+    /// The non-automation "special" host calls (mapper/chat/publish bridges +
+    /// the method-dispatch accelerator/HTTP). Split out so ``recordEffect``
+    /// stays within the complexity budget. Returns whether it handled `function`.
+    private nonisolated func recordSpecialCall(_ function: HostFunction, _ arguments: [LuaValue]) -> Bool {
+        switch function {
+        case .mapperCall: recordMapperCall(arguments)
+        case .chatCapture:
+            effects.append(.chatCapture(
+                text: Self.argString(arguments, 0),
+                channel: Self.argOptionalString(arguments, 1) ?? ""
+            ))
+        case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .accelerator: registerAccelerator(arguments)
+        case .http: registerHTTPRequest(arguments)
+        default: return false
+        }
+        return true
+    }
+
+    /// Map an `AddTriggerEx`/`AddAlias` host call to its effect (extracted so
+    /// ``recordEffect`` stays within the complexity budget).
+    private nonisolated static func addAutomationEffect(
+        _ function: HostFunction, _ arguments: [LuaValue]
+    ) -> ScriptEffect {
+        let name = argString(arguments, 0)
+        let pattern = argString(arguments, 1)
+        let flags = Int(argDouble(arguments, 2))
+        let script = argString(arguments, 3)
+        return function == .addAlias
+            ? .addAlias(name: name, pattern: pattern, flags: flags, script: script)
+            : .addTrigger(name: name, pattern: pattern, flags: flags, script: script)
     }
 
     /// Map an `enable*(name, on)` host call to its effect (collapsed so

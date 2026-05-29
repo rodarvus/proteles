@@ -29,9 +29,9 @@ public actor ScriptEngine {
     var triggers = TriggerEngine()
     var aliases = AliasEngine()
     var timers = TimerEngine()
-    /// Name → id for runtime-registered (and declarative-plugin) automations,
-    /// so MUSHclient `EnableTrigger`/`DeleteTrigger`/`AddTriggerEx`-by-name and
-    /// `EnableTimer` resolve. Populated on plugin load and dynamic add.
+    /// Name → id for runtime/declarative automations, so MUSHclient
+    /// `EnableTrigger`/`DeleteTrigger`/`AddTriggerEx`-by-name + `EnableTimer`
+    /// resolve. Populated on plugin load + dynamic add.
     var triggerIDsByName: [String: UUID] = [:]
     var timerIDsByName: [String: UUID] = [:]
     var aliasIDsByName: [String: UUID] = [:]
@@ -78,10 +78,9 @@ public actor ScriptEngine {
         triggers.remove(id: id)
     }
 
-    /// Atomically replace a trigger (remove + re-add in a single actor call).
-    /// Live-apply uses this, not separate `removeTrigger`/`addTrigger` calls:
-    /// two `await`s can interleave with other edit tasks (actor reentrancy) and
-    /// leave duplicate same-id registrations — a trigger firing N×.
+    /// Atomically replace a trigger (remove + re-add in one actor call) — not
+    /// separate `removeTrigger`/`addTrigger`, whose two `await`s can interleave
+    /// with other edit tasks and leave duplicate same-id registrations.
     public func updateTrigger(_ trigger: Trigger) {
         triggers.remove(id: trigger.id)
         try? triggers.add(trigger)
@@ -265,11 +264,10 @@ public actor ScriptEngine {
 
     // MARK: - Plugins
 
-    /// Load a parsed MUSHclient plugin into the live engines: give it its own Lua
-    /// environment (so its globals don't collide), scope its variables + ambient
-    /// context, install the compat shim, run its `<script>` there, register its
-    /// triggers/aliases/timers (owner-tagged so they later run in the same env),
-    /// then invoke `OnPluginInstall`. Returns the install effects.
+    /// Load a parsed MUSHclient plugin: give it its own Lua environment, scope
+    /// its variables + context, install the compat shim, run its `<script>`,
+    /// register its (owner-tagged) triggers/aliases/timers, then invoke
+    /// `OnPluginInstall`. Returns the install effects.
     @discardableResult
     public func loadPlugin(
         _ plugin: MUSHclientPlugin,
@@ -335,9 +333,14 @@ public actor ScriptEngine {
         await runtime.callGlobal(name, arguments)
     }
 
+    /// Fire a plugin's stored `async` callback with the HTTP response.
+    public func completeHTTP(_ request: HTTPRequest, _ response: HTTPResponse) async -> [ScriptEffect] {
+        await runtime.completeHTTPRequest(request, response)
+    }
+
     /// Constrain `sqlite3.open` (the lsqlite3 binding) to `directory` — the
-    /// per-profile world-data dir where the mapper DB and plugins' own SQLite
-    /// stores live. `nil` re-closes file access.
+    /// per-profile world-data dir for the mapper DB + plugins' SQLite stores.
+    /// `nil` re-closes file access.
     public func setSQLiteDirectory(_ directory: String?) async {
         await runtime.setSQLiteDirectory(directory)
     }
@@ -369,10 +372,9 @@ public actor ScriptEngine {
 
     // MARK: - Input expansion
 
-    /// Expand a typed line through the aliases, returning the effects to
-    /// apply. If no alias matches, the line is sent verbatim. `.execute`
-    /// targets re-expand (depth-guarded); `.script` runs Lua; `.output`
-    /// echoes locally.
+    /// Expand a typed line through the aliases → effects. No match → sent
+    /// verbatim. `.execute` re-expands (depth-guarded); `.script` runs Lua;
+    /// `.output` echoes locally.
     public func expandInput(_ input: String) async -> [ScriptEffect] {
         await expandInput(input, depth: 0)
     }
@@ -481,9 +483,8 @@ public actor ScriptEngine {
     }
 
     /// Project a GMCP message into the live `proteles.gmcp` table, fire its
-    /// `gmcp.*` events, and — when MUSHclient plugins are loaded — synthesise
-    /// the GMCP-handler's `OnPluginBroadcast(1, handlerID, "GMCP", package)`
-    /// that plugins like `aard_prompt_fixer` wait on. Returns all effects.
+    /// `gmcp.*` events, and (with MUSHclient plugins loaded) synthesise the
+    /// handler's `OnPluginBroadcast(1, id, "GMCP", package)`. Returns effects.
     public func applyGMCP(package: String, json: String) async -> [ScriptEffect] {
         var effects = await runtime.applyGMCP(package: package, json: json)
         await effects.append(contentsOf: fireCallbackOnAll("OnPluginBroadcast", [
@@ -496,12 +497,11 @@ public actor ScriptEngine {
         return effects
     }
 
-    /// Offer a command about to be sent to the MUD to every loaded plugin's
-    /// `OnPluginSend(text)` (MUSHclient's send hook). Returns whether the send is
-    /// `blocked` (any plugin returned false) + the callbacks' effects. dinv's
-    /// `dbot.execute` relies on this: it sends a `DINV_BYPASS …`-prefixed line, and
-    /// `OnPluginSend` strips the prefix, re-sends the bare command, and returns
-    /// false to drop the prefixed one.
+    /// Offer a command about to be sent to every plugin's `OnPluginSend(text)`
+    /// (MUSHclient's send hook). Returns whether it's `blocked` (a plugin
+    /// returned false) + the callbacks' effects. dinv's `dbot.execute` relies on
+    /// this: it sends a `DINV_BYPASS …` line, and `OnPluginSend` strips the
+    /// prefix, re-sends the bare command, and returns false to drop the prefix.
     public func fireOnPluginSend(_ text: String) async -> (blocked: Bool, effects: [ScriptEffect]) {
         guard !suspended else { return (false, []) }
         var effects: [ScriptEffect] = []

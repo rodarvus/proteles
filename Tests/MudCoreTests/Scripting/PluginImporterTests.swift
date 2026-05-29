@@ -115,12 +115,12 @@ struct PluginImporterTests {
         #expect(r.findings.contains { $0.severity == .info && $0.message.contains("Windows-only") })
     }
 
-    @Test("async (network) is a soft note, not a missing file")
-    func asyncNote() throws {
+    @Test("async is supported (no caveat, no missing-file warning)")
+    func asyncSupported() throws {
+        // async now runs over URLSession, so it's just a bundled helper.
         let r = try report(#"local a = require "async""#)
         #expect(r.verdict == .ready)
-        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("internet") })
-        #expect(!r.findings.contains { $0.severity == .warning })
+        #expect(r.findings.isEmpty)
     }
 
     @Test("The dependency-nag (checkplugin / aard_requirements) is stubbed, not warned")

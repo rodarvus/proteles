@@ -51,13 +51,10 @@ public actor SessionController {
     /// Map window. Fed by the native ASCII-map plugin via `.updateMap`.
     public nonisolated let mapStore: MapStore
 
-    /// Durable, controller-lifetime stream of connection-state
-    /// transitions for the UI to observe.
-    ///
-    /// The underlying ``NetworkConnection`` is a *one-shot* object —
-    /// recreated per ``connect(to:autologin:)``, so its own state stream can't
-    /// be observed across reconnects; the controller re-publishes each
-    /// connection's transitions here as one stable app-session stream.
+    /// Durable, controller-lifetime stream of connection-state transitions for
+    /// the UI. The underlying ``NetworkConnection`` is *one-shot* (recreated per
+    /// ``connect(to:autologin:)``), so its own state stream can't be observed
+    /// across reconnects; the controller re-publishes each here as one stream.
     public nonisolated let connectionStates: AsyncStream<State>
     private let connectionStatesContinuation: AsyncStream<State>.Continuation
 
@@ -84,6 +81,8 @@ public actor SessionController {
 
     /// Factory for a fresh connection per session (real by default; tests override).
     let makeConnection: @Sendable () -> any MudConnection
+    /// Performs plugins' outbound `async` HTTP requests (injectable for tests).
+    let httpClient: any HTTPClient
 
     /// Mirror of the active connection's state, for synchronous reads.
     public private(set) var state: State = .disconnected
@@ -265,10 +264,12 @@ public actor SessionController {
         loggingEnabled: Bool = false,
         logFormat: SessionLogFormat = .text,
         logFileURL: @escaping @Sendable (SessionLogFormat) -> URL? = { _ in nil },
-        makeConnection: @escaping @Sendable () -> any MudConnection = { NetworkConnection() }
+        makeConnection: @escaping @Sendable () -> any MudConnection = { NetworkConnection() },
+        httpClient: any HTTPClient = URLSessionHTTPClient()
     ) {
         self.keepAliveInterval = keepAliveInterval
         self.makeConnection = makeConnection
+        self.httpClient = httpClient
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
         self.chatStore = chatStore
@@ -309,12 +310,10 @@ public actor SessionController {
         recorder != nil
     }
 
-    /// Start recording every inbound wire chunk to `url` (and open the paired
-    /// debug transcript). Any prior recording is closed first. Recordings
-    /// capture raw wire bytes (pre-decompression, pre-telnet-parse), so a
-    /// replay exercises the full protocol stack — including MCCP2. Best-effort:
-    /// write failures silence further recording rather than tear down the
-    /// session.
+    /// Start recording every inbound wire chunk to `url` (+ the paired debug
+    /// transcript); any prior recording is closed first. Captures raw wire bytes
+    /// (pre-decompression/telnet-parse), so a replay exercises the full stack
+    /// incl. MCCP2. Best-effort: write failures silence recording, not the session.
     public func startRecording(to url: URL) throws {
         recorder?.close()
         transcript?.close()

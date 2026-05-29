@@ -146,7 +146,7 @@ public actor LuaRuntime {
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet
         case readFile, writeFile
-        case dialog, accelerator
+        case dialog, accelerator, http
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -200,6 +200,11 @@ public actor LuaRuntime {
     private nonisolated(unsafe) var transientRefs: [Int32] = []
     /// Directory `sqlite3.open`/file helpers may touch; `nil` = closed.
     nonisolated(unsafe) var sqliteDirectory: String?
+
+    /// Pending async HTTP callbacks by request id (claimed refs, freed on
+    /// completion — see `LuaRuntime+HTTP`); `nextHTTPRequestID` keys them.
+    nonisolated(unsafe) var pendingHTTP: [Int: (callback: Int32?, onTimeout: Int32?)] = [:]
+    nonisolated(unsafe) var nextHTTPRequestID = 0
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before the runtime is usable —
@@ -322,9 +327,8 @@ public actor LuaRuntime {
     debug = { traceback = _debug.traceback }
     """
 
-    /// Run the sandbox chunk directly on a freshly-opened state. Static so
-    /// it's callable from the (nonisolated) initializer; it touches only
-    /// the passed pointer, not the actor's isolated surface.
+    /// Run the sandbox chunk directly on a freshly-opened state. Static so it's
+    /// callable from the (nonisolated) initializer; touches only the pointer.
     private static func applySandbox(to state: OpaquePointer) throws {
         if luaL_loadstring(state, sandboxScript) != 0 {
             throw LuaError.syntax(popMessage(state))
@@ -334,9 +338,8 @@ public actor LuaRuntime {
         }
     }
 
-    /// Pop the top-of-stack error object as a String (state-only; shared
-    /// by the initializer's sandbox path and the instance error path).
-    /// Module-internal so the compat-shim extension can reuse it.
+    /// Pop the top-of-stack error object as a String (state-only; shared by the
+    /// initializer's sandbox path + the instance error path; module-internal).
     static func popMessage(_ state: OpaquePointer) -> String {
         let message = clua_tostring(state, -1).map { String(cString: $0) } ?? "unknown Lua error"
         clua_pop(state, 1)
@@ -345,10 +348,8 @@ public actor LuaRuntime {
 
     // MARK: - proteles.* host API
 
-    /// Build the global `proteles` table, each entry a C closure carrying
-    /// this runtime (lightuserdata) and a function id as upvalues.
-    /// `nonisolated` so the initializer can call it; touches only `state`
-    /// and `self`'s pointer.
+    /// Build the global `proteles` table, each entry a C closure carrying this
+    /// runtime (lightuserdata) + a function id as upvalues. `nonisolated`.
     private nonisolated func installProtelesAPI() {
         lua_createtable(state, 0, 26)
         setHostFunction("send", .send)
@@ -366,6 +367,7 @@ public actor LuaRuntime {
         setHostFunction("writeFile", .writeFile)
         setHostFunction("dialog", .dialog)
         setHostFunction("accelerator", .accelerator)
+        setHostFunction("__http", .http)
         setHostFunction("call", .call)
         setHostFunction("getVar", .getVar)
         setHostFunction("setVar", .setVar)
@@ -415,15 +417,15 @@ public actor LuaRuntime {
     }
 
     /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*` function
-    /// is called from Lua; records the effect. `nonisolated` (reaching `effects`
-    /// via `nonisolated(unsafe)`) since it runs inside `lua_pcall` on the executor.
+    /// is called from Lua; records the effect. `nonisolated` since it runs inside
+    /// `lua_pcall` on the executor (reaching `effects` via `nonisolated(unsafe)`).
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin,
-             .aardwolfTelnet, .accelerator:
+             .aardwolfTelnet, .accelerator, .http:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -504,9 +506,9 @@ public actor LuaRuntime {
         transientRefs.append(ref)
     }
 
-    /// Mark a transient ref as owned (stored long-term), so it isn't freed
-    /// at run-end. Returns the same ref for convenience.
-    private nonisolated func claim(_ ref: Int32) -> Int32 {
+    /// Mark a transient ref as owned (stored long-term), so it isn't freed at
+    /// run-end. Returns the same ref. Pair with `luaL_unref` when done.
+    nonisolated func claim(_ ref: Int32) -> Int32 {
         transientRefs.removeAll { $0 == ref }
         return ref
     }

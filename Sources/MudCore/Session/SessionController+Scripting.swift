@@ -197,10 +197,9 @@ public extension SessionController {
         return parts
     }
 
-    /// Send a command to the MUD, first offering it to plugins' `OnPluginSend`
-    /// (MUSHclient's send hook). If a plugin blocks it, the raw send is
-    /// suppressed — the plugin handled it (dinv strips its `DINV_BYPASS` prefix
-    /// and re-sends the bare command). The hook's effects are applied,
+    /// Send a command, first offering it to plugins' `OnPluginSend` (MUSHclient's
+    /// send hook). A plugin blocking it suppresses the raw send — it handled it
+    /// (dinv strips its `DINV_BYPASS` prefix + re-sends). Hook effects applied,
     /// re-entrancy-guarded. No script engine → sends straight to the MUD.
     private func sendCommandThroughPlugins(_ command: String) async {
         // While OnPluginSend is processing, a send goes straight to the MUD
@@ -238,6 +237,8 @@ public extension SessionController {
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):
             publishedModelsContinuation.yield(json)
+        case .httpRequest(let request):
+            performHTTPRequest(request)
         default:
             await applyInboundControlEffect(effect)
         }
@@ -278,11 +279,10 @@ public extension SessionController {
     /// script engine or the bundled assets.
     ///
     /// **Armed, not loaded immediately:** dinv inits on the first `char.base`
-    /// broadcast it sees *while the character is active*, and only then opens
-    /// its DB and initializes its modules. If loaded at connect time, the
-    /// `char.base` broadcasts that arrive during login (state ≠ active) latch
-    /// its "GMCP initialized" flag and init never runs. So we record the state
-    /// dir and load on the first active `char.status` (see ``loadPendingDinv``).
+    /// broadcast it sees *while the character is active*. Loaded at connect time,
+    /// the `char.base` arriving during login (state ≠ active) would latch its
+    /// "GMCP initialized" flag and init never runs — so we record the state dir
+    /// and load on the first active `char.status` (see ``loadPendingDinv``).
     func armBundledDinv(stateDirectory: String) {
         pendingDinvStateDirectory = stateDirectory
     }
