@@ -1,8 +1,11 @@
-# Plan — `async` HTTP for plugins (post-0.3.0)
+# Plan — `async` HTTP for plugins
 
-**Status:** deferred to after `v0.3.0` (a *known limitation* of 0.3.0 — see
-`docs/KNOWN_ISSUES.md`). Gating decision is already made (below); the build is
-the only thing pending.
+**Status: SHIPPED** (D-67, post-`0.3.0` on `main`). Implemented over URLSession
+as designed below; full parity (`doAsyncRemoteRequest`/`HEAD`/`GETFILE`),
+outbound HTTP allowed freely (MUSHclient parity). Code:
+`Sources/MudCore/Networking/HTTPClient.swift`, `LuaRuntime+HTTP.swift`,
+`SessionController+HTTP.swift`, the clean-room `async` module in
+`LuaRuntime+CompatShim.swift`; tests in `AsyncHTTPTests`.
 
 ## What it is
 

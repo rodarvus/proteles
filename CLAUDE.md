@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-66). **1024 tests, four gates green.**
+decision log (D-01…D-68). **1045 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -40,8 +40,11 @@ What landed for `v0.3.0` (decision refs):
   stub + `async` deferral (D-64); `GetInfo(56)` → plugin folder (D-65);
   `SendSpecial` (D-66).**
 
-**Known limitation:** plugin outbound HTTP (`async`) is stubbed — deferred
-post-`0.3.0` (`docs/plans/ASYNC_HTTP_PLAN.md`, `docs/KNOWN_ISSUES.md`).
+**Post-`0.3.0` on `main` (unpushed):** word-level Tab autocomplete; a backlog
+batch (command-line spell-check + no-autocorrect, multi-line alias sends,
+logging retention/per-world, inventory-serials keyring/vault + colour — D-68);
+and **`async` HTTP for plugins over URLSession** (D-67) — the former known
+limitation is now resolved.
 
 ### NEXT SESSION — start here
 
