@@ -139,7 +139,7 @@ public extension SessionController {
         for effect in effects {
             switch effect {
             case .send(let command), .sendNoEcho(let command):
-                await sendCommandThroughPlugins(command)
+                await sendLines(command)
             case .execute(let command):
                 // MUSHclient's Execute: re-parse through the command pipeline
                 // (native mapper / aliases), not a raw send.
@@ -180,12 +180,28 @@ public extension SessionController {
         }
     }
 
+    /// Send `command` one line at a time — a multi-line alias expansion becomes
+    /// separate commands (MUSHclient's per-line Send), each offered to OnPluginSend.
+    private func sendLines(_ command: String) async {
+        for line in Self.splitSendLines(command) {
+            await sendCommandThroughPlugins(line)
+        }
+    }
+
+    /// Split a send into per-line commands. No newline → unchanged. With newlines
+    /// → each line, dropping one trailing empty (`"look\n"` → `look`).
+    nonisolated static func splitSendLines(_ text: String) -> [String] {
+        guard text.contains("\n") else { return [text] }
+        var parts = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if parts.last?.isEmpty == true { parts.removeLast() }
+        return parts
+    }
+
     /// Send a command to the MUD, first offering it to plugins' `OnPluginSend`
-    /// (MUSHclient's send hook). If any plugin blocks it (returns false), the
-    /// raw send is suppressed — the plugin handled it (dinv strips its
-    /// `DINV_BYPASS` prefix and re-sends the bare command). The hook's own
-    /// effects are applied, re-entrancy-guarded so a re-sending plugin can't
-    /// loop. With no script engine, sends straight to the MUD.
+    /// (MUSHclient's send hook). If a plugin blocks it, the raw send is
+    /// suppressed — the plugin handled it (dinv strips its `DINV_BYPASS` prefix
+    /// and re-sends the bare command). The hook's effects are applied,
+    /// re-entrancy-guarded. No script engine → sends straight to the MUD.
     private func sendCommandThroughPlugins(_ command: String) async {
         // While OnPluginSend is processing, a send goes straight to the MUD
         // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
