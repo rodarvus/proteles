@@ -10,17 +10,19 @@ import SwiftUI
 /// On macOS this is an `NSTextField`-backed field (``CommandField``) so it
 /// can intercept the keys SwiftUI's `TextField` swallows:
 ///
-///   - **Type-ahead.** As you type, the most-recently-used matching command
-///     from history is shown inline with its completed suffix selected, so
-///     a bare **Enter** accepts the whole line. Deleting never re-suggests.
-///     Communication/chat commands are never offered.
-///   - **Tab / Shift-Tab** cycle to the next/previous matching command.
+///   - **Tab / Shift-Tab → word completion.** Completes the *current word*
+///     (the token ending at the caret) from the live ``CompletionVocabulary``
+///     (room/group GMCP nouns, recent output words, command verbs/aliases),
+///     replacing just that word and keeping the rest of the line. The first
+///     Tab fills the best match; each further Tab cycles to the next, Shift-Tab
+///     the previous. Mirrors Mudlet's `TCommandLine` tab completion.
 ///   - **Up / Down** walk the command history (``CommandHistory``), with
-///     the partially-typed line preserved.
-///   - **Esc** dismisses the inline suggestion, restoring what you typed;
-///     **→ / End** accepts it in place so you can keep editing.
-///   - **Enter** submits (a bare Enter sends an empty line — MUDs use it
-///     to refresh prompts / page output).
+///     the partially-typed line preserved — applied only on the keypress,
+///     never while typing.
+///   - **Esc** cancels an in-progress completion cycle.
+///   - **Enter** submits **exactly what's in the box** — nothing is ever
+///     auto-completed or auto-accepted behind your back (a bare Enter sends an
+///     empty line; MUDs use it to refresh prompts / page output).
 ///
 /// Focus: the field grabs first-responder on appear and whenever its
 /// window becomes key (⌘-tabbing back, closing the Worlds window), matching
@@ -31,22 +33,28 @@ import SwiftUI
 public struct CommandInputView: View {
     private let onSubmit: (String) -> Void
     private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)?
+    private let vocabulary: (@MainActor () -> CompletionVocabulary)?
 
     /// - Parameters:
     ///   - onSubmit: called with the line when the user presses Enter.
     ///   - onMacroKey: given a key chord (and whether the input is empty),
     ///     return `true` to indicate a macro consumed the keypress (the key is
     ///     then swallowed, not typed). Used for keypad/chord navigation.
+    ///   - vocabulary: called on demand for the current completion vocabulary
+    ///     (live GMCP nouns + recent output words + verbs/aliases). `nil`
+    ///     disables word completion (only history recall remains).
     public init(
         onSubmit: @escaping (String) -> Void,
-        onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil
+        onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil,
+        vocabulary: (@MainActor () -> CompletionVocabulary)? = nil
     ) {
         self.onSubmit = onSubmit
         self.onMacroKey = onMacroKey
+        self.vocabulary = vocabulary
     }
 
     public var body: some View {
-        CommandField(onSubmit: onSubmit, onMacroKey: onMacroKey)
+        CommandField(onSubmit: onSubmit, onMacroKey: onMacroKey, vocabulary: vocabulary)
             .frame(height: 20)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -65,9 +73,10 @@ public struct CommandInputView: View {
     private struct CommandField: NSViewRepresentable {
         let onSubmit: (String) -> Void
         let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+        let vocabulary: (@MainActor () -> CompletionVocabulary)?
 
         func makeCoordinator() -> Coordinator {
-            Coordinator(onSubmit: onSubmit)
+            Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
         }
 
         func makeNSView(context: Context) -> NSTextField {
@@ -92,56 +101,43 @@ public struct CommandInputView: View {
 
         func updateNSView(_ nsView: NSTextField, context: Context) {
             context.coordinator.onSubmit = onSubmit
+            context.coordinator.vocabulary = vocabulary
             (nsView as? AutoFocusTextField)?.onMacroKey = onMacroKey
         }
 
         @MainActor
         final class Coordinator: NSObject, NSTextFieldDelegate {
             var onSubmit: (String) -> Void
+            var vocabulary: (@MainActor () -> CompletionVocabulary)?
             weak var field: NSTextField?
 
             private var history = CommandHistory()
 
-            /// The user-typed prefix the current inline suggestion is based
-            /// on (the text *before* the auto-completed, selected suffix).
-            private var typedPrefix = ""
-
-            /// Length of the typed text at the previous change, used to tell
-            /// an insertion (suggest) from a deletion (don't).
-            private var previousTypedLength = 0
-
-            /// LRU-ordered completion candidates for ``typedPrefix`` and the
-            /// one currently shown. Tab / Shift-Tab cycle through them.
+            /// Tab-completion cycle state: the full-line candidates for the
+            /// current word (each = the text before the word + a completion),
+            /// and the one currently shown. Built on the first Tab, cycled by
+            /// repeated Tab / Shift-Tab, and cleared by any other key.
             private var candidates: [String] = []
             private var candidateIndex = 0
-            private var suggesting = false
+            private var cycling = false
 
-            init(onSubmit: @escaping (String) -> Void) {
+            init(
+                onSubmit: @escaping (String) -> Void,
+                vocabulary: (@MainActor () -> CompletionVocabulary)?
+            ) {
                 self.onSubmit = onSubmit
+                self.vocabulary = vocabulary
             }
 
-            // MARK: - Typing → inline suggestion
+            // MARK: - Typing
 
-            /// As the user types, offer the most-recent matching command
-            /// inline with the completed suffix selected, so a bare Enter
-            /// accepts it. Deletions never trigger a suggestion (otherwise
-            /// Backspace would just re-expand).
+            /// Typing ends any Tab cycle and resets history navigation. We do
+            /// **not** auto-suggest inline as you type — Enter always sends
+            /// exactly what's in the box (no stale command fired by accident).
             func controlTextDidChange(_: Notification) {
                 history.resetNavigation()
-                clearSuggestion()
-
-                let full = currentText
-                let isInsertion = full.count > previousTypedLength
-                typedPrefix = full
-                previousTypedLength = full.count
-
-                guard isInsertion, !full.isEmpty, caretIsAtEnd else { return }
-                let matches = history.completions(for: full)
-                guard !matches.isEmpty else { return }
-                candidates = matches
-                candidateIndex = 0
-                suggesting = true
-                showCandidate()
+                cycling = false
+                candidates = []
             }
 
             func control(
@@ -154,34 +150,30 @@ public struct CommandInputView: View {
                     submit()
                     return true
                 case #selector(NSResponder.moveUp(_:)):
-                    revertSuggestion()
+                    endCycle()
                     if let text = history.recallPrevious(currentText: currentText) {
                         setText(text)
                     }
                     return true
                 case #selector(NSResponder.moveDown(_:)):
-                    revertSuggestion()
+                    endCycle()
                     if let text = history.recallNext() {
                         setText(text)
                     }
                     return true
                 case #selector(NSResponder.insertTab(_:)):
-                    cycleCandidate(forward: true)
+                    cycleCompletion(forward: true)
                     return true
                 case #selector(NSResponder.insertBacktab(_:)):
-                    cycleCandidate(forward: false)
+                    cycleCompletion(forward: false)
                     return true
                 case #selector(NSResponder.cancelOperation(_:)):
-                    return revertSuggestionIfActive()
-                case #selector(NSResponder.moveRight(_:)),
-                     #selector(NSResponder.moveToEndOfLine(_:)),
-                     #selector(NSResponder.moveToEndOfParagraph(_:)):
-                    // Accept the inline suggestion in place (caret to end)
-                    // without sending; keep typing-vs-deleting bookkeeping
-                    // honest by treating the whole line as "typed".
-                    acceptSuggestionInPlace()
-                    return false
+                    return endCycle()
                 default:
+                    // Any other editing/navigation key ends the cycle but is
+                    // otherwise handled normally by the field editor.
+                    cycling = false
+                    candidates = []
                     return false
                 }
             }
@@ -192,23 +184,21 @@ public struct CommandInputView: View {
                 let text = currentText
                 onSubmit(text)
                 history.record(text)
-                clearSuggestion()
-                typedPrefix = ""
-                previousTypedLength = 0
+                cycling = false
+                candidates = []
                 setText("")
             }
 
-            /// Tab / Shift-Tab: cycle to the next/previous completion for the
-            /// typed prefix. Starts a suggestion if none is showing yet.
-            private func cycleCandidate(forward: Bool) {
-                if !suggesting {
-                    let prefix = currentText
-                    let matches = history.completions(for: prefix)
-                    guard !matches.isEmpty else { return }
-                    typedPrefix = prefix
-                    candidates = matches
-                    candidateIndex = 0
-                    suggesting = true
+            /// Tab / Shift-Tab: complete the **current word** (the token ending
+            /// at the caret) from the live vocabulary, replacing just that word
+            /// and keeping the rest of the line. The first Tab fills the best
+            /// match; each further Tab cycles to the next (Shift-Tab, previous).
+            private func cycleCompletion(forward: Bool) {
+                if !cycling {
+                    guard let built = buildCandidates() else { return }
+                    candidates = built
+                    candidateIndex = forward ? 0 : built.count - 1
+                    cycling = true
                 } else {
                     guard !candidates.isEmpty else { return }
                     let count = candidates.count
@@ -216,34 +206,34 @@ public struct CommandInputView: View {
                         ? (candidateIndex + 1) % count
                         : (candidateIndex - 1 + count) % count
                 }
-                showCandidate()
+                setText(candidates[candidateIndex])
             }
 
-            private func revertSuggestionIfActive() -> Bool {
-                guard suggesting else { return false }
-                revertSuggestion()
-                return true
+            /// Full-line completion candidates for the word at the caret, or
+            /// `nil` if there's no word to complete (caret after a space, empty
+            /// line, no vocabulary, or no matches). Each candidate is the text
+            /// before the word + a completed word, so the rest of the line is
+            /// preserved.
+            private func buildCandidates() -> [String]? {
+                guard let vocabulary, caretIsAtEnd else { return nil }
+                let line = currentText
+                guard let (word, range) = InputCompletion.currentWord(in: line, caret: line.count)
+                else { return nil }
+                let isFirst = InputCompletion.isFirstWord(in: line, caret: line.count)
+                let words = vocabulary().completions(forWord: word, isFirstWord: isFirst)
+                guard !words.isEmpty else { return nil }
+                let before = String(line[..<range.lowerBound])
+                return words.map { before + $0 }
             }
 
-            /// Drop the suggestion and restore what the user actually typed.
-            private func revertSuggestion() {
-                guard suggesting else { return }
-                clearSuggestion()
-                setText(typedPrefix)
-            }
-
-            /// Keep the shown suggestion in the line as accepted text.
-            private func acceptSuggestionInPlace() {
-                guard suggesting else { return }
-                clearSuggestion()
-                typedPrefix = currentText
-                previousTypedLength = currentText.count
-            }
-
-            private func clearSuggestion() {
-                suggesting = false
+            /// End any Tab cycle, leaving the field text as-is. Returns whether
+            /// a cycle was active (so Esc can report it consumed the key).
+            @discardableResult
+            private func endCycle() -> Bool {
+                guard cycling else { return false }
+                cycling = false
                 candidates = []
-                candidateIndex = 0
+                return true
             }
 
             // MARK: - Field text
@@ -262,9 +252,9 @@ public struct CommandInputView: View {
                     && range.location == (currentText as NSString).length
             }
 
-            /// Replace the field text and put the caret at the end.
-            /// Programmatic edits don't fire `controlTextDidChange`, so this
-            /// won't clobber navigation/suggestion state.
+            /// Replace the field text and put the caret at the end. Programmatic
+            /// edits don't fire `controlTextDidChange`, so this won't clobber
+            /// cycle / navigation state.
             private func setText(_ text: String) {
                 let end = (text as NSString).length
                 if let editor {
@@ -273,23 +263,6 @@ public struct CommandInputView: View {
                 } else {
                     field?.stringValue = text
                 }
-                typedPrefix = text
-                previousTypedLength = text.count
-            }
-
-            /// Show ``candidates``[``candidateIndex``] with the suffix beyond
-            /// ``typedPrefix`` selected, so the next keystroke replaces it and
-            /// Enter accepts the whole line.
-            private func showCandidate() {
-                guard let editor, candidates.indices.contains(candidateIndex) else { return }
-                let text = candidates[candidateIndex]
-                editor.string = text
-                let prefixLength = (typedPrefix as NSString).length
-                let fullLength = (text as NSString).length
-                editor.selectedRange = NSRange(
-                    location: prefixLength,
-                    length: max(0, fullLength - prefixLength)
-                )
             }
         }
     }
