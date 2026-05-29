@@ -61,6 +61,11 @@ extension LuaRuntime {
                 channel: Self.argOptionalString(arguments, 1) ?? ""
             ))
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .aardwolfTelnet:
+            effects.append(.aardwolfTelnet(
+                option: Int(Self.argDouble(arguments, 0)),
+                on: Self.argBool(arguments, 1)
+            ))
         case .enableTrigger, .enableTimer, .enableAlias, .enableGroup:
             effects.append(Self.enableEffect(function, arguments))
         case .doAfter:
