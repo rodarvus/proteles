@@ -6,63 +6,79 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 
 ## Current status (2026-05-29)
 
-**Shipped `v0.2.3`** (native mapper, lsqlite3, Search-and-Destroy, dinv, tiled
-panel dock, MIT relicense + clean binary, iTerm2 theme gallery, first
-Preferences pass, app icon). Read **PLAN.md** for the full status table +
-decision log (D-01…D-62). **~1007 tests, four gates green.**
+**Shipped `v0.3.0`** (tagged + GitHub release, non-notarized build attached).
+Headline since `v0.2.3`: the **Plugin Library** (one discoverable
+`~/Documents/Proteles/` home; add from Mac/URL; export), **Phase-7 features**
+(Inventory Serials, Session Logging, Notifications, **MacroEngine**, Scripts-editor
+rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
+compatibility** (12-plugin load audit + an honest, quiet compatibility report),
+and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
+decision log (D-01…D-66). **1024 tests, four gates green.**
 
-**Unreleased on `main` — preparing `v0.3.0`** (cut when the user gives the green
-flag; ~13 commits unpushed, push gated on a privacy sweep):
+What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
   **Help panel** (D-46/D-52); **mapper colour fix** (D-47); **shim wins** (D-48).
 - **Phase-7 features:** Inventory Serials, Session Logging, Notifications (D-49);
   **MacroEngine** (D-50); **Scripts-editor UX rework** (D-51).
 - **Search-and-Destroy fully live-verified** (D-55/D-56).
 - **Empty-line / bare-Enter fix (D-60)** — a loaded catch-all alias was
-  swallowing it; an empty line now goes raw to the MUD, bypassing alias/mapper/
-  S&D expansion (MUSHclient parity).
-- **Plugin Library — Phases A/B/C (D-59 plan → D-61 shipped):** ONE unified
-  MUSHclient-plugin mechanism under **`~/Documents/Proteles/`**, replacing the old
-  "imported vs personal" split (and the D-57 personal-plugin framing). One
+  swallowing it; an empty line now goes raw to the MUD (MUSHclient parity).
+- **Plugin Library — Phases A/B/C (D-59 plan → D-61):** ONE unified
+  MUSHclient-plugin mechanism under **`~/Documents/Proteles/`**. One
   self-contained, discoverable dir per plugin (`Plugins/<name>/`); **global** DBs
   in `Databases/` (mapper `Aardwolf.db`, S&D `SnDdb.db`); per-character data in
   `Plugins/<name>/data/<character>/`, keyed by the **readable character name**;
   explicit-add registry; **Add Plugin…** (From your Mac / From a URL); per-row
-  enable / Reveal in Finder / Update / Remove / **Export** (zip to share); user
-  **scripts relocated** to `Scripts/` split by kind with a per-kind global toggle.
-- **Community-plugin shim hardening (D-62)** — a 12-plugin *load audit* (each
-  actually run through the shim, not eyeballed) closed: lenient XML (raw `<`/`>`
-  in attribute values, e.g. `(?<named>)` regexes), `GetPluginName`, `gmcp()`→`""`
-  for a missing path, a clean-room `telnet_options`, `check`, `SaveState`,
-  `CallPlugin gmcpval`, `dofile` Windows-backslash paths, a sandboxed `io`, and a
-  state path for imported plugins.
+  enable / Reveal in Finder / Update / Remove / **Export**; user **scripts
+  relocated** to `Scripts/` split by kind with a per-kind global toggle.
+- **Community-plugin shim hardening (D-62)** — a 12-plugin *load audit* closed:
+  lenient XML (raw `<`/`>` in attribute values), `GetPluginName`, `gmcp()`→`""`,
+  clean-room `telnet_options`, `check`, `SaveState`, `CallPlugin gmcpval`,
+  `dofile` Windows-backslash paths, a sandboxed `io`, imported-plugin state path.
+- **`Accelerator`/`AcceleratorTo` → MacroEngine bridge + clean-room `utils`
+  dialogs (D-63); compatibility-report honesty rework (D-64); dependency-nag
+  stub + `async` deferral (D-64); `GetInfo(56)` → plugin folder (D-65);
+  `SendSpecial` (D-66).**
+
+**Known limitation:** plugin outbound HTTP (`async`) is stubbed — deferred
+post-`0.3.0` (`docs/plans/ASYNC_HTTP_PLAN.md`, `docs/KNOWN_ISSUES.md`).
 
 ### NEXT SESSION — start here
 
-**Done this session:** empty-line/bare-Enter fix (D-60); the **Plugin Library
-A/B/C** (D-59 plan → D-61) — the `~/Documents/Proteles` data home, unified import
-(Mac/URL), export, readable per-character data dirs, scripts split by kind + a
-per-kind global toggle; **community-plugin shim hardening** from a 12-plugin load
-audit (D-62); the clean-room `utils` dialog family + the
-**`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
-**compatibility-report honesty rework** (folder-aware, two-state, quiet — no
-FUD) + **dependency-nag stub** (`checkplugin`/`aard_requirements`) (D-64); S&D
-asset/installer tests made hermetic. **Plugin outbound HTTP (`async`) is
-deferred post-0.3.0** as a known limitation (plan: `docs/plans/ASYNC_HTTP_PLAN.md`;
-decisions taken — full parity over `URLSession`, allow HTTP freely). **Docs
-refreshed for a `v0.3.0` cut — cut the release only when the user gives the
-green flag**
-(`docs/NOTARIZATION.md` = the Phase-8 signing/notarization workflow).
+**`v0.3.0` is cut and released** (git tag `v0.3.0` + GitHub release, non-notarized
+`Proteles-0.3.0.zip` attached; the privacy history-scrub was completed and pushed).
+Tail of the release work after the Library/shim run: the clean-room `utils`
+dialogs + **`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
+**compatibility-report honesty rework** + **dependency-nag stub** (D-64);
+**`GetInfo(56)` → the plugin's own folder** (D-65, for flat-file config like the
+gagger's gag list); **`SendSpecial`** (D-66). Live testing surfaced + resolved:
+**dinv showed empty** because its DB lives at the deeply-nested
+`GetInfo(85)/dinv-<id>/<GMCP-name>/dinv.db` and the user's rich MUSHclient DB
+wasn't at that exact path (schema is **identical** — same dinv code/migrations);
+copied it into place.
 
-**Confirmed by the user (no longer pending live-verification):** Help panel,
-mapper colours, Inventory Serials, Session Logging, Notifications.
+**Notarization deferred:** releases ship a non-notarized build (local dev
+identity) with the standard Gatekeeper note. `docs/NOTARIZATION.md` is the
+when-we-get-to-it Developer-ID workflow.
 
-**Awaiting the user's live check:** the whole **Plugin Library** (import from
-Mac/URL, export, the tree, scripts split + global toggle) and the **12 audited
-community plugins** (load-clean offline; runtime trigger/command behaviour is the
-user's live test).
+**Confirmed by the user:** Help panel, mapper colours, Inventory Serials, Session
+Logging, Notifications, the Plugin Library, and a broad swathe of community
+plugins (autobypass, mudbin, Orphean, Double Predictor via `SendSpecial`, …).
+
+**Open from live testing (not blocking 0.3.0):**
+- **Hadar_Spellups** spams `index nil` at login — `{affon}` affects arrive before
+  `slist hsp` is parsed (the list is empty); self-recovers once slist completes.
+  Prime suspect: we may deliver a mid-login `char.status` GMCP that triggers a
+  premature `slist`. Worth comparing GMCP-during-login delivery vs MUSHclient.
+- **Message gagger** errors if `messages_to_gag.txt` is absent (it never creates
+  it — faithful to MUSHclient); the user maintains it at the `GetInfo(56)` path
+  (`~/Documents/Proteles/Plugins/Aardwolf_Message_Gagger/`).
+- **Speedwalk** "Too many run errors" was downstream of the empty dinv DB (portal
+  data missing); re-check now the real DB is in place.
 
 **Candidates after 0.3.0** (plans in `docs/plans/`; user picks):
+0. **`async` HTTP** for plugins — `docs/plans/ASYNC_HTTP_PLAN.md` (decisions taken;
+   makes network plugins like lightRankStats actually work).
 1. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md`.
 2. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate with a real VI player).
 3. **Remaining Preferences tabs** + **phase-2 follow-ups**
