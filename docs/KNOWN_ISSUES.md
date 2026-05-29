@@ -30,18 +30,8 @@ to the global `~/Documents/Proteles/Databases/Aardwolf.db`. That path change may
 have altered or masked this; re-check whether it still reproduces against the
 new layout before investigating.
 
-## Plugin outbound HTTP (`async`) is stubbed (deferred to post-0.3.0)
+## Plugin outbound HTTP (`async`) — RESOLVED (D-67)
 
-**Status:** known limitation of `v0.3.0`, by decision. Plan + design are ready
-in `docs/plans/ASYNC_HTTP_PLAN.md`.
-
-Plugins that use the Aardwolf `async` helper (web APIs / file downloads) **load
-and run their local logic, but their network calls do nothing** — `require
-"async"` resolves to an inert stub. A plugin whose *core* feature is the network
-(e.g. a stat-sync that POSTs to a clan site) will appear to work but silently
-not sync. The compatibility report flags this with a soft, verdict-neutral note.
-
-Decisions already taken (so the future build is unblocked): **full API parity**
-(`doAsyncRemoteRequest`/`HEAD`/`GETFILE`) over `URLSession` (HTTPS works natively
-— independent of the telnet-TLS deferral, D-15), and **allow outbound HTTP(S)
-freely** (MUSHclient parity, trusted plugins). Review after 0.3.0.
+Implemented post-`0.3.0` over URLSession (full parity; outbound HTTP allowed
+freely). `require "async"` is now the real module — see
+`docs/plans/ASYNC_HTTP_PLAN.md`. No longer a limitation.
