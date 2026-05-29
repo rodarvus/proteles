@@ -92,9 +92,15 @@ public struct PluginContext: Sendable, Equatable {
         case 1: pluginName // GetPluginInfo: name
         case 19: version // GetPluginInfo: version
         case 2: worldName // world name
-        case 56, 66: appDirectory // app pathname / application directory
+        // GetInfo(56) ("application path name") maps to the plugin's OWN folder,
+        // not the per-character data dir — a Proteles divergence from MUSHclient
+        // (where 56 is the shared install root). This gives a plugin a stable,
+        // global-across-characters, hand-editable home for flat-file config it
+        // reads via `GetInfo(56) .. "x.txt"` (e.g. the message gagger's gag
+        // list). DB-backed plugins keep per-character storage via 66/85 below.
+        case 66: appDirectory // application directory (per-character data dir)
         case 58: logDirectory // log files directory
-        case 60, 64: pluginDirectory // plugin path / current directory
+        case 56, 60, 64: pluginDirectory // app path / plugin path / current dir
         case 67: worldDirectory // world file directory
         case 74: soundsDirectory // sounds directory
         case 85: stateDirectory // state files directory

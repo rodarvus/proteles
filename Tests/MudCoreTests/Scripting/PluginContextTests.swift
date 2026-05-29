@@ -19,8 +19,13 @@ struct PluginContextTests {
     @Test("Path and identity codes resolve to their directories")
     func pathCodes() {
         #expect(context.info(2) == .text("Aardwolf")) // world name
-        #expect(context.info(66) == .text("/app")) // app dir
+        #expect(context.info(66) == .text("/app")) // app dir (per-character data)
         #expect(context.info(60) == .text("/plugins/x")) // plugin dir
+        // GetInfo(56) maps to the plugin's OWN folder, not the data dir, so a
+        // plugin's `GetInfo(56) .. "x.txt"` config is global-per-plugin (see
+        // the message gagger). Split from 66 deliberately.
+        #expect(context.info(56) == .text("/plugins/x")) // plugin dir (not /app)
+        #expect(context.info(64) == .text("/plugins/x")) // current dir
         #expect(context.info(67) == .text("/worlds/aard")) // world dir
         #expect(context.info(74) == .text("/sounds")) // sounds
         #expect(context.info(85) == .text("/state")) // state
