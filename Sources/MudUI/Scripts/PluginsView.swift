@@ -121,6 +121,7 @@ public struct PluginsView: View {
                 report: report(for: plugin),
                 onReveal: { reveal(plugin) },
                 onUpdate: { update(plugin) },
+                onExport: { export(plugin) },
                 onRemove: { Task { await model.remove(pluginID: plugin.id) } }
             )
         } else {
@@ -227,6 +228,22 @@ public struct PluginsView: View {
     private func reveal(_ plugin: LibraryPluginRow) {
         #if os(macOS)
             NSWorkspace.shared.activateFileViewerSelecting([plugin.directory])
+        #endif
+    }
+
+    private func export(_ plugin: LibraryPluginRow) {
+        #if os(macOS)
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.zip]
+            panel.nameFieldStringValue = "\(plugin.directory.lastPathComponent).zip"
+            panel.message = "Export this plugin as a zip to share (its per-character data is excluded)."
+            panel.prompt = "Export"
+            guard panel.runModal() == .OK, let destination = panel.url else { return }
+            do {
+                try PluginExporter.export(pluginDirectory: plugin.directory, to: destination)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         #endif
     }
 

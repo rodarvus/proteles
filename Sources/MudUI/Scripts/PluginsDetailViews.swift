@@ -156,6 +156,7 @@ struct LibraryPluginDetail: View {
     let report: PluginImportReport?
     let onReveal: () -> Void
     let onUpdate: () -> Void
+    let onExport: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
@@ -175,6 +176,7 @@ struct LibraryPluginDetail: View {
                 HStack(spacing: 10) {
                     Button("Reveal in Finder", systemImage: "folder", action: onReveal)
                     Button(updateLabel, systemImage: "arrow.triangle.2.circlepath", action: onUpdate)
+                    Button("Export…", systemImage: "square.and.arrow.up", action: onExport)
                     Button("Remove", systemImage: "trash", role: .destructive, action: onRemove)
                 }
                 .buttonStyle(.bordered)
