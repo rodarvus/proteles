@@ -21,6 +21,9 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
+    /// Recent output lines (plain text), the word source for Tab completion.
+    /// A reference holder so appends don't trigger a view re-render.
+    @State private var recentLines = RecentLineBuffer()
     /// Drives the "Save Layout…" name prompt.
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
@@ -79,6 +82,12 @@ struct ContentView: View {
             .task {
                 for await snapshot in await session.gmcpState.subscribe() {
                     gmcp = snapshot
+                }
+            }
+            // Feed recent output lines to the Tab-completion word source.
+            .task {
+                for await line in await session.scrollbackStore.subscribe() {
+                    recentLines.append(line.text)
                 }
             }
             .task(id: omitBlankLines) {
@@ -212,7 +221,8 @@ struct ContentView: View {
                     }
                     Task { await session.fire(action) }
                     return true
-                }
+                },
+                vocabulary: { makeCompletionVocabulary() }
             )
             .overlay(alignment: .trailing) {
                 if navigationMode {
@@ -229,6 +239,39 @@ struct ContentView: View {
             GaugeBarView(state: connectionState, gmcp: gmcp)
         }
     }
+
+    /// Build the current Tab-completion vocabulary: live GMCP nouns (room name
+    /// words + group member names) as context, recent output words, and a
+    /// verb set (movement/common commands + channel names) for the first word.
+    /// Called on Tab, so harvesting recent lines here is cheap.
+    private func makeCompletionVocabulary() -> CompletionVocabulary {
+        var context: [String] = []
+        if let members = gmcp.group?.members { context += members.map(\.name) }
+        if let roomName = gmcp.room?.name {
+            context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
+        }
+        return CompletionVocabulary(
+            contextWords: context,
+            recentWords: InputCompletion.harvestWords(from: recentLines.snapshot),
+            verbs: Self.completionVerbs
+        )
+    }
+
+    /// First-word completion verbs: common Aardwolf commands + the channel
+    /// names (so `gos`→`gossip`). Aliases can join this later.
+    private static let completionVerbs: [String] = {
+        let commands = [
+            "north", "south", "east", "west", "northeast", "northwest",
+            "southeast", "southwest", "look", "examine", "consider", "kill",
+            "cast", "get", "give", "drop", "put", "wear", "wield", "hold",
+            "remove", "quaff", "recite", "eat", "drink", "open", "close",
+            "unlock", "enter", "recall", "rest", "sleep", "wake", "stand",
+            "flee", "scan", "where", "inventory", "equipment", "score",
+            "practice", "train", "buy", "sell", "list", "rent", "campaign",
+            "quest", "gquest", "run", "speedwalk"
+        ]
+        return commands + Array(CommandHistory.communicationCommands)
+    }()
 
     /// Toolbar menu to show/hide each panel + reset the layout.
     private var panelsMenu: some View {
@@ -389,5 +432,30 @@ struct ContentView: View {
         case .connected: .connected
         case .closing: .reconnecting
         }
+    }
+}
+
+/// A small bounded ring of recent output lines (plain text) — the word source
+/// for Tab completion. A reference type so the scrollback subscription can
+/// append without triggering a SwiftUI re-render of ``ContentView``.
+@MainActor
+final class RecentLineBuffer {
+    private var lines: [String] = []
+    private let capacity: Int
+
+    init(capacity: Int = 250) {
+        self.capacity = capacity
+    }
+
+    func append(_ text: String) {
+        lines.append(text)
+        if lines.count > capacity {
+            lines.removeFirst(lines.count - capacity)
+        }
+    }
+
+    /// Oldest-first, as ``InputCompletion/harvestWords`` expects.
+    var snapshot: [String] {
+        lines
     }
 }

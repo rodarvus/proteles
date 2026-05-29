@@ -53,4 +53,19 @@ The dangerous inline-auto-accept is removed entirely.
   field editor), Tab/Shift-Tab cycle, → / Tab accept, Enter sends typed-only,
   Up/Down history (unchanged), Esc dismisses the ghost.
 
-## Status: implementing (MudCore model + tests first, then the view).
+## Status
+
+**Shipped (v1):** the MudCore engine (`CompletionVocabulary` + `InputCompletion`,
+18 tests) and the **Tab/Shift-Tab word-cycle** in `CommandInputView`, wired to a
+live vocabulary in `ContentView` (recent output words via a `RecentLineBuffer`
+fed by a `ScrollbackStore` subscription; GMCP room/group nouns; a verb set of
+common commands + channel names). **Enter now sends exactly what's typed** — the
+old auto-accept-on-Enter inline suggestion is gone (the core fix).
+
+**Deferred — the as-you-type ghost hint.** The chosen "subtle ghost" needs a
+*non-selected* grey trailing hint (fish/Warp-style) so it doesn't eat your
+spacebar or get auto-sent. Doing that well in an `NSTextField` field editor is
+fragile (the suffix would have to live in the editable string); it really wants
+a small custom `NSTextView` that draws ghost text outside the text storage.
+Pulled out of v1 so the robust Tab completion + the Enter-safety fix land now;
+the ghost is a focused follow-up with the right view.
