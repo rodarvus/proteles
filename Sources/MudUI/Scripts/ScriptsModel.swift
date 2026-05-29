@@ -27,6 +27,8 @@ public final class ScriptsModel {
     public var selectedAliasID: UUID?
     public var selectedTimerID: UUID?
     public var selectedMacroID: UUID?
+    /// Which script kinds are shared across characters (for the editor toggles).
+    public private(set) var scriptScope = ScriptScope()
 
     private let session: SessionController
     private var store: ScriptStore?
@@ -48,11 +50,13 @@ public final class ScriptsModel {
     /// Load a profile's scripts: build its store, mirror the document, and
     /// install the whole set into the live session. Idempotent per profile.
     public func load(forProfile id: UUID) async {
-        guard let url = try? ScriptStore.defaultStoreURL(forProfile: id) else { return }
-        let store = ScriptStore(url: url)
+        let character = await Self.characterKey(forProfile: id)
+        guard let scriptsDir = try? ProtelesPaths.scriptsDirectory() else { return }
+        let store = ScriptStore(directory: scriptsDir, character: character)
         try? await store.load()
         self.store = store
         profileID = id
+        scriptScope = await store.scope
         await seedDefaultMacrosIfNeeded(store: store, profileID: id)
         await refresh()
         await session.loadScripts(store.document)
@@ -85,7 +89,6 @@ public final class ScriptsModel {
         // above, so their triggers/timers survive). Each lives in its own
         // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59), with
         // its per-character data under <plugin>/data/<profile>/.
-        let character = await Self.characterKey(forProfile: id)
         if let libraryURL = try? PluginLibraryStore.defaultStoreURL() {
             let library = PluginLibraryStore(url: libraryURL)
             try? await library.load()
@@ -97,6 +100,15 @@ public final class ScriptsModel {
         if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character) {
             await session.armBundledDinv(stateDirectory: dinvData.path)
         }
+    }
+
+    /// Toggle whether a script kind is shared across characters (the editor's
+    /// per-tab "Shared" switch). The active set is unchanged — only where it's
+    /// stored — so no reload is needed.
+    public func setScriptGlobal(_ kind: ScriptScope.Kind, _ value: Bool) async {
+        guard let store else { return }
+        try? await store.setGlobal(kind, value)
+        scriptScope = await store.scope
     }
 
     /// A readable, filesystem-safe per-character data-dir key for `id`: the

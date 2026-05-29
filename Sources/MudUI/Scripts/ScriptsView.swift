@@ -30,6 +30,21 @@ public struct ScriptsView: View {
         .navigationTitle("Scripts")
     }
 
+    /// A toolbar switch toggling whether this kind is shared across all
+    /// characters (stored in `Scripts/_shared`) or kept per-character.
+    @ToolbarContentBuilder
+    private func scopeToggleItem(_ kind: ScriptScope.Kind) -> some ToolbarContent {
+        ToolbarItem(placement: .automatic) {
+            Toggle("Shared", isOn: Binding(
+                get: { model.scriptScope.isGlobal(kind) },
+                set: { on in Task { await model.setScriptGlobal(kind, on) } }
+            ))
+            .toggleStyle(.switch)
+            .help("Share these \(kind.rawValue) across all your characters "
+                + "(Scripts/_shared) instead of keeping them per-character.")
+        }
+    }
+
     // MARK: - Triggers
 
     private var triggersTab: some View {
@@ -63,6 +78,7 @@ public struct ScriptsView: View {
                     remove: { await model.removeSelectedTrigger() },
                     canModify: model.selectedTriggerID != nil
                 )
+                scopeToggleItem(.triggers)
             }
         } detail: {
             if let id = model.selectedTriggerID, let binding = model.binding(forTrigger: id) {
@@ -105,6 +121,7 @@ public struct ScriptsView: View {
                     remove: { await model.removeSelectedAlias() },
                     canModify: model.selectedAliasID != nil
                 )
+                scopeToggleItem(.aliases)
             }
         } detail: {
             if let id = model.selectedAliasID, let binding = model.binding(forAlias: id) {
@@ -147,6 +164,7 @@ public struct ScriptsView: View {
                     remove: { await model.removeSelectedTimer() },
                     canModify: model.selectedTimerID != nil
                 )
+                scopeToggleItem(.timers)
             }
         } detail: {
             if let id = model.selectedTimerID, let binding = model.binding(forTimer: id) {
@@ -189,6 +207,7 @@ public struct ScriptsView: View {
                     remove: { await model.removeSelectedMacro() },
                     canModify: model.selectedMacroID != nil
                 )
+                scopeToggleItem(.macros)
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Restore Default Keypad Layout") {
