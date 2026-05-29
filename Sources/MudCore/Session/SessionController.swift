@@ -112,7 +112,7 @@ public actor SessionController {
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
-    var loadedPluginsDirectory: URL? // active world's plugin dir, for ReloadPlugin disk re-read
+    var loadedPluginDirectories: [String: URL] = [:] // plugin id → its dir, for ReloadPlugin disk re-read
     /// Timestamped `.log` beside ``recorder``: local events the wire omits.
     var transcript: SessionTranscript?
     /// Per-world persistence for scoped script/plugin variables (write-through).
