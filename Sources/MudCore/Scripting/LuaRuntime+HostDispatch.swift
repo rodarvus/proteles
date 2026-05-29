@@ -16,6 +16,9 @@ extension LuaRuntime {
         case .monotonic: [.number(Date().timeIntervalSince1970)]
         case .fileExists: [.boolean(fileExistsAllowed(Self.argString(arguments, 0)))]
         case .makeDirectory: [.boolean(makeDirectoryAllowed(Self.argString(arguments, 0)))]
+        case .readFile: [readFileContents(Self.argString(arguments, 0)).map { LuaValue.string($0) } ?? .nil]
+        case .writeFile:
+            [.boolean(writeFileAllowed(Self.argString(arguments, 0), Self.argString(arguments, 1)))]
         default: []
         }
     }

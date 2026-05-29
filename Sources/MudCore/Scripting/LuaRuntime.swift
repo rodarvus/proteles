@@ -145,6 +145,7 @@ public actor LuaRuntime {
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet
+        case readFile, writeFile
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -351,6 +352,8 @@ public actor LuaRuntime {
         setHostFunction("broadcast", .broadcast)
         setHostFunction("export", .export)
         setHostFunction("aardwolfTelnet", .aardwolfTelnet)
+        setHostFunction("readFile", .readFile)
+        setHostFunction("writeFile", .writeFile)
         setHostFunction("call", .call)
         setHostFunction("getVar", .getVar)
         setHostFunction("setVar", .setVar)
@@ -422,7 +425,8 @@ public actor LuaRuntime {
             return moduleSourceValue(arguments)
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory:
+        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
+             .readFile, .writeFile:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)

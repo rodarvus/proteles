@@ -22,6 +22,7 @@ public extension LuaRuntime {
         _ = try run(Self.compatShimSource)
         _ = try run(Self.automationShimSource)
         _ = try run(Self.utilsShimSource)
+        _ = try run(Self.ioShimSource)
         registerModules(Self.standardHelpers)
         // Nick Gammon's `wait` coroutine helper (and its `check` dependency),
         // bundled (see MUSHHelperAssets), so third-party plugins that
@@ -183,6 +184,23 @@ public extension LuaRuntime {
       if id == nil or id == GetPluginID() then return proteles.info(1) or "" end
       return ""
     end
+    -- check(code): MUSHclient's return-code guard (lua/check.lua) — raise a Lua
+    -- error if an API call didn't return eOK, else pass the code through. Our
+    -- API functions return eOK on success, so check() is a no-op on the happy
+    -- path (plugins wrap calls like `check(AddTimer(...))`).
+    function check(code)
+      if code ~= nil and code ~= error_code.eOK then
+        error("MUSHclient API call failed with code " .. tostring(code), 2)
+      end
+      return code
+    end
+    -- SaveState(): MUSHclient persists plugin state on demand. We write variables
+    -- through automatically, so this just runs the plugin's OnPluginSaveState (if
+    -- any) — where it sets the variables to persist — and reports success.
+    function SaveState()
+      if type(OnPluginSaveState) == "function" then pcall(OnPluginSaveState) end
+      return error_code.eOK
+    end
 
     -- MUSHclient also exposes the whole world API as fields on a global `world`
     -- object: `world.Note(...)` is equivalent to `Note(...)`. Some plugins call
@@ -209,9 +227,38 @@ public extension LuaRuntime {
     -- forward the callee's return values. Calls to the native GMCP mapper's
     -- well-known id are routed to it (find results arrive via OnPluginBroadcast
     -- 500/501, like the real mapper).
+    -- Serialize a value (gmcp subtree) to a Lua-literal string, for the GMCP
+    -- handler's gmcpval/gmcpdata_as_string callees (plugins loadstring the
+    -- result back into a table). Handles the string/number/table leaves GMCP
+    -- data is made of.
+    local function __toLuaLiteral(v)
+      local t = type(v)
+      if t == "table" then
+        local parts = {}
+        for k, val in pairs(v) do
+          local key = type(k) == "number" and ("[" .. k .. "]")
+            or ("[" .. string.format("%q", tostring(k)) .. "]")
+          parts[#parts + 1] = key .. "=" .. __toLuaLiteral(val)
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+      elseif t == "number" or t == "boolean" then
+        return tostring(v)
+      else
+        return string.format("%q", tostring(v))
+      end
+    end
     function CallPlugin(id, fn, ...)
       if id == "b6eae87ccedd84f510b74714" then
         proteles.mapperCall(fn, ...); return error_code.eOK
+      end
+      -- Aardwolf GMCP handler: gmcpval/gmcpdata_as_string(path) return a
+      -- Lua-literal string of the GMCP subtree (the reference handler does
+      -- `serialize.save_simple(gmcpdata_at_level(path) or "")`). Bridge to our
+      -- live gmcp() accessor so plugins that fetch GMCP via CallPlugin work.
+      if id == "3e7dedbe37e44942dd46d264" and (fn == "gmcpval" or fn == "gmcpdata_as_string") then
+        require "gmcphelper" -- ensure gmcp() is defined
+        local args = {...}
+        return error_code.eOK, __toLuaLiteral(gmcp(args[1]))
       end
       -- Aardwolf Chat Capture plugin: storeFromOutside(text, tab, foreground)
       -- adds a line under a tab. Bridge it to native chat (rsocial, hadar
