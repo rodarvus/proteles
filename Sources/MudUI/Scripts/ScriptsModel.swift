@@ -110,6 +110,11 @@ public final class ScriptsModel {
         if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character) {
             await session.armBundledDinv(stateDirectory: dinvData.path)
         }
+        // leveldb: a single shared leveling DB (MUSHclient-style, GetInfo(60));
+        // it writes state/leveldb/leveldb.db under its plugin home. Loaded eagerly.
+        if let levelDBHome = try? ProtelesPaths.pluginDirectory(named: "leveldb") {
+            await session.loadBundledLevelDB(dataDirectory: levelDBHome.path)
+        }
     }
 
     /// Toggle whether a script kind is shared across characters (the editor's

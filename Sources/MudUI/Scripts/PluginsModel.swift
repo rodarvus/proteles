@@ -91,6 +91,21 @@ public final class PluginsModel {
             ]
         ),
         BuiltInFeatureRow(
+            id: "leveldb",
+            name: "leveldb (Leveling DB)",
+            summary: "The leveldb leveling database (MIT) — bundled and run verbatim through the "
+                + "MUSHclient compatibility shim. Passively records kills, deaths, quests, "
+                + "campaigns, global quests, power-ups, and level-ups into a SQLite database, "
+                + "queried with its `ldb …` commands.",
+            commands: [
+                "ldb daily — today's leveling summary",
+                "ldb level / ldb tier / ldb remort — progression breakdowns",
+                "ldb campaigns / ldb quests / ldb gq — reward + completion logs",
+                "ldb top xp / top zones / top mobs — most productive",
+                "ldb help — leveldb's own command reference"
+            ]
+        ),
+        BuiltInFeatureRow(
             id: "search-and-destroy",
             name: "Search & Destroy",
             summary: "The Search-and-Destroy campaign/quest hunter (by Crowley) — not bundled with "

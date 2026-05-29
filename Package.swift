@@ -59,7 +59,10 @@ let package = Package(
                 .copy("Resources/MUSHHelpers"),
                 // Vendored dinv inventory manager (MIT; run verbatim through
                 // the MUSHclient compat shim — see Resources/dinv/PROVENANCE.md).
-                .copy("Resources/dinv")
+                .copy("Resources/dinv"),
+                // Vendored leveldb leveling database (MIT; run verbatim through
+                // the compat shim — see Resources/leveldb/PROVENANCE.md).
+                .copy("Resources/leveldb")
             ]
         ),
         .target(

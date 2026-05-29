@@ -90,5 +90,17 @@ public extension LuaRuntime {
     function io.write() return io end
     function io.flush() return io end
     function io.close() return true end
+
+    -- os.execute: we never spawn a shell. The one MUSHclient idiom plugins use
+    -- is `mkdir "<dir>"` (incl. the Windows `if not exist "<dir>" mkdir "<dir>"`
+    -- form) to ensure their data dir exists — route that to the sandboxed
+    -- makeDirectory. Anything else is a no-op. Returns 0 like a shell success,
+    -- so callers checking the result don't treat it as failure.
+    function os.execute(command)
+      command = tostring(command or "")
+      local dir = command:match('mkdir%s+"([^"]+)"') or command:match('mkdir%s+([^"%s]+)')
+      if dir then proteles.makeDirectory(dir) end
+      return 0
+    end
     """
 }
