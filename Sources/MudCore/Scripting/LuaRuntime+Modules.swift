@@ -73,13 +73,15 @@ extension LuaRuntime {
             }
             return nil
         }
-        // dofile: `name` is a path (absolute or relative to a search path).
-        for candidate in [name] + moduleSearchPaths.map({ $0 + "/" + name }) {
+        // dofile: `name` is a path. Normalise Windows separators (plugins ported
+        // from MUSHclient build paths like `…\\worlds\\plugins\\foo.lua`).
+        let path = name.replacingOccurrences(of: "\\", with: "/")
+        for candidate in [path] + moduleSearchPaths.map({ $0 + "/" + path }) {
             if isAllowed(candidate), let source = readLua(candidate) { return source }
         }
         // Fall back to a bundled module matching the file's basename, so a
         // plugin's `dofile("…/aardwolf_colors.lua")` resolves to our built-in.
-        let base = (name as NSString).lastPathComponent
+        let base = (path as NSString).lastPathComponent
         if base.hasSuffix(".lua") {
             return bundledModules[String(base.dropLast(4))]
         }
