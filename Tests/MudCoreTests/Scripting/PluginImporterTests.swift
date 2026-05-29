@@ -115,12 +115,25 @@ struct PluginImporterTests {
         #expect(r.findings.contains { $0.severity == .info && $0.message.contains("Windows-only") })
     }
 
-    @Test("async (online update) is a soft note, not a missing file")
+    @Test("async (network) is a soft note, not a missing file")
     func asyncNote() throws {
         let r = try report(#"local a = require "async""#)
         #expect(r.verdict == .ready)
-        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("online-update") })
+        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("internet") })
         #expect(!r.findings.contains { $0.severity == .warning })
+    }
+
+    @Test("The dependency-nag (checkplugin / aard_requirements) is stubbed, not warned")
+    func dependencyNagResolves() throws {
+        // mudbin's `OnPluginListChanged` dofiles `lua/aard_requirements.lua`,
+        // which requires `checkplugin` — both are no-op stubs in Proteles, so
+        // neither should be flagged as a missing file.
+        let r = try report("""
+        require "checkplugin"
+        function OnPluginListChanged() dofile("lua/aard_requirements.lua") end
+        """)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
     }
 
     @Test("Counts come from the parsed plugin")

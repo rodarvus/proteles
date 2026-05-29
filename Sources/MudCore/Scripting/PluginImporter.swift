@@ -63,7 +63,8 @@ public enum PluginImporter {
     /// source of truth is the shim's registration — kept in sync here). `wait`,
     /// `check` and the inert `async` stub are registered separately.
     private static var bundledLibraries: Set<String> {
-        Set(LuaRuntime.standardHelpers.keys).union(["wait", "check", "async"])
+        Set(LuaRuntime.standardHelpers.keys)
+            .union(["wait", "check", "async", "checkplugin", "aard_requirements"])
     }
 
     /// Lua 5.1 standard libraries. `require "string"` / `"math"` resolve to the
@@ -98,8 +99,8 @@ public enum PluginImporter {
         if requiredLibraries(in: script).contains("async") {
             findings.append(.init(
                 severity: .info,
-                message: "Its online-update / background-download features won't run; "
-                    + "everything else works."
+                message: "Talks to the internet (the `async` helper), which Proteles doesn't "
+                    + "support yet — those parts won't work."
             ))
         }
 

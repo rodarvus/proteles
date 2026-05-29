@@ -57,6 +57,20 @@ struct ShimCompatAdditionsTests {
         }
     }
 
+    @Test("checkplugin / aard_requirements load as no-ops (the dependency nag)")
+    func dependencyNagStub() async throws {
+        let lua = try await shimmed()
+        // Mirrors mudbin: require checkplugin, then dofile aard_requirements via
+        // the basename fallback. Both resolve and run without error.
+        let effects = try await lua.run("""
+        require "checkplugin"
+        do_plugin_check_now("50f4e1fc89999ce02a216a3c", "aard_requirements")
+        dofile("lua/aard_requirements.lua")
+        proteles.echo("loaded")
+        """)
+        #expect(effects == [.echo("loaded")])
+    }
+
     @Test("utils dialogs route through the injected provider and map results")
     func utilsDialogs() async throws {
         let lua = try await shimmed()

@@ -33,7 +33,17 @@ public extension LuaRuntime {
         // SSL + llthreads). Proteles has no network helper, so we register an
         // inert stub: `require "async"` succeeds (a plugin's script loads and
         // its non-network commands work) and any `async.*(...)` is a no-op.
+        // Real outbound HTTP is a deferred feature — docs/plans/ASYNC_HTTP_PLAN.md.
         registerModule("async", source: Self.asyncStubSource)
+        // `checkplugin` + `aard_requirements` are the Aardwolf package's
+        // dependency-nag framework: a plugin `dofile`s `aard_requirements.lua`
+        // (which `require`s `checkplugin` and calls `do_plugin_check_now`) to
+        // warn if a *companion MUSHclient plugin* isn't installed. Proteles has
+        // no MUSHclient plugin registry/PPI, so that check is meaningless — we
+        // register no-op stubs so dependency-gated plugins (e.g. mudbin's
+        // `OnPluginListChanged`) load clean instead of erroring on a missing file.
+        registerModule("checkplugin", source: Self.checkpluginStubSource)
+        registerModule("aard_requirements", source: "-- Proteles no-op: see checkplugin stub.")
     }
 
     /// Inert `async` module: every field is a no-op function, so plugins that
@@ -42,6 +52,17 @@ public extension LuaRuntime {
     local function noop() return nil end
     async = setmetatable({}, { __index = function() return noop end })
     return async
+    """
+
+    /// No-op `checkplugin`: defines the same globals the real one does
+    /// (`do_plugin_check_now`/`checkplugin`/`load_ppi`) so a plugin's dependency
+    /// check is a harmless no-op rather than a "you must install X" nag for a
+    /// MUSHclient plugin that doesn't exist (and isn't needed) in Proteles.
+    internal nonisolated static let checkpluginStubSource = """
+    function do_plugin_check_now() end
+    function checkplugin() end
+    function load_ppi() return nil end
+    return { do_plugin_check_now = do_plugin_check_now, checkplugin = checkplugin, load_ppi = load_ppi }
     """
 
     /// Call a global Lua function by name (e.g. a plugin lifecycle callback

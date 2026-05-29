@@ -44,9 +44,14 @@ A/B/C** (D-59 plan → D-61) — the `~/Documents/Proteles` data home, unified i
 (Mac/URL), export, readable per-character data dirs, scripts split by kind + a
 per-kind global toggle; **community-plugin shim hardening** from a 12-plugin load
 audit (D-62); the clean-room `utils` dialog family + the
-**`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); S&D
-asset/installer tests made hermetic. **Docs refreshed for a
-`v0.3.0` cut — cut the release only when the user gives the green flag**
+**`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
+**compatibility-report honesty rework** (folder-aware, two-state, quiet — no
+FUD) + **dependency-nag stub** (`checkplugin`/`aard_requirements`) (D-64); S&D
+asset/installer tests made hermetic. **Plugin outbound HTTP (`async`) is
+deferred post-0.3.0** as a known limitation (plan: `docs/plans/ASYNC_HTTP_PLAN.md`;
+decisions taken — full parity over `URLSession`, allow HTTP freely). **Docs
+refreshed for a `v0.3.0` cut — cut the release only when the user gives the
+green flag**
 (`docs/NOTARIZATION.md` = the Phase-8 signing/notarization workflow).
 
 **Confirmed by the user (no longer pending live-verification):** Help panel,
