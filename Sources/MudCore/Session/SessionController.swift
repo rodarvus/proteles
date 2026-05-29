@@ -3,31 +3,23 @@ import Foundation
 /// Owns one MUD session: a ``NetworkConnection`` plus a ``LinePipeline``
 /// that turns received bytes into stored ``Line`` records.
 ///
-/// Phase 2 telnet-negotiation policy:
-///   - `WILL MCCP2`  → `DO MCCP2`  (accept compression).
-///   - `WILL <anything else>` → `DONT <option>`.
-///   - `DO  <anything>`        → `WONT <option>`.
-///   - `WONT` / `DONT` need no reply.
+/// Phase 2 telnet-negotiation policy: `WILL MCCP2` → `DO MCCP2` (accept
+/// compression); `WILL <else>` → `DONT`; `DO <anything>` → `WONT`; `WONT` /
+/// `DONT` need no reply.
 ///
-/// All actual byte-parsing logic lives in ``LinePipeline`` — this actor
-/// is the I/O wrapper: it owns the connection, drives the pipeline
-/// from the byte stream, dispatches outbound bytes for negotiation
-/// replies and user commands, and appends the resulting lines to the
-/// scrollback store.
+/// All byte-parsing lives in ``LinePipeline`` — this actor is the I/O wrapper:
+/// it owns the connection, drives the pipeline from the byte stream, dispatches
+/// outbound bytes for negotiation replies + user commands, and appends the
+/// resulting lines to the scrollback store.
 ///
-/// Concurrency model:
+/// Concurrency: the controller is an actor; ``scrollbackStore``,
+/// ``connection``, ``connectionStates`` are `nonisolated` so the SwiftUI layer
+/// can read them without `await`. Inbound bytes are processed in a single
+/// long-lived `Task` iterating ``NetworkConnection/bytes``; pipeline state lives
+/// on the actor, so only that task mutates it.
 ///
-///   - The controller is an actor.
-///   - ``scrollbackStore``, ``connection``, ``connectionStates`` are
-///     `nonisolated` so the SwiftUI view layer can read / observe them
-///     without `await`.
-///   - Inbound bytes are processed inside a single long-lived `Task`
-///     that iterates ``NetworkConnection/bytes``. Pipeline state lives
-///     on the actor and is therefore only mutated by that task.
-///
-/// Reconnect: ``connect(to:)`` resets the pipeline, so a `disconnect`
-/// followed by a fresh `connect` on the same controller behaves like
-/// a clean start.
+/// Reconnect: ``connect(to:)`` resets the pipeline, so disconnect + a fresh
+/// connect on the same controller behaves like a clean start.
 public actor SessionController {
     public typealias State = NetworkConnection.State
 
@@ -429,18 +421,16 @@ public actor SessionController {
         updateState(.disconnected)
     }
 
-    /// Send a user-typed command (run through aliases when a script engine is
-    /// present, else verbatim; `\r\n` appended). Tracks quit commands so the
-    /// server close after `quit` is a clean logout, not a dropped link that
-    /// would trigger autoreconnect.
+    /// Send a user-typed command (aliases when a script engine is present, else
+    /// verbatim; `\r\n` appended). Tracks `quit` so the ensuing server close is
+    /// a clean logout, not a dropped link that would autoreconnect.
     public func send(_ command: String) async throws {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
-        // Locally echo what the user typed (dimmed), so input is visible —
-        // notably while writing a note. Suppressed when the server is echoing
-        // (password prompts) and for the bare prompt-refresh Enter. The
-        // transcript tap is gated the same way so a typed password isn't logged.
+        // Echo typed input (dimmed) so it's visible — e.g. while writing a note.
+        // Suppressed when the server echoes (passwords) and for the bare
+        // prompt-refresh Enter; the transcript tap is gated the same way.
         if !serverEcho, !command.isEmpty {
             await scrollbackStore.append(Self.inputEchoLine(command))
             logTranscript(.input, command)
@@ -448,14 +438,14 @@ public actor SessionController {
         try await dispatchCommand(command)
     }
 
-    /// Route a command through the in-app pipeline (native `mapper …` → S&D
-    /// aliases → user aliases → MUD), without the user-input echo. Used by typed
-    /// input and by a plugin's `Execute` (MUSHclient semantics — re-parsed as if
-    /// typed, so S&D's `Execute("mapper goto …")` reaches the native mapper).
+    /// Route a command through the in-app pipeline (native `mapper …` → S&D →
+    /// user aliases → MUD), without the user-input echo. Used by typed input and
+    /// by a plugin's `Execute` (re-parsed as if typed, so S&D's
+    /// `Execute("mapper goto …")` reaches the native mapper).
     func dispatchCommand(_ command: String) async throws {
         // Command stacking (Aardwolf/MUSHclient): split on `;` (`;;` = literal
-        // `;`), dispatching each command. A lone empty piece is a bare-Enter
-        // prompt nudge and is preserved.
+        // `;`). A trailing empty piece is dropped; a lone empty line falls
+        // through to dispatchSingleCommand as a bare-Enter nudge.
         let pieces = CommandStack.split(command)
         for piece in pieces {
             if piece.isEmpty, pieces.count > 1 { continue }
@@ -465,6 +455,14 @@ public actor SessionController {
 
     /// Route one (already unstacked) command through the in-app pipeline.
     private func dispatchSingleCommand(_ command: String) async throws {
+        // A bare Enter is a wire signal (prompt refresh / pager advance), not a
+        // command: send it raw, bypassing mapper/S&D/alias expansion — as
+        // MUSHclient's `Execute` does ("empty line - just send it"). Else a
+        // loaded catch-all alias (`match="*"`/`^(.*)$`) eats the empty string.
+        if command.isEmpty {
+            try await sendLine(command)
+            return
+        }
         // Native `mapper …` commands are handled in-app, not sent to the MUD.
         if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
             await applyScriptEffects(mapper.handleCommand(command))
