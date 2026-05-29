@@ -3,12 +3,20 @@
 > Small, low-risk items the user grouped as "quick wins." Each needs one
 > decision before I implement. Status: **plan / awaiting approval**.
 
-## 1. Search-and-Destroy test flakiness (no decision needed)
-`SearchAndDestroyAssetsTests` flakes under `swift test --parallel` (passes
-isolated / on retry) because it touches a shared on-disk S&D install location
-that races once S&D is installed on the machine. Fix: point the tests at a
-per-test temp directory so they're hermetic. Already flagged as a spawned task;
-implement when the batch is approved. (Unambiguous — no decision.)
+## 1. Search-and-Destroy test flakiness (DONE)
+`SearchAndDestroyAssetsTests` ("S&D data modules load from the install dir") and
+`SearchAndDestroyInstallerTests` ("…isInstalled flips") flaked under
+`swift test --parallel` (passed isolated / on retry) because they read/wrote the
+shared `SearchAndDestroyAssets.installDirectory` global, racing each other and
+any suite that calls `SnDFixture.install()`. **Fixed:** added directory-injectable
+`in:` accessors to `SearchAndDestroyAssets` (`isInstalled(in:)`, `core(in:)`,
+`lua(_:in:)`, `pluginXML(in:)`, `helperModules(in:)`); the global accessors now
+delegate to them. The two suites read an explicit dir instead of mutating the
+global — the assets suite uses `SnDFixture.directory` (a new read-only accessor)
+and the installer test uses its own per-test temp dir. No suite now mutates the
+global to a *different* value, so the remaining `SnDFixture.install()` callers
+(host/dispatch/campaign/XML) all set it to the same fixture dir and no longer
+race harmfully. Verified green across 6 consecutive `--parallel` runs.
 
 ## 2. Session logging — rotation / retention
 Phase-1 writes one readable log per session (text/HTML) with no cap, so the logs

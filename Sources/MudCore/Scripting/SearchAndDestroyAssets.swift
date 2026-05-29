@@ -22,35 +22,67 @@ public enum SearchAndDestroyAssets {
 
     /// Whether S&D is installed (its `core.lua` is present in the install dir).
     public static var isInstalled: Bool {
-        core != nil
+        isInstalled(in: installDirectory)
     }
 
     /// The plugin's main script (the original `<script>` CDATA), or nil if not
     /// installed.
     public static var core: String? {
-        lua("core")
+        core(in: installDirectory)
     }
 
     /// An installed Lua module's source by name (e.g. `areaReferences`,
     /// `constants`, `sqlSetup`, `tablesSetup`), or nil if not installed.
     public static func lua(_ name: String) -> String? {
-        guard let url = installDirectory?.appendingPathComponent("\(name).lua") else { return nil }
-        return try? String(contentsOf: url, encoding: .utf8)
+        lua(name, in: installDirectory)
     }
 
     /// The normalised plugin XML (source for the trigger/alias/timer
     /// definitions; parsed by a tolerant extractor since MUSHclient's XML
     /// isn't strict enough for `XMLParser`).
     public static var pluginXML: String? {
-        guard let url = installDirectory?.appendingPathComponent("Search_and_Destroy.xml") else { return nil }
-        return try? String(contentsOf: url, encoding: .utf8)
+        pluginXML(in: installDirectory)
     }
 
     /// S&D's own data modules to register with the runtime's module loader (so
     /// its `require`s resolve). Gammon's `wait`/`check` are registered
     /// separately from ``MUSHHelperAssets`` (they're bundled, not downloaded).
     public static var helperModules: [String: String] {
+        helperModules(in: installDirectory)
+    }
+
+    // The accessors above resolve against the shared `installDirectory` global
+    // (set once at startup). The `in:` variants below read an explicit
+    // directory instead — used by tests so they never touch (and so never race
+    // on) the shared global under `swift test --parallel`.
+
+    // MARK: - Directory-injectable accessors
+
+    /// Whether S&D is installed in `directory` (its `core.lua` is present).
+    public static func isInstalled(in directory: URL?) -> Bool {
+        core(in: directory) != nil
+    }
+
+    /// The plugin's main script read from `directory`, or nil if absent.
+    public static func core(in directory: URL?) -> String? {
+        lua("core", in: directory)
+    }
+
+    /// An installed Lua module's source read from `directory`, or nil if absent.
+    public static func lua(_ name: String, in directory: URL?) -> String? {
+        guard let url = directory?.appendingPathComponent("\(name).lua") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// The normalised plugin XML read from `directory`, or nil if absent.
+    public static func pluginXML(in directory: URL?) -> String? {
+        guard let url = directory?.appendingPathComponent("Search_and_Destroy.xml") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// S&D's data modules read from `directory`.
+    public static func helperModules(in directory: URL?) -> [String: String] {
         ["constants", "areaReferences", "sqlSetup", "tablesSetup"]
-            .reduce(into: [:]) { result, name in result[name] = lua(name) }
+            .reduce(into: [:]) { result, name in result[name] = lua(name, in: directory) }
     }
 }
