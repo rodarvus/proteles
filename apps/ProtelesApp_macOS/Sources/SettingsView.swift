@@ -194,6 +194,8 @@ private struct ConnectionSettingsView: View {
 private struct LoggingSettingsView: View {
     @AppStorage("sessionLogging") private var sessionLogging = false
     @AppStorage("sessionLogFormat") private var sessionLogFormat = "text"
+    @AppStorage("perWorldLogs") private var perWorldLogs = false
+    @AppStorage("logRetention") private var logRetention = 30
 
     var body: some View {
         Form {
@@ -210,6 +212,15 @@ private struct LoggingSettingsView: View {
                     Text("HTML (preserves colour)").tag("html")
                 }
                 .pickerStyle(.radioGroup)
+            }
+            Section("Organisation") {
+                Toggle("Separate logs per world", isOn: $perWorldLogs)
+                Stepper("Keep the newest \(logRetention) logs", value: $logRetention, in: 5...500)
+                Text("Older session logs are deleted on connect. Per-world logs go in a "
+                    + "subfolder named for the world; the limit applies per folder. "
+                    + "Passwords are never written to the log.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section {
                 Button("Reveal Logs in Finder") {

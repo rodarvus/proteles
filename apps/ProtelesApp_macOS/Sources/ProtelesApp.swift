@@ -77,12 +77,7 @@ struct ProtelesApp: App {
             scriptEngine: scriptEngine,
             autoRecord: true,
             reconnectPolicy: .standard,
-            logFileURL: { format in
-                guard let directory = ProtelesApp.logsDirectory() else { return nil }
-                let stamp = ProtelesApp.logTimestampFormatter.string(from: Date())
-                let ext = format == .html ? "html" : "txt"
-                return directory.appendingPathComponent("session-\(stamp).\(ext)")
-            }
+            logFileURL: { format in ProtelesApp.makeLogURL(format: format) }
         )
 
         // Register the built-in native plugins (ported from the Aardwolf
@@ -244,6 +239,7 @@ struct ProtelesApp: App {
                 let scripts = scripts
                 Task { @MainActor in
                     await worlds.setActive(profile.id)
+                    ProtelesApp.logContext.worldName = profile.name
                     let plan = worlds.autologinPlan(for: profile)
                     await session.disconnect()
                     await scripts.load(forProfile: profile.id)
@@ -299,6 +295,48 @@ struct ProtelesApp: App {
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         ) else { return nil }
         return base.appendingPathComponent("com.proteles.ProtelesApp/logs", isDirectory: true)
+    }
+
+    /// The current world name, set on connect so the (Sendable, off-main) log
+    /// URL closure can place per-world logs without reaching into the UI models.
+    static let logContext = LogContext()
+
+    /// Build the session-log URL: a per-world subfolder when enabled, pruning
+    /// old logs to the retention limit first. Called by the session on connect.
+    static func makeLogURL(format: SessionLogFormat) -> URL? {
+        guard let base = logsDirectory() else { return nil }
+        let defaults = UserDefaults.standard
+        let directory = perWorldSubfolder(of: base) ?? base
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        pruneLogs(in: directory, keeping: defaults.object(forKey: "logRetention") as? Int ?? 30)
+        let stamp = logTimestampFormatter.string(from: Date())
+        let ext = format == .html ? "html" : "txt"
+        return directory.appendingPathComponent("session-\(stamp).\(ext)")
+    }
+
+    /// The per-world log subfolder of `base`, or nil when per-world logging is
+    /// off or no world name is set.
+    private static func perWorldSubfolder(of base: URL) -> URL? {
+        guard UserDefaults.standard.bool(forKey: "perWorldLogs"),
+              let world = logContext.worldName, !world.isEmpty else { return nil }
+        return base.appendingPathComponent(logFolderName(world), isDirectory: true)
+    }
+
+    /// Delete the oldest `.txt`/`.html` logs in `directory` beyond `keeping`.
+    static func pruneLogs(in directory: URL, keeping: Int) {
+        let manager = FileManager.default
+        guard let files = try? manager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return }
+        let logs = files.filter { ["txt", "html"].contains($0.pathExtension.lowercased()) }
+        for url in LogRetention.filesToPrune(logs, keeping: keeping) {
+            try? manager.removeItem(at: url)
+        }
+    }
+
+    /// A filesystem-safe folder name for a world (drops path separators/colons).
+    static func logFolderName(_ world: String) -> String {
+        world.components(separatedBy: CharacterSet(charactersIn: "/\\:")).joined(separator: "-")
     }
 
     static let logTimestampFormatter: DateFormatter = {
@@ -377,6 +415,7 @@ private struct ProtelesCommands: Commands {
                 let scripts = scripts
                 Task { @MainActor in
                     guard let active = worlds.activeProfile else { return }
+                    ProtelesApp.logContext.worldName = active.name
                     await scripts.load(forProfile: active.id)
                     try? await session.connect(
                         to: active.endpoint,
@@ -458,5 +497,17 @@ private struct ProtelesCommands: Commands {
     /// A binding that reflects a panel's visibility and toggles it on change.
     private func panelBinding(_ kind: PanelKind) -> Binding<Bool> {
         Binding(get: { layout.isVisible(kind) }, set: { _ in layout.toggle(kind) })
+    }
+}
+
+/// Thread-safe holder for the current world name, read by the session-log URL
+/// closure (which runs off the main actor) and written on the main actor when a
+/// world connects. Tiny + lock-guarded so it's safely `Sendable`.
+final class LogContext: @unchecked Sendable {
+    private let lock = NSLock()
+    private var name: String?
+    var worldName: String? {
+        get { lock.withLock { name } }
+        set { lock.withLock { name = newValue } }
     }
 }
