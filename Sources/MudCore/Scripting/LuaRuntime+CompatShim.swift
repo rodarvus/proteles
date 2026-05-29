@@ -177,6 +177,12 @@ public extension LuaRuntime {
       if n == 20 then return proteles.info(60) end -- directory
       return proteles.info(n) -- 1 = name, 19 = version (others → nil)
     end
+    -- GetPluginName() = the current plugin's name; GetPluginName(id) for any
+    -- other plugin is unknown to us (we only host the current one) → "".
+    function GetPluginName(id)
+      if id == nil or id == GetPluginID() then return proteles.info(1) or "" end
+      return ""
+    end
 
     -- MUSHclient also exposes the whole world API as fields on a global `world`
     -- object: `world.Note(...)` is equivalent to `Note(...)`. Some plugins call

@@ -321,7 +321,11 @@ extension LuaRuntime {
     end
     function gmcpval(path)
       local node = walk(path)
-      if node == nil then return nil end
+      -- Match the reference gmcphelper: a missing path returns "" (an empty
+      -- string), not nil — so `gmcp("char.status").state` is harmlessly nil
+      -- (string indexing) rather than a nil-index crash, exactly as plugins
+      -- written against MUSHclient expect (aard_GMCP_handler: `… or ""`).
+      if node == nil then return "" end
       return stringifyLeaves(node)
     end
     gmcp = gmcpval
