@@ -136,6 +136,11 @@ extension LuaRuntime {
     function require(name)
       local cached = loaded[name]
       if cached ~= nil then return cached end
+      -- A standard Lua library already loaded as a global (string, math, table,
+      -- os, coroutine, …): `require "string"` returns it, like stock Lua's
+      -- package.loaded. Many MUSHclient plugins `require "string"`/`"math"`.
+      local lib = rawget(_G, name)
+      if type(lib) == "table" then loaded[name] = lib; return lib end
       local source = proteles.__moduleSource(name, true)
       if source == nil then error("module '" .. tostring(name) .. "' not found", 2) end
       local chunk = proteles.__compile(source, name)

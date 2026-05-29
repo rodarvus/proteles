@@ -201,6 +201,12 @@ public extension LuaRuntime {
       if type(OnPluginSaveState) == "function" then pcall(OnPluginSaveState) end
       return error_code.eOK
     end
+    -- Keyboard accelerators (MUSHclient Accelerator/AcceleratorTo): we have no
+    -- plugin-bindable accelerator surface (the MacroEngine is the native
+    -- equivalent), so these are inert — the plugin loads and its commands work;
+    -- the bound keystroke just doesn't fire. Returns eOK like the real API.
+    function Accelerator(_key, _send, _sendto) return error_code.eOK end
+    function AcceleratorTo(_key, _send, _sendto) return error_code.eOK end
 
     -- MUSHclient also exposes the whole world API as fields on a global `world`
     -- object: `world.Note(...)` is equivalent to `Note(...)`. Some plugins call
