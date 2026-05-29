@@ -14,6 +14,17 @@ extension LuaRuntime {
         case .isConnected: [.boolean(connected)]
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
         case .monotonic: [.number(Date().timeIntervalSince1970)]
+        case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
+        case .dialog: [dialogValue(arguments)]
+        default: []
+        }
+    }
+
+    /// The sandbox-gated filesystem host calls (`fileExists`/`makeDirectory`/
+    /// `readFile`/`writeFile`), split out so ``queryValue`` stays within the
+    /// complexity budget.
+    nonisolated func fileValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        switch function {
         case .fileExists: [.boolean(fileExistsAllowed(Self.argString(arguments, 0)))]
         case .makeDirectory: [.boolean(makeDirectoryAllowed(Self.argString(arguments, 0)))]
         case .readFile: [readFileContents(Self.argString(arguments, 0)).map { LuaValue.string($0) } ?? .nil]
@@ -35,6 +46,51 @@ extension LuaRuntime {
         case .text(let text): return .string(text)
         case .number(let number): return .number(number)
         case .flag(let flag): return .boolean(flag)
+        }
+    }
+
+    /// `proteles.dialog(kind, …)` → build a ``ScriptDialog``, run it through the
+    /// app's provider (synchronously), and map the result to a Lua value. With no
+    /// provider (headless / tests), degrades safely: "ok" for msgbox, else nil.
+    nonisolated func dialogValue(_ arguments: [LuaValue]) -> LuaValue {
+        let kind = Self.argString(arguments, 0)
+        let request: ScriptDialog
+        switch kind {
+        case "msgbox":
+            request = .message(
+                text: Self.argString(arguments, 1),
+                title: Self.argString(arguments, 2),
+                buttons: Int(Self.argDouble(arguments, 3))
+            )
+        case "input":
+            request = .input(
+                prompt: Self.argString(arguments, 1),
+                title: Self.argString(arguments, 2),
+                defaultText: Self.argString(arguments, 3),
+                multiline: Self.argBool(arguments, 4)
+            )
+        case "choose":
+            request = .choose(
+                prompt: Self.argString(arguments, 1),
+                title: Self.argString(arguments, 2),
+                items: arguments.dropFirst(3).map { $0.stringValue ?? "" }
+            )
+        case "openfile":
+            request = .openFile(
+                message: Self.argString(arguments, 1),
+                chooseDirectory: Self.argBool(arguments, 2)
+            )
+        default:
+            return .nil
+        }
+        guard let result = dialogProvider?(request) else {
+            return kind == "msgbox" ? .string("ok") : .nil
+        }
+        switch result {
+        case .button(let label): return .string(label)
+        case .text(let text): return text.map(LuaValue.string) ?? .nil
+        case .index(let index): return index.map { LuaValue.number(Double($0)) } ?? .nil
+        case .path(let path): return path.map(LuaValue.string) ?? .nil
         }
     }
 

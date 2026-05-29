@@ -146,10 +146,15 @@ public actor LuaRuntime {
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet
         case readFile, writeFile
+        case dialog
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
     nonisolated(unsafe) var connected = false
+
+    /// App hook that fulfils a plugin's `utils.*` dialog synchronously (nil =
+    /// dialogs degrade to a safe default). Set by ``setDialogProvider(_:)``.
+    nonisolated(unsafe) var dialogProvider: ScriptDialogProvider?
 
     /// Module-loader state (see `LuaRuntime+Modules`): `require` libraries
     /// (name → source) and the dirs `require`/`dofile` may read.
@@ -354,6 +359,7 @@ public actor LuaRuntime {
         setHostFunction("aardwolfTelnet", .aardwolfTelnet)
         setHostFunction("readFile", .readFile)
         setHostFunction("writeFile", .writeFile)
+        setHostFunction("dialog", .dialog)
         setHostFunction("call", .call)
         setHostFunction("getVar", .getVar)
         setHostFunction("setVar", .setVar)
@@ -426,7 +432,7 @@ public actor LuaRuntime {
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
-             .readFile, .writeFile:
+             .readFile, .writeFile, .dialog:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)

@@ -33,6 +33,41 @@ struct ShimCompatAdditionsTests {
         #expect(effects == [.echo("true"), .echo("function")])
     }
 
+    @Test("utils dialogs route through the injected provider and map results")
+    func utilsDialogs() async throws {
+        let lua = try await shimmed()
+        await lua.setDialogProvider { request in
+            switch request {
+            case .message: .button("yes")
+            case .input(_, _, let def, let multiline): .text((multiline ? "EDITED:" : "INPUT:") + def)
+            case .choose: .index(2)
+            case .openFile(_, let directory): .path(directory ? "/folder" : "/file.txt")
+            }
+        }
+        let effects = try await lua.run("""
+        proteles.echo(utils.msgbox("q?", "Title", 4))
+        proteles.echo(utils.inputbox("name?", "T", "joe"))
+        proteles.echo(utils.editbox("Data", "Edit", "abc"))
+        proteles.echo(tostring(utils.choose("pick", "T", {"a", "b", "c"})))
+        proteles.echo(utils.filepicker())
+        proteles.echo(utils.directorypicker())
+        """)
+        #expect(effects == [
+            .echo("yes"), .echo("INPUT:joe"), .echo("EDITED:abc"),
+            .echo("2"), .echo("/file.txt"), .echo("/folder")
+        ])
+    }
+
+    @Test("With no provider, msgbox returns ok and inputbox/editbox return nil")
+    func utilsDialogsNoProvider() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo(utils.msgbox("q?", "T", 0))
+        proteles.echo(tostring(utils.editbox("Data", "Edit", "abc")))
+        """)
+        #expect(effects == [.echo("ok"), .echo("nil")])
+    }
+
     @Test("check() passes eOK through and errors on a non-eOK code")
     func checkGuard() async throws {
         let lua = try await shimmed()
