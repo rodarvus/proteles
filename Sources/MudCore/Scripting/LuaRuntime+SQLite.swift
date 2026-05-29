@@ -62,6 +62,11 @@ extension LuaRuntime {
         sqliteDirectory = directory
     }
 
+    /// Install the app's `utils.*` dialog provider (see ``ScriptDialogProvider``).
+    func setDialogProvider(_ provider: ScriptDialogProvider?) {
+        dialogProvider = provider
+    }
+
     /// `proteles.fileExists(path)` — whether `path` exists, but only within the
     /// allowed directory (the `utils.readdir`/`dbot.fileExists` backing). Paths
     /// outside the sandbox read as "not found" rather than leaking the tree.

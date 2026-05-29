@@ -98,6 +98,9 @@ struct ProtelesApp: App {
                 await scriptEngine.registerNativePlugin(TickTimer())
                 await scriptEngine.registerNativePlugin(URLLinkify())
                 await scriptEngine.registerNativePlugin(InventorySerialsPlugin())
+                // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
+                // pickers) for shim plugins that pop a dialog.
+                await scriptEngine.setDialogProvider(makeScriptDialogProvider())
             }
         }
 

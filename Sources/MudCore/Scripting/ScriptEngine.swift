@@ -1,14 +1,11 @@
 import Foundation
 
 /// Ties the scripting layer to a live session: owns a ``LuaRuntime`` and a
-/// ``TriggerEngine``, runs incoming lines through the triggers, executes
-/// matched scripts with their captures bound, and reports what the host
-/// should do (PLAN.md §8.6).
-///
-/// Pure decision-making — like the engines it composes, it returns
-/// ``ScriptEffect``s and a gag decision rather than touching the network or
-/// scrollback itself, so it stays testable without a live session. The host
-/// (``SessionController``) applies the result.
+/// ``TriggerEngine``, runs incoming lines through the triggers, executes matched
+/// scripts with their captures bound, and reports what the host should do
+/// (PLAN.md §8.6). Pure decision-making — it returns ``ScriptEffect``s + a gag
+/// decision rather than touching the network/scrollback, so it stays testable
+/// without a live session; the host (``SessionController``) applies the result.
 public actor ScriptEngine {
     /// What to do with a processed line.
     public struct LineDisposition: Sendable, Equatable {
@@ -271,11 +268,10 @@ public actor ScriptEngine {
 
     // MARK: - Plugins
 
-    /// Load a parsed MUSHclient plugin into the live engines: give it its own
-    /// Lua environment (so its globals don't collide with other plugins),
-    /// scope its variables + ambient context, install the compat shim, run
-    /// its `<script>` in that env, register its triggers/aliases/timers
-    /// (tagged with the plugin as owner so they later run in the same env),
+    /// Load a parsed MUSHclient plugin into the live engines: give it its own Lua
+    /// environment (so its globals don't collide), scope its variables + ambient
+    /// context, install the compat shim, run its `<script>` there, register its
+    /// triggers/aliases/timers (owner-tagged so they later run in the same env),
     /// then invoke `OnPluginInstall`. Returns the install effects.
     @discardableResult
     public func loadPlugin(
@@ -347,6 +343,11 @@ public actor ScriptEngine {
     /// stores live. `nil` re-closes file access.
     public func setSQLiteDirectory(_ directory: String?) async {
         await runtime.setSQLiteDirectory(directory)
+    }
+
+    /// Install the app's `utils.*` dialog provider (native modals; `nil` = no-op).
+    public func setDialogProvider(_ provider: ScriptDialogProvider?) async {
+        await runtime.setDialogProvider(provider)
     }
 
     /// Register a helper library available to `require name`.
@@ -496,12 +497,11 @@ public actor ScriptEngine {
     }
 
     /// Offer a command about to be sent to the MUD to every loaded plugin's
-    /// `OnPluginSend(text)` (MUSHclient's send hook). Returns whether the send
-    /// is `blocked` (any plugin returned false) and any effects the callbacks
-    /// produced (registrations consumed; sends/notes returned for the host to
-    /// apply). dinv's `dbot.execute` framework relies on this: it sends a
-    /// `DINV_BYPASS …`-prefixed line, and `OnPluginSend` strips the prefix,
-    /// re-sends the bare command, and returns false to drop the prefixed one.
+    /// `OnPluginSend(text)` (MUSHclient's send hook). Returns whether the send is
+    /// `blocked` (any plugin returned false) + the callbacks' effects. dinv's
+    /// `dbot.execute` relies on this: it sends a `DINV_BYPASS …`-prefixed line, and
+    /// `OnPluginSend` strips the prefix, re-sends the bare command, and returns
+    /// false to drop the prefixed one.
     public func fireOnPluginSend(_ text: String) async -> (blocked: Bool, effects: [ScriptEffect]) {
         guard !suspended else { return (false, []) }
         var effects: [ScriptEffect] = []

@@ -124,16 +124,42 @@ extension LuaRuntime {
       return true
     end
 
-    -- GUI / native dialogs: no headless meaning — safe stubs (cancel/empty), so
-    -- plugins that offer dialogs still load and their non-dialog paths work.
+    -- Native dialogs (msgbox/inputbox/editbox/choose/file pickers) → the app's
+    -- modal provider via proteles.dialog; with no provider they degrade safely
+    -- (cancelled / "ok"). msgbox(message, title, buttons): buttons is the
+    -- MUSHclient code (0=OK, 1=OK/Cancel, 3=Yes/No/Cancel, 4=Yes/No).
+    function utils.msgbox(message, title, buttons)
+      return proteles.dialog("msgbox", tostring(message == nil and "" or message),
+        tostring(title == nil and "" or title), tonumber(buttons) or 0)
+    end
+    utils.umsgbox = utils.msgbox
+    -- inputbox(message, title, default) → entered text or nil.
+    function utils.inputbox(message, title, default)
+      return proteles.dialog("input", tostring(message == nil and "" or message),
+        tostring(title == nil and "" or title), tostring(default == nil and "" or default), false)
+    end
+    -- editbox(title, prompt, default) → multi-line text or nil.
+    function utils.editbox(title, prompt, default)
+      return proteles.dialog("input", tostring(prompt == nil and "" or prompt),
+        tostring(title == nil and "" or title), tostring(default == nil and "" or default), true)
+    end
+    -- choose(message, title, items[, default]) → the 1-based index of the pick,
+    -- or nil if cancelled.
+    function utils.choose(message, title, items)
+      if type(items) ~= "table" then return nil end
+      return proteles.dialog("choose", tostring(message == nil and "" or message),
+        tostring(title == nil and "" or title), unpack(items))
+    end
+    function utils.filepicker() return proteles.dialog("openfile", "Choose a file", false) end
+    function utils.directorypicker() return proteles.dialog("openfile", "Choose a folder", true) end
+
+    -- Remaining native dialogs we don't (yet) implement: safe no-op stubs so
+    -- plugins that offer them still load and their non-dialog paths work.
     local function nilFn() return nil end
     for _, name in ipairs({
-      "inputbox", "editbox", "listbox", "multilistbox", "choose", "fontpicker",
-      "filepicker", "directorypicker", "filterpicker", "colourpicker",
+      "listbox", "multilistbox", "fontpicker", "filterpicker", "colourpicker",
       "spellcheckdialog", "xmlread", "functionlist", "callbackslist",
     }) do utils[name] = nilFn end
-    function utils.msgbox(...) return "ok" end
-    function utils.umsgbox(...) return "ok" end
     function utils.getfontfamilies() return {} end
     function utils.getfontsize(...) return 0 end
     function utils.appendtonotepad(...) return 0 end
