@@ -144,6 +144,7 @@ public actor LuaRuntime {
         case enableTrigger, enableTimer, enableGroup, doAfter
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
         case fileExists, makeDirectory, reloadPlugin
+        case aardwolfTelnet
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -349,6 +350,7 @@ public actor LuaRuntime {
         setHostFunction("onBroadcast", .onBroadcast)
         setHostFunction("broadcast", .broadcast)
         setHostFunction("export", .export)
+        setHostFunction("aardwolfTelnet", .aardwolfTelnet)
         setHostFunction("call", .call)
         setHostFunction("getVar", .getVar)
         setHostFunction("setVar", .setVar)
@@ -405,7 +407,8 @@ public actor LuaRuntime {
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
-             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin:
+             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin,
+             .aardwolfTelnet:
             recordEffect(function, arguments)
             return []
         case .call:

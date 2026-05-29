@@ -20,8 +20,56 @@ extension LuaRuntime {
         "serialize": serializeSource,
         "json": jsonSource,
         "aardwolf_colors": aardwolfColorsSource,
-        "addxml": addxmlSource
+        "addxml": addxmlSource,
+        "telnet_options": telnetOptionsSource
     ]
+
+    /// `telnet_options` (clean-room): the Aardwolf telnet-option constants
+    /// (`TELOPT_*`) + `TelnetOption(which, on)` / `TelnetOptionOn` /
+    /// `TelnetOptionOff`, which many plugins `dofile(GetInfo(60).."telnet_options
+    /// .lua")` to toggle Aardwolf "tag" options (spellup, helps, channels, …).
+    /// MUSHclient ships it in the shared plugins dir; Proteles isolates each
+    /// plugin, so we provide it as a bundled helper (the `dofile` basename
+    /// fallback resolves it). The original sends the option-102 subnegotiation
+    /// via `SendPkt`; we route it through `proteles.aardwolfTelnet`, which emits
+    /// the exact same `IAC SB 102 <option> <1|2> IAC SE` natively (byte-clean,
+    /// no binary round-trip through the Lua↔Swift string bridge). The numeric
+    /// option codes are Aardwolf protocol facts.
+    private static let telnetOptionsSource = """
+    TELOPT_STATMON = 1
+    TELOPT_BIGMAP = 2
+    TELOPT_HELPS = 3
+    TELOPT_MAP = 4
+    TELOPT_CHANNELS = 5
+    TELOPT_TELLS = 6
+    TELOPT_SPELLUP = 7
+    TELOPT_SKILLGAINS = 8
+    TELOPT_SAYS = 9
+    TELOPT_SCORE = 11
+    TELOPT_ROOM_NAMES = 12
+    TELOPT_EXIT_NAMES = 14
+    TELOPT_EDITOR_TAGS = 15
+    TELOPT_EQUIPMENT = 16
+    TELOPT_INVENTORY = 17
+    TELOPT_ROOMDESC_TAGS = 18
+    TELOPT_ROOMNAME_TAGS = 19
+    TELOPT_INVMON_TAGS = 20
+    TELOPT_REPOP_TAGS = 21
+    TELOPT_QUIET = 50
+    TELOPT_AUTOTICK = 51
+    TELOPT_PROMPT = 52
+    TELOPT_PAGING = 53
+    TELOPT_AUTOMAP = 54
+    TELOPT_SHORTMAP = 55
+    TELOPT_REQUEST_STATUS = 100
+
+    function TelnetOption(which, on)
+      proteles.aardwolfTelnet(which, on and true or false)
+    end
+
+    function TelnetOptionOn(which) TelnetOption(which, true) end
+    function TelnetOptionOff(which) TelnetOption(which, false) end
+    """
 
     /// `addxml` (clean-room): add triggers/aliases/timers from an attribute
     /// table, the way MUSHclient's `addxml.lua` does — but mapped onto our
