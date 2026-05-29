@@ -57,6 +57,22 @@ struct ShimCompatAdditionsTests {
         }
     }
 
+    @Test("SendSpecial honours Echo and defaults to no-echo (one-arg form)")
+    func sendSpecial() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo(tostring(SendSpecial("score") == error_code.eOK)) -- one arg → no echo
+        SendSpecial("look", true)   -- Echo true → echoed send
+        SendSpecial("quaff blue", false, true, true, true) -- queue/log/history ignored
+        """)
+        #expect(effects == [
+            .sendNoEcho("score"), // the send happens inside the call, before echo prints eOK
+            .echo("true"),
+            .send("look"),
+            .sendNoEcho("quaff blue")
+        ])
+    }
+
     @Test("checkplugin / aard_requirements load as no-ops (the dependency nag)")
     func dependencyNagStub() async throws {
         let lua = try await shimmed()

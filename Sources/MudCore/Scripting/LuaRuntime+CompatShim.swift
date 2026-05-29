@@ -164,6 +164,16 @@ public extension LuaRuntime {
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end
     function SendNoEcho(text) proteles.sendNoEcho(tostring(text)); return error_code.eOK end
+    -- SendSpecial(Message, Echo, Queue, Log, History): MUSHclient's send with
+    -- options. We honour Echo (true → echo the line like Send; false/nil → no
+    -- echo); Queue/Log/History don't apply to our send path and are accepted
+    -- and ignored. Plugins commonly call it with one arg (e.g. Double
+    -- Predictor's `SendSpecial(text)`) → behaves like SendNoEcho.
+    function SendSpecial(message, echo, queue, log, history)
+      message = tostring(message)
+      if echo then proteles.send(message) else proteles.sendNoEcho(message) end
+      return error_code.eOK
+    end
     -- MUSHclient's Execute runs world input. Text prefixed with the script
     -- prefix (a run of backslashes, the MUSHclient convention) is executed as
     -- Lua in the caller's environment rather than sent; plugins use this to
