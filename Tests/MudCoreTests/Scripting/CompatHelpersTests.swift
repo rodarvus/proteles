@@ -18,9 +18,12 @@ struct CompatHelpersTests {
         // Leaf scalars come back as strings (Aardwolf plugins compare them so).
         #expect(try await lua.string("gmcp('char.status.state')") == "3")
         #expect(try await lua.string("gmcp('char.status.enemy')") == "a rat")
-        // A table node is returned as a table; a missing path is nil.
+        // A table node is returned as a table; a missing path returns "" (the
+        // reference gmcphelper's `… or ""`), so indexing it is harmlessly nil
+        // (string index) rather than a nil-index crash.
         #expect(try await lua.boolean("type(gmcp('char.status')) == 'table'"))
-        #expect(try await lua.boolean("gmcp('char.nope.missing') == nil"))
+        #expect(try await lua.boolean("gmcp('char.nope.missing') == ''"))
+        #expect(try await lua.boolean("gmcp('char.nope.missing').state == nil"))
     }
 
     @Test("copytable.deep makes an independent copy")
