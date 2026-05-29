@@ -91,7 +91,11 @@ public enum MUSHclientPluginLoader {
     }
 
     public static func parse(_ data: Data) throws -> MUSHclientPlugin {
-        let parser = XMLParser(data: data)
+        // MUSHclient's lenient XML reader allows raw `<`/`>` inside attribute
+        // values (e.g. PCRE named-group regexes `(?<n>…)` in a trigger `match`),
+        // which strict XMLParser rejects; escape those up front so such plugins
+        // import without mangling their patterns.
+        let parser = XMLParser(data: MUSHclientXMLSanitizer.lenientAttributeData(data))
         let delegate = PluginParserDelegate()
         parser.delegate = delegate
         guard parser.parse() else {
