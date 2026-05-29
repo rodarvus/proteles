@@ -57,6 +57,7 @@ public enum PluginInstaller {
     public static func installFromFiles(
         _ sources: [URL],
         into pluginsDirectory: URL,
+        origin: PluginOrigin? = nil,
         enabledFor profile: UUID,
         now: Date,
         fileManager: FileManager = .default
@@ -80,7 +81,7 @@ public enum PluginInstaller {
             throw InstallError.copyFailed(error.localizedDescription)
         }
 
-        let origin = PluginOrigin.file(path: (sources.first ?? xml).path)
+        let origin = origin ?? .file(path: (sources.first ?? xml).path)
         let manifest = PluginManifest(pluginID: plugin.id, name: name, origin: origin, addedAt: now)
         try writeManifest(manifest, into: directory, fileManager: fileManager)
         let entry = PluginLibraryEntry(
@@ -96,13 +97,50 @@ public enum PluginInstaller {
 
     // MARK: - Helpers
 
+    /// Resolve a user-chosen path to the plugin `.xml` to install. A `.xml` file
+    /// is returned as-is; a folder yields the `.xml` inside — preferring one
+    /// whose name matches the folder (`foo/foo.xml`), else the only/first `.xml`.
+    /// `nil` if no plugin `.xml` is found at the top level.
+    public static func resolvePluginXML(at url: URL, fileManager: FileManager = .default) -> URL? {
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
+        if !isDir.boolValue {
+            return url.pathExtension.lowercased() == "xml" ? url : nil
+        }
+        let xmls = ((try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension.lowercased() == "xml" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let folderName = url.lastPathComponent.lowercased()
+        return xmls.first { $0.deletingPathExtension().lastPathComponent.lowercased() == folderName }
+            ?? xmls.first
+    }
+
+    /// Find the plugin `.xml` anywhere under `root` (shallowest first), so a
+    /// downloaded zip that extracts to a wrapper dir (e.g. GitHub's
+    /// `<repo>-<branch>/`) still resolves. Returns the `.xml` URL, or `nil`.
+    public static func findPluginXML(under root: URL, fileManager: FileManager = .default) -> URL? {
+        if let direct = resolvePluginXML(at: root, fileManager: fileManager) { return direct }
+        var queue = [root]
+        while !queue.isEmpty {
+            let dir = queue.removeFirst()
+            let contents = (try? fileManager.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: [.isDirectoryKey]
+            )) ?? []
+            if let xml = contents
+                .filter({ $0.pathExtension.lowercased() == "xml" })
+                .min(by: { $0.lastPathComponent < $1.lastPathComponent }) { return xml }
+            queue += contents.filter { isDirectory($0, fileManager) }
+        }
+        return nil
+    }
+
     /// Resolve `sources` to (the items to copy, the plugin `.xml`).
     private static func resolve(
         _ sources: [URL], fileManager: FileManager
     ) throws -> (items: [URL], xml: URL) {
         if sources.count == 1, isDirectory(sources[0], fileManager) {
             let folder = sources[0]
-            guard let xml = LocalPluginStore.resolvePluginXML(at: folder, fileManager: fileManager)
+            guard let xml = resolvePluginXML(at: folder, fileManager: fileManager)
             else { throw InstallError.noPluginXML }
             let contents = (try? fileManager.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: nil

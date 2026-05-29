@@ -89,17 +89,14 @@ public final class ScriptsModel {
         if let worldDataDir {
             await loadSearchAndDestroyHost(worldDataDir: worldDataDir)
         }
-        // Then load this world's MUSHclient .xml plugins (after the script
-        // reset above, so their triggers/timers survive).
-        if let pluginsDirectory = MUSHclientPluginLoader.defaultDirectory(forProfile: id) {
-            await session.loadPlugins(fromDirectory: pluginsDirectory)
-        }
-        // Then this world's personal plugins, referenced in place from the
-        // user's own disk (never copied here); modules resolve from their folder.
-        if let localURL = try? LocalPluginStore.defaultStoreURL(forProfile: id) {
-            let localStore = LocalPluginStore(url: localURL)
-            try? await localStore.load()
-            await session.loadLocalPlugins(localStore.plugins)
+        // Then load this world's enabled library plugins (after the script reset
+        // above, so their triggers/timers survive). Each lives in its own
+        // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59).
+        if let libraryURL = try? PluginLibraryStore.defaultStoreURL() {
+            let library = PluginLibraryStore(url: libraryURL)
+            try? await library.load()
+            let directories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
+            await session.loadPlugins(directories: directories)
         }
         // dinv (D-32): its per-character DB lives under the world-data dir (the
         // sqlite root). Armed here; loaded once the character is active (D-32).

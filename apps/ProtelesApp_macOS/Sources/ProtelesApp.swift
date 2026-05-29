@@ -271,15 +271,13 @@ struct ProtelesApp: App {
         Window("Plugins", id: ProtelesApp.pluginsWindowID) {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
-                    guard let id = worlds.activeProfileID,
-                          let directory = MUSHclientPluginLoader.defaultDirectory(forProfile: id)
-                    else { return }
+                    guard let id = worlds.activeProfileID else { return }
                     let scripts = scripts
-                    plugins.prepare(directory: directory) {
+                    plugins.prepare(profileID: id) {
                         await scripts.load(forProfile: id)
                     }
                     await plugins.refreshNative()
-                    await plugins.refreshLocal()
+                    await plugins.refresh()
                 }
         }
         .windowResizability(.contentSize)

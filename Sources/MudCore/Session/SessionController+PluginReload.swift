@@ -57,31 +57,26 @@ extension SessionController {
         await reloadDiskPlugin(id: id)
     }
 
-    /// Re-read a single on-disk MUSHclient plugin (already unloaded) from the
-    /// active world's plugin directory and load it fresh. No-op if the
-    /// directory or a matching plugin file can't be found.
+    /// Re-read a single on-disk MUSHclient plugin (already unloaded) from its own
+    /// library directory and load it fresh. No-op if the plugin's directory or a
+    /// matching plugin `.xml` can't be found.
     private func reloadDiskPlugin(id: String) async {
-        guard let scriptEngine, let directory = loadedPluginsDirectory,
-              let entries = try? FileManager.default.contentsOfDirectory(
-                  at: directory, includingPropertiesForKeys: nil
-              )
+        guard let scriptEngine,
+              let directory = loadedPluginDirectories[id],
+              let xml = PluginInstaller.resolvePluginXML(at: directory),
+              let data = try? Data(contentsOf: xml),
+              let plugin = try? MUSHclientPluginLoader.parse(data), plugin.id == id
         else { return }
         let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
-        for url in entries where url.pathExtension.lowercased() == "xml" {
-            guard let data = try? Data(contentsOf: url),
-                  let plugin = try? MUSHclientPluginLoader.parse(data), plugin.id == id
-            else { continue }
-            let context = PluginContext(
-                pluginID: plugin.id,
-                pluginName: plugin.name,
-                pluginDirectory: directory.path,
-                worldDirectory: worldDir,
-                appDirectory: worldDir
-            )
-            await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-            await persistVariablesIfDirty()
-            restartTimerLoop()
-            return
-        }
+        let context = PluginContext(
+            pluginID: plugin.id,
+            pluginName: plugin.name,
+            pluginDirectory: Self.directoryPath(directory),
+            worldDirectory: worldDir,
+            appDirectory: worldDir
+        )
+        await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        await persistVariablesIfDirty()
+        restartTimerLoop()
     }
 }

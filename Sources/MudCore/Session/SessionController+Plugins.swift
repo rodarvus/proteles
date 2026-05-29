@@ -1,37 +1,41 @@
 import Foundation
 
-/// Loading MUSHclient plugins into the live ``ScriptEngine`` — both the
-/// world's imported plugins (copied into the per-profile plugins folder) and
-/// its **personal** plugins (referenced in place from the user's own disk).
-/// Split out of ``SessionController`` so the scripting extension stays within
-/// the file-length budget.
+/// Loading the user's library plugins into the live ``ScriptEngine``. A library
+/// plugin lives in its own self-contained directory under
+/// `~/Documents/Proteles/Plugins/<name>/` (see `PluginLibrary`); this resolves
+/// each enabled entry to its `.xml` + module folder and runs it through the
+/// compat shim. Split out of ``SessionController`` to stay within the file-length
+/// budget.
 public extension SessionController {
-    /// Discover and load every MUSHclient `.xml` plugin in `directory` into the
-    /// live engine: parse each, scope it with a ``PluginContext`` rooted at the
-    /// directory (so `require`/`dofile`/`GetInfo` resolve there), run it (firing
-    /// `OnPluginInstall`), and apply the resulting effects. Call after
+    /// Load the plugins in the given directories (each a self-contained plugin
+    /// dir, one `.xml` + its modules) into the live engine: set the module search
+    /// path to the union of the directories (so `require`/`dofile`/`GetInfo`
+    /// resolve), parse + run each (firing `OnPluginInstall`), and apply the
+    /// effects. Records each plugin's directory for `ReloadPlugin`. Call after
     /// ``loadScripts(_:)`` (which resets the engines) and before connecting.
-    /// No-op without a script engine or plugins.
-    func loadPlugins(fromDirectory directory: URL) async {
+    /// A directory with no resolvable `.xml` is skipped. No-op without a script
+    /// engine.
+    func loadPlugins(directories: [URL]) async {
         guard let scriptEngine else { return }
-        loadedPluginsDirectory = directory
-        let entries = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
-        )) ?? []
-        let xmlFiles = entries
-            .filter { $0.pathExtension.lowercased() == "xml" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        guard !xmlFiles.isEmpty else { return }
+        let resolved: [(directory: URL, xml: URL)] = directories.compactMap { directory in
+            guard let xml = PluginInstaller.resolvePluginXML(at: directory) else { return nil }
+            return (directory, xml)
+        }
+        guard !resolved.isEmpty else {
+            loadedPluginDirectories = [:]
+            return
+        }
+        await scriptEngine.setModuleSearchPaths(resolved.map(\.directory.path))
 
-        // Plugins resolve their own files (and dofile targets) here.
-        await scriptEngine.setModuleSearchPaths([directory.path])
-        for url in xmlFiles {
-            guard let data = try? Data(contentsOf: url),
+        // GetInfo(66)/(67) → the world-data dir (trailing slash so
+        // `GetInfo(66)..WorldName()..".db"` resolves to a plugin's DB).
+        let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
+        var directories: [String: URL] = [:]
+        for (directory, xml) in resolved {
+            guard let data = try? Data(contentsOf: xml),
                   let plugin = try? MUSHclientPluginLoader.parse(data)
             else { continue }
-            // GetInfo(66)/(67) → the world-data dir (trailing slash so
-            // `GetInfo(66)..WorldName()..".db"` resolves to the mapper DB).
-            let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
+            directories[plugin.id] = directory
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
@@ -41,44 +45,10 @@ public extension SessionController {
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         }
+        loadedPluginDirectories = directories
         // OnPluginInstall may have set variables; persist them.
         await persistVariablesIfDirty()
         // Plugins may have registered timers.
-        restartTimerLoop()
-    }
-
-    /// Load the world's **personal** plugins — referenced in place from the
-    /// user's own disk (never copied into app-support), each resolving its
-    /// `dofile`/`require` modules from its own folder. Call after
-    /// ``loadPlugins(fromDirectory:)`` so the module search path is the union of
-    /// the imported-plugins dir + every personal plugin's folder. Disabled refs
-    /// and paths that don't resolve to a plugin `.xml` are skipped.
-    func loadLocalPlugins(_ references: [LocalPluginReference]) async {
-        guard let scriptEngine else { return }
-        let resolved = references
-            .filter(\.enabled)
-            .compactMap { LocalPluginStore.resolvePluginXML(at: $0.url) }
-        guard !resolved.isEmpty else { return }
-
-        var searchPaths = resolved.map { $0.deletingLastPathComponent().path }
-        if let imported = loadedPluginsDirectory?.path { searchPaths.insert(imported, at: 0) }
-        await scriptEngine.setModuleSearchPaths(searchPaths)
-
-        let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
-        for xml in resolved {
-            guard let data = try? Data(contentsOf: xml),
-                  let plugin = try? MUSHclientPluginLoader.parse(data)
-            else { continue }
-            let context = PluginContext(
-                pluginID: plugin.id,
-                pluginName: plugin.name,
-                pluginDirectory: Self.directoryPath(xml.deletingLastPathComponent()),
-                worldDirectory: worldDir,
-                appDirectory: worldDir
-            )
-            await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-        }
-        await persistVariablesIfDirty()
         restartTimerLoop()
     }
 

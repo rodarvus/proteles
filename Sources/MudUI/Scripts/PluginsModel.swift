@@ -2,22 +2,6 @@ import Foundation
 import MudCore
 import Observation
 
-/// A MUSHclient plugin installed for a world: the on-disk `.xml` plus parsed
-/// metadata for display.
-public struct InstalledPlugin: Identifiable, Sendable, Equatable {
-    /// The file URL (also the stable identity).
-    public let id: URL
-    public let name: String
-    public let author: String
-    public let version: String
-    /// `false` if the file couldn't be parsed as a plugin.
-    public let parsed: Bool
-
-    public var fileName: String {
-        id.lastPathComponent
-    }
-}
-
 /// A built-in native (Swift) plugin shown in the Plugins window, with its
 /// live enabled state and displayable help.
 public struct NativePluginRow: Identifiable, Sendable, Equatable {
@@ -40,39 +24,38 @@ public struct BuiltInFeatureRow: Identifiable, Sendable, Equatable {
     public let commands: [String]
 }
 
-/// A **personal** plugin referenced in place from the user's own disk (never
-/// copied into app-support), shown in the Plugins window with its parsed name,
-/// source path, and per-world enabled state.
-public struct LocalPluginRow: Identifiable, Sendable, Equatable {
-    public let id: UUID
+/// One plugin in the user's library, shown in the Plugins window: its parsed
+/// name, its directory, where it came from (for the Update action), and its
+/// per-world enabled state.
+public struct LibraryPluginRow: Identifiable, Sendable, Equatable {
+    /// The MUSHclient plugin id (stable identity).
+    public let id: String
     public let name: String
-    public let path: String
-    /// `false` if the referenced path no longer resolves to a parseable plugin.
+    public let directory: URL
+    public let origin: PluginOrigin
+    /// `false` if the directory no longer resolves to a parseable plugin.
     public let parsed: Bool
     public var enabled: Bool
 }
 
-/// What's selected in the Plugins window: a built-in native plugin (by id),
-/// an imported `.xml` plugin (by file URL), a personal plugin (by reference
-/// id), or a built-in feature (by id).
+/// What's selected in the Plugins window: a built-in native plugin (by id), a
+/// built-in feature (by id), or a library plugin (by MUSHclient id).
 public enum PluginSelection: Hashable, Sendable {
     case native(String)
-    case imported(URL)
-    case local(UUID)
     case feature(String)
+    case library(String)
 }
 
-/// `@Observable` model for the Plugins window: lists a world's installed
-/// `.xml` plugins and the built-in native plugins, imports new ones (with a
-/// compatibility report), and removes/toggles them. File operations live
-/// here; re-syncing the live session is delegated to a `resync` closure the
-/// app supplies (so a change applies immediately).
+/// `@Observable` model for the Plugins window: lists the user's library plugins
+/// and the built-in native plugins, adds new ones from your Mac or a URL (with a
+/// compatibility report), and removes/toggles/updates them. File operations live
+/// here; re-syncing the live session is delegated to a `resync` closure the app
+/// supplies (so a change applies immediately).
 @MainActor
 @Observable
 public final class PluginsModel {
-    public private(set) var installed: [InstalledPlugin] = []
-    /// Personal plugins referenced in place from the user's own disk.
-    public private(set) var localPlugins: [LocalPluginRow] = []
+    /// The user's added plugins (the library).
+    public private(set) var libraryPlugins: [LibraryPluginRow] = []
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
 
@@ -126,19 +109,12 @@ public final class PluginsModel {
     public var selection: PluginSelection?
 
     private let session: SessionController
-    private var directory: URL?
-    private var localStore: LocalPluginStore?
+    private var profileID: UUID?
+    private var library: PluginLibraryStore?
     private var resync: (@MainActor () async -> Void)?
 
     public init(session: SessionController) {
         self.session = session
-    }
-
-    /// The selected imported plugin's file URL, if an imported plugin (not a
-    /// native one) is selected — used by the import/remove flow.
-    public var selectedImportedURL: URL? {
-        if case .imported(let url) = selection { return url }
-        return nil
     }
 
     /// The selected built-in feature (mapper / S&D), if one is selected.
@@ -153,14 +129,54 @@ public final class PluginsModel {
         return nativePlugins.first { $0.id == id }
     }
 
-    /// The selected personal plugin, if one is selected.
-    public var selectedLocal: LocalPluginRow? {
-        guard case .local(let id) = selection else { return nil }
-        return localPlugins.first { $0.id == id }
+    /// The selected library plugin, if one is selected.
+    public var selectedLibrary: LibraryPluginRow? {
+        guard case .library(let id) = selection else { return nil }
+        return libraryPlugins.first { $0.id == id }
     }
 
-    /// Load the built-in native plugins' current enabled state from the
-    /// engine. Call when the Plugins window appears.
+    // MARK: - Lifecycle
+
+    /// Point the model at the active profile (for per-world enablement) and
+    /// supply the re-sync action (reloading the profile's scripts + plugins).
+    /// Call when the Plugins window appears / the active profile changes.
+    public func prepare(profileID: UUID, resync: @escaping @MainActor () async -> Void) {
+        self.profileID = profileID
+        self.resync = resync
+        library = (try? PluginLibraryStore.defaultStoreURL()).map { PluginLibraryStore(url: $0) }
+    }
+
+    /// Load the library from disk into displayable rows (parsing each plugin's
+    /// `.xml` for its name + validity). Call when the window appears.
+    public func refresh() async {
+        guard let library, let profileID else { libraryPlugins = []; return }
+        try? await library.load()
+        libraryPlugins = await library.entries.map { entry in
+            let directory = (try? entry.directory())
+            let plugin = directory
+                .flatMap { PluginInstaller.resolvePluginXML(at: $0) }
+                .flatMap { try? Data(contentsOf: $0) }
+                .flatMap { try? MUSHclientPluginLoader.parse($0) }
+            let name = (plugin?.name).flatMap { $0.isEmpty ? nil : $0 } ?? entry.name
+            return LibraryPluginRow(
+                id: entry.pluginID,
+                name: name,
+                directory: directory ?? URL(fileURLWithPath: "/"),
+                origin: entry.origin,
+                parsed: plugin != nil,
+                enabled: entry.isEnabled(forProfile: profileID)
+            )
+        }
+    }
+
+    /// Enable/disable a native plugin by id; applies live and persists the flag
+    /// to the world's native-plugin store.
+    public func setNativeEnabled(_ enabled: Bool, id: String) async {
+        await session.setNativePluginEnabled(enabled, id: id)
+        await refreshNative()
+    }
+
+    /// Load the built-in native plugins' current enabled state from the engine.
     public func refreshNative() async {
         let listing = await session.scriptEngine?.nativePluginListing() ?? []
         nativePlugins = listing.map {
@@ -176,143 +192,119 @@ public final class PluginsModel {
         }
     }
 
-    /// Enable/disable a native plugin by id; applies live and persists the
-    /// flag to the world's native-plugin store.
-    public func setNativeEnabled(_ enabled: Bool, id: String) async {
-        await session.setNativePluginEnabled(enabled, id: id)
-        await refreshNative()
-    }
+    // MARK: - Compatibility report
 
-    /// Point the model at a world's plugins directory and supply the
-    /// re-sync action (typically reloading the active profile's scripts +
-    /// plugins). Call when the Plugins window appears.
-    public func prepare(directory: URL, resync: @escaping @MainActor () async -> Void) {
-        self.directory = directory
-        self.resync = resync
-        // Personal-plugin references live beside the imported plugins (the
-        // loader scans only `.xml`, so the `.json` is ignored there).
-        localStore = LocalPluginStore(url: directory.appendingPathComponent("local-plugins.json"))
-        refresh()
-    }
-
-    /// Load the world's personal-plugin references from disk into displayable
-    /// rows (parsing each referenced `.xml` for its name). Call when the window
-    /// appears, alongside ``refreshNative()``.
-    public func refreshLocal() async {
-        guard let localStore else { localPlugins = []; return }
-        try? await localStore.load()
-        localPlugins = await localStore.plugins.map { reference in
-            let plugin = LocalPluginStore.resolvePluginXML(at: reference.url)
-                .flatMap { try? Data(contentsOf: $0) }
-                .flatMap { try? MUSHclientPluginLoader.parse($0) }
-            let name = (plugin?.name).flatMap { $0.isEmpty ? nil : $0 } ?? reference.url.lastPathComponent
-            return LocalPluginRow(
-                id: reference.id,
-                name: name,
-                path: reference.path,
-                parsed: plugin != nil,
-                enabled: reference.enabled
-            )
+    /// Resolve the plugin `.xml` among `sources` (a folder, or loose files) and
+    /// analyse it for the pre-add compatibility report. `nil` xml if none found.
+    public func report(forSources sources: [URL]) -> (xml: URL?, report: PluginImportReport?) {
+        let xml: URL? = if sources.count == 1 {
+            PluginInstaller.findPluginXML(under: sources[0])
+        } else {
+            sources.first { $0.pathExtension.lowercased() == "xml" }
         }
+        let report = xml
+            .flatMap { try? Data(contentsOf: $0) }
+            .flatMap { try? MUSHclientPluginLoader.parse($0) }
+            .map { PluginImporter.analyze($0) }
+        return (xml, report)
     }
 
-    /// Reference a personal plugin at `url` (a `.xml` or its folder), load it
-    /// live, and persist the reference per-world. Returns `false` if the path
-    /// doesn't resolve to a plugin `.xml`.
+    // MARK: - Add / remove / enable / update
+
+    /// Stage a download from `url` into a temp directory (for the report +
+    /// install). Throws on download/extract failure. The caller removes the temp
+    /// dir when done.
+    public func stageDownload(from url: URL) async throws -> URL {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("plugin-dl-\(UUID().uuidString)", isDirectory: true)
+        try await PluginDownloader.download(from: url, into: temp)
+        return temp
+    }
+
+    /// Install a plugin from local `sources` (a folder or loose files) into the
+    /// library, enable it for the active world, and re-sync. `origin` overrides
+    /// the recorded source (a URL, for a staged download). Returns the plugin id.
     @discardableResult
-    public func addLocalPlugin(at url: URL) async -> Bool {
-        guard let localStore, LocalPluginStore.resolvePluginXML(at: url) != nil else { return false }
-        let reference = LocalPluginReference(path: url.path)
-        try? await localStore.add(reference)
-        await refreshLocal()
-        await resync?()
-        selection = .local(reference.id)
-        return true
-    }
-
-    /// Drop a personal-plugin reference (the file on disk is untouched) and
-    /// re-sync so it stops loading.
-    public func removeLocal(id: UUID) async {
-        guard let localStore else { return }
-        try? await localStore.remove(id: id)
-        if selection == .local(id) { selection = nil }
-        await refreshLocal()
-        await resync?()
-    }
-
-    /// Toggle a personal plugin for this world and re-sync (a disabled plugin
-    /// isn't reloaded).
-    public func setLocalEnabled(_ enabled: Bool, id: UUID) async {
-        guard let localStore else { return }
-        try? await localStore.setEnabled(enabled, id: id)
-        await refreshLocal()
-        await resync?()
-    }
-
-    /// Re-scan the directory for `.xml` plugins.
-    public func refresh() {
-        guard let directory else { installed = []; return }
-        let urls = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
-        )) ?? []
-        installed = urls
-            .filter { $0.pathExtension.lowercased() == "xml" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-            .map(Self.describe)
-    }
-
-    /// Parse + analyse a candidate file for the import preview. `nil` if it
-    /// isn't a parseable plugin.
-    public func report(for url: URL) -> PluginImportReport? {
-        guard let data = try? Data(contentsOf: url),
-              let plugin = try? MUSHclientPluginLoader.parse(data)
+    public func add(sources: [URL], origin: PluginOrigin? = nil) async -> String? {
+        guard let library, let profileID,
+              let pluginsDir = try? ProtelesPaths.pluginsDirectory(),
+              let result = try? PluginInstaller.installFromFiles(
+                  sources, into: pluginsDir, origin: origin, enabledFor: profileID, now: Date()
+              )
         else { return nil }
-        return PluginImporter.analyze(plugin)
-    }
-
-    /// Copy `sourceURL` into the world's plugins directory and re-sync the
-    /// live session so it loads immediately. Returns the installed entry's id.
-    @discardableResult
-    public func install(from sourceURL: URL) async -> URL? {
-        guard let directory else { return nil }
-        let destination = directory.appendingPathComponent(sourceURL.lastPathComponent)
-        do {
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: destination)
-        } catch {
-            return nil
+        // Re-adding a plugin already in the library: drop the old dir first (if
+        // the new install landed in a different directory).
+        let existing = await library.entries.first { $0.pluginID == result.entry.pluginID }
+        if let existing, existing.dirName != result.entry.dirName, let oldDir = try? existing.directory() {
+            try? FileManager.default.removeItem(at: oldDir)
         }
-        refresh()
+        try? await library.upsert(result.entry)
+        await refresh()
         await resync?()
-        return destination
+        selection = .library(result.entry.pluginID)
+        return result.entry.pluginID
     }
 
-    /// Delete an installed plugin's file and re-sync.
-    public func remove(_ plugin: InstalledPlugin) async {
-        try? FileManager.default.removeItem(at: plugin.id)
-        if selection == .imported(plugin.id) { selection = nil }
-        refresh()
+    /// Remove a plugin from the library — deletes its directory and the registry
+    /// entry — and re-sync so it stops loading.
+    public func remove(pluginID: String) async {
+        guard let library else { return }
+        let entry = await library.entries.first { $0.pluginID == pluginID }
+        if let dir = try? entry?.directory() {
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try? await library.remove(pluginID: pluginID)
+        if selection == .library(pluginID) { selection = nil }
+        await refresh()
         await resync?()
     }
 
-    // MARK: - Private
+    /// Toggle a plugin for the active world and re-sync (a disabled plugin isn't
+    /// loaded).
+    public func setEnabled(_ enabled: Bool, pluginID: String) async {
+        guard let library, let profileID else { return }
+        try? await library.setEnabled(enabled, pluginID: pluginID, forProfile: profileID)
+        await refresh()
+        await resync?()
+    }
 
-    private static func describe(_ url: URL) -> InstalledPlugin {
-        guard let data = try? Data(contentsOf: url),
-              let plugin = try? MUSHclientPluginLoader.parse(data)
-        else {
-            return InstalledPlugin(
-                id: url, name: url.lastPathComponent, author: "", version: "", parsed: false
-            )
-        }
-        return InstalledPlugin(
-            id: url,
-            name: plugin.name.isEmpty ? url.lastPathComponent : plugin.name,
-            author: plugin.author,
-            version: plugin.version,
-            parsed: true
-        )
+    /// Replace a plugin's files from new local `sources`, preserving its
+    /// per-world enablement, then re-sync. (The "Update from file…" action.)
+    public func updateFromFiles(pluginID: String, sources: [URL]) async {
+        await replace(pluginID: pluginID, sources: sources, origin: .file(path: sources.first?.path ?? ""))
+    }
+
+    /// Re-download a URL-sourced plugin from its recorded origin and replace its
+    /// files, preserving enablement. (The "Refresh" action.) No-op for a
+    /// file-sourced plugin (use `updateFromFiles`).
+    public func refreshFromURL(pluginID: String) async {
+        guard let library,
+              let entry = await library.entries.first(where: { $0.pluginID == pluginID }),
+              case .url(let urlString) = entry.origin, let url = URL(string: urlString)
+        else { return }
+        guard let temp = try? await stageDownload(from: url) else { return }
+        defer { try? FileManager.default.removeItem(at: temp) }
+        await replace(pluginID: pluginID, sources: [temp], origin: .url(urlString))
+    }
+
+    /// Shared replace: keep the old enablement, drop the old dir, install fresh.
+    private func replace(pluginID: String, sources: [URL], origin: PluginOrigin) async {
+        guard let library, let profileID,
+              let old = await library.entries.first(where: { $0.pluginID == pluginID }),
+              let pluginsDir = try? ProtelesPaths.pluginsDirectory()
+        else { return }
+        if let oldDir = try? old.directory() { try? FileManager.default.removeItem(at: oldDir) }
+        guard let result = try? PluginInstaller.installFromFiles(
+            sources, into: pluginsDir, origin: origin, enabledFor: profileID, now: Date()
+        ) else { return }
+        var entry = result.entry
+        entry.enabledProfiles = old.enabledProfiles
+        entry.addedAt = old.addedAt
+        entry.updatedAt = Date()
+        // The id may differ if the file changed identity; drop the stale entry.
+        if entry.pluginID != pluginID { try? await library.remove(pluginID: pluginID) }
+        try? await library.upsert(entry)
+        await refresh()
+        await resync?()
     }
 }
