@@ -67,7 +67,12 @@ for the modern Mac — no Wine, no VM, no emulator.
 **Plugins**
 - Drop in a **MUSHclient `.xml` plugin** and it runs through the `mush.lua`
   compatibility shim (per-plugin sandboxed environments). The **Plugins**
-  window (⇧⌘P) imports them with a compatibility report.
+  window (⇧⌘P) imports them with a plain-language compatibility report.
+- **Run your own plugins privately** — **Add Local…** points Proteles at a
+  plugin (a `.xml` or its folder) **on your own disk** and runs it *in place*,
+  resolving its companion `.lua` modules from its folder. Nothing is copied into
+  the app; only a per-world reference is stored, so personal plugins stay on
+  your machine.
 - The **dinv inventory manager** (~26k lines of Lua) runs end-to-end through the
   shim: `dinv build` identifies your whole inventory **including items inside
   containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
