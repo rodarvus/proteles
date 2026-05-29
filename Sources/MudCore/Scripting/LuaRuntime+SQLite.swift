@@ -67,6 +67,12 @@ extension LuaRuntime {
         dialogProvider = provider
     }
 
+    /// Install the app's accelerator registrar (plugin `Accelerator`/
+    /// `AcceleratorTo` → the live MacroEngine).
+    func setAcceleratorRegistrar(_ registrar: (@Sendable (Macro) -> Void)?) {
+        acceleratorRegistrar = registrar
+    }
+
     /// `proteles.fileExists(path)` — whether `path` exists, but only within the
     /// allowed directory (the `utils.readdir`/`dbot.fileExists` backing). Paths
     /// outside the sandbox read as "not found" rather than leaking the tree.

@@ -146,7 +146,7 @@ public actor LuaRuntime {
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet
         case readFile, writeFile
-        case dialog
+        case dialog, accelerator
     }
 
     /// Live connection state for `proteles.isConnected` (host-updated).
@@ -155,6 +155,11 @@ public actor LuaRuntime {
     /// App hook that fulfils a plugin's `utils.*` dialog synchronously (nil =
     /// dialogs degrade to a safe default). Set by ``setDialogProvider(_:)``.
     nonisolated(unsafe) var dialogProvider: ScriptDialogProvider?
+
+    /// App hook that registers a plugin's `Accelerator`/`AcceleratorTo` keybind
+    /// into the live MacroEngine (nil = accelerators are inert). Set by
+    /// ``setAcceleratorRegistrar(_:)``.
+    nonisolated(unsafe) var acceleratorRegistrar: (@Sendable (Macro) -> Void)?
 
     /// Module-loader state (see `LuaRuntime+Modules`): `require` libraries
     /// (name → source) and the dirs `require`/`dofile` may read.
@@ -360,6 +365,7 @@ public actor LuaRuntime {
         setHostFunction("readFile", .readFile)
         setHostFunction("writeFile", .writeFile)
         setHostFunction("dialog", .dialog)
+        setHostFunction("accelerator", .accelerator)
         setHostFunction("call", .call)
         setHostFunction("getVar", .getVar)
         setHostFunction("setVar", .setVar)
@@ -417,7 +423,7 @@ public actor LuaRuntime {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin,
-             .aardwolfTelnet:
+             .aardwolfTelnet, .accelerator:
             recordEffect(function, arguments)
             return []
         case .call:

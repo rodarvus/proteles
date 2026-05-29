@@ -94,6 +94,20 @@ extension LuaRuntime {
         }
     }
 
+    /// `proteles.accelerator(key, send, sendto)` (MUSHclient Accelerator/
+    /// AcceleratorTo) → parse the key string to a ``KeyChord`` and register it in
+    /// the live MacroEngine via the app's registrar. `sendto == 12` (script) runs
+    /// `send` as Lua; anything else sends it as a command. An unparseable key is
+    /// ignored.
+    nonisolated func registerAccelerator(_ arguments: [LuaValue]) {
+        guard let registrar = acceleratorRegistrar,
+              let chord = AcceleratorParser.chord(from: Self.argString(arguments, 0))
+        else { return }
+        let send = Self.argString(arguments, 1)
+        let action: MacroAction = Int(Self.argDouble(arguments, 2)) == 12 ? .script(send) : .command(send)
+        registrar(Macro(name: "Accelerator", chord: chord, action: action))
+    }
+
     static func argString(_ arguments: [LuaValue], _ index: Int) -> String {
         index < arguments.count ? (arguments[index].stringValue ?? "") : ""
     }
@@ -120,6 +134,7 @@ extension LuaRuntime {
                 channel: Self.argOptionalString(arguments, 1) ?? ""
             ))
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .accelerator: registerAccelerator(arguments)
         case .aardwolfTelnet:
             effects.append(.aardwolfTelnet(
                 option: Int(Self.argDouble(arguments, 0)),
