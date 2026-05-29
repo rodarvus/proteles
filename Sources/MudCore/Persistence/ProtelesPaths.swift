@@ -44,6 +44,15 @@ public enum ProtelesPaths {
         )
     }
 
+    /// `~/Documents/Proteles/Scripts/` — the user's triggers/aliases/timers/macros
+    /// (split by kind, per-character or shared). Discoverable + hand-editable.
+    public static func scriptsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("Scripts", isDirectory: true),
+            fileManager
+        )
+    }
+
     /// The directory for one plugin, `Plugins/<dirName>/`. Created if missing.
     public static func pluginDirectory(
         named dirName: String,

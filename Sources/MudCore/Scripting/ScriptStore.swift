@@ -1,8 +1,7 @@
 import Foundation
 
-/// The persisted scripting set for one world: its triggers, aliases, and
-/// timers (PLAN.md §8.6). One JSON document per profile, mirroring
-/// ``ProfileDocument``.
+/// The persisted scripting set for one world: its triggers, aliases, timers, and
+/// macros (PLAN.md §8.6). Loaded into a ``ScriptEngine`` at connect time.
 public struct ScriptDocument: Codable, Sendable, Equatable {
     public var triggers: [Trigger]
     public var aliases: [Alias]
@@ -37,15 +36,48 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
     }
 }
 
-/// Actor that owns a world's user-defined automations and persists them to
-/// disk, mirroring ``ProfileStore``: the whole document is rewritten
-/// atomically after each change (these sets are small and edited rarely).
+/// Which script kinds are **shared across characters** (global) vs per-character.
+/// Persisted at `Scripts/scope.json`. Default: everything per-character.
+public struct ScriptScope: Codable, Sendable, Equatable {
+    public var triggers = false
+    public var aliases = false
+    public var timers = false
+    public var macros = false
+
+    public init() {}
+
+    public enum Kind: String, CaseIterable, Sendable {
+        case triggers, aliases, timers, macros
+    }
+
+    public func isGlobal(_ kind: Kind) -> Bool {
+        switch kind {
+        case .triggers: triggers
+        case .aliases: aliases
+        case .timers: timers
+        case .macros: macros
+        }
+    }
+
+    public mutating func setGlobal(_ kind: Kind, _ value: Bool) {
+        switch kind {
+        case .triggers: triggers = value
+        case .aliases: aliases = value
+        case .timers: timers = value
+        case .macros: macros = value
+        }
+    }
+}
+
+/// Actor that owns a world's user-defined automations and persists them under
+/// `~/Documents/Proteles/Scripts/`, **split by kind** into discoverable,
+/// hand-editable JSON files. Each kind is independently per-character
+/// (`Scripts/<character>/triggers.json`) or shared across characters
+/// (`Scripts/_shared/triggers.json`), controlled by ``ScriptScope``.
 ///
-/// Storage only — it holds no live ``TriggerEngine``/``AliasEngine``/
-/// ``TimerEngine``. The app loads the document at connect time and feeds it
-/// into a ``ScriptEngine``, and writes user edits back here. Transient,
-/// script-created automations (one-shot triggers, Mudlet-style temporary
-/// timers) are runtime-only and never added to the store.
+/// Storage only — it holds no live engine. The app loads the document at connect
+/// time into a ``ScriptEngine`` and writes user edits back here. Transient,
+/// script-created automations are runtime-only and never stored.
 public actor ScriptStore {
     public enum StoreError: Error, Equatable {
         case loadFailed(String)
@@ -53,57 +85,68 @@ public actor ScriptStore {
         case notFound(UUID)
     }
 
-    /// On-disk path of this world's script document.
-    public let url: URL
+    /// The Scripts home (`~/Documents/Proteles/Scripts/`).
+    public let directory: URL
+    /// The character key for the per-character subdirectory.
+    public let character: String
+    /// The shared subdirectory name (kinds toggled global live here).
+    private static let sharedDir = "_shared"
+    private static let scopeFile = "scope.json"
 
+    public private(set) var scope: ScriptScope
     public private(set) var triggers: [Trigger] = []
     public private(set) var aliases: [Alias] = []
     public private(set) var timers: [MudTimer] = []
     public private(set) var macros: [Macro] = []
 
-    public init(url: URL) {
-        self.url = url
+    public init(directory: URL, character: String) {
+        self.directory = directory
+        self.character = character
+        scope = Self.readScope(directory)
     }
 
-    /// A snapshot of the current document (for loading into a engine).
+    /// A snapshot of the current document (for loading into an engine).
     public var document: ScriptDocument {
         ScriptDocument(triggers: triggers, aliases: aliases, timers: timers, macros: macros)
     }
 
     // MARK: - Load
 
-    /// Load the document from disk. A missing file is treated as an empty
-    /// set (nothing is written until the first edit), so fresh profiles
-    /// don't litter empty files.
+    /// Load every kind from its scoped file. Missing files are empty sets (a
+    /// fresh setup doesn't litter empty files until the first edit).
     public func load() throws {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            apply(ScriptDocument())
-            return
-        }
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch {
-            throw StoreError.loadFailed(error.localizedDescription)
-        }
-        do {
-            try apply(JSONDecoder().decode(ScriptDocument.self, from: data))
-        } catch {
-            throw StoreError.loadFailed(error.localizedDescription)
+        scope = Self.readScope(directory)
+        triggers = decode([Trigger].self, .triggers)
+        aliases = decode([Alias].self, .aliases)
+        timers = decode([MudTimer].self, .timers)
+        macros = decode([Macro].self, .macros)
+    }
+
+    /// Replace the whole document at once (e.g. an import) and persist each kind.
+    public func replace(with document: ScriptDocument) throws {
+        triggers = document.triggers
+        aliases = document.aliases
+        timers = document.timers
+        macros = document.macros
+        for kind in ScriptScope.Kind.allCases {
+            try persist(kind)
         }
     }
 
-    /// Replace the whole document at once (e.g. an import).
-    public func replace(with document: ScriptDocument) throws {
-        apply(document)
-        try persist()
+    /// Toggle whether a kind is shared across characters. The current set moves
+    /// with you (it's written to the new scoped location); the old file is left
+    /// in place so toggling back restores the character's previous set.
+    public func setGlobal(_ kind: ScriptScope.Kind, _ value: Bool) throws {
+        scope.setGlobal(kind, value)
+        try persist(kind)
+        try writeScope()
     }
 
     // MARK: - Triggers
 
     public func addTrigger(_ trigger: Trigger) throws {
         triggers.append(trigger)
-        try persist()
+        try persist(.triggers)
     }
 
     public func updateTrigger(_ trigger: Trigger) throws {
@@ -111,22 +154,20 @@ public actor ScriptStore {
             throw StoreError.notFound(trigger.id)
         }
         triggers[index] = trigger
-        try persist()
+        try persist(.triggers)
     }
 
     public func removeTrigger(id: UUID) throws {
-        guard triggers.contains(where: { $0.id == id }) else {
-            throw StoreError.notFound(id)
-        }
+        guard triggers.contains(where: { $0.id == id }) else { throw StoreError.notFound(id) }
         triggers.removeAll { $0.id == id }
-        try persist()
+        try persist(.triggers)
     }
 
     // MARK: - Aliases
 
     public func addAlias(_ alias: Alias) throws {
         aliases.append(alias)
-        try persist()
+        try persist(.aliases)
     }
 
     public func updateAlias(_ alias: Alias) throws {
@@ -134,22 +175,20 @@ public actor ScriptStore {
             throw StoreError.notFound(alias.id)
         }
         aliases[index] = alias
-        try persist()
+        try persist(.aliases)
     }
 
     public func removeAlias(id: UUID) throws {
-        guard aliases.contains(where: { $0.id == id }) else {
-            throw StoreError.notFound(id)
-        }
+        guard aliases.contains(where: { $0.id == id }) else { throw StoreError.notFound(id) }
         aliases.removeAll { $0.id == id }
-        try persist()
+        try persist(.aliases)
     }
 
     // MARK: - Timers
 
     public func addTimer(_ timer: MudTimer) throws {
         timers.append(timer)
-        try persist()
+        try persist(.timers)
     }
 
     public func updateTimer(_ timer: MudTimer) throws {
@@ -157,22 +196,20 @@ public actor ScriptStore {
             throw StoreError.notFound(timer.id)
         }
         timers[index] = timer
-        try persist()
+        try persist(.timers)
     }
 
     public func removeTimer(id: UUID) throws {
-        guard timers.contains(where: { $0.id == id }) else {
-            throw StoreError.notFound(id)
-        }
+        guard timers.contains(where: { $0.id == id }) else { throw StoreError.notFound(id) }
         timers.removeAll { $0.id == id }
-        try persist()
+        try persist(.timers)
     }
 
     // MARK: - Macros
 
     public func addMacro(_ macro: Macro) throws {
         macros.append(macro)
-        try persist()
+        try persist(.macros)
     }
 
     public func updateMacro(_ macro: Macro) throws {
@@ -180,61 +217,75 @@ public actor ScriptStore {
             throw StoreError.notFound(macro.id)
         }
         macros[index] = macro
-        try persist()
+        try persist(.macros)
     }
 
     public func removeMacro(id: UUID) throws {
-        guard macros.contains(where: { $0.id == id }) else {
-            throw StoreError.notFound(id)
-        }
+        guard macros.contains(where: { $0.id == id }) else { throw StoreError.notFound(id) }
         macros.removeAll { $0.id == id }
-        try persist()
+        try persist(.macros)
     }
 
     // MARK: - Disk
 
-    /// Recommended per-profile location:
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/scripts/<id>.json`.
-    /// Creates the parent directory if needed.
-    public static func defaultStoreURL(
-        forProfile id: UUID,
-        fileManager: FileManager = .default
-    ) throws -> URL {
-        guard
-            let support = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            throw StoreError.loadFailed("no Application Support directory")
-        }
-        let folder = support
-            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-            .appendingPathComponent("scripts", isDirectory: true)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent("\(id.uuidString).json")
+    /// The directory a kind lives in: `Scripts/<character>/` or, if shared,
+    /// `Scripts/_shared/`. Created on demand.
+    private func scopedDirectory(for kind: ScriptScope.Kind) -> URL {
+        let sub = scope.isGlobal(kind) ? Self.sharedDir : character
+        let url = directory.appendingPathComponent(sub, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
-    // MARK: - Private
-
-    private func apply(_ document: ScriptDocument) {
-        triggers = document.triggers
-        aliases = document.aliases
-        timers = document.timers
-        macros = document.macros
+    private func path(for kind: ScriptScope.Kind) -> URL {
+        scopedDirectory(for: kind).appendingPathComponent("\(kind.rawValue).json")
     }
 
-    private func persist() throws {
+    private func decode<T: Decodable>(_: [T].Type, _ kind: ScriptScope.Kind) -> [T] {
+        guard let data = FileManager.default.contents(atPath: path(for: kind).path) else { return [] }
+        return (try? JSONDecoder().decode([T].self, from: data)) ?? []
+    }
+
+    private func persist(_ kind: ScriptScope.Kind) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data: Data
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            data = try encoder.encode(document)
+            data = switch kind {
+            case .triggers: try encoder.encode(triggers)
+            case .aliases: try encoder.encode(aliases)
+            case .timers: try encoder.encode(timers)
+            case .macros: try encoder.encode(macros)
+            }
         } catch {
             throw StoreError.saveFailed(error.localizedDescription)
         }
         do {
-            try data.write(to: url, options: .atomic)
+            try data.write(to: path(for: kind), options: .atomic)
+        } catch {
+            throw StoreError.saveFailed(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Scope persistence
+
+    private static func readScope(_ directory: URL) -> ScriptScope {
+        let url = directory.appendingPathComponent(scopeFile)
+        guard let data = FileManager.default.contents(atPath: url.path),
+              let scope = try? JSONDecoder().decode(ScriptScope.self, from: data)
+        else { return ScriptScope() }
+        return scope
+    }
+
+    private func writeScope() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try encoder.encode(scope).write(
+                to: directory.appendingPathComponent(Self.scopeFile),
+                options: .atomic
+            )
         } catch {
             throw StoreError.saveFailed(error.localizedDescription)
         }

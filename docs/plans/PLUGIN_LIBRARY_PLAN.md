@@ -97,8 +97,11 @@ clearly app-provided group.
   per-plugin lsqlite3 sandbox roots; mapper + S&D DBs → global `Databases/`;
   dinv data → `Plugins/dinv/data/<profile>/`. Touches the mapper-DB path (the
   open "loses its DB" bug area) — path change only; keep the NO-GUESSING stance.
-- **Phase C (later)** — `Scripts/` + `Aliases/` under the tree; export/share a
-  plugin (zip its dir).
+- **Phase C (shipped)** — export/share a plugin (zip its dir, excluding
+  per-character `data/`); user scripts relocated to `~/Documents/Proteles/Scripts/`,
+  split by kind (`triggers/aliases/timers/macros.json`), each independently
+  per-character (`<character>/`) or shared (`_shared/`) via a per-kind "Shared"
+  toggle in the Scripts editor (`scope.json`).
 
 ## Security / trust
 Unchanged from the prior plan: plugins run in the per-plugin `setfenv` sandbox +

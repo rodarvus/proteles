@@ -2,47 +2,53 @@ import Foundation
 @testable import MudCore
 import Testing
 
-@Suite("ScriptStore — persistence", .serialized)
+@Suite("ScriptStore — split, scoped persistence", .serialized)
 struct ScriptStoreTests {
-    private func temporaryURL() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent(
-            "proteles-scripts-test-\(UUID().uuidString).json"
-        )
+    private func temporaryDir() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("proteles-scripts-\(UUID().uuidString)", isDirectory: true)
     }
 
-    @Test("A missing file loads as an empty set and writes nothing")
-    func missingFileIsEmpty() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+    @Test("A fresh directory loads as empty sets and writes nothing")
+    func missingFilesAreEmpty() async throws {
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
-        let store = ScriptStore(url: url)
+        let store = ScriptStore(directory: dir, character: "rodarvus")
         try await store.load()
 
         #expect(await store.triggers.isEmpty)
         #expect(await store.aliases.isEmpty)
         #expect(await store.timers.isEmpty)
-        // No file created until the first edit.
-        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(await store.macros.isEmpty)
+        // No per-kind file created until the first edit.
+        #expect(!FileManager.default
+            .fileExists(atPath: dir.appendingPathComponent("rodarvus/triggers.json").path))
     }
 
-    @Test("Added automations round-trip through disk")
+    @Test("Added automations round-trip through their split files")
     func roundTrips() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
         let trigger = Trigger(pattern: .wildcard("* arrives"), sendText: "kill %1")
         let alias = Alias(pattern: .wildcard("gg *"), sendText: "get %1 corpse")
         let timer = MudTimer(schedule: .every(10), action: .send("save"))
 
         do {
-            let store = ScriptStore(url: url)
+            let store = ScriptStore(directory: dir, character: "rodarvus")
             try await store.load()
             try await store.addTrigger(trigger)
             try await store.addAlias(alias)
             try await store.addTimer(timer)
         }
+        // Each kind has its own discoverable file under the character dir.
+        #expect(FileManager.default
+            .fileExists(atPath: dir.appendingPathComponent("rodarvus/triggers.json").path))
+        #expect(FileManager.default
+            .fileExists(atPath: dir.appendingPathComponent("rodarvus/aliases.json").path))
 
-        let reopened = ScriptStore(url: url)
+        let reopened = ScriptStore(directory: dir, character: "rodarvus")
         try await reopened.load()
         #expect(await reopened.triggers == [trigger])
         #expect(await reopened.aliases == [alias])
@@ -51,8 +57,8 @@ struct ScriptStoreTests {
 
     @Test("Every TriggerPattern and TimerSchedule case survives a round-trip")
     func encodesAllCases() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
         let triggers = [
             Trigger(pattern: .substring("foo")),
@@ -70,94 +76,88 @@ struct ScriptStoreTests {
             MudTimer(schedule: .atTimeOfDay(hour: 6, minute: 30, second: 1.5), action: .send("c"))
         ]
 
-        let store = ScriptStore(url: url)
+        let store = ScriptStore(directory: dir, character: "c")
         try await store.load()
-        try await store.replace(with: ScriptDocument(
-            triggers: triggers, aliases: aliases, timers: timers
-        ))
+        try await store.replace(with: ScriptDocument(triggers: triggers, aliases: aliases, timers: timers))
 
-        let reopened = ScriptStore(url: url)
+        let reopened = ScriptStore(directory: dir, character: "c")
         try await reopened.load()
         #expect(await reopened.triggers == triggers)
         #expect(await reopened.aliases == aliases)
         #expect(await reopened.timers == timers)
     }
 
-    @Test("Update replaces by id; remove drops by id")
-    func updateAndRemove() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+    @Test("Update replaces by id; remove drops by id; unknown id throws")
+    func updateRemoveAndUnknown() async throws {
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
         var trigger = Trigger(pattern: .substring("a"), sendText: "one")
-        let store = ScriptStore(url: url)
+        let store = ScriptStore(directory: dir, character: "c")
         try await store.load()
         try await store.addTrigger(trigger)
-
         trigger.sendText = "two"
         try await store.updateTrigger(trigger)
         #expect(await store.triggers.first?.sendText == "two")
-
         try await store.removeTrigger(id: trigger.id)
         #expect(await store.triggers.isEmpty)
-    }
 
-    @Test("Updating or removing an unknown id throws notFound")
-    func unknownIDThrows() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
-
-        let store = ScriptStore(url: url)
-        try await store.load()
-        let ghost = Alias(pattern: .exact("nope"))
         await #expect(throws: ScriptStore.StoreError.self) {
-            try await store.updateAlias(ghost)
+            try await store.updateAlias(Alias(pattern: .exact("nope")))
         }
         await #expect(throws: ScriptStore.StoreError.self) {
             try await store.removeTimer(id: UUID())
         }
     }
 
-    @Test("Macros round-trip through disk and update/remove by id")
+    @Test("Macros round-trip and update/remove by id")
     func macrosRoundTrip() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
         var macro = Macro(
             name: "North",
             chord: KeyChord(keyCode: KeyCode.keypad8, isKeypad: true),
             action: .command("n")
         )
-        let store = ScriptStore(url: url)
+        let store = ScriptStore(directory: dir, character: "c")
         try await store.load()
         try await store.addMacro(macro)
 
-        let reopened = ScriptStore(url: url)
+        let reopened = ScriptStore(directory: dir, character: "c")
         try await reopened.load()
         #expect(await reopened.macros == [macro])
 
         macro.action = .command("north")
         try await store.updateMacro(macro)
         #expect(await store.macros.first?.action == .command("north"))
-
         try await store.removeMacro(id: macro.id)
         #expect(await store.macros.isEmpty)
     }
 
-    @Test("A document written before macros existed still loads (missing key = empty)")
-    func decodesMissingMacrosKey() async throws {
-        let url = temporaryURL()
-        defer { try? FileManager.default.removeItem(at: url) }
+    @Test("A kind toggled global is shared across characters; per-character kinds aren't")
+    func globalScopeSharesAcrossCharacters() async throws {
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
 
-        // Simulate a pre-macros script file: triggers present, no `macros` key.
-        let legacy = """
-        { "triggers": [], "aliases": [], "timers": [] }
-        """
-        try Data(legacy.utf8).write(to: url)
+        let shared = Trigger(pattern: .substring("global"), sendText: "g")
+        let mine = Alias(pattern: .exact("mine"), sendText: "m")
 
-        let store = ScriptStore(url: url)
-        try await store.load()
-        #expect(await store.macros.isEmpty)
-        #expect(await store.triggers.isEmpty)
+        // Character "alpha": add a trigger, make triggers global; add a per-char alias.
+        let alpha = ScriptStore(directory: dir, character: "alpha")
+        try await alpha.load()
+        try await alpha.addTrigger(shared)
+        try await alpha.setGlobal(.triggers, true) // moves triggers → _shared
+        try await alpha.addAlias(mine)
+        #expect(FileManager.default
+            .fileExists(atPath: dir.appendingPathComponent("_shared/triggers.json").path))
+
+        // Character "beta" (fresh) sees the global triggers but not alpha's alias.
+        let beta = ScriptStore(directory: dir, character: "beta")
+        try await beta.load()
+        #expect(await beta.scope.triggers) // scope.json is read back
+        #expect(await beta.triggers == [shared])
+        #expect(await beta.aliases.isEmpty)
     }
 
     @Test("ScriptEngine.reload replaces the whole automation set")
@@ -166,14 +166,11 @@ struct ScriptStoreTests {
         try await engine.addTrigger(Trigger(pattern: .substring("old"), sendText: "x"))
         #expect(await engine.triggerList.count == 1)
 
-        await engine.reload(ScriptDocument(
-            triggers: [
-                Trigger(pattern: .substring("new1")),
-                Trigger(pattern: .substring("new2"))
-            ]
-        ))
-        let patterns = await engine.triggerList.map(\.pattern)
-        #expect(patterns == [.substring("new1"), .substring("new2")])
+        await engine.reload(ScriptDocument(triggers: [
+            Trigger(pattern: .substring("new1")),
+            Trigger(pattern: .substring("new2"))
+        ]))
+        #expect(await engine.triggerList.map(\.pattern) == [.substring("new1"), .substring("new2")])
     }
 
     @Test("ScriptEngine.load ingests a document and skips invalid entries")
@@ -188,8 +185,6 @@ struct ScriptStoreTests {
         )
         let engine = try ScriptEngine()
         await engine.load(document)
-
-        // The malformed regex trigger was skipped; the valid one survives.
         #expect(await engine.triggerList.count == 1)
         #expect(await engine.aliasList.count == 1)
         #expect(await engine.timerList.count == 1)
