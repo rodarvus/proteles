@@ -52,14 +52,11 @@ public final class SearchAndDestroyStore: Sendable {
         }
     }
 
-    /// The S&D data file inside the per-profile world-data directory. Reuses
-    /// the mapper's directory resolution so both DBs share `GetInfo(66)`.
-    public static func defaultStoreURL(
-        forProfile id: UUID,
-        fileManager: FileManager = .default
-    ) throws -> URL {
-        let directory = try MapperStore.worldDataDirectory(forProfile: id, fileManager: fileManager)
-        return directory.appendingPathComponent("SnDdb.db")
+    /// The global S&D database, `~/Documents/Proteles/Databases/SnDdb.db` — the
+    /// same file the host opens via `GetInfo(66)` (its configured directory).
+    /// Area/mob data is world-wide, so it's shared across characters (D-59).
+    public static func defaultStoreURL(fileManager: FileManager = .default) throws -> URL {
+        try ProtelesPaths.searchAndDestroyDatabaseURL(fileManager: fileManager)
     }
 
     // MARK: - Schema

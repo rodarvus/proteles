@@ -62,18 +62,18 @@ extension SessionController {
     /// matching plugin `.xml` can't be found.
     private func reloadDiskPlugin(id: String) async {
         guard let scriptEngine,
-              let directory = loadedPluginDirectories[id],
-              let xml = PluginInstaller.resolvePluginXML(at: directory),
+              let paths = loadedPluginPaths[id],
+              let xml = PluginInstaller.resolvePluginXML(at: paths.code),
               let data = try? Data(contentsOf: xml),
               let plugin = try? MUSHclientPluginLoader.parse(data), plugin.id == id
         else { return }
-        let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
+        let dataDir = Self.directoryPath(paths.data)
         let context = PluginContext(
             pluginID: plugin.id,
             pluginName: plugin.name,
-            pluginDirectory: Self.directoryPath(directory),
-            worldDirectory: worldDir,
-            appDirectory: worldDir
+            pluginDirectory: Self.directoryPath(paths.code),
+            worldDirectory: dataDir,
+            appDirectory: dataDir
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         await persistVariablesIfDirty()

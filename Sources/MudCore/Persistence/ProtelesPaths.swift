@@ -55,6 +55,34 @@ public enum ProtelesPaths {
         )
     }
 
+    /// A plugin's **per-character** data directory,
+    /// `Plugins/<dirName>/data/<profile>/` (created) — where its SQLite DB +
+    /// saved state live (code is shared across characters; data is not).
+    public static func pluginDataDirectory(
+        named dirName: String,
+        profile: UUID,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        try ensure(
+            pluginDirectory(named: dirName, fileManager: fileManager)
+                .appendingPathComponent("data", isDirectory: true)
+                .appendingPathComponent(profile.uuidString, isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// The global mapper database, `Databases/Aardwolf.db` — one map of Aardwolf
+    /// shared across all characters.
+    public static func mapperDatabaseURL(fileManager: FileManager = .default) throws -> URL {
+        try databasesDirectory(fileManager: fileManager).appendingPathComponent("Aardwolf.db")
+    }
+
+    /// The global Search-and-Destroy database, `Databases/SnDdb.db` — area/mob
+    /// data shared across all characters.
+    public static func searchAndDestroyDatabaseURL(fileManager: FileManager = .default) throws -> URL {
+        try databasesDirectory(fileManager: fileManager).appendingPathComponent("SnDdb.db")
+    }
+
     /// A filesystem-safe, human-readable directory name for a plugin display
     /// name (kept readable for discoverability — spaces are fine on macOS;
     /// only path-hostile characters are replaced). Falls back to "Plugin".

@@ -33,7 +33,7 @@ struct SessionControllerPluginTests {
 
         let engine = try ScriptEngine()
         let controller = SessionController(scriptEngine: engine)
-        await controller.loadPlugins(directories: [directory])
+        await controller.loadPlugins(directories: [directory], profile: UUID())
 
         // The plugin's trigger registered and OnPluginInstall ran in scope.
         #expect(await engine.triggerList.count == 1)
@@ -70,7 +70,7 @@ struct SessionControllerPluginTests {
             let engine = try ScriptEngine()
             let controller = SessionController(scriptEngine: engine)
             await controller.attachVariableStore(VariableStore(url: variableURL))
-            await controller.loadPlugins(directories: [pluginsDir])
+            await controller.loadPlugins(directories: [pluginsDir], profile: UUID())
             #expect(await engine.variablesSnapshot()["com.test.counter"]?["n"] == "1")
         }
         let store = VariableStore(url: variableURL)
@@ -82,7 +82,7 @@ struct SessionControllerPluginTests {
             let engine = try ScriptEngine()
             let controller = SessionController(scriptEngine: engine)
             await controller.attachVariableStore(VariableStore(url: variableURL))
-            await controller.loadPlugins(directories: [pluginsDir])
+            await controller.loadPlugins(directories: [pluginsDir], profile: UUID())
             #expect(await engine.variablesSnapshot()["com.test.counter"]?["n"] == "2")
         }
     }
@@ -94,12 +94,12 @@ struct SessionControllerPluginTests {
 
         let engine = try ScriptEngine()
         let controller = SessionController(scriptEngine: engine)
-        await controller.loadPlugins(directories: [directory])
+        await controller.loadPlugins(directories: [directory], profile: UUID())
         #expect(await engine.triggerList.isEmpty)
 
         // A directory that doesn't exist is also safe.
         let missing = directory.appendingPathComponent("nope", isDirectory: true)
-        await controller.loadPlugins(directories: [missing])
+        await controller.loadPlugins(directories: [missing], profile: UUID())
         #expect(await engine.triggerList.isEmpty)
     }
 }

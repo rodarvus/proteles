@@ -8,48 +8,59 @@ import Foundation
 /// budget.
 public extension SessionController {
     /// Load the plugins in the given directories (each a self-contained plugin
-    /// dir, one `.xml` + its modules) into the live engine: set the module search
-    /// path to the union of the directories (so `require`/`dofile`/`GetInfo`
-    /// resolve), parse + run each (firing `OnPluginInstall`), and apply the
-    /// effects. Records each plugin's directory for `ReloadPlugin`. Call after
-    /// ``loadScripts(_:)`` (which resets the engines) and before connecting.
-    /// A directory with no resolvable `.xml` is skipped. No-op without a script
-    /// engine.
-    func loadPlugins(directories: [URL]) async {
+    /// dir, one `.xml` + its modules) into the live engine for character
+    /// `profile`: set the module search path to the union of the directories (so
+    /// `require`/`dofile`/`GetInfo` resolve), parse + run each (firing
+    /// `OnPluginInstall`), and apply the effects. Each plugin's `GetInfo(66)`
+    /// (`worldDirectory`) is its **own** per-character data dir
+    /// (`<plugin>/data/<profile>/`), so its SQLite DB + state stay with it (the
+    /// engine-wide lsqlite3 sandbox root spans the whole `~/Documents/Proteles`
+    /// tree). Records each plugin's code + data dirs for `ReloadPlugin`. Call
+    /// after ``loadScripts(_:)`` and before connecting. A directory with no
+    /// resolvable `.xml` is skipped. No-op without a script engine.
+    func loadPlugins(directories: [URL], profile: UUID) async {
         guard let scriptEngine else { return }
         let resolved: [(directory: URL, xml: URL)] = directories.compactMap { directory in
             guard let xml = PluginInstaller.resolvePluginXML(at: directory) else { return nil }
             return (directory, xml)
         }
         guard !resolved.isEmpty else {
-            loadedPluginDirectories = [:]
+            loadedPluginPaths = [:]
             return
         }
         await scriptEngine.setModuleSearchPaths(resolved.map(\.directory.path))
 
-        // GetInfo(66)/(67) → the world-data dir (trailing slash so
-        // `GetInfo(66)..WorldName()..".db"` resolves to a plugin's DB).
-        let worldDir = worldDataDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
-        var directories: [String: URL] = [:]
+        var paths: [String: (code: URL, data: URL)] = [:]
         for (directory, xml) in resolved {
             guard let data = try? Data(contentsOf: xml),
                   let plugin = try? MUSHclientPluginLoader.parse(data)
             else { continue }
-            directories[plugin.id] = directory
+            let dataDir = Self.pluginDataDirectory(for: directory, profile: profile)
+            paths[plugin.id] = (code: directory, data: dataDir)
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
                 pluginDirectory: Self.directoryPath(directory),
-                worldDirectory: worldDir,
-                appDirectory: worldDir
+                worldDirectory: Self.directoryPath(dataDir),
+                appDirectory: Self.directoryPath(dataDir)
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         }
-        loadedPluginDirectories = directories
+        loadedPluginPaths = paths
         // OnPluginInstall may have set variables; persist them.
         await persistVariablesIfDirty()
         // Plugins may have registered timers.
         restartTimerLoop()
+    }
+
+    /// A plugin's per-character data dir, `<plugin>/data/<profile>/` (created),
+    /// where its DB + state live (`GetInfo(66)`).
+    static func pluginDataDirectory(for codeDirectory: URL, profile: UUID) -> URL {
+        let dataDir = codeDirectory
+            .appendingPathComponent("data", isDirectory: true)
+            .appendingPathComponent(profile.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+        return dataDir
     }
 
     /// A directory path with a guaranteed trailing slash. MUSHclient's
