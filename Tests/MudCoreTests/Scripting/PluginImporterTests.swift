@@ -4,7 +4,11 @@ import Testing
 
 @Suite("PluginImporter — compatibility diagnostics")
 struct PluginImporterTests {
-    private func report(_ script: String, triggers: String = "") throws -> PluginImportReport {
+    private func report(
+        _ script: String,
+        triggers: String = "",
+        availableFiles: Set<String> = []
+    ) throws -> PluginImportReport {
         let plugin = try MUSHclientPluginLoader.parse(xml: """
         <muclient>
         <plugin id="com.test.p" name="Test Plugin" author="Me" version="1.2"/>
@@ -12,10 +16,10 @@ struct PluginImporterTests {
         <script><![CDATA[ \(script) ]]></script>
         </muclient>
         """)
-        return PluginImporter.analyze(plugin)
+        return PluginImporter.analyze(plugin, availableFiles: availableFiles)
     }
 
-    @Test("A plugin using only supported calls is reported as supported")
+    @Test("A plugin using only supported calls is Ready with no findings")
     func supportedPlugin() throws {
         let r = try report("""
         function OnPluginInstall() Note("hi"); Send("look"); SetVariable("x", "1") end
@@ -23,59 +27,100 @@ struct PluginImporterTests {
         #expect(r.name == "Test Plugin")
         #expect(r.author == "Me")
         #expect(r.version == "1.2")
-        #expect(r.verdict == .supported)
-        #expect(r.findings.allSatisfy { $0.severity == .ok })
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
     }
 
-    @Test("Miniwindow use is a caveat (commands work; the custom panel doesn't show)")
-    func miniwindowCaveat() throws {
+    @Test("Miniwindow use is a soft note — still Ready (commands work; panel won't draw)")
+    func miniwindowNote() throws {
         let r = try report("""
         function OnPluginInstall() WindowCreate("w", 0, 0, 100, 100, 1, 0, 0) end
         """)
-        // A self-drawn window is a limitation, not a blocker — the plugin's
-        // commands/automations still run, so this is "works with caveats".
-        #expect(r.verdict == .worksWithCaveats)
-        #expect(r.findings.contains { $0.severity == .warning && $0.message.contains("window") })
+        // A self-drawn window doesn't stop the plugin working, so it stays Ready
+        // and the heads-up is an info note, not a verdict-lowering warning.
+        #expect(r.verdict == .ready)
+        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("pop-up window") })
     }
 
-    @Test("EnableTrigger is fully supported (no longer flagged a caveat)")
-    func enableTriggerSupported() throws {
-        // EnableTrigger/Timer/Group route to the host engines now — they were
-        // stale "no-op pending" warnings before the dinv/S&D work landed.
-        let r = try report("""
-        function go() EnableTrigger("t", true); Note("done") end
-        """)
-        #expect(r.verdict == .supported)
-        #expect(r.findings.allSatisfy { $0.severity == .ok })
+    @Test("EnableTrigger and AddTriggerEx are fully supported (no findings)")
+    func runtimeAutomationsSupported() throws {
+        let enable = try report(#"function go() EnableTrigger("t", true); Note("done") end"#)
+        #expect(enable.verdict == .ready)
+        #expect(enable.findings.isEmpty)
+
+        let add = try report(#"function go() AddTriggerEx("t","^x$","",0,-1,0,"","fn",12,100) end"#)
+        #expect(add.verdict == .ready)
+        #expect(add.findings.isEmpty)
     }
 
-    @Test("AddTriggerEx is supported; a script AddTimer is the one real caveat")
-    func runtimeAutomationsClassification() throws {
-        // AddTriggerEx/AddAlias are real now (so: supported, no warning).
-        let triggers = try report(#"function go() AddTriggerEx("t","^x$","",0,-1,0,"","fn",12,100) end"#)
-        #expect(triggers.verdict == .supported)
-        // AddTimer becomes a one-shot, so a repeating script timer is a caveat.
-        let timer = try report(#"function go() AddTimer("t",0,0,5,"",0,"fn") end"#)
-        #expect(timer.verdict == .worksWithCaveats)
-        #expect(timer.findings.contains { $0.severity == .warning && $0.message.contains("once") })
+    @Test("A script AddTimer no longer warns — one-shot timers work like MUSHclient")
+    func addTimerSilent() throws {
+        // We can't tell a one-shot from a repeating timer statically, and a
+        // one-shot works exactly as it does in MUSHclient — so no blanket note.
+        let r = try report(#"function go() AddTimer("t",0,0,5,"",0,"fn") end"#)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
     }
 
-    @Test("A plugin that loads companion files is steered to “Add Local…”")
-    func companionFilesHint() throws {
-        let r = try report(#"dofile(GetPluginInfo(GetPluginID(), 20) .. "x_db.lua")"#)
-        #expect(r.findings.contains { $0.severity == .warning && $0.message.contains("Add Local") })
+    @Test("A required helper present in the folder resolves — Ready, no warning")
+    func helperPresentResolves() throws {
+        let r = try report(#"require "aardutils""#, availableFiles: ["aardutils.lua"])
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
     }
 
-    @Test("require of a bundled lib is OK; an unknown lib is a caveat")
-    func requireClassification() throws {
-        let bundled = try report(#"require "gmcphelper""#)
-        #expect(bundled.findings.contains { $0.severity == .ok && $0.message.contains("gmcphelper") })
+    @Test("A required helper that wasn't included is one actionable warning")
+    func helperMissingWarns() throws {
+        let r = try report(#"local u = require "aardutils"; local v = require "var""#)
+        #expect(r.verdict == .needsAttention)
+        let warnings = r.findings.filter { $0.severity == .warning }
+        #expect(warnings.count == 1) // consolidated, not one-per-file
+        #expect(warnings.first?.message.contains("aardutils.lua") == true)
+        #expect(warnings.first?.message.contains("var.lua") == true)
+        #expect(warnings.first?.message.contains("whole plugin folder") == true)
+    }
 
-        let unknown = try report(#"require "some_random_lib""#)
-        #expect(unknown.verdict == .worksWithCaveats)
-        #expect(unknown.findings.contains {
-            $0.severity == .warning && $0.message.contains("some_random_lib")
-        })
+    @Test("require of a bundled lib needs nothing — Ready, no findings")
+    func bundledLibSilent() throws {
+        let r = try report(#"require "gmcphelper"; require "serialize""#)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
+    }
+
+    @Test("Lua standard libraries are never reported as missing files")
+    func standardLibrariesResolve() throws {
+        // The earlier analyzer flagged `require "math"` as a missing `math.lua`.
+        let r = try report(#"require "string"; require "math"; require "table""#)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.isEmpty)
+    }
+
+    @Test("A dofile'd companion file is resolved against the folder")
+    func dofileCompanionResolution() throws {
+        let script = #"dofile(GetPluginInfo(GetPluginID(), 20) .. "x_db.lua")"#
+        // Missing → warned.
+        let missing = try report(script)
+        #expect(missing.verdict == .needsAttention)
+        #expect(missing.findings.contains { $0.message.contains("x_db.lua") })
+        // Present in the folder → clean.
+        let present = try report(script, availableFiles: ["x_db.lua"])
+        #expect(present.verdict == .ready)
+        #expect(present.findings.isEmpty)
+    }
+
+    @Test("luacom is a soft note about a Windows-only feature — still Ready")
+    func luacomNote() throws {
+        let r = try report(#"luacom.CreateObject("SAPI.SpVoice")"#)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("Windows-only") })
+    }
+
+    @Test("async (online update) is a soft note, not a missing file")
+    func asyncNote() throws {
+        let r = try report(#"local a = require "async""#)
+        #expect(r.verdict == .ready)
+        #expect(r.findings.contains { $0.severity == .info && $0.message.contains("online-update") })
+        #expect(!r.findings.contains { $0.severity == .warning })
     }
 
     @Test("Counts come from the parsed plugin")
@@ -91,14 +136,5 @@ struct PluginImporterTests {
         )
         #expect(r.triggerCount == 2)
         #expect(r.aliasCount == 0)
-    }
-
-    @Test("ColourNote is a supported call (whole-word, not a substring trip)")
-    func wordBoundary() throws {
-        // ColourNote is fully supported; "Note" must not double-count inside
-        // "ColourNote" — so the single call is counted exactly once.
-        let r = try report(#"function f() ColourNote("white", "", "x") end"#)
-        #expect(r.verdict == .supported)
-        #expect(r.findings.contains { $0.message.contains("Uses 1 supported") && $0.severity == .ok })
     }
 }

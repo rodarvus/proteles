@@ -202,11 +202,39 @@ public final class PluginsModel {
         } else {
             sources.first { $0.pathExtension.lowercased() == "xml" }
         }
+        // The plugin's helpers travel with it: any `.lua` beside the `.xml` (and
+        // any loose `.lua` the user picked) counts as present, so a folder add
+        // doesn't warn about files it actually included.
+        let available = Self.availableLuaFiles(xml: xml, sources: sources)
         let report = xml
             .flatMap { try? Data(contentsOf: $0) }
             .flatMap { try? MUSHclientPluginLoader.parse($0) }
-            .map { PluginImporter.analyze($0) }
+            .map { PluginImporter.analyze($0, availableFiles: available) }
         return (xml, report)
+    }
+
+    /// Lowercased basenames of every `.lua` reachable from what's being added:
+    /// the folder holding the `.xml` (recursively) plus any loose `.lua` sources.
+    static func availableLuaFiles(xml: URL?, sources: [URL]) -> Set<String> {
+        let fm = FileManager.default
+        var names: Set<String> = []
+        func addDirectory(_ dir: URL) {
+            guard let walker = fm.enumerator(at: dir, includingPropertiesForKeys: nil) else { return }
+            for case let file as URL in walker where file.pathExtension.lowercased() == "lua" {
+                names.insert(file.lastPathComponent.lowercased())
+            }
+        }
+        if let xml { addDirectory(xml.deletingLastPathComponent()) }
+        for source in sources {
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: source.path, isDirectory: &isDirectory) else { continue }
+            if isDirectory.boolValue {
+                addDirectory(source)
+            } else if source.pathExtension.lowercased() == "lua" {
+                names.insert(source.lastPathComponent.lowercased())
+            }
+        }
+        return names
     }
 
     // MARK: - Add / remove / enable / update
