@@ -17,8 +17,9 @@ public extension SessionController {
     /// engine-wide lsqlite3 sandbox root spans the whole `~/Documents/Proteles`
     /// tree). Records each plugin's code + data dirs for `ReloadPlugin`. Call
     /// after ``loadScripts(_:)`` and before connecting. A directory with no
-    /// resolvable `.xml` is skipped. No-op without a script engine.
-    func loadPlugins(directories: [URL], profile: UUID) async {
+    /// resolvable `.xml` is skipped. No-op without a script engine. `character`
+    /// is the readable per-character data-dir key (the character name).
+    func loadPlugins(directories: [URL], character: String) async {
         guard let scriptEngine else { return }
         let resolved: [(directory: URL, xml: URL)] = directories.compactMap { directory in
             guard let xml = PluginInstaller.resolvePluginXML(at: directory) else { return nil }
@@ -35,14 +36,19 @@ public extension SessionController {
             guard let data = try? Data(contentsOf: xml),
                   let plugin = try? MUSHclientPluginLoader.parse(data)
             else { continue }
-            let dataDir = Self.pluginDataDirectory(for: directory, profile: profile)
+            let dataDir = Self.pluginDataDirectory(for: directory, character: character)
+            let dataPath = Self.directoryPath(dataDir)
             paths[plugin.id] = (code: directory, data: dataDir)
+            // `GetInfo(66)` (world dir) AND `GetInfo(85)` (state files dir) point
+            // at the plugin's own data dir, so a plugin that builds its DB/state
+            // path from either finds it there (e.g. the plugin's state path).
             let context = PluginContext(
                 pluginID: plugin.id,
                 pluginName: plugin.name,
                 pluginDirectory: Self.directoryPath(directory),
-                worldDirectory: Self.directoryPath(dataDir),
-                appDirectory: Self.directoryPath(dataDir)
+                worldDirectory: dataPath,
+                appDirectory: dataPath,
+                stateDirectory: dataPath
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         }
@@ -53,12 +59,12 @@ public extension SessionController {
         restartTimerLoop()
     }
 
-    /// A plugin's per-character data dir, `<plugin>/data/<profile>/` (created),
-    /// where its DB + state live (`GetInfo(66)`).
-    static func pluginDataDirectory(for codeDirectory: URL, profile: UUID) -> URL {
+    /// A plugin's per-character data dir, `<plugin>/data/<character>/` (created),
+    /// where its DB + state live (`GetInfo(66)`/`GetInfo(85)`).
+    static func pluginDataDirectory(for codeDirectory: URL, character: String) -> URL {
         let dataDir = codeDirectory
             .appendingPathComponent("data", isDirectory: true)
-            .appendingPathComponent(profile.uuidString, isDirectory: true)
+            .appendingPathComponent(character, isDirectory: true)
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         return dataDir
     }

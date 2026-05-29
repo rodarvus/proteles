@@ -85,17 +85,34 @@ public final class ScriptsModel {
         // above, so their triggers/timers survive). Each lives in its own
         // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59), with
         // its per-character data under <plugin>/data/<profile>/.
+        let character = await Self.characterKey(forProfile: id)
         if let libraryURL = try? PluginLibraryStore.defaultStoreURL() {
             let library = PluginLibraryStore(url: libraryURL)
             try? await library.load()
             let directories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
-            await session.loadPlugins(directories: directories, profile: id)
+            await session.loadPlugins(directories: directories, character: character)
         }
-        // dinv (D-32): its per-character DB lives under Plugins/dinv/data/<profile>/.
+        // dinv (D-32): its per-character DB lives under Plugins/dinv/data/<character>/.
         // Armed here; loaded once the character is active.
-        if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", profile: id) {
+        if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character) {
             await session.armBundledDinv(stateDirectory: dinvData.path)
         }
+    }
+
+    /// A readable, filesystem-safe per-character data-dir key for `id`: the
+    /// profile's autologin username (the character), else its display name, else
+    /// the UUID — so data lives under `…/data/<character>/`, never an opaque id.
+    static func characterKey(forProfile id: UUID) async -> String {
+        guard let url = try? ProfileStore.defaultStoreURL() else { return id.uuidString }
+        let store = ProfileStore(url: url)
+        try? await store.load()
+        let profile = await store.profiles.first { $0.id == id }
+        let candidates = [profile?.autologin?.username, profile?.name]
+        for candidate in candidates {
+            let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty { return ProtelesPaths.directorySlug(for: trimmed) }
+        }
+        return id.uuidString
     }
 
     // MARK: - Search-and-Destroy (user-installed plugin)
