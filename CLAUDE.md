@@ -9,47 +9,57 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Shipped `v0.2.3`** (native mapper, lsqlite3, Search-and-Destroy, dinv, tiled
 panel dock, MIT relicense + clean binary, iTerm2 theme gallery, first
 Preferences pass, app icon). Read **PLAN.md** for the full status table +
-decision log (D-01…D-49). **~928 tests, four gates green.**
+decision log (D-01…D-58). **~982 tests, four gates green.**
 
 **Unreleased on `main` (post-`v0.2.3`, NOT yet in a cut release):**
-- App icon + version-from-bundle fix.
-- **UI revamp finish:** drag-to-redock, detachable windows, menu fixes (single
-  View menu, no empty Format menu).
-- **Rich Exits** (D-45) — clickable room exits (cardinals + custom) in the main
-  window.
-- **Help panel** (D-46) — `help <topic>` captured to a dedicated panel with
-  clickable cross-refs + search + back/forward.
-- **Mapper colour fix** — palette seeded from the persisted `environments`
-  table + handshake now requests `sectors` (aylor was all-grey).
-- **Shim wins:** `addxml` helper module + a `CallPlugin`→native-chat bridge
-  (Chat Capture id) — see `docs/COMMUNITY_PLUGIN_AUDIT.md`.
-- **Phase-7 features (MVPs):** **Inventory Serials** (native plugin),
-  **Session Logging** (text/HTML, Preferences ▸ Logging), **Notifications**
-  (tells/mentions, Preferences ▸ Notifications).
+- UI-revamp finish (drag-to-redock, detachable windows, menu fixes); **Rich
+  Exits** (D-45); **Help panel** (D-46/D-52); **mapper colour fix** (D-47);
+  **shim wins** (D-48 — `addxml`, `CallPlugin`→native-chat bridge).
+- **Phase-7 features:** **Inventory Serials**, **Session Logging**,
+  **Notifications** (D-49); the **MacroEngine** (D-50); the **Scripts-editor UX
+  rework** (D-51).
+- **Search-and-Destroy fully live-verified (D-55/D-56):** xcp/go/nx/consider/scan
+  all work, scan/consider render in real colours. Root-caused via the harness —
+  the `select`-global clobber + the missing MUSHclient `styles` 4th trigger arg.
+- **Local-plugin install Phase 1 (D-57):** "Add Local…" runs a user's own
+  plugin from a local path **in place** (per-world reference, never copied).
+- **Plugin-compat hardening from live testing (D-58):** plugin-dir trailing
+  slash (sibling `dofile`s), a `world` global proxy, an honest "does it work?"
+  compatibility report, and **GMCP replay on S&D re-attach** (xcp no longer
+  stuck "unknown state" after a mid-session reload).
+- **~28 commits unpushed on `main`** — push only after a `git grep` privacy
+  sweep (see Privacy below); the user gates pushes.
 
-### NEXT SESSION — start here: MacroEngine (then continue the order)
+### NEXT SESSION — start here
 
-**The current workstream is Phase 7.** The agreed implementation order (the
-research/plan for each is in **`docs/plans/`**):
-1. **MacroEngine** ← **resume here.** Keybindings + one-key/keypad navigation;
-   plan in **`docs/plans/MACRO_ENGINE_PLAN.md`**. Pure `MacroEngine`+`KeyChord`
-   in MudCore (start here — testable), an app-level `NSEvent` local monitor, and
-   a key-capture editor (folds into the Scripts editor). The one-key-on-macOS
-   problem is solved in the plan (modifier/function chords always fire; numpad
-   fires; bare keys only in an opt-in "Navigation mode"). A **command-button
-   bar** is the natural fast-follow (design `MacroAction` to serve both).
-2. **Scripts-editor rework** (issue #4) — `docs/plans/SCRIPTS_EDITOR_REWORK_PLAN.md`
-   (alias = pattern field + actions textarea; grouped forms; a "Test" panel).
-3. **Personal plugin install** (local path / URL) — `docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`.
-4. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md` (run-via-shim collection, then
+**Done since last session:** MacroEngine (D-50), Scripts-editor rework (D-51),
+S&D fully live-verified + colour parity (D-55/D-56), local-plugin install
+Phase 1 (D-57), plugin-compat hardening (D-58). **The current workstream is
+still Phase 7.** First, decide with the user where to go — then proceed. The
+candidates (plans in **`docs/plans/`**), roughly in priority order:
+
+1. **OPEN BUG — "mapper loses its DB" (NO-GUESSING).** A live report after
+   reload churn. Not reproduced from code: the schema is `CREATE IF NOT EXISTS`
+   and a re-attached `Mapper` reloads the graph from the same on-disk DB, so the
+   DB shouldn't go empty. **Don't guess-fix.** When the user next hits it, get:
+   (a) do `mapper where`/`find` *also* return nothing (DB-level loss) or is only
+   the visual Map panel blank (display/binding)? (b) what precedes it —
+   reconnect / plugin load / DB import? plus the auto-written session transcript.
+   Likely related to the *full world reload* (`ScriptsModel.load`) that
+   re-attaches mapper + S&D on every plugin/DB op — that churn is what surfaced
+   the S&D re-attach bug (D-58); a lighter resync may be the real fix.
+2. **Personal-plugin install Phase 2** — the URL/network installer + consent
+   flow (`docs/plans/LOCAL_PLUGIN_INSTALL_PLAN.md`). **Deferred for explicit
+   approval** (network + third-party-code consent). Phase 1 (local path) shipped.
+3. **leveldb** — `docs/plans/LEVELDB_PORT_PLAN.md` (run-via-shim collection, then
    a native Swift Charts panel reading its SQLite DB).
-5. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate UX with a real VI
+4. **TTS** accessibility — `docs/plans/TTS_PLAN.md` (validate UX with a real VI
    player before shipping).
-6. **Remaining Preferences tabs** + fold in the phase-2 follow-ups.
-
-**Phase-2 follow-ups (tracked):** Inventory Serials → keyring/vault + colour
-command; Logging → rotation/retention + per-world + input filtering;
-Notifications → `proteles.notify` host call + custom/GMCP rules.
+5. **Remaining Preferences tabs** + the **phase-2 follow-ups**
+   (`docs/plans/PHASE2_FOLLOWUPS.md`): Inventory Serials → keyring/vault + colour
+   command; Logging → rotation/retention + per-world + input filtering;
+   Notifications phase-2 (task #16 — in-focus toggle + custom words/regex +
+   per-channel); the S&D-tests-hermetic quick win.
 
 **Reference:** `docs/plans/MUDLET_GAP_ANALYSIS.md` ranks remaining Mudlet gaps;
 `docs/NOTARIZATION.md` covers the Phase-8 release/signing workflow.
@@ -64,10 +74,13 @@ scrubbed from history via force-push; do not repeat it. Sweep before pushing:
 `git grep -i <names>` must be empty.
 
 ### Live-verification backlog (user tests interactively)
-Committed + gate-green but awaiting the user's live check: **Help panel**,
-**mapper colours** (reconnect first), **Inventory Serials**, **Session Logging**,
-**Notifications**. The MVPs that capture/parse live Aardwolf output (Help,
-inventory serials) may need a real-format tweak — isolated + easy to adjust.
+**Live-verified this session:** Search-and-Destroy end-to-end
+(xcp/go/nx/consider/scan, incl. colour parity); local-plugin "Add Local…"
+(multi-file plugins load in place). Committed + gate-green but still awaiting
+the user's live check: **Help panel**, **mapper colours** (reconnect first),
+**Inventory Serials**, **Session Logging**, **Notifications**.
+**OPEN live bug:** "mapper loses its DB after reload churn" — needs a repro +
+transcript before fixing (NO-GUESSING; see the NEXT SESSION block + D-58).
 
 ### Gotchas to remember
 - **600-line file budget** (swiftlint `file_length` warning → `--strict` error).
