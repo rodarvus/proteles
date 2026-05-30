@@ -111,10 +111,9 @@ public actor SessionController {
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
-    /// Whether we've seen an in-game `char.status` (state ≥ 3) this connection.
-    /// Until then, `char.status` plugin broadcasts are held so plugins don't act
-    /// on the transitional mid-login status (MUSHclient parity — see
-    /// `dispatchGMCP`). Reset on each connect.
+    /// Seen an in-game `char.status` (state ≥ 3) this connection? Until then,
+    /// `char.status` plugin broadcasts are held (MUSHclient parity — see
+    /// `dispatchGMCP`). Reset on connect.
     var seenCharInGame = false
     /// Plugin id → its code + per-character data directories, for ReloadPlugin
     /// disk re-read and `GetInfo(66)` resolution.
@@ -132,10 +131,9 @@ public actor SessionController {
     /// `room.info`/`room.area`/`room.sectors` from the GMCP stream.
     public internal(set) var mapper: Mapper?
 
-    /// The live Search-and-Destroy plugin host. Set via
-    /// ``attachSearchAndDestroy(_:)`` when a world loads; incoming lines,
-    /// typed S&D commands, and timers are routed through it, and the model it
-    /// publishes is forwarded to ``publishedModels``.
+    /// The live Search-and-Destroy plugin host (set via
+    /// ``attachSearchAndDestroy(_:)``); lines, S&D commands, and timers route
+    /// through it, and its published model is forwarded to ``publishedModels``.
     public internal(set) var searchAndDestroy: SearchAndDestroyHost?
 
     /// The lsqlite3 sandbox root: the `~/Documents/Proteles` tree.
@@ -155,11 +153,10 @@ public actor SessionController {
     /// Drop empty MUD lines from output; off by default (`Omit_Blank_Lines`).
     public internal(set) var omitBlankLines = false
 
-    /// Rewrite Aardwolf's exits line into clickable direction hyperlinks in the
-    /// main output (Rich Exits); off by default. When on, the controller sends
-    /// `tags exits on` after login so the line is detectable, rebuilds it from
-    /// ``richExitsCardinals`` (GMCP) + ``richExitsCustomExits`` (mapper), and
-    /// gags the tag-toggle confirmation. See ``RichExits``.
+    /// Rewrite Aardwolf's exits line into clickable direction hyperlinks (Rich
+    /// Exits); off by default. When on, sends `tags exits on` after login,
+    /// rebuilds the line from ``richExitsCardinals`` + ``richExitsCustomExits``,
+    /// and gags the tag-toggle confirmation. See ``RichExits``.
     public internal(set) var richExitsEnabled = false
     /// Whether `tags exits on` has been sent this session (one-shot per connect).
     var sentExitsTag = false
@@ -204,10 +201,8 @@ public actor SessionController {
     var userInitiatedDisconnect = false
 
     /// Set when the user sends a quit command (see ``quitCommands``), so a
-    /// server-initiated close that follows is treated as a clean logout —
-    /// not an unexpected drop to autoreconnect from. Cleared by any other
-    /// command (e.g. if the quit needed confirming and the user kept
-    /// playing) and on each fresh connect.
+    /// following server close is a clean logout, not a drop to autoreconnect
+    /// from. Cleared by any other command and on each fresh connect.
     var expectsCleanClose = false
 
     /// Commands that mean "log me out" — a server close right after one is
