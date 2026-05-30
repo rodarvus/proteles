@@ -63,10 +63,6 @@ extension SessionController {
         await persistVariablesIfDirty()
     }
 
-    /// Route one GMCP message to the GMCP state, chat, mapper, script engine,
-    /// and the S&D host. Split out of ``processChunk`` for the complexity
-    /// budget. Also reused by the `injectGMCP` effect (synthesized config
-    /// packets from the native GMCP handler) so they take the same path.
     /// Extract Aardwolf's `state` from a `char.status` GMCP payload (≥ 3 = in
     /// the game). `nil` if absent/unparseable.
     nonisolated static func charStatusState(_ json: String) -> Int? {
@@ -78,6 +74,10 @@ extension SessionController {
         return nil
     }
 
+    /// Route one GMCP message to the GMCP state, chat, mapper, script engine,
+    /// and the S&D host. Split out of ``processChunk`` for the complexity
+    /// budget. Also reused by the `injectGMCP` effect (synthesized config
+    /// packets from the native GMCP handler) so they take the same path.
     func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
         latestGMCPByPackage[message.package.lowercased()] = message.json
@@ -103,12 +103,11 @@ extension SessionController {
         // spellup-list request fires before login completes, fails, and recovers
         // too slowly, so spell tracking never works. The native HUD (gmcpState,
         // above) still updates throughout.
-        if message.package.lowercased() == "char.status", !seenCharInGame,
-           let state = Self.charStatusState(message.json), state >= 3
-        {
+        let isCharStatus = message.package.lowercased() == "char.status"
+        if isCharStatus, !seenCharInGame, (Self.charStatusState(message.json) ?? 0) >= 3 {
             seenCharInGame = true
         }
-        let holdCharStatus = message.package.lowercased() == "char.status" && !seenCharInGame
+        let holdCharStatus = isCharStatus && !seenCharInGame
         if let scriptEngine, !holdCharStatus {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
             // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
