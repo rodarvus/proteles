@@ -67,6 +67,17 @@ extension SessionController {
     /// and the S&D host. Split out of ``processChunk`` for the complexity
     /// budget. Also reused by the `injectGMCP` effect (synthesized config
     /// packets from the native GMCP handler) so they take the same path.
+    /// Extract Aardwolf's `state` from a `char.status` GMCP payload (≥ 3 = in
+    /// the game). `nil` if absent/unparseable.
+    nonisolated static func charStatusState(_ json: String) -> Int? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        if let state = object["state"] as? Int { return state }
+        if let state = object["state"] as? NSNumber { return state.intValue }
+        return nil
+    }
+
     func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
         latestGMCPByPackage[message.package.lowercased()] = message.json
@@ -86,7 +97,19 @@ extension SessionController {
                 await setAardwolfTagOption(3, on: true) // TELOPT_HELPS
             }
         }
-        if let scriptEngine {
+        // Hold `char.status` plugin delivery until the character is in-game
+        // (state ≥ 3), matching MUSHclient: a transitional mid-login char.status
+        // (state 2) otherwise makes plugins act prematurely — e.g. Hadar's
+        // spellup-list request fires before login completes, fails, and recovers
+        // too slowly, so spell tracking never works. The native HUD (gmcpState,
+        // above) still updates throughout.
+        if message.package.lowercased() == "char.status", !seenCharInGame,
+           let state = Self.charStatusState(message.json), state >= 3
+        {
+            seenCharInGame = true
+        }
+        let holdCharStatus = message.package.lowercased() == "char.status" && !seenCharInGame
+        if let scriptEngine, !holdCharStatus {
             await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
             // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
             // (option 201); dinv's config detection reads only that path.
