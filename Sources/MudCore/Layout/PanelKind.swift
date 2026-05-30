@@ -22,6 +22,8 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case info
     /// In-game help reader (captured `help <topic>` with clickable cross-refs).
     case help
+    /// Native leveldb reporting (live HUD / tables / analytics / journey).
+    case levels
 
     public var id: String {
         rawValue
@@ -37,6 +39,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .hunt: "Search & Destroy"
         case .info: "Character"
         case .help: "Help"
+        case .levels: "Levels"
         }
     }
 
@@ -50,6 +53,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .hunt: "S&D"
         case .info: "Char"
         case .help: "Help"
+        case .levels: "Levels"
         }
     }
 
@@ -63,6 +67,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .hunt: "scope"
         case .info: "person.text.rectangle"
         case .help: "questionmark.circle"
+        case .levels: "chart.line.uptrend.xyaxis"
         }
     }
 

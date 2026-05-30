@@ -51,6 +51,7 @@ struct ProtelesApp: App {
 
     /// In-game Help panel model (shared by the docked + detached Help views).
     @State private var help = HelpPanelModel()
+    @State private var levels = LevelDBPanelModel()
 
     /// AppKit hooks for menu surgery the SwiftUI command API can't fully do
     /// (stripping the empty Format menu with deterministic timing).
@@ -133,7 +134,8 @@ struct ProtelesApp: App {
                 map: map,
                 asciiMap: asciiMap,
                 snd: snd,
-                help: help
+                help: help,
+                levels: levels
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")
@@ -226,7 +228,8 @@ struct ProtelesApp: App {
                     map: map,
                     asciiMap: asciiMap,
                     snd: snd,
-                    help: help
+                    help: help,
+                    levels: levels
                 )
             }
         }
@@ -465,6 +468,8 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("U", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.info)) { Text("Character") }
                 .keyboardShortcut("I", modifiers: [.command, .shift])
+            Toggle(isOn: panelBinding(.levels)) { Text("Levels") }
+                .keyboardShortcut("L", modifiers: [.command, .shift])
             Button("Help") { openWindow(id: ProtelesApp.helpWindowID) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 
