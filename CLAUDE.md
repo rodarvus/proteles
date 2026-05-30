@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-68). **1045 tests, four gates green.**
+decision log (D-01…D-70). **1051 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -40,11 +40,18 @@ What landed for `v0.3.0` (decision refs):
   stub + `async` deferral (D-64); `GetInfo(56)` → plugin folder (D-65);
   `SendSpecial` (D-66).**
 
-**Post-`0.3.0` on `main` (unpushed):** word-level Tab autocomplete; a backlog
-batch (command-line spell-check + no-autocorrect, multi-line alias sends,
-logging retention/per-world, inventory-serials keyring/vault + colour — D-68);
-and **`async` HTTP for plugins over URLSession** (D-67) — the former known
-limitation is now resolved.
+**Post-`0.3.0` on `main`:** word-level Tab autocomplete; a backlog batch
+(command-line spell-check + no-autocorrect, multi-line alias sends, logging
+retention/per-world, inventory-serials keyring/vault + colour — D-68); **`async`
+HTTP for plugins over URLSession** (D-67); **leveldb V1** run verbatim through the
+shim (D-69); and trigger-output fixes (D-70) — `ColourTell` colour, the trigger
+`styles`/`GetNormalColour` surface, and a **char.status in-game gate** so plugins
+(Hadar spellups) don't act on mid-login GMCP. **In progress: leveldb Part B**
+native reporting panels (A faithful tables · B live HUD · C charts · D journey).
+
+**Open (needs a live repro):** dinv's `wish list` probe output isn't gagged
+(the gag mechanism is verified correct through every path; the failure is a dinv
+init/timing edge during the post-login burst — don't guess-fix).
 
 ### NEXT SESSION — start here
 
