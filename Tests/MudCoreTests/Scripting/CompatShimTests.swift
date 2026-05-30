@@ -71,6 +71,33 @@ struct CompatShimTests {
         ])])
     }
 
+    @Test("ColourTell cells carry their colour into the flushed line (leveldb rows)")
+    func colourTellCarriesColour() async throws {
+        let lua = try await shimmed()
+        // leveldb builds a row as coloured cells via ColourTell, flushed by a
+        // ColourNote/Note — every cell's colour must survive (the bug: ColourTell
+        // used to buffer only text, so rows rendered in the default colour).
+        let effects = try await lua.run("""
+        ColourTell('#87CEEB', '', 'mob')
+        ColourNote('cyan', '', '  42')
+        """)
+        #expect(effects == [.colourNote([
+            NoteSegment(text: "mob", foreground: "#87CEEB", background: nil),
+            NoteSegment(text: "  42", foreground: "cyan", background: nil)
+        ])])
+    }
+
+    @Test("A plain Tell prefix flushes onto the Note line")
+    func tellPrefixFlushes() async throws {
+        let lua = try await shimmed()
+        // Tell (no colour) + ColourNote → the prefix leads as a default segment.
+        let effects = try await lua.run("Tell('[tag] '); ColourNote('red', '', 'msg')")
+        #expect(effects == [.colourNote([
+            NoteSegment(text: "[tag] ", foreground: nil, background: nil),
+            NoteSegment(text: "msg", foreground: "red", background: nil)
+        ])])
+    }
+
     @Test("SetVariable / GetVariable round-trip and return eOK")
     func variables() async throws {
         let lua = try await shimmed()
