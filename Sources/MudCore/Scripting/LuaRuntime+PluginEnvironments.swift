@@ -58,9 +58,11 @@ public extension LuaRuntime {
         _ script: String,
         pluginID: String,
         matches: [String] = [],
-        named: [String: String] = [:]
+        named: [String: String] = [:],
+        styles: [ScriptStyleRun] = []
     ) -> [ScriptEffect] {
         setMatchGlobals(matches, named)
+        setStyleGlobal(styles)
         return runInEnvironment(script, pluginID: pluginID, chunkName: "script", errorLabel: "Script error")
     }
 

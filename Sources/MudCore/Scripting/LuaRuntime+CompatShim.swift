@@ -134,9 +134,8 @@ public extension LuaRuntime {
     error_desc = error_desc or {}
 
     -- Output ----------------------------------------------------------------
-    -- MUSHclient line model: Tell/ColourTell APPEND (no newline); Note/ColourNote/
-    -- AnsiNote/print FLUSH. `__pending` buffers coloured segments ({fg,bg,text}) so
-    -- a row built from ColourTell cells keeps every cell's colour on one line.
+    -- Tell/ColourTell APPEND coloured segments to `__pending`; Note/ColourNote/
+    -- AnsiNote/print FLUSH them as one line — a ColourTell row keeps its colours.
     local __pending = {}
     -- Flush `__pending` + `extra` ({fg,bg,text} array) as one colourNote line.
     local function __flush(extra)
@@ -147,8 +146,7 @@ public extension LuaRuntime {
       proteles.colourNote(unpack(flat, 1, k))
     end
     function Tell(text) __pending[#__pending + 1] = { "", "", text == nil and "" or tostring(text) } end
-    -- ColourTell(fore, back, text, ...): buffer each triple as a coloured segment.
-    function ColourTell(...)
+    function ColourTell(...) -- buffer each triple as a coloured cell
       local a, n = {...}, select("#", ...)
       for b = 1, n, 3 do
         __pending[#__pending + 1] = {
@@ -163,8 +161,7 @@ public extension LuaRuntime {
       if #__pending == 0 then proteles.echo(text)
       else __flush({ { "", "", text } }) end
     end
-    -- ColourNote(fore, back, text, ...): each triple → a styled segment on one
-    -- line, after any pending Tell/ColourTell cells.
+    -- ColourNote(fore, back, text, ...): each triple → a styled cell, after pending.
     function ColourNote(...)
       local a, n = {...}, select("#", ...)
       local extra = {}
@@ -185,6 +182,12 @@ public extension LuaRuntime {
       __pending = {}
       proteles.echoAnsi(prefix .. (text == nil and "" or tostring(text)))
     end
+    -- GetNormalColour(n)/GetBoldColour(n): the world's ANSI colour n as a BGR int,
+    -- matching MUSHColour (Swift) so a trigger's styles[i].textcolour compares.
+    local __nc = { [0] = 0, 128, 32768, 32896, 8388608, 8388736, 8421376, 12632256 }
+    local __bc = { [0] = 8421504, 255, 65280, 65535, 16711680, 16711935, 16776960, 16777215 }
+    function GetNormalColour(w) return __nc[tonumber(w) or 7] or 0 end
+    function GetBoldColour(w) return __bc[tonumber(w) or 7] or 0 end
     -- Hyperlink(action, text, hint): clickable text → the native primitive
     -- (action: URL → opens browser, else sent as a command). A pending prefix is
     -- flushed first; inline composition with Tell/Note isn't supported.
@@ -202,19 +205,17 @@ public extension LuaRuntime {
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end
     function SendNoEcho(text) proteles.sendNoEcho(tostring(text)); return error_code.eOK end
     -- SendSpecial(Message, Echo, Queue, Log, History): MUSHclient's send with
-    -- options. We honour Echo (true → echo the line like Send; false/nil → no
-    -- echo); Queue/Log/History don't apply to our send path and are accepted
-    -- and ignored. Plugins commonly call it with one arg (e.g. Double
-    -- Predictor's `SendSpecial(text)`) → behaves like SendNoEcho.
+    -- options. We honour Echo (true → echo like Send; false/nil → no echo);
+    -- Queue/Log/History don't apply and are ignored. The common one-arg call
+    -- (e.g. Double Predictor's `SendSpecial(text)`) behaves like SendNoEcho.
     function SendSpecial(message, echo, queue, log, history)
       message = tostring(message)
       if echo then proteles.send(message) else proteles.sendNoEcho(message) end
       return error_code.eOK
     end
-    -- MUSHclient's Execute runs world input. Text prefixed with the script
-    -- prefix (a run of backslashes, the MUSHclient convention) is executed as
-    -- Lua in the caller's environment rather than sent; plugins use this to
-    -- defer script (e.g. dinv's self-reload Execute("\\\\\\DoAfterSpecial(…)")).
+    -- MUSHclient's Execute runs world input. A backslash-prefixed run (the
+    -- MUSHclient script-prefix convention) is executed as Lua in the caller's
+    -- env rather than sent (dinv's self-reload Execute("\\\\\\DoAfterSpecial(…)")).
     function Execute(text)
       text = tostring(text)
       local stripped = text:gsub("^\\\\+", "")
@@ -300,9 +301,8 @@ public extension LuaRuntime {
 
     -- Inter-plugin ----------------------------------------------------------
     -- CallPlugin returns (status, results...); we report eOK + forward returns.
-    -- Calls to the native GMCP mapper's id route to it (results via
-    -- OnPluginBroadcast 500/501). __toLuaLiteral serializes a gmcp subtree to a
-    -- Lua-literal string for the handler's gmcpval/gmcpdata_as_string callees.
+    -- The native GMCP mapper's id routes to it (results via OnPluginBroadcast
+    -- 500/501). __toLuaLiteral serializes a gmcp subtree to a Lua-literal string.
     local function __toLuaLiteral(v)
       local t = type(v)
       if t == "table" then

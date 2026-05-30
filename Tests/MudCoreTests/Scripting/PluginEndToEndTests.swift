@@ -157,6 +157,36 @@ struct PluginEndToEndTests {
         #expect(disposition.effects.contains(.echo("B reacts")))
     }
 
+    @Test("A trigger script gets a non-nil styles[]; GetNormalColour aligns with the run colour")
+    func triggerStylesArgument() async throws {
+        // The rsocial_capture case: a trigger callback `fn(name, line, wc, styles)`
+        // that reads `styles[1].textcolour == GetNormalColour(7)`. styles must be
+        // the matched line's colour runs, and GetNormalColour must agree.
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.styles" name="Styles"/>
+        <triggers>
+        <trigger match="^hi$" enabled="y" regexp="y" script="capture" send_to="12"/>
+        </triggers>
+        <script><![CDATA[
+        function capture(name, line, wc, styles)
+          proteles.send("fg=" .. tostring(styles[1].textcolour) .. " white=" .. tostring(GetNormalColour(7)))
+        end
+        ]]></script>
+        </muclient>
+        """)
+        try await engine.loadPlugin(plugin)
+        var white = StyleAttributes.default
+        white.foreground = .named(.white)
+        let line = Line(id: LineID(0), text: "hi", runs: [StyledRun(utf16Range: 0..<2, style: white)])
+
+        let disposition = await engine.process(line)
+
+        // styles[1] is the white run, and its textcolour equals GetNormalColour(7).
+        #expect(disposition.effects.contains(.send("fg=12632256 white=12632256")))
+    }
+
     @Test("OnPluginSend blocks a prefixed send and re-sends the bare command")
     func onPluginSendBypass() async throws {
         // Mirrors dinv's dbot.execute bypass: a DINV_BYPASS-prefixed line is
