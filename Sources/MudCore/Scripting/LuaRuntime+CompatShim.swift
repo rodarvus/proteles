@@ -46,12 +46,11 @@ public extension LuaRuntime {
         registerModule("aard_requirements", source: "-- Proteles no-op: see checkplugin stub.")
     }
 
-    /// Native `async` module (clean-room) over `proteles.__http`. Exposes the
-    /// reference's `doAsyncRemoteRequest`/`HEAD`/`GETFILE` with the same
-    /// signatures, so plugins (e.g. a stat-sync that POSTs to a clan site) run
-    /// unmodified. A string callback is `loadstring`d to a function, as upstream
-    /// does. The host fires the callback with `(retval, page, status, headers,
-    /// full_status, url, body)`.
+    /// Native `async` module (clean-room) over `proteles.__http`: the reference's
+    /// `doAsyncRemoteRequest`/`HEAD`/`GETFILE` with the same signatures, so
+    /// plugins run unmodified. A string callback is `loadstring`d (as upstream).
+    /// The host fires it with `(retval, page, status, headers, full_status,
+    /// url, body)`.
     internal nonisolated static let asyncModuleSource = """
     async = {}
     local function as_func(cb)
@@ -135,47 +134,62 @@ public extension LuaRuntime {
     error_desc = error_desc or {}
 
     -- Output ----------------------------------------------------------------
-    -- MUSHclient line model: Tell/ColourTell APPEND to the current output line
-    -- (no newline); Note/ColourNote/AnsiNote/print FLUSH it. Plugins build
-    -- tagged rows like `ColourTell(prefix) .. AnsiNote(message)` expecting one
-    -- line. We buffer Tell text as a leading prefix and prepend it on flush, so
-    -- a tag + message land on the same line. (No pending ⇒ behaviour is the
-    -- plain Note/ColourNote, preserving the common single-call case.)
-    local __pending = ""
-    function Tell(text) __pending = __pending .. (text == nil and "" or tostring(text)) end
-    -- ColourTell(fore, back, text, ...): append each triple's text (the tag's
-    -- own colour isn't carried onto the buffered prefix yet).
+    -- MUSHclient line model: Tell/ColourTell APPEND (no newline); Note/ColourNote/
+    -- AnsiNote/print FLUSH. `__pending` buffers coloured segments ({fg,bg,text}) so
+    -- a row built from ColourTell cells keeps every cell's colour on one line.
+    local __pending = {}
+    -- Flush `__pending` + `extra` ({fg,bg,text} array) as one colourNote line.
+    local function __flush(extra)
+      local segs = __pending; __pending = {}
+      if extra then for i = 1, #extra do segs[#segs + 1] = extra[i] end end
+      local flat, k = {}, 0
+      for i = 1, #segs do flat[k+1], flat[k+2], flat[k+3] = segs[i][1], segs[i][2], segs[i][3]; k = k + 3 end
+      proteles.colourNote(unpack(flat, 1, k))
+    end
+    function Tell(text) __pending[#__pending + 1] = { "", "", text == nil and "" or tostring(text) } end
+    -- ColourTell(fore, back, text, ...): buffer each triple as a coloured segment.
     function ColourTell(...)
       local a, n = {...}, select("#", ...)
-      for i = 3, n, 3 do __pending = __pending .. (a[i] == nil and "" or tostring(a[i])) end
+      for b = 1, n, 3 do
+        __pending[#__pending + 1] = {
+          a[b]     == nil and "" or tostring(a[b]),
+          a[b + 1] == nil and "" or tostring(a[b + 1]),
+          a[b + 2] == nil and "" or tostring(a[b + 2]),
+        }
+      end
     end
     function Note(text)
-      proteles.echo(__pending .. (text == nil and "" or tostring(text))); __pending = ""
+      text = text == nil and "" or tostring(text)
+      if #__pending == 0 then proteles.echo(text)
+      else __flush({ { "", "", text } }) end
     end
     -- ColourNote(fore, back, text, ...): each triple → a styled segment on one
-    -- line. A pending Tell prefix leads as a default-colour segment.
+    -- line, after any pending Tell/ColourTell cells.
     function ColourNote(...)
       local a, n = {...}, select("#", ...)
-      local coerced = {}
-      if __pending ~= "" then
-        coerced[1], coerced[2], coerced[3] = "", "", __pending
-        __pending = ""
+      local extra = {}
+      for b = 1, n, 3 do
+        extra[#extra + 1] = {
+          a[b]     == nil and "" or tostring(a[b]),
+          a[b + 1] == nil and "" or tostring(a[b + 1]),
+          a[b + 2] == nil and "" or tostring(a[b + 2]),
+        }
       end
-      for i = 1, n do coerced[#coerced + 1] = (a[i] == nil) and "" or tostring(a[i]) end
-      proteles.colourNote(unpack(coerced, 1, #coerced))
+      __flush(extra)
     end
-    -- Render ANSI-SGR text in colour (often `AnsiNote(ColoursToANSI(text))`),
-    -- flushing any pending Tell prefix onto the same line.
+    -- Render ANSI-SGR text in colour. A pending tag prefix is flattened to its
+    -- text (a coloured prefix + an ANSI body can't share one effect).
     function AnsiNote(text)
-      proteles.echoAnsi(__pending .. (text == nil and "" or tostring(text))); __pending = ""
+      local prefix = ""
+      for i = 1, #__pending do prefix = prefix .. __pending[i][3] end
+      __pending = {}
+      proteles.echoAnsi(prefix .. (text == nil and "" or tostring(text)))
     end
-    -- Hyperlink(action, text, hint, …): clickable text — MUSHclient's
-    -- Hyperlink. Maps to the native primitive (action: URL → opens browser,
-    -- else sent as a command). Any pending Tell prefix is flushed first; inline
-    -- composition with surrounding Tell/Note isn't supported (a known shim
-    -- limitation), so the link lands on its own line.
+    -- Hyperlink(action, text, hint): clickable text → the native primitive
+    -- (action: URL → opens browser, else sent as a command). A pending prefix is
+    -- flushed first; inline composition with Tell/Note isn't supported.
     function Hyperlink(action, text, hint)
-      if __pending ~= "" then proteles.echo(__pending); __pending = "" end
+      if #__pending > 0 then __flush(nil) end
       proteles.hyperlink(tostring(text or ""), tostring(action or ""), hint and tostring(hint) or nil)
       return error_code.eOK
     end
@@ -268,13 +282,9 @@ public extension LuaRuntime {
       return error_code.eOK
     end
 
-    -- MUSHclient also exposes the whole world API as fields on a global `world`
-    -- object: `world.Note(...)` is equivalent to `Note(...)`. Some plugins call
-    -- it that way, so proxy field access to the matching global (resolved at
-    -- call time, so functions defined later in this chunk are reachable). The
-    -- dot form (`world.Foo(...)`) is the common idiom; a colon call would pass
-    -- `world` as an extra leading arg, which these globals ignore for the
-    -- no-arg/string cases plugins use.
+    -- MUSHclient also exposes the API as fields on a global `world` object
+    -- (`world.Note(...)` ≡ `Note(...)`); proxy field access to the matching
+    -- global (resolved at call time, so later-defined functions are reachable).
     world = setmetatable({}, { __index = function(_, key) return _G[key] end })
 
     -- GMCP ------------------------------------------------------------------
@@ -289,14 +299,10 @@ public extension LuaRuntime {
     end
 
     -- Inter-plugin ----------------------------------------------------------
-    -- MUSHclient CallPlugin returns (status, results...); we report eOK and
-    -- forward the callee's return values. Calls to the native GMCP mapper's
-    -- well-known id are routed to it (find results arrive via OnPluginBroadcast
-    -- 500/501, like the real mapper).
-    -- Serialize a value (gmcp subtree) to a Lua-literal string, for the GMCP
-    -- handler's gmcpval/gmcpdata_as_string callees (plugins loadstring the
-    -- result back into a table). Handles the string/number/table leaves GMCP
-    -- data is made of.
+    -- CallPlugin returns (status, results...); we report eOK + forward returns.
+    -- Calls to the native GMCP mapper's id route to it (results via
+    -- OnPluginBroadcast 500/501). __toLuaLiteral serializes a gmcp subtree to a
+    -- Lua-literal string for the handler's gmcpval/gmcpdata_as_string callees.
     local function __toLuaLiteral(v)
       local t = type(v)
       if t == "table" then
