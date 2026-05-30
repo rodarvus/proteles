@@ -111,6 +111,11 @@ public actor SessionController {
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
+    /// Whether we've seen an in-game `char.status` (state ≥ 3) this connection.
+    /// Until then, `char.status` plugin broadcasts are held so plugins don't act
+    /// on the transitional mid-login status (MUSHclient parity — see
+    /// `dispatchGMCP`). Reset on each connect.
+    var seenCharInGame = false
     /// Plugin id → its code + per-character data directories, for ReloadPlugin
     /// disk re-read and `GetInfo(66)` resolution.
     var loadedPluginPaths: [String: (code: URL, data: URL)] = [:]
@@ -595,5 +600,6 @@ public actor SessionController {
         autologin = nil
         connection = nil
         dinvLoaded = false // reloads on the next active char.status (e.g. reconnect)
+        seenCharInGame = false // re-gate char.status plugin broadcasts until in-game
     }
 }
