@@ -48,6 +48,38 @@ public struct ScriptStyleRun: Sendable, Equatable {
         self.textColour = textColour
         self.backColour = backColour
     }
+
+    /// Build the MUSHclient `styles` array for a matched line: one entry per
+    /// styled run (its `textcolour`/`backcolour` as ``MUSHColour`` ints), with
+    /// default-colour entries filling any gaps, covering the whole line in
+    /// order — so `styles[1]` is the first cell's colour, as plugins expect.
+    public static func mushStyles(text: String, runs: [StyledRun]) -> [ScriptStyleRun] {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return [] }
+        let defaultFg = MUSHColour.normal[7]
+        var result: [ScriptStyleRun] = []
+        var cursor = 0
+        func emit(_ lower: Int, _ upper: Int, _ fg: Int, _ bg: Int) {
+            guard lower < upper, lower >= 0, upper <= nsText.length else { return }
+            result.append(ScriptStyleRun(
+                text: nsText.substring(with: NSRange(location: lower, length: upper - lower)),
+                textColour: fg,
+                backColour: bg
+            ))
+        }
+        for run in runs.sorted(by: { $0.utf16Range.lowerBound < $1.utf16Range.lowerBound }) {
+            let lower = run.utf16Range.lowerBound
+            let upper = run.utf16Range.upperBound
+            guard lower >= cursor else { continue } // skip overlapping runs
+            if lower > cursor { emit(cursor, lower, defaultFg, 0) } // default-colour gap
+            let fg = run.style.foreground.map(MUSHColour.int(for:)) ?? defaultFg
+            let bg = run.style.background.map(MUSHColour.int(for:)) ?? 0
+            emit(lower, upper, fg, bg)
+            cursor = upper
+        }
+        if cursor < nsText.length { emit(cursor, nsText.length, defaultFg, 0) }
+        return result
+    }
 }
 
 public enum ScriptEffect: Sendable, Equatable {

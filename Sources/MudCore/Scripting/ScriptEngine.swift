@@ -264,10 +264,9 @@ public actor ScriptEngine {
 
     // MARK: - Plugins
 
-    /// Load a parsed MUSHclient plugin: give it its own Lua environment, scope
-    /// its variables + context, install the compat shim, run its `<script>`,
-    /// register its (owner-tagged) triggers/aliases/timers, then invoke
-    /// `OnPluginInstall`. Returns the install effects.
+    /// Load a parsed MUSHclient plugin: own Lua env, scoped variables + context,
+    /// compat shim, run its `<script>`, register its (owner-tagged) automations,
+    /// then `OnPluginInstall`. Returns the install effects.
     @discardableResult
     public func loadPlugin(
         _ plugin: MUSHclientPlugin,
@@ -429,9 +428,8 @@ public actor ScriptEngine {
         await process(Line(id: LineID(0), text: text))
     }
 
-    /// Styled-line entry point: triggers match `line.text`, and native
-    /// plugins receive the full styled ``Line`` so they can rewrite it
-    /// (text substitution) while preserving per-segment colour.
+    /// Styled-line entry point: triggers match `line.text` (and get its colour
+    /// runs as `styles`); native plugins receive the full styled ``Line``.
     public func process(_ line: Line) async -> LineDisposition {
         // While suspended (Note mode), lines pass through untouched.
         if suspended { return LineDisposition() }
@@ -443,16 +441,16 @@ public actor ScriptEngine {
             }
             if let script = firing.script {
                 let owner = automationOwners[firing.triggerID]
-                // Plugin triggers follow MUSHclient: %1/%0/%<name> in the body
-                // are substituted with (Lua-string-escaped) captures before it
-                // runs, so a backslash/quote in the matched line can't break it;
-                // user scripts (no owner) run verbatim so literal `%` survives.
+                // Plugin triggers: %1/%0/%<name> in the body are substituted with
+                // (Lua-escaped) captures before it runs; user scripts (no owner)
+                // run verbatim so a literal `%` survives.
                 let body = owner == nil ? script : firing.match.expandForScript(script)
                 await disposition.effects.append(contentsOf: runOwnedScript(
                     body,
                     owner: owner,
                     matches: firing.match.captures,
-                    named: firing.match.named
+                    named: firing.match.named,
+                    styles: ScriptStyleRun.mushStyles(text: line.text, runs: line.runs)
                 ))
             }
         }
@@ -470,15 +468,17 @@ public actor ScriptEngine {
         _ script: String,
         owner: String?,
         matches: [String],
-        named: [String: String]
+        named: [String: String],
+        styles: [ScriptStyleRun] = []
     ) async -> [ScriptEffect] {
         let raw: [ScriptEffect] = if let owner {
-            await runtime.runPluginScript(script, pluginID: owner, matches: matches, named: named)
+            await runtime.runPluginScript(
+                script, pluginID: owner, matches: matches, named: named, styles: styles
+            )
         } else {
-            await runScript(script, matches: matches, named: named)
+            await runScript(script, matches: matches, named: named, styles: styles)
         }
-        // Apply MUSHclient programmatic automation (AddTimer/AddTriggerEx/
-        // EnableTrigger/…) to our own engines; pass the rest (sends/echoes) on.
+        // Apply programmatic automation (AddTimer/AddTriggerEx/…); pass the rest on.
         return consumeRegistrations(raw, owner: owner)
     }
 
@@ -498,10 +498,9 @@ public actor ScriptEngine {
     }
 
     /// Offer a command about to be sent to every plugin's `OnPluginSend(text)`
-    /// (MUSHclient's send hook). Returns whether it's `blocked` (a plugin
-    /// returned false) + the callbacks' effects. dinv's `dbot.execute` relies on
-    /// this: it sends a `DINV_BYPASS …` line, and `OnPluginSend` strips the
-    /// prefix, re-sends the bare command, and returns false to drop the prefix.
+    /// (MUSHclient's send hook). Returns whether it's `blocked` + the callbacks'
+    /// effects (dinv's `dbot.execute` bypass: strip a `DINV_BYPASS` line, re-send
+    /// bare, return false to drop the prefixed one).
     public func fireOnPluginSend(_ text: String) async -> (blocked: Bool, effects: [ScriptEffect]) {
         guard !suspended else { return (false, []) }
         var effects: [ScriptEffect] = []
@@ -589,10 +588,11 @@ public actor ScriptEngine {
     private func runScript(
         _ script: String,
         matches: [String],
-        named: [String: String]
+        named: [String: String],
+        styles: [ScriptStyleRun] = []
     ) async -> [ScriptEffect] {
         do {
-            return try await runtime.runScript(script, matches: matches, named: named)
+            return try await runtime.runScript(script, matches: matches, named: named, styles: styles)
         } catch {
             return [.note(text: "Script error: \(error)", foreground: "red", background: nil)]
         }
