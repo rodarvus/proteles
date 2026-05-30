@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-70). **1051 tests, four gates green.**
+decision log (D-01…D-71). **1059 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -46,8 +46,10 @@ retention/per-world, inventory-serials keyring/vault + colour — D-68); **`asyn
 HTTP for plugins over URLSession** (D-67); **leveldb V1** run verbatim through the
 shim (D-69); and trigger-output fixes (D-70) — `ColourTell` colour, the trigger
 `styles`/`GetNormalColour` surface, and a **char.status in-game gate** so plugins
-(Hadar spellups) don't act on mid-login GMCP. **In progress: leveldb Part B**
-native reporting panels (A faithful tables · B live HUD · C charts · D journey).
+(Hadar spellups) don't act on mid-login GMCP; and **leveldb Part B** — the native
+**Levels** panel (D-71): a read-only `LevelDBStore` (GRDB, mapper-decoupled — the
+plugin stays sole writer) feeding four faces (A faithful tables · B live HUD ·
+C Swift-Charts analytics · D journey), View ▸ Levels / ⇧⌘L.
 
 **Open (needs a live repro):** dinv's `wish list` probe output isn't gagged
 (the gag mechanism is verified correct through every path; the failure is a dinv

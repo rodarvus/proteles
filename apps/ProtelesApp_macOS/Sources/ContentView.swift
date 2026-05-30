@@ -16,6 +16,8 @@ struct ContentView: View {
     let snd: SnDPanelModel
     /// In-game Help panel: receives captured help articles + drives navigation.
     let help: HelpPanelModel
+    /// Native leveldb reporting panel (read-only over the plugin's DB).
+    let levels: LevelDBPanelModel
     /// Posts session notifications (tells/mentions) as macOS notifications.
     @State private var notifications = NotificationController()
     @Environment(\.openWindow) private var openWindow
@@ -191,6 +193,7 @@ struct ContentView: View {
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
         case .info: AnyView(InfoPanel(state: gmcp))
         case .help: AnyView(HelpPanelView(model: help))
+        case .levels: AnyView(LevelDBPanelView(model: levels))
         }
     }
 

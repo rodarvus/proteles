@@ -55,6 +55,11 @@ for the modern Mac — no Wine, no VM, no emulator.
   topic to follow it), a search field, and back/forward history.
 - **Inventory Serials** (Plugins window toggle): `inventory` lists items
   grouped with serial numbers, flag colours, and counts.
+- **Leveling analytics** (View ▸ Levels, ⇧⌘L): a native **Levels** panel over
+  the bundled leveldb plugin's data — a live grind HUD (XP/hour, next level,
+  best zone), faithful sortable reports (top zones/mobs, quests, campaigns, gold
+  sources, deaths, daily), Swift-Charts analytics, and a tier/remort "journey"
+  with an activity heatmap. Read-only, so the plugin stays the source of truth.
 
 **Notifications & logging**
 - **Notifications** (Preferences ▸ Notifications): native macOS notifications
@@ -156,7 +161,7 @@ Then, in the app:
 | Manage Worlds | ⇧⌘M |
 | Scripts editor | ⇧⌘T |
 | Plugins | ⇧⌘P |
-| Toggle panels — Map / Text Map / Channels / S&D / Character | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I |
+| Toggle panels — Map / Text Map / Channels / S&D / Character / Levels | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I / ⇧⌘L |
 | Copy with colour codes (ANSI) | ⇧⌘C |
 
 ---
@@ -175,7 +180,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1051 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1059 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
