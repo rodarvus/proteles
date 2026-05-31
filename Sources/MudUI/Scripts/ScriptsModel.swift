@@ -95,26 +95,29 @@ public final class ScriptsModel {
         // sandboxed runtime, pointed at the global Databases/ dir (its
         // SnDdb.db). Inert when S&D isn't installed (host.load throws).
         await loadSearchAndDestroyHost()
-        // Then load this world's enabled library plugins (after the script reset
-        // above, so their triggers/timers survive). Each lives in its own
-        // discoverable dir under ~/Documents/Proteles/Plugins/ (see D-59), with
-        // its per-character data under <plugin>/data/<profile>/.
+        // ARM (don't load yet) this world's enabled library plugins + the bundled
+        // leveldb. ALL MUSHclient plugin initialisation is deferred until the
+        // character is in-game (first char.status state ≥ 3, after the MOTD), so
+        // plugins don't run their init-time server probes (slist, cp info, …)
+        // during login where those commands fail (D-74). Each plugin lives in its
+        // own discoverable dir under ~/Documents/Proteles/Plugins/ (D-59), with
+        // per-character data under <plugin>/data/<profile>/. dinv (D-32) keeps its
+        // own arming; the session activates all three on the in-game signal.
+        var pluginDirectories: [URL] = []
         if let libraryURL = try? PluginLibraryStore.defaultStoreURL() {
             let library = PluginLibraryStore(url: libraryURL)
             try? await library.load()
-            let directories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
-            await session.loadPlugins(directories: directories, character: character)
+            pluginDirectories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
         }
-        // dinv (D-32): its per-character DB lives under Plugins/dinv/data/<character>/.
-        // Armed here; loaded once the character is active.
         if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character) {
             await session.armBundledDinv(stateDirectory: dinvData.path)
         }
-        // leveldb: a single shared leveling DB (MUSHclient-style, GetInfo(60));
-        // it writes state/leveldb/leveldb.db under its plugin home. Loaded eagerly.
-        if let levelDBHome = try? ProtelesPaths.pluginDirectory(named: "leveldb") {
-            await session.loadBundledLevelDB(dataDirectory: levelDBHome.path)
-        }
+        let levelDBHome = try? ProtelesPaths.pluginDirectory(named: "leveldb")
+        await session.armInitialPlugins(
+            directories: pluginDirectories,
+            character: character,
+            levelDBDirectory: levelDBHome?.path
+        )
     }
 
     /// Toggle whether a script kind is shared across characters (the editor's

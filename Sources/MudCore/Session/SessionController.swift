@@ -119,17 +119,30 @@ public actor SessionController {
     /// `char.status` plugin broadcasts are held (MUSHclient parity — see
     /// `dispatchGMCP`). Reset on connect.
     var seenCharInGame = false
-    /// Whether `OnPluginConnect` has fired yet this connection. We defer it from
-    /// the raw connect until the character is in-game (first `char.status`
-    /// state ≥ 3), so plugins that probe the server on connect (`slist`,
-    /// `cp info`, …) don't run their commands during login/MOTD where they fail.
-    /// Fired once, by whichever comes first: the in-game signal or a fallback
-    /// timer. Reset on connect.
+    /// **All** MUSHclient plugin initialisation is held until the character is
+    /// in-game — the first `char.status` with state ≥ 3 (after the MOTD), the
+    /// same signal dinv has always armed on. Plugins probe the server on init
+    /// (`slist`, `cp info`, …) and those commands fail during login/MOTD, so we
+    /// don't load them (their `OnPluginInstall`) or fire `OnPluginConnect` until
+    /// then. Activation runs once per the in-game signal (or a fallback timer).
+    ///
+    /// Two guards: ``pluginsLoaded`` is session/world-lifetime (the load +
+    /// `OnPluginInstall` happen once; plugins persist across reconnects), while
+    /// ``pluginsConnectFired`` is per-connection (`OnPluginConnect` fires on each
+    /// reconnect's in-game signal). `armInitialPlugins` resets `pluginsLoaded`
+    /// (a fresh world arm → reload); `establish` resets `pluginsConnectFired`.
+    var pluginsLoaded = false
     var pluginsConnectFired = false
-    /// Fallback that fires the deferred `OnPluginConnect` if no in-game
-    /// `char.status` arrives within a grace window (insurance for a stuck login
-    /// or a MUD that doesn't send state 3). Cancelled on teardown.
-    var pluginConnectFallbackTask: Task<Void, Never>?
+    /// Pending initial plugin loads, armed at world-load and run on activation:
+    /// the enabled library plugin dirs + the per-character data-dir key, and the
+    /// bundled leveldb home. (dinv keeps its own arming, `pendingDinvStateDirectory`.)
+    var pendingInitialPluginDirectories: [URL] = []
+    var pendingInitialPluginCharacter: String?
+    var pendingLevelDBDirectory: String?
+    /// Fallback that activates plugins if no in-game `char.status` arrives within
+    /// a grace window (insurance for a stuck login / a MUD without state 3).
+    /// Cancelled on teardown.
+    var pluginActivationFallbackTask: Task<Void, Never>?
     /// Plugin id → its code + per-character data directories, for ReloadPlugin
     /// disk re-read and `GetInfo(66)` resolution.
     var loadedPluginPaths: [String: (code: URL, data: URL)] = [:]
@@ -380,7 +393,7 @@ public actor SessionController {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         gmcpHandshakeSent = false
-        pluginsConnectFired = false
+        pluginsConnectFired = false // per-connection; pluginsLoaded persists across reconnects
         sentExitsTag = false
         richExitsCardinals = []
         richExitsCustomExits = []
@@ -558,8 +571,8 @@ public actor SessionController {
         timerTask = nil
         keepAliveTask?.cancel()
         keepAliveTask = nil
-        pluginConnectFallbackTask?.cancel()
-        pluginConnectFallbackTask = nil
+        pluginActivationFallbackTask?.cancel()
+        pluginActivationFallbackTask = nil
         recorder?.close()
         recorder = nil
         transcript?.close()

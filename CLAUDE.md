@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-74). **1066 tests, four gates green.**
+decision log (D-01…D-74). **1070 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -52,9 +52,13 @@ plugin stays sole writer) feeding four faces (A faithful tables · B live HUD ·
 C Swift-Charts analytics · D journey) in a dedicated `Window` (not a dock tile),
 View ▸ Levels / ⇧⌘L.
 
-**Open (needs a live repro):** dinv's `wish list` probe output isn't gagged
-(the gag mechanism is verified correct through every path; the failure is a dinv
-init/timing edge during the post-login burst — don't guess-fix).
+**Open (needs a fresh live re-test):** dinv's `wish list` probe output isn't
+gagged. Harness coverage now proves the gag mechanism + coroutine/nested-
+coroutine trigger registration all work in the current tree (no reproduction
+offline). The ungagged recordings predate the D-72 (per-plugin variable scope)
+and D-73 (cancellable timers) fixes, both of which touch dinv's wish machinery
+— so re-test live before more harness work. If it still leaks, the next step is
+a full `wish.getCR` drive (pagesize getConfig) in the harness. Don't guess-fix.
 
 ### NEXT SESSION — start here
 

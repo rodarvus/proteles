@@ -22,18 +22,19 @@ extension SessionController {
         if let scriptEngine {
             Task { [weak self] in
                 await scriptEngine.setConnected(newState == .connected)
-                // OnPluginConnect is deferred to the in-game signal (see
-                // firePluginConnectIfNeeded) — NOT fired on the raw connect, so
-                // plugins don't probe the server during login/MOTD. Native
-                // plugins still connect now (their connect is login-safe, e.g.
-                // AsciiMap just enables an out-of-band telnet option).
+                // MUSHclient plugin load + OnPluginConnect are deferred to the
+                // in-game signal (see activatePluginsIfNeeded) — NOT run on the
+                // raw connect, so plugins don't probe the server during
+                // login/MOTD. Native plugins still connect now (their connect is
+                // login-safe, e.g. AsciiMap just enables an out-of-band telnet
+                // option).
                 var effects: [ScriptEffect] = switch newState {
                 case .disconnected: await scriptEngine.disconnectPlugins()
                 default: []
                 }
                 if newState == .connected {
                     await effects.append(contentsOf: scriptEngine.connectNativePlugins())
-                    await self?.schedulePluginConnectFallback()
+                    await self?.schedulePluginActivationFallback()
                 }
                 if !effects.isEmpty { await self?.applyScriptEffects(effects) }
                 await self?.persistVariablesIfDirty()
