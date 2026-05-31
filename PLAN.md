@@ -5,8 +5,18 @@
 > project evolves; the **Decision Log** (§13) is append-only history and is
 > never edited, only superseded.
 
-**Last rewritten:** 2026-05-29 · **Latest release:** `v0.3.0` (tagged + GitHub
-release, non-notarized build): the **Plugin Library** — one unified import
+**Last rewritten:** 2026-05-29 · **Latest release:** `v0.4.0` (tagged + GitHub
+release, non-notarized build): **native leveling analytics** — the **Levels**
+window over the bundled **leveldb** plugin (run verbatim through the shim for
+collection, D-69; four read-only faces — tables/HUD/charts/journey — D-71),
+**plugin outbound HTTP (`async`)** over URLSession (D-67, closing the one
+`0.3.0` deferred limitation), a big **plugin-reliability batch** (per-plugin
+variable scope D-72; cancellable `AddTimer`/`DeleteTimer` + `EnablePlugin` D-73;
+**defer plugin init until in-game** so login-time probes don't fail D-74; CRLF
+`io.lines` for the gagger; trigger-output fidelity D-70), **dinv + leveldb
+database import/reset** (D-75), and a backlog batch of input/logging polish
+(D-68).
+**Prior release `v0.3.0`:** the **Plugin Library** — one unified import
 mechanism under `~/Documents/Proteles/` (D-59 plan → D-61, Phases A/B/C), **Phase-7
 features** (Inventory Serials, Session Logging, Notifications, MacroEngine,
 Scripts-editor rework — D-49/D-50/D-51), **Rich Exits** (D-45), **Help panel**
@@ -15,7 +25,6 @@ Scripts-editor rework — D-49/D-50/D-51), **Rich Exits** (D-45), **Help panel**
 12-plugin load audit (D-62), the **`Accelerator`→MacroEngine bridge** + `utils`
 dialogs (D-63), an **honest, quiet compatibility report** (D-64), and assorted
 shim closes (`SendSpecial`, dependency-nag stub, `GetInfo(56)` — D-65/D-66).
-`async` plugin HTTP is the one deferred known-limitation (post-0.3.0).
 
 ---
 
