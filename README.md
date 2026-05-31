@@ -88,6 +88,11 @@ for the modern Mac — no Wine, no VM, no emulator.
   shim: `dinv build` identifies your whole inventory **including items inside
   containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
   **portal navigation** all work.
+- **Import your existing data.** Beyond the mapper + S&D databases, you can bring
+  over your **dinv** and **leveldb** databases too (**Databases ▸ Import
+  Inventory / Import Leveling**) — done while disconnected, taking effect on your
+  next connect. Plugins initialise only once you're in-game (after the MOTD), so
+  their login-time server probes don't fail.
 - The **Aardwolf MUSHclient plugin package** is ported natively (all 43 plugins
   triaged): the GMCP handler (`sendgmcp` + config), a GA-based prompt boundary,
   the tick-timer countdown, Omit Blank Lines, Enemy/TNL HUD bars, the three
@@ -181,7 +186,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1059 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1077 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they

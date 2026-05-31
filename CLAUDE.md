@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-74). **1070 tests, four gates green.**
+decision log (D-01…D-75). **1077 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -52,6 +52,19 @@ plugin stays sole writer) feeding four faces (A faithful tables · B live HUD ·
 C Swift-Charts analytics · D journey) in a dedicated `Window` (not a dock tile),
 View ▸ Levels / ⇧⌘L.
 
+**Then a live-testing batch (D-72…D-75):** **per-plugin variable scope + ambient
+context** bound to the executing plugin (D-72 — fixed leveldb `ldb on` not
+persisting); **cancellable `AddTimer`/`DeleteTimer`** + `EnablePlugin`/`Disable
+Plugin`/`IsPluginInstalled` shim stubs (D-73 — the cancellable timer fixed the
+Hadar_Spellups "Getting/Got skills" spam); **defer ALL MUSHclient plugin init
+until in-game** (D-74 — plugins' login-time `slist`/`cp info` probes failed
+during MOTD; dinv keeps its own arming, the rest are armed + loaded on the first
+in-game `char.status`); a **CRLF `io.lines`** fix (the Message Gagger reads a
+Windows-CRLF gag list — the stray `\r` made every literal pattern miss); and
+**dinv + leveldb database import/reset** (D-75 — whole-file replace via the
+Databases menu, since plugin-owned SQLite can't be safely merged like the
+mapper/S&D).
+
 **Open (needs a fresh live re-test):** dinv's `wish list` probe output isn't
 gagged. Harness coverage now proves the gag mechanism + coroutine/nested-
 coroutine trigger registration all work in the current tree (no reproduction
@@ -87,11 +100,15 @@ plugins (autobypass, mudbin, Orphean, Double Predictor via `SendSpecial`, …).
   (D-70); the *repeating* "Getting/Got skills/spells" was the shim's
   non-cancellable `AddTimer`/`DeleteTimer` (D-73 — its 10s slist safety timer
   fired despite being deleted, re-opening the capture gate every tick).
-- **Message gagger** errors if `messages_to_gag.txt` is absent (it never creates
-  it — faithful to MUSHclient); the user maintains it at the `GetInfo(56)` path
-  (`~/Documents/Proteles/Plugins/Aardwolf_Message_Gagger/`).
-- **Speedwalk** "Too many run errors" was downstream of the empty dinv DB (portal
-  data missing); re-check now the real DB is in place.
+- **Message gagger** — RESOLVED (CRLF `io.lines`, this batch). Its
+  `messages_to_gag.txt` is Windows-CRLF; the stray `\r` per line made every
+  literal gag pattern miss. (It still errors if the file is *absent* — faithful
+  to MUSHclient; the user maintains it at the `GetInfo(56)` path.)
+- **Speedwalk / `xcp` portal nav** — the portal hop uses dinv's `dinv portal use`
+  (item serial); failures were downstream of dinv being uninitialised (D-74
+  follow-up) and/or **stale dinv obj_ids** from the imported MUSHclient DB. Fix
+  for the user: run a fresh `dinv build` (now that dinv initialises), or import a
+  current dinv DB (D-75), so the portal item's obj_id matches the live inventory.
 
 **Candidates after 0.3.0** (plans in `docs/plans/`; user picks):
 0. **`async` HTTP** for plugins — `docs/plans/ASYNC_HTTP_PLAN.md` (decisions taken;
