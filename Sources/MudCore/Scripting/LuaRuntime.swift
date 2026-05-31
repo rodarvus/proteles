@@ -166,28 +166,25 @@ public actor LuaRuntime {
     nonisolated(unsafe) var bundledModules: [String: String] = [:]
     nonisolated(unsafe) var moduleSearchPaths: [String] = []
 
-    /// Ambient environment for `proteles.info`/`proteles.pluginID` (≈ MUSHclient
-    /// `GetInfo`/`GetPluginID`). Loader-set per plugin; defaults to user scripts.
+    /// Ambient `proteles.info`/`pluginID` (≈ `GetInfo`/`GetPluginID`), bound to the
+    /// *executing* plugin per run via ``pluginContexts`` (see PluginEnvironments).
     nonisolated(unsafe) var pluginContext = PluginContext.default
+    /// Per-plugin contexts (id → context), so a run re-enters the right ambient
+    /// regardless of load order. Set by ``setPluginContext``.
+    nonisolated(unsafe) var pluginContexts: [String: PluginContext] = [:]
 
-    /// Per-plugin sandbox environments (plugin id → registry ref of an env
-    /// table whose metatable `__index` falls back to `_G`). A plugin's script,
-    /// callbacks, and trigger/alias/timer scripts run in its own env so two
-    /// plugins can't clobber each other's globals. See `LuaRuntime+PluginEnvironments`.
+    /// Per-plugin sandbox environments (plugin id → registry ref of an env table
+    /// whose `__index` falls back to `_G`), so plugins can't clobber each other's
+    /// globals. See `LuaRuntime+PluginEnvironments`.
     nonisolated(unsafe) var pluginEnvs: [String: Int32] = [:]
 
-    /// Scoped string variables (`proteles.getVar`/`setVar`/`deleteVar`,
-    /// ≈ MUSHclient `Get/SetVariable`). Keyed `scope → name → value`; the
-    /// host sets ``currentVariableScope`` per plugin/script so each plugin's
-    /// variables are isolated. Held in memory (so reads return synchronously
-    /// inside the Lua dispatch) and synced to/from disk by the host around
-    /// runs. `nonisolated(unsafe)` for the same reason as ``effects``.
+    /// Scoped string variables (`getVar`/`setVar`, ≈ `Get/SetVariable`), keyed
+    /// `scope → name → value`, isolated per plugin via ``currentVariableScope``.
     nonisolated(unsafe) var variables: [String: [String: String]] = [:]
-    /// The scope `getVar`/`setVar`/`deleteVar` read and write. Defaults to a
-    /// shared user scope; the plugin loader sets it per plugin id.
+    /// The scope `getVar`/`setVar`/`deleteVar` read/write — bound to the executing
+    /// plugin per run (`_user` default).
     nonisolated(unsafe) var currentVariableScope = "_user"
-    /// Scopes whose variables changed since the last ``takeDirtyVariableScopes``,
-    /// so the host knows what to persist.
+    /// Scopes whose variables changed since the last ``takeDirtyVariableScopes``.
     nonisolated(unsafe) var dirtyVariableScopes: Set<String> = []
 
     /// Event name → registry refs of registered handler functions.
@@ -207,9 +204,8 @@ public actor LuaRuntime {
     nonisolated(unsafe) var nextHTTPRequestID = 0
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
-    /// standard-library surface is removed before the runtime is usable —
-    /// see ``sandboxScript``. Pass `false` only for fully-trusted internal
-    /// scripts.
+    /// standard-library surface is removed before use (see ``sandboxScript``);
+    /// pass `false` only for fully-trusted internal scripts.
     public init(sandboxed: Bool = true, executionTimeout: Duration = .seconds(2)) throws {
         guard let state = luaL_newstate() else {
             throw LuaError.initializationFailed
@@ -229,8 +225,7 @@ public actor LuaRuntime {
         lua_close(state)
     }
 
-    /// Execute a chunk and return the side effects its `proteles.*` calls
-    /// recorded, in order. The host applies them.
+    /// Execute a chunk and return the recorded `proteles.*` side effects, in order.
     @discardableResult
     public func run(_ script: String) throws -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
@@ -240,11 +235,9 @@ public actor LuaRuntime {
         return effects
     }
 
-    /// Run a chunk with trigger captures bound to globals first, returning
-    /// the recorded effects. Sets `matches` (a table keyed `0…n`, where
-    /// `matches[0]` is the whole match and `matches[i]` the i-th group) and
-    /// `named` (named captures). Done in one isolated call so nothing
-    /// interleaves between binding and running.
+    /// Run a chunk with trigger captures bound to globals first, returning the
+    /// recorded effects. Sets `matches` (`matches[0]` = whole match, `matches[i]`
+    /// = i-th group) and `named` (named captures), isolated so nothing interleaves.
     @discardableResult
     public func runScript(
         _ script: String,
@@ -252,6 +245,14 @@ public actor LuaRuntime {
         named: [String: String] = [:],
         styles: [ScriptStyleRun] = []
     ) throws -> [ScriptEffect] {
+        // User scripts use the default `_user` variable scope + ambient context;
+        // set + restore both so a prior plugin run's id can't divert user
+        // Get/SetVariable into a plugin's bucket or report a plugin's identity.
+        let previousScope = currentVariableScope
+        let previousContext = pluginContext
+        currentVariableScope = "_user"
+        pluginContext = .default
+        defer { currentVariableScope = previousScope; pluginContext = previousContext }
         setMatchGlobals(captures, named)
         setStyleGlobal(styles)
         return try run(script)
@@ -267,8 +268,7 @@ public actor LuaRuntime {
         return lua_tonumber(state, -1)
     }
 
-    /// Evaluate an expression and return its string result. (Lua coerces
-    /// numbers to strings, matching `tostring`.)
+    /// Evaluate an expression and return its string result (Lua coerces numbers).
     public func string(_ expression: String) throws -> String {
         try evaluate(expression)
         defer { clua_pop(state, 1) }
