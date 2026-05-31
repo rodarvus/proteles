@@ -106,6 +106,9 @@ extension SessionController {
         let isCharStatus = message.package.lowercased() == "char.status"
         if isCharStatus, !seenCharInGame, (Self.charStatusState(message.json) ?? 0) >= 3 {
             seenCharInGame = true
+            // Now in-game: fire the deferred OnPluginConnect before this first
+            // in-game char.status reaches plugins (connect precedes broadcasts).
+            await firePluginConnectIfNeeded()
         }
         let holdCharStatus = isCharStatus && !seenCharInGame
         if let scriptEngine, !holdCharStatus {

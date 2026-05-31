@@ -253,6 +253,13 @@ public extension LuaRuntime {
       if id == nil or id == GetPluginID() then return proteles.info(1) or "" end
       return ""
     end
+    -- Plugin enable/disable + presence. We host one plugin per environment and
+    -- can't toggle another plugin from Lua, so these are benign no-ops that
+    -- report success: a plugin that disables itself on install (then `return`s)
+    -- simply proceeds, and callers wrapping the call in `check()` see eOK.
+    function EnablePlugin(id, flag) return error_code.eOK end
+    function DisablePlugin(id) return error_code.eOK end
+    function IsPluginInstalled(id) return id == nil or id == GetPluginID() end
     -- check(code): MUSHclient's return-code guard (lua/check.lua) — raise a Lua
     -- error if an API call didn't return eOK, else pass the code through. Our
     -- API functions return eOK on success, so check() is a no-op on the happy
@@ -368,7 +375,15 @@ public extension LuaRuntime {
     /// 5.1), and the `module`/`package` shim — the dependencies the `wait`
     /// coroutine helper and many third-party plugins need. Registrations route
     /// to `proteles.*` effects, which ``ScriptEngine`` applies to its engines.
-    internal nonisolated static let automationShimSource = #"""
+    /// The full compat-shim Lua source = the core API here + the timers /
+    /// plugin-control extras in `LuaRuntime+CompatShimTimers.swift`. Split across
+    /// two files to stay within the file-length budget; concatenated verbatim
+    /// (with a newline) into one Lua chunk by ``loadCompatShim()``.
+    internal nonisolated static var automationShimSource: String {
+        shimSourceCore + "\n" + shimSourceTimersAndPlugins
+    }
+
+    private nonisolated static let shimSourceCore = #"""
     -- Name registries so IsTrigger/IsTimer/IsAlias can answer existence
     -- (MUSHclient object names are world-unique). Add*/Delete* keep these in
     -- sync; dinv's de-init whacks objects by name and treats "not found" as a
@@ -493,108 +508,5 @@ public extension LuaRuntime {
     function MakeRegularExpression(text)
       return "^" .. tostring(text):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?{}|\\]", "\\%0") .. "$"
     end
-
-    -- Programmatic timers/triggers → host effects. AddTimer becomes a one-shot
-    -- deferred call to its script (the only shape `wait` uses); the response/
-    -- send-to and DeleteTimer are no-ops (one-shots expire). AddTriggerEx
-    -- registers a (one-shot) trigger whose script fires on match. -----------
-    function AddTimer(name, hour, minute, second, response, flags, script)
-      local seconds = (tonumber(hour) or 0) * 3600 + (tonumber(minute) or 0) * 60
-        + (tonumber(second) or 0)
-      if script and script ~= "" then
-        proteles.doAfter(seconds, script .. "(" .. string.format("%q", tostring(name)) .. ")", true)
-      end
-      __timerNames[tostring(name)] = true
-      return error_code.eOK
-    end
-    -- Deferred actions → one-shot timers on the host's timer engine. With
-    -- sendto.script (12) / sendto.scriptafteromit (14) the text runs as Lua in
-    -- the owning plugin's env; otherwise it's sent to the MUD. dinv's reload,
-    -- execute-queue re-arm, and version paths all rely on DoAfterSpecial.
-    function DoAfterSpecial(seconds, text, sendtoValue)
-      -- sendto.execute (10): the deferred text is processed like typed input —
-      -- aliases, speedwalk AND command stacking (`;`). dinv relies on this for
-      -- its portal sequence, e.g. `wear <id> portal;put <id> <bag>`: the client
-      -- must split on `;` into two commands. We defer a script that calls
-      -- `Execute`, which routes through the host command pipeline (where the
-      -- `;` split happens) — a raw send would hand Aardwolf the whole stacked
-      -- string and it'd treat `portal;put …` as the wear location.
-      if sendtoValue == 10 then
-        proteles.doAfter(tonumber(seconds) or 0,
-                         "Execute(" .. string.format("%q", tostring(text)) .. ")", true)
-        return error_code.eOK
-      end
-      local isScript = (sendtoValue == 12 or sendtoValue == 14)
-      proteles.doAfter(tonumber(seconds) or 0, tostring(text), isScript)
-      return error_code.eOK
-    end
-    function DoAfter(seconds, text)
-      proteles.doAfter(tonumber(seconds) or 0, tostring(text), false)
-      return error_code.eOK
-    end
-    -- ReloadPlugin: tear down and re-instantiate a plugin by id. A plugin can
-    -- ask the host to reload itself (dinv's `dinv reload`); the host routes by
-    -- kind (native / bundled dinv / on-disk MUSHclient).
-    function ReloadPlugin(id) proteles.reloadPlugin(tostring(id)); return error_code.eOK end
-    -- Build the Lua a trigger runs when it fires, matching MUSHclient: a non-
-    -- empty `script` is a handler called as `fn(name, line, wildcards)`; else,
-    -- with a script send-to (12/14, the AddTriggerEx default in the Aardwolf
-    -- corpus), the `response` text is run as Lua (the host %-expands %1/%0/… to
-    -- captures first); else the response is sent to the world. An empty body is
-    -- a no-op (e.g. an OmitFromOutput-only suppression trigger).
-    local function __triggerBody(name, response, script, sendtoVal)
-      if script and script ~= "" then
-        return script .. "(" .. string.format("%q", tostring(name)) .. ", matches[0], matches)"
-      end
-      response = tostring(response or "")
-      if response == "" then return "" end
-      if sendtoVal == nil or sendtoVal == 12 or sendtoVal == 14 then return response end
-      return "Send(" .. string.format("%q", response) .. ")"
-    end
-    function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
-      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0,
-                          __triggerBody(name, response, script, sendto))
-      __triggerNames[tostring(name)] = true
-      return error_code.eOK
-    end
-    function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
-      -- AddTrigger has no send_to param; MUSHclient defaults to the world.
-      proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0,
-                          __triggerBody(name, response, script, 1))
-      __triggerNames[tostring(name)] = true
-      return error_code.eOK
-    end
-    function DeleteTrigger(name)
-      proteles.removeTrigger(tostring(name)); __triggerNames[tostring(name)] = nil
-      return error_code.eOK
-    end
-    -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
-    -- engine (owner-scoped, like AddTriggerEx). `script` is the handler name.
-    function AddAlias(name, match, response, flags, script)
-      proteles.addAlias(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
-      __aliasNames[tostring(name)] = true
-      return error_code.eOK
-    end
-    function EnableAlias(name, flag)
-      proteles.enableAlias(tostring(name), not (flag == false or flag == nil or flag == 0))
-      return error_code.eOK
-    end
-    function DeleteTimer(name) __timerNames[tostring(name)] = nil; return error_code.eOK end
-    -- Existence checks (MUSHclient world API): eOK when the named object exists,
-    -- else the type-specific not-found code. dinv's de-init wrappers branch on
-    -- these to skip deleting objects that were never instantiated.
-    function IsTrigger(name)
-      return __triggerNames[tostring(name)] and error_code.eOK or error_code.eTriggerNotFound
-    end
-    function IsTimer(name)
-      return __timerNames[tostring(name)] and error_code.eOK or error_code.eTimerNotFound
-    end
-    function IsAlias(name)
-      return __aliasNames[tostring(name)] and error_code.eOK or error_code.eAliasNotFound
-    end
-    function SetTimerOption(name, option, value) return error_code.eOK end
-    function SetTriggerOption(name, option, value) return error_code.eOK end
-    function DeleteTemporaryTriggers() return 0 end
-    function DeleteTemporaryTimers() return 0 end
     """#
 }

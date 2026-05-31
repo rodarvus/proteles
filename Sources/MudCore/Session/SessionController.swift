@@ -56,7 +56,9 @@ public actor SessionController {
     /// ``connect(to:autologin:)``), so its own state stream can't be observed
     /// across reconnects; the controller re-publishes each here as one stream.
     public nonisolated let connectionStates: AsyncStream<State>
-    private let connectionStatesContinuation: AsyncStream<State>.Continuation
+    /// Internal (not private) so `updateState` in `SessionController+ConnectionState`
+    /// can publish onto the stream.
+    let connectionStatesContinuation: AsyncStream<State>.Continuation
 
     /// JSON model snapshots a plugin published (`proteles.publish`, e.g. S&D's
     /// window state) — the UI subscribes and feeds its panel. Newest-only.
@@ -85,7 +87,9 @@ public actor SessionController {
     let httpClient: any HTTPClient
 
     /// Mirror of the active connection's state, for synchronous reads.
-    public private(set) var state: State = .disconnected
+    /// `internal(set)` (not `private(set)`) so `updateState` in the
+    /// `+ConnectionState` extension file can mutate it.
+    public internal(set) var state: State = .disconnected
 
     var pipeline = LinePipeline()
     private var processTask: Task<Void, Never>?
@@ -115,6 +119,17 @@ public actor SessionController {
     /// `char.status` plugin broadcasts are held (MUSHclient parity — see
     /// `dispatchGMCP`). Reset on connect.
     var seenCharInGame = false
+    /// Whether `OnPluginConnect` has fired yet this connection. We defer it from
+    /// the raw connect until the character is in-game (first `char.status`
+    /// state ≥ 3), so plugins that probe the server on connect (`slist`,
+    /// `cp info`, …) don't run their commands during login/MOTD where they fail.
+    /// Fired once, by whichever comes first: the in-game signal or a fallback
+    /// timer. Reset on connect.
+    var pluginsConnectFired = false
+    /// Fallback that fires the deferred `OnPluginConnect` if no in-game
+    /// `char.status` arrives within a grace window (insurance for a stuck login
+    /// or a MUD that doesn't send state 3). Cancelled on teardown.
+    var pluginConnectFallbackTask: Task<Void, Never>?
     /// Plugin id → its code + per-character data directories, for ReloadPlugin
     /// disk re-read and `GetInfo(66)` resolution.
     var loadedPluginPaths: [String: (code: URL, data: URL)] = [:]
@@ -365,6 +380,7 @@ public actor SessionController {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         gmcpHandshakeSent = false
+        pluginsConnectFired = false
         sentExitsTag = false
         richExitsCardinals = []
         richExitsCustomExits = []
@@ -528,51 +544,6 @@ public actor SessionController {
         }
     }
 
-    /// Update the mirrored state and republish it (deduplicated so the durable
-    /// stream never emits the same state twice in a row).
-    func updateState(_ newState: State) {
-        guard newState != state else { return }
-        state = newState
-        connectionStatesContinuation.yield(newState)
-        syncTimerLoop(to: newState)
-        // Keep S&D's `IsConnected()` in sync (gates its init bootstrap; its
-        // init hook auto-detects an already-running campaign).
-        if let searchAndDestroy {
-            Task { await searchAndDestroy.setConnected(newState == .connected) }
-        }
-        // Keep scripts' `isConnected` in sync + drive plugin lifecycle callbacks.
-        if let scriptEngine {
-            Task { [weak self] in
-                await scriptEngine.setConnected(newState == .connected)
-                var effects: [ScriptEffect] = switch newState {
-                case .connected: await scriptEngine.connectPlugins()
-                case .disconnected: await scriptEngine.disconnectPlugins()
-                default: []
-                }
-                if newState == .connected {
-                    await effects.append(contentsOf: scriptEngine.connectNativePlugins())
-                }
-                if !effects.isEmpty { await self?.applyScriptEffects(effects) }
-                await self?.persistVariablesIfDirty()
-            }
-        }
-    }
-
-    /// Drive the timer loop with the connection: start on connect (re-arms
-    /// timers on reconnect), stop on disconnect (teardownSession also cancels it).
-    private func syncTimerLoop(to newState: State) {
-        switch newState {
-        case .connected:
-            restartTimerLoop()
-            lastOutboundActivity = Date() // a fresh connect counts as activity
-            startKeepAlive()
-        case .disconnected:
-            timerTask?.cancel(); timerTask = nil
-            keepAliveTask?.cancel(); keepAliveTask = nil
-        default: break
-        }
-    }
-
     /// Cancel the per-session tasks and drop the connection so the next
     /// ``connect(to:autologin:)`` starts clean. Idempotent. Does *not*
     /// emit a state transition — callers do that explicitly.
@@ -587,6 +558,8 @@ public actor SessionController {
         timerTask = nil
         keepAliveTask?.cancel()
         keepAliveTask = nil
+        pluginConnectFallbackTask?.cancel()
+        pluginConnectFallbackTask = nil
         recorder?.close()
         recorder = nil
         transcript?.close()

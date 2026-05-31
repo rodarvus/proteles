@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-72). **1061 tests, four gates green.**
+decision log (D-01…D-74). **1066 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -79,10 +79,10 @@ Logging, Notifications, the Plugin Library, and a broad swathe of community
 plugins (autobypass, mudbin, Orphean, Double Predictor via `SendSpecial`, …).
 
 **Open from live testing (not blocking 0.3.0):**
-- **Hadar_Spellups** spams `index nil` at login — `{affon}` affects arrive before
-  `slist hsp` is parsed (the list is empty); self-recovers once slist completes.
-  Prime suspect: we may deliver a mid-login `char.status` GMCP that triggers a
-  premature `slist`. Worth comparing GMCP-during-login delivery vs MUSHclient.
+- **Hadar_Spellups** — RESOLVED. The login `index nil` was the char.status gate
+  (D-70); the *repeating* "Getting/Got skills/spells" was the shim's
+  non-cancellable `AddTimer`/`DeleteTimer` (D-73 — its 10s slist safety timer
+  fired despite being deleted, re-opening the capture gate every tick).
 - **Message gagger** errors if `messages_to_gag.txt` is absent (it never creates
   it — faithful to MUSHclient); the user maintains it at the `GetInfo(56)` path
   (`~/Documents/Proteles/Plugins/Aardwolf_Message_Gagger/`).
