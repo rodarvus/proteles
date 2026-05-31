@@ -38,15 +38,17 @@ public struct AsciiMap: NativePlugin {
     /// **UTF-8 box-drawing** walls (`│ ─ ┌ …`) the server renders for us — far
     /// nicer than `|`/`-`. 5 = single-line "extended walls"; 6 = double-line.
     /// MUSHclient had to down-convert these to ASCII; we're natively UTF-8, so
-    /// we render them verbatim. Sent `session`-only, so it doesn't alter the
-    /// character's saved setting.
+    /// we render them verbatim. Sent as the character's **saved default** (no
+    /// `session` suffix) at the user's request, so the Unicode single-line map
+    /// is the default everywhere rather than a per-session override.
     private static let preferredMapType = 5
 
     private var capturing = false
     private var buffer: [Line] = []
     /// Whether we're currently in a state that permits a map request.
     private var playing = false
-    /// Sent `maptype` once per session (on the first playing state).
+    /// Sent `maptype` once per session (on the first playing state) — sets the
+    /// saved default, so it's idempotent after the first time.
     private var requestedMapType = false
 
     private struct StatusState: Decodable { let state: Int? }
@@ -92,7 +94,7 @@ public struct AsciiMap: NativePlugin {
             var effects: [ScriptEffect] = []
             if !requestedMapType {
                 requestedMapType = true
-                effects.append(.send("maptype \(Self.preferredMapType) session"))
+                effects.append(.send("maptype \(Self.preferredMapType)"))
             }
             effects.append(.send("map"))
             return effects
