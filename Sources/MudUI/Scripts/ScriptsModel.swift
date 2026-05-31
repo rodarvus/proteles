@@ -132,7 +132,7 @@ public final class ScriptsModel {
     /// A readable, filesystem-safe per-character data-dir key for `id`: the
     /// profile's autologin username (the character), else its display name, else
     /// the UUID — so data lives under `…/data/<character>/`, never an opaque id.
-    static func characterKey(forProfile id: UUID) async -> String {
+    public static func characterKey(forProfile id: UUID) async -> String {
         guard let url = try? ProfileStore.defaultStoreURL() else { return id.uuidString }
         let store = ProfileStore(url: url)
         try? await store.load()

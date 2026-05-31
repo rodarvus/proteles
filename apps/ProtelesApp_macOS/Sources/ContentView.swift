@@ -18,10 +18,14 @@ struct ContentView: View {
     let help: HelpPanelModel
     /// Native leveldb reporting panel (read-only over the plugin's DB).
     let levels: LevelDBPanelModel
+    /// Import/reset hooks for the plugin-owned DBs (dinv, leveldb).
+    let pluginDBs: PluginDatabasesModel
     /// Posts session notifications (tells/mentions) as macOS notifications.
     @State private var notifications = NotificationController()
     @Environment(\.openWindow) private var openWindow
-    @State private var connectionState: StatusBarView.ConnectionState = .disconnected
+    // Not `private` so the `ContentView+PluginDatabases` extension (separate
+    // file) can gate import/reset on the live connection state.
+    @State var connectionState: StatusBarView.ConnectionState = .disconnected
     @State private var gmcp = GMCPState()
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
@@ -325,6 +329,10 @@ struct ContentView: View {
         snd.onReset = { resetSearchAndDestroyDatabase() }
         snd.onInstall = { installSearchAndDestroy() }
         snd.isInstalled = scripts.isSearchAndDestroyInstalled
+        pluginDBs.onImportDinv = { importPluginDatabase(.dinv) }
+        pluginDBs.onResetDinv = { resetPluginDatabase(.dinv) }
+        pluginDBs.onImportLevelDB = { importPluginDatabase(.levelDB) }
+        pluginDBs.onResetLevelDB = { resetPluginDatabase(.levelDB) }
     }
 
     /// Download + install the Search-and-Destroy plugin on request (S&D isn't
