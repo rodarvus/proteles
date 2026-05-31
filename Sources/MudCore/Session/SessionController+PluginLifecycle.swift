@@ -54,7 +54,15 @@ extension SessionController {
         if let levelDBDirectory = pendingLevelDBDirectory {
             await loadBundledLevelDB(dataDirectory: levelDBDirectory)
         }
-        await loadPendingDinv()
+        // NOTE: dinv is intentionally NOT loaded here. Its init is a fragile
+        // one-shot — it runs `inv.init.atActive()` only on the *first* char.base
+        // broadcast it sees, and only if the state is active at that instant
+        // (else it flips its "initialized" flag and never retries). Loading it
+        // inside this simultaneous batch (alongside ~15 other plugins, all
+        // sending probes) raced its char.base handling and left it uninitialized
+        // (the user had to `dinv reload`). So dinv keeps its own dedicated
+        // arming (`armedDinvShouldLoad` → `loadPendingDinv` in `dispatchGMCP`),
+        // which already loads it on the in-game char.status with clean timing.
     }
 
     /// Arm the fallback that activates plugins if no in-game `char.status`
