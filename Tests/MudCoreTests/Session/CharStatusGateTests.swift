@@ -50,4 +50,37 @@ struct CharStatusGateTests {
 
         await controller.disconnect()
     }
+
+    /// A plugin that probes the server from `OnPluginConnect` (the failure mode:
+    /// such a command sent during login/MOTD fails).
+    private let connector = """
+    <muclient>
+    <plugin id="com.test.connector" name="Connector"/>
+    <script><![CDATA[
+    function OnPluginConnect() SendNoEcho("ON_CONNECT") end
+    ]]></script>
+    </muclient>
+    """
+
+    @Test("OnPluginConnect is deferred from the raw connect until in-game")
+    func deferredConnect() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: connector))
+        let conn = InMemoryConnection()
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        // Mid-login (state 2): OnPluginConnect must not have fired yet.
+        await controller.dispatchGMCP(GMCPMessage(package: "char.status", json: #"{"state":2}"#))
+        #expect(!conn.sentLines.contains("ON_CONNECT"), "OnPluginConnect fired during login")
+
+        // In-game (state 3): the deferred OnPluginConnect fires now.
+        await controller.dispatchGMCP(GMCPMessage(package: "char.status", json: #"{"state":3}"#))
+        #expect(
+            conn.sentLines.contains("ON_CONNECT"),
+            "deferred OnPluginConnect didn't fire in-game: \(conn.sentLines)"
+        )
+
+        await controller.disconnect()
+    }
 }
