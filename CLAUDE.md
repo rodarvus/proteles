@@ -13,7 +13,7 @@ Headline since `v0.2.3`: the **Plugin Library** (one discoverable
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
 and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-71). **1059 tests, four gates green.**
+decision log (D-01…D-72). **1061 tests, four gates green.**
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);

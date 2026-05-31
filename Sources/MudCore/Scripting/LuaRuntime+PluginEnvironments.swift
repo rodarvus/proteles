@@ -76,7 +76,21 @@ public extension LuaRuntime {
         _ arguments: [LuaValue] = []
     ) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
-        defer { releaseTransientRefs() }
+        // Bind the variable scope AND ambient context (GetPluginID/GetInfo(60)/…)
+        // to THIS plugin for the duration of the call, then restore. Both are
+        // process-global and were otherwise set only at load time (to whichever
+        // plugin loaded last — e.g. dinv, armed, loads mid-session after leveldb),
+        // so a lifecycle callback like OnPluginSaveState would persist into the
+        // wrong plugin's variable bucket and read another plugin's identity/dir.
+        let previousScope = currentVariableScope
+        let previousContext = pluginContext
+        currentVariableScope = pluginID
+        if let context = pluginContexts[pluginID] { pluginContext = context }
+        defer {
+            currentVariableScope = previousScope
+            pluginContext = previousContext
+            releaseTransientRefs()
+        }
         guard let envRef = pluginEnvs[pluginID] else { return effects }
         lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [env]
         lua_getfield(state, -1, name) // [env, fn]
@@ -105,7 +119,16 @@ public extension LuaRuntime {
     /// allow (never silently swallow a user's command).
     func callPluginSend(_ pluginID: String, _ text: String) -> (effects: [ScriptEffect], allow: Bool) {
         effects.removeAll(keepingCapacity: true)
-        defer { releaseTransientRefs() }
+        // Scope Get/SetVariable to THIS plugin for the call (see callPluginCallback).
+        let previousScope = currentVariableScope
+        let previousContext = pluginContext
+        currentVariableScope = pluginID
+        if let context = pluginContexts[pluginID] { pluginContext = context }
+        defer {
+            currentVariableScope = previousScope
+            pluginContext = previousContext
+            releaseTransientRefs()
+        }
         guard let envRef = pluginEnvs[pluginID] else { return (effects, true) }
         lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [env]
         lua_getfield(state, -1, "OnPluginSend") // [env, fn]
@@ -139,7 +162,17 @@ public extension LuaRuntime {
         errorLabel: String
     ) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
-        defer { releaseTransientRefs() }
+        // Owned trigger/alias/timer scripts read/write THIS plugin's variables
+        // (see callPluginCallback) — scope for the run, then restore.
+        let previousScope = currentVariableScope
+        let previousContext = pluginContext
+        currentVariableScope = pluginID
+        if let context = pluginContexts[pluginID] { pluginContext = context }
+        defer {
+            currentVariableScope = previousScope
+            pluginContext = previousContext
+            releaseTransientRefs()
+        }
         guard let envRef = pluginEnvs[pluginID] else { return effects }
         guard Self.loadBuffer(state, source, name: "=" + chunkName) == 0 else {
             effects.append(.note(

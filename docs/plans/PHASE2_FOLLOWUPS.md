@@ -40,6 +40,14 @@ Phase-1 keeps captured item serials in a plain per-world file. Decisions:
 - **Colour command** — the phase-2 note mentions a colour command for serials;
   defer until the storage decision lands.
 
+## 4. Levels window — visual polish (BACKLOG)
+The leveldb **Levels** window (D-71) works as intended, but the four faces are
+information-dense and could use a polish pass — spacing/hierarchy, the Reports
+table column sizing, chart legibility at small window sizes, and consistency
+with the rest of the app's panel chrome. **Deferred by the user** (2026-05-31):
+functional, not urgent; revisit as a dedicated polish task. No decision needed
+— purely visual refinement.
+
 ## Recommendation
 Approve #1 outright (no decision). For #2 pick rotation policy + N; for #3 pick
-Keychain vs file. Then I implement all three in tested layers.
+Keychain vs file. Then I implement all three in tested layers. #4 is parked.

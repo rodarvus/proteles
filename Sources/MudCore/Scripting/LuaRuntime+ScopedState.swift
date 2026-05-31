@@ -12,9 +12,11 @@ public extension LuaRuntime {
         currentVariableScope = scope
     }
 
-    /// Set the ambient context `proteles.info`/`proteles.pluginID` report.
+    /// Set the ambient context `proteles.info`/`proteles.pluginID` report, and
+    /// remember it by plugin id so callbacks/owned scripts can re-enter it.
     func setPluginContext(_ context: PluginContext) {
         pluginContext = context
+        if !context.pluginID.isEmpty { pluginContexts[context.pluginID] = context }
     }
 
     /// Update the live connection state reported by `proteles.isConnected`.

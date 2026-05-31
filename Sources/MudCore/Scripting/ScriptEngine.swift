@@ -278,7 +278,6 @@ public actor ScriptEngine {
         resolved.version = plugin.version
         if resolved.pluginName.isEmpty { resolved.pluginName = plugin.name }
         await runtime.createPluginEnvironment(plugin.id)
-        await runtime.setVariableScope(plugin.id)
         await runtime.setPluginContext(resolved)
         try? await runtime.loadCompatShim()
 
