@@ -83,4 +83,46 @@ struct CharStatusGateTests {
 
         await controller.disconnect()
     }
+
+    /// A plugin whose `OnPluginInstall` probes the server (the failure mode the
+    /// deferral exists to prevent during login/MOTD).
+    private static let installerXML = """
+    <muclient>
+    <plugin id="com.test.deferinstall" name="DeferInstall"/>
+    <script><![CDATA[
+    function OnPluginInstall() SendNoEcho("INSTALLED") end
+    ]]></script>
+    </muclient>
+    """
+
+    @Test("armed plugins don't LOAD (no OnPluginInstall) until the character is in-game")
+    func deferredInstall() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("defer-install-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Self.installerXML.write(
+            to: dir.appendingPathComponent("DeferInstall.xml"), atomically: true, encoding: .utf8
+        )
+
+        let engine = try ScriptEngine()
+        let conn = InMemoryConnection()
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        // Arm (don't load) as the world-load path now does.
+        await controller.armInitialPlugins(directories: [dir], character: "Tester", levelDBDirectory: nil)
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        // Mid-login (state 2): the plugin must NOT have loaded — no OnPluginInstall.
+        await controller.dispatchGMCP(GMCPMessage(package: "char.status", json: #"{"state":2}"#))
+        #expect(!conn.sentLines.contains("INSTALLED"), "plugin loaded during login (OnPluginInstall ran)")
+
+        // In-game (state 3): the deferred load runs OnPluginInstall now.
+        await controller.dispatchGMCP(GMCPMessage(package: "char.status", json: #"{"state":3}"#))
+        #expect(
+            conn.sentLines.contains("INSTALLED"),
+            "deferred plugin didn't load in-game: \(conn.sentLines)"
+        )
+
+        await controller.disconnect()
+    }
 }
