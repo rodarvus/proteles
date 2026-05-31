@@ -52,6 +52,7 @@ struct ProtelesApp: App {
     /// In-game Help panel model (shared by the docked + detached Help views).
     @State private var help = HelpPanelModel()
     @State private var levels = LevelDBPanelModel()
+    @State private var pluginDBs = PluginDatabasesModel()
 
     /// AppKit hooks for menu surgery the SwiftUI command API can't fully do
     /// (stripping the empty Format menu with deterministic timing).
@@ -135,7 +136,8 @@ struct ProtelesApp: App {
                 asciiMap: asciiMap,
                 snd: snd,
                 help: help,
-                levels: levels
+                levels: levels,
+                pluginDBs: pluginDBs
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")
@@ -203,10 +205,14 @@ struct ProtelesApp: App {
             CommandMenu("Databases") {
                 Button("Import Map Database…") { map.importDatabase() }
                 Button("Import Search & Destroy Database…") { snd.requestImport() }
+                Button("Import Inventory (dinv) Database…") { pluginDBs.importDinv() }
+                Button("Import Leveling (leveldb) Database…") { pluginDBs.importLevelDB() }
                 Divider()
                 Menu("Reset Databases (Testing)") {
                     Button("Empty Map Database…") { map.resetDatabase() }
                     Button("Empty Search & Destroy Database…") { snd.requestReset() }
+                    Button("Delete Inventory (dinv) Database…") { pluginDBs.resetDinv() }
+                    Button("Delete Leveling (leveldb) Database…") { pluginDBs.resetLevelDB() }
                 }
             }
         }
