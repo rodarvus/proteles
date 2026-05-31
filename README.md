@@ -3,14 +3,17 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.3.0` — daily-usable.**
+> **Status: `v0.4.0` — daily-usable.**
 > Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
 > their own windows), a **theme gallery**, **clickable room exits**, an in-game
 > **Help reader**, **session logging**, **notifications**, keyboard **macros**,
-> the **dinv inventory manager**, the Aardwolf plugin package ported natively,
+> the **dinv inventory manager**, **native leveling analytics** (the Levels
+> window over the leveldb plugin), the Aardwolf plugin package ported natively,
 > and a **discoverable plugin library** (add MUSHclient plugins from your Mac or
-> a URL, all under `~/Documents/Proteles/`). **MIT-licensed**. A **non-notarized
+> a URL, import your dinv/leveldb databases, all under `~/Documents/Proteles/`).
+> Plugins now run **outbound HTTP** and initialise only once you're in-game.
+> **MIT-licensed**. A **non-notarized
 > build** is attached to each [release](https://github.com/rodarvus/proteles/releases)
 > (right-click ▸ Open past Gatekeeper), or build from source (below). Design
 > lives in **[PLAN.md](PLAN.md)**.

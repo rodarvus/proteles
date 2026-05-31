@@ -4,16 +4,25 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-29)
+## Current status (2026-05-31)
 
-**Shipped `v0.3.0`** (tagged + GitHub release, non-notarized build attached).
-Headline since `v0.2.3`: the **Plugin Library** (one discoverable
+**Shipped `v0.4.0`** (tagged + GitHub release, non-notarized build attached).
+Headline since `v0.3.0`: **native leveling analytics** — the **Levels** window
+over the bundled **leveldb** plugin (collection via the shim, D-69; four
+read-only faces, D-71); **plugin outbound HTTP (`async`)** over URLSession (D-67,
+closing the last 0.3.0 limitation); a big **plugin-reliability batch** (per-plugin
+variable scope D-72, cancellable `AddTimer`/`DeleteTimer` + `EnablePlugin` D-73,
+**defer plugin init until in-game** D-74, CRLF `io.lines` for the gagger,
+trigger-output fidelity D-70); **dinv + leveldb DB import/reset** (D-75); and an
+input/logging polish batch (D-68). Read **PLAN.md** for the full status table +
+decision log (D-01…D-75). **1077 tests, four gates green.**
+
+`v0.3.0` headline (prior): the **Plugin Library** (one discoverable
 `~/Documents/Proteles/` home; add from Mac/URL; export), **Phase-7 features**
 (Inventory Serials, Session Logging, Notifications, **MacroEngine**, Scripts-editor
 rework), **Rich Exits**, **Help panel**, much **broader MUSHclient plugin
 compatibility** (12-plugin load audit + an honest, quiet compatibility report),
-and the **empty-line/bare-Enter fix**. Read **PLAN.md** for the full status table +
-decision log (D-01…D-75). **1077 tests, four gates green.**
+and the **empty-line/bare-Enter fix**.
 
 What landed for `v0.3.0` (decision refs):
 - UI-revamp finish (drag-to-redock, detach, menu fixes); **Rich Exits** (D-45);
@@ -75,9 +84,19 @@ a full `wish.getCR` drive (pagesize getConfig) in the harness. Don't guess-fix.
 
 ### NEXT SESSION — start here
 
-**`v0.3.0` is cut and released** (git tag `v0.3.0` + GitHub release, non-notarized
-`Proteles-0.3.0.zip` attached; the privacy history-scrub was completed and pushed).
-Tail of the release work after the Library/shim run: the clean-room `utils`
+**`v0.4.0` is cut and released** (git tag `v0.4.0` + GitHub release, non-notarized
+`Proteles-0.4.0.zip` attached). It bundles the post-0.3.0 work: leveldb Levels
+window (D-69/D-71), `async` plugin HTTP (D-67), the plugin-reliability batch
+(D-70/D-72/D-73/D-74 + the gagger CRLF fix), dinv+leveldb DB import (D-75), and
+the input/logging polish batch (D-68). Version lives in
+`apps/ProtelesApp_macOS/project.yml` (`CFBundleShortVersionString` +
+`MARKETING_VERSION`); `MudCore.version` reads it at runtime. Release flow:
+bump project.yml → `xcodegen generate` → Release build → zip the `.app` as
+`Proteles-<ver>.zip` → commit + tag `v<ver>` → `gh release create`.
+
+**Open / to re-test live in 0.4.0:** the dinv `wish list` gag (likely fixed by
+D-72/D-73 — see the Open note above; needs a fresh live check). The pre-0.4.0
+release work for `v0.3.0`: the clean-room `utils`
 dialogs + **`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
 **compatibility-report honesty rework** + **dependency-nag stub** (D-64);
 **`GetInfo(56)` → the plugin's own folder** (D-65, for flat-file config like the
