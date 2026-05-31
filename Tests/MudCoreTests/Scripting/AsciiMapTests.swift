@@ -55,7 +55,7 @@ struct AsciiMapTests {
         // Enter a playing state (3) → set the solid-line map type once, then
         // fire an initial map request.
         #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#)
-            == [.send("maptype 5 session"), .send("map")])
+            == [.send("maptype 5"), .send("map")])
         // Now room.info refreshes (maptype already set, so just `map`).
         #expect(plugin.onGMCP(package: "room.info", json: "{}") == [.send("map")])
 
@@ -81,7 +81,7 @@ struct AsciiMapTests {
     func requestsOnceOnTransition() {
         var plugin = AsciiMap()
         #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#)
-            == [.send("maptype 5 session"), .send("map")])
+            == [.send("maptype 5"), .send("map")])
         // Staying in state 3 (e.g. align update) must not re-request.
         #expect(plugin.onGMCP(package: "char.status", json: #"{"state":3}"#).isEmpty)
     }

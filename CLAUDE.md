@@ -117,9 +117,12 @@ Sweep before pushing: `git grep -i <names>` **and**
 
 ### Gotchas to remember
 - **600-line file budget** (swiftlint `file_length` warning → `--strict` error).
-  `SessionController.swift` + its `+Scripting`/`+Inbound` extensions ride the
-  edge; new code there often needs a compensating compaction. Prefer new
-  `SessionController+Feature.swift` extension files for feature logic.
+  When a file crosses 600, **split it** (a new `Type+Feature.swift` extension
+  file) or genuinely refactor a function — **do NOT compact/delete doc comments
+  to squeak under the limit** (user feedback 2026-05-31: removing the "why" is
+  counterproductive; splitting files and optimising functions is the wanted
+  direction). `SessionController.swift` + its `+Scripting`/`+Inbound` extensions
+  ride the edge; prefer a new `SessionController+Feature.swift` for new logic.
 - **New app-target files need `xcodegen generate`** before `xcodebuild` (the
   `.xcodeproj` is generated + gitignored). New MudCore/MudUI files don't (SwiftPM).
 - **Actor `init` can't call isolated methods** — inline the work (mapper palette

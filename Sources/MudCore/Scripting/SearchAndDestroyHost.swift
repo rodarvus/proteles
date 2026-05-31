@@ -114,21 +114,24 @@ public actor SearchAndDestroyHost {
     -- exactly once, when init finishes (`init_called == 2`), so wrapping it is a
     -- reliable "init complete" signal — and unlike `init_called`/
     -- `current_activity` (core.lua locals invisible to this chunk) it's a global
-    -- we can hook. Two things on that signal:
-    --   1. Persistently arm `trg_cp_info_targets`/`trg_cp_info_level_taken` (run
-    --      here, in a consumed timer-fire path, so the enable reaches the host
-    --      engine). Aardwolf auto-shows "YOUR CURRENT CAMPAIGN" on login, often
-    --      *before* a requested `cp info` — without the entry trigger armed, that
-    --      block scrolls by unparsed and the campaign is never detected. Armed,
-    --      it fires the transient line/end triggers and the chain completes.
-    --   2. Also request a `cp info` shortly after, for when nothing auto-shows.
-    if type(setup_scan_con_triggers) == "function" and type(do_cp_info) == "function" then
+    -- we can hook. We persistently arm `trg_cp_info_targets`/`trg_cp_info_level_taken`
+    -- here (in a consumed timer-fire path, so the enable reaches the host engine).
+    -- Two cases need the entry trigger armed:
+    --   • Aardwolf auto-shows "YOUR CURRENT CAMPAIGN" on login, often *before* any
+    --     `cp info` — unarmed, that block scrolls by unparsed and detection misses.
+    --   • S&D's own init (core.lua) always probes `cp info` once on connect —
+    --     `do_cp_info()` if the area range is cached, else via `area_index_end`'s
+    --     raw `cp info` (which does NOT arm the scrape triggers itself). Arming
+    --     here covers the raw-`cp info` branch so the result is parsed.
+    -- We do NOT send our own `cp info`: S&D already sends exactly one on connect,
+    -- so a second send here just double-printed the campaign block (the scrape
+    -- triggers aren't gagged — matching MUSHclient, which shows it once).
+    if type(setup_scan_con_triggers) == "function" then
       local __snd_orig_setup = setup_scan_con_triggers
       setup_scan_con_triggers = function(...)
         __snd_orig_setup(...)
         EnableTrigger("trg_cp_info_level_taken", true)
         EnableTrigger("trg_cp_info_targets", true)
-        DoAfterSpecial(1.0, "do_cp_info()", sendto.script)
       end
     end
     """
