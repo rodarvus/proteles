@@ -49,6 +49,11 @@ public extension LuaRuntime {
         local line
         if nl then line = content:sub(pos, nl - 1); pos = nl + 1
         else line = content:sub(pos); pos = #content + 1 end
+        -- Strip a trailing CR so a CRLF (Windows) file reads like MUSHclient's
+        -- text-mode io.lines: otherwise a config line keeps a stray carriage
+        -- return and an exact match (e.g. the Message Gagger gag patterns) never
+        -- fires against the CR-less MUD line.
+        if line:sub(-1) == "\\r" then line = line:sub(1, -2) end
         if fmt == "L" then return line .. "\\n" end
         return line
       end
