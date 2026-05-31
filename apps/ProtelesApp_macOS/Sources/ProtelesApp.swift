@@ -270,6 +270,17 @@ struct ProtelesApp: App {
         .defaultSize(width: 740, height: 640)
         .windowResizability(.contentSize)
 
+        // Leveling analytics: a dedicated, roomy window (not a dock tile) — the
+        // four leveldb faces (live HUD / reports / analytics / journey) carry too
+        // much to share the cramped dock. Read-only over the plugin's DB.
+        Window("Levels", id: ProtelesApp.levelsWindowID) {
+            LevelDBPanelView(model: levels)
+                .frame(minWidth: 560, idealWidth: 820, minHeight: 420, idealHeight: 680)
+                .navigationTitle("Levels")
+        }
+        .defaultSize(width: 820, height: 680)
+        .windowResizability(.contentSize)
+
         Window("Plugins", id: ProtelesApp.pluginsWindowID) {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
@@ -289,6 +300,7 @@ struct ProtelesApp: App {
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
     static let helpWindowID = "help"
+    static let levelsWindowID = "levels"
 
     /// `~/Library/Application Support/com.proteles.ProtelesApp/logs` — where
     /// user session logs are written (used by the log-file builder + the
@@ -468,7 +480,7 @@ private struct ProtelesCommands: Commands {
                 .keyboardShortcut("U", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.info)) { Text("Character") }
                 .keyboardShortcut("I", modifiers: [.command, .shift])
-            Toggle(isOn: panelBinding(.levels)) { Text("Levels") }
+            Button("Levels") { openWindow(id: ProtelesApp.levelsWindowID) }
                 .keyboardShortcut("L", modifiers: [.command, .shift])
             Button("Help") { openWindow(id: ProtelesApp.helpWindowID) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])

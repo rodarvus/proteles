@@ -77,9 +77,10 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 
     /// Panels a user can toggle from the Panels menu (everything but `output`).
-    /// `help` is excluded — it's a dedicated window now, not a dock tile (the
-    /// case remains so older saved layouts that docked it still decode/render).
+    /// `help` and `levels` are excluded — they're dedicated windows now, not dock
+    /// tiles (the cases remain so older saved layouts that docked them still
+    /// decode/render).
     public static var toggleable: [PanelKind] {
-        allCases.filter { $0.isClosable && $0 != .help }
+        allCases.filter { $0.isClosable && $0 != .help && $0 != .levels }
     }
 }

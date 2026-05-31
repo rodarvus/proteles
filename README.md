@@ -55,7 +55,7 @@ for the modern Mac — no Wine, no VM, no emulator.
   topic to follow it), a search field, and back/forward history.
 - **Inventory Serials** (Plugins window toggle): `inventory` lists items
   grouped with serial numbers, flag colours, and counts.
-- **Leveling analytics** (View ▸ Levels, ⇧⌘L): a native **Levels** panel over
+- **Leveling analytics** (View ▸ Levels, ⇧⌘L): a native **Levels** window over
   the bundled leveldb plugin's data — a live grind HUD (XP/hour, next level,
   best zone), faithful sortable reports (top zones/mobs, quests, campaigns, gold
   sources, deaths, daily), Swift-Charts analytics, and a tier/remort "journey"
@@ -161,7 +161,8 @@ Then, in the app:
 | Manage Worlds | ⇧⌘M |
 | Scripts editor | ⇧⌘T |
 | Plugins | ⇧⌘P |
-| Toggle panels — Map / Text Map / Channels / S&D / Character / Levels | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I / ⇧⌘L |
+| Toggle panels — Map / Text Map / Channels / S&D / Character | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I |
+| Levels window | ⇧⌘L |
 | Copy with colour codes (ANSI) | ⇧⌘C |
 
 ---
