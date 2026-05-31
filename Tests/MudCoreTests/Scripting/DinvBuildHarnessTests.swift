@@ -162,4 +162,79 @@ struct DinvBuildHarnessTests {
         let sentAFence = driver.outbound.contains { $0.hasPrefix("echo { DINV fence") }
         #expect(sentAFence, "dinv never transmitted a fence echo")
     }
+
+    /// The real `wish list` output captured from a live session. dinv should
+    /// gag everything from the header through its `DINV wish list fence` marker
+    /// (its START trigger matches the header → enables the OmitFromOutput item
+    /// trigger; the fence line disables it). Anything after the fence is normal.
+    private static let wishOutput: [String] = [
+        "                                    Base Cost Adjustment Your Cost  Keyword",
+        " ---------------------------------- --------- ---------- --------- -----------",
+        "*Very fast spell-up time                 6000        250        -- Spellup    ",
+        " No hunger or thirst                     3000          0      3000 Nohunger   ",
+        " Immunity to Vorpal                      5000        300      8000 Novorpal   ",
+        "*Portal wear location                    6000        150        -- Portal     ",
+        "Your total adjustment cost is: 3000",
+        "Your quest points on hand are: 973",
+        "Refer to 'help wish' for a description of each wish.",
+        "DINV wish list fence"
+    ]
+
+    @Test("dinv gags the wish-list output through its fence")
+    func wishListOutputIsGagged() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dinv-wish-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let engine = try await loadDinv(in: dir)
+        let driver = Driver(engine: engine, clock: Date())
+        // Initialise dinv (its wish item-trigger is registered in init.atActive).
+        await driver.apply(engine.applyGMCP(
+            package: "char.status", json: #"{"level":150,"state":3,"pos":"Standing"}"#
+        ))
+        await driver.apply(engine.applyGMCP(
+            package: "char.base", json: #"{"name":"Tester","class":"Mage"}"#
+        ))
+        await driver.drive()
+
+        // Arm the wish capture exactly as dbot.wish.get does before sending
+        // `wish list` (setupFn adds the header START trigger that enables the gag).
+        // setupFn's AddTriggerEx is a registration effect — consume it as the
+        // real timer/coroutine-resume path does, so the trigger goes live.
+        let setupRaw = await engine.runInPluginEnvironment(
+            DinvAssets.pluginID,
+            "if dbot and dbot.wish and dbot.wish.setupFn then dbot.wish.setupFn() end"
+        )
+        await driver.apply(engine.consumeRegistrations(setupRaw, owner: DinvAssets.pluginID))
+
+        // Diagnostic: are the start (setupFn) + item (init.atActive) triggers live?
+        let diagLua = "proteles.note('WISHDIAG start=' .. tostring(IsTrigger('drlDbotWishTriggerStart'))"
+            + " .. ' item=' .. tostring(IsTrigger('drlDbotWishTriggerItem')))"
+        for case .note(let text, _, _) in await engine.run(diagLua) where text.contains("WISHDIAG") {
+            print("=== \(text) ===")
+        }
+
+        // Replay the wish output line-by-line; record which lines were gagged.
+        var gagged: [String] = []
+        var shown: [String] = []
+        for line in Self.wishOutput {
+            let disposition = await engine.process(line: line)
+            if disposition.gag { gagged.append(line) } else { shown.append(line) }
+        }
+        // A normal line after the fence must pass through.
+        let afterFence = await engine.process(line: "You are standing in a field.")
+
+        #expect(!shown.isEmpty || !gagged.isEmpty, "no lines processed")
+        // The header + item rows + the fence marker should all be gagged.
+        #expect(
+            gagged.contains { $0.contains("Base Cost") },
+            "wish header was NOT gagged — shown: \(shown)"
+        )
+        #expect(
+            gagged.contains { $0.contains("Spellup") },
+            "a wish item row was NOT gagged — shown: \(shown)"
+        )
+        #expect(!afterFence.gag, "a normal line after the fence was gagged")
+    }
 }

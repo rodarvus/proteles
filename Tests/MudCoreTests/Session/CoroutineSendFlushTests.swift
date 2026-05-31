@@ -130,4 +130,96 @@ struct CoroutineSendFlushTests {
         )
         await controller.disconnect()
     }
+
+    /// dinv's wish-list gag arms its capture trigger from `setupFn`, which runs
+    /// inside a `wait` coroutine resumed by a timer (after the prefix fence).
+    /// This reproduces that class: a coroutine that, AFTER a `wait.time` yield,
+    /// `AddTriggerEx`-registers a trigger — then we feed a matching line and
+    /// check the trigger actually fired. If registrations issued from a
+    /// timer-resumed coroutine aren't applied to the engine, the trigger is dead
+    /// and the line passes unhandled — exactly why the wish output isn't gagged.
+    private let coroutineRegisterPlugin = """
+    <muclient>
+    <plugin id="com.test.coreg" name="CoReg"/>
+    <script><![CDATA[
+    require "wait"
+    function arm()
+      wait.make(function()
+        wait.time(0.2)
+        AddTriggerEx("coRegTrig", "^TRIGME$", 'SendNoEcho("FIRED")',
+          trigger_flag.Enabled + trigger_flag.RegularExpression,
+          -1, 0, "", "", 12, 0)
+      end)
+    end
+    ]]></script>
+    <aliases><alias match="arm" enabled="y" script="arm" send_to="12"/></aliases>
+    </muclient>
+    """
+
+    @Test("A trigger registered from a timer-resumed coroutine is live")
+    func triggerRegisteredAfterWaitIsLive() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: coroutineRegisterPlugin))
+        let conn = InMemoryConnection()
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("arm")
+        // Give the 0.2s resume timer time to fire + register the trigger.
+        try? await Task.sleep(for: .milliseconds(600))
+        conn.injectLine("TRIGME") // should match the just-registered trigger
+
+        #expect(
+            await waitForSend("FIRED", on: conn, timeout: .seconds(2)),
+            "a trigger AddTriggerEx'd from a timer-resumed coroutine never fired: \(conn.sentLines)"
+        )
+        await controller.disconnect()
+    }
+
+    /// dinv's wish flow nests coroutines: `wish.get` → `wait.make(getCR)`, and
+    /// `getCR` → `safe.commands` → `wait.make(dequeueCR)`, with `setupFn`'s
+    /// `AddTriggerEx` running deep inside the INNER coroutine after a `wait.time`.
+    /// This reproduces that nesting: an inner coroutine (spawned by an outer one)
+    /// registers a trigger after a yield. If the inner coroutine's registration
+    /// is lost, the wish gag never arms.
+    private let nestedCoroutinePlugin = """
+    <muclient>
+    <plugin id="com.test.conest" name="CoNest"/>
+    <script><![CDATA[
+    require "wait"
+    function arm()
+      wait.make(function()           -- outer (wish.getCR)
+        wait.time(0.1)
+        wait.make(function()         -- inner (dequeueCR)
+          wait.time(0.1)
+          AddTriggerEx("coNestTrig", "^TRIGME$", 'SendNoEcho("FIRED")',
+            trigger_flag.Enabled + trigger_flag.RegularExpression,
+            -1, 0, "", "", 12, 0)
+        end)
+        wait.time(0.5)               -- outer keeps spinning (callback.wait analog)
+      end)
+    end
+    ]]></script>
+    <aliases><alias match="arm" enabled="y" script="arm" send_to="12"/></aliases>
+    </muclient>
+    """
+
+    @Test("A trigger registered from a NESTED timer-resumed coroutine is live")
+    func triggerRegisteredFromNestedCoroutineIsLive() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: nestedCoroutinePlugin))
+        let conn = InMemoryConnection()
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("arm")
+        try? await Task.sleep(for: .milliseconds(700)) // both yields fire + register
+        conn.injectLine("TRIGME")
+
+        #expect(
+            await waitForSend("FIRED", on: conn, timeout: .seconds(2)),
+            "a trigger registered from a nested coroutine never fired: \(conn.sentLines)"
+        )
+        await controller.disconnect()
+    }
 }
