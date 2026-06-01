@@ -97,17 +97,22 @@ diagnostic that cracked it — keep it.
 
 ### NEXT SESSION — start here
 
-**`v0.4.0` is released; post-0.4.0 work on `main` is unreleased (a `v0.4.1`'s
-worth).** Since the tag: **hermetic plugin enable/disable** (D-76 — toggling one
-plugin no longer reloads the world), **dinv `wish list` gag fixed + live-confirmed**
-(D-77 dinv-side + **D-79 host-side gag**, the reliable one), **dock-drag reorder**
-within a same-axis split (D-78), a **`GAG` transcript category** for gag
-diagnosis, and the TLS-reference cleanup. All four gates green; ~1087 tests.
-**Next release:** bump `apps/ProtelesApp_macOS/project.yml`
+**`v0.4.1` is cut and released** (git tag `v0.4.1` + GitHub release, non-notarized
+`Proteles-0.4.1.zip` attached). It bundles the post-0.4.0 work: **hermetic plugin
+enable/disable** (D-76 — toggling one plugin no longer reloads the world), **dinv
+`wish list` gag fixed + live-confirmed** (D-77 dinv-side + **D-79 host-side gag**,
+the reliable one), **dock-drag reorder** within a same-axis split (D-78), a **`GAG`
+transcript category** for gag diagnosis, and the TLS-reference cleanup. All four
+gates green; 1087 tests. Version lives in `apps/ProtelesApp_macOS/project.yml`
 (`CFBundleShortVersionString` + `MARKETING_VERSION`; `MudCore.version` reads it at
-runtime) to `0.4.1` → `xcodegen generate` → Release build → zip the `.app` as
-`Proteles-<ver>.zip` → commit + tag `v<ver>` → `gh release create`. (Not cut yet —
-user decides when.)
+runtime). Release flow: bump project.yml → `xcodegen generate` → Release build →
+`ditto -c -k --keepParent Proteles.app /tmp/Proteles-<ver>.zip` → commit + tag
+`v<ver>` → `gh release create v<ver> <zip> --title … --notes …`.
+
+**Candidate next (user to pick; see the backlog):** command-button bar (TAction —
+cheap, high daily value, pairs with MacroEngine), Notifications phase-2, continent
+graphical map, TTS (D-41, needs a VI player), or release-engineering for a real
+1.0 (notarization, Sparkle auto-update, crash reporting).
 
 **Older open / to re-test live** — the pre-0.4.0 `v0.3.0` work: the clean-room `utils`
 dialogs + **`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
