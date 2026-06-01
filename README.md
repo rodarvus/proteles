@@ -131,8 +131,6 @@ for the modern Mac — no Wine, no VM, no emulator.
   (`.log`) that logs local events the wire capture can't — typed input, sends,
   script/echo output, and GMCP — for after-the-fact debugging.
 
-TLS is deferred to post-1.0 (issue #3) — the client is plain telnet for now.
-
 ---
 
 ## Getting started (build from source)

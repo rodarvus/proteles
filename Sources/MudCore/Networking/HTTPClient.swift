@@ -36,10 +36,10 @@ public protocol HTTPClient: Sendable {
     func perform(_ request: HTTPRequest) async -> HTTPResponse
 }
 
-/// `URLSession`-backed HTTP(S) client. HTTPS works natively, so plugin web
-/// calls are independent of the deferred telnet-TLS work (D-15). The body is
-/// returned to the host; a GETFILE save is done host-side through the plugin
-/// sandbox, not here, so this never touches arbitrary paths.
+/// `URLSession`-backed HTTP(S) client for plugin `async` requests (HTTPS works
+/// natively via URLSession). The body is returned to the host; a GETFILE save is
+/// done host-side through the plugin sandbox, not here, so this never touches
+/// arbitrary paths.
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
 

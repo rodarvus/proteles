@@ -29,12 +29,7 @@ import Network
 ///     ``connect(to:)`` works for a reconnect, but the actor is not
 ///     designed for parallel connections.
 public actor NetworkConnection {
-    /// Where to connect.
-    ///
-    /// TLS support was removed pre-1.0 (see issue tracker) — Aardwolf's
-    /// TLS endpoint couldn't be made to work reliably and it's not on
-    /// the critical path. Connections are plain TCP for now; a `useTLS`
-    /// flag (plus certificate-trust handling) returns post-1.0.
+    /// Where to connect. Connections are plain TCP.
     public struct Endpoint: Sendable, Equatable {
         public let host: String
         public let port: UInt16

@@ -426,5 +426,3 @@ path outside the repo, e.g.
   `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
 - After a feature lands, produce a Release build for the user to verify
   interactively, then push to GitHub.
-- TLS is deferred to post-1.0 (D-15, issue #3); the client is plain telnet
-  for now.
