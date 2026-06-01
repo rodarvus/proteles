@@ -18,6 +18,35 @@ struct SearchAndDestroyHostTests {
         #expect(await host.functionExists("OnPluginBroadcast"))
     }
 
+    /// Regression: the post-navigation local scan (`xcp`/`go`/`nx` → smartscan/
+    /// qw/con) only fires when S&D's arrival comparison `going_to_room ==
+    /// current_room.rmid` succeeds. `current_room.rmid = gmcp("room.info").num`
+    /// and `going_to_room = tostring(room_id)` (a string), so the comparison
+    /// works only if `gmcp("room.info").num` is also a STRING — which it is in
+    /// MUSHclient, where the Aardwolf GMCP handler recursively `stringify()`s
+    /// every decoded value. Our host serialised nested number leaves as bare Lua
+    /// numbers, so `gmcp("room.info").num` came back as `2339` (number) and the
+    /// comparison `"2339" == 2339` was always false → no scan. Every leaf, at
+    /// every access path, must be a string.
+    @Test("gmcp leaves are stringified at every depth (the xcp/go/nx scan arrival check)")
+    func gmcpLeavesAreStringsAtEveryDepth() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":2339,"zone":"light","exits":{"n":2343},"coord":{"x":30}}"#
+        )
+        // The nested scalar read the way S&D reads it: `gmcp("room.info").num`.
+        #expect(await host.evaluate("type(gmcp('room.info').num)") == "string")
+        #expect(await host.evaluate("gmcp('room.info').num") == "2339")
+        // The literal arrival comparison S&D performs must now succeed.
+        #expect(await host.evaluate("tostring(2339) == gmcp('room.info').num and 'yes' or 'no'") == "yes")
+        // Deeper nesting (exits/coord) is stringified too — faithful to the
+        // reference's recursive stringify().
+        #expect(await host.evaluate("type(gmcp('room.info').exits.n)") == "string")
+        #expect(await host.evaluate("type(gmcp('room.info').coord.x)") == "string")
+    }
+
     @Test("Tell/ColourTell append; print/Note flush — one line per row")
     func tellNoteLineBuffering() async throws {
         let host = try SearchAndDestroyHost()

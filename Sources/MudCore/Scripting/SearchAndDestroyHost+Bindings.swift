@@ -145,13 +145,23 @@ extension SearchAndDestroyHost {
         end
         return "{" .. table.concat(parts, ",") .. "}"
       elseif t == "string" then return string.format("%q", v)
-      elseif t == "number" or t == "boolean" then return tostring(v)
+      -- Quote scalar leaves *inside tables* too — NOT bare `tostring(v)`. The
+      -- Aardwolf GMCP handler (`aard_GMCP_handler.xml`) recursively `stringify()`s
+      -- every decoded value ("we've historically treated numbers as strings"),
+      -- so in MUSHclient `gmcp("room.info").num` is the STRING "2339". S&D relies
+      -- on this: `current_room.rmid = ri.num` then `going_to_room ==
+      -- current_room.rmid`, where `going_to_room = tostring(room_id)`. Emitting a
+      -- bare number here made `gmcp("room.info").num` a Lua *number*, so the
+      -- arrival comparison "2339" == 2339 was always false and the
+      -- post-navigation scan (smartscan/qw/con via `action_on_destination_arrived`)
+      -- never ran. Quoting matches the reference at every access path.
+      elseif t == "number" or t == "boolean" then return string.format("%q", tostring(v))
       else return "nil" end
     end
     -- gmcphelper convention: a scalar leaf comes back as a STRING. Aardwolf
     -- sends e.g. `char.status.state` as a JSON number, but S&D compares it to
     -- "3" (`is_character_ready`); code that needs a number tonumber()s it. So
-    -- quote scalar leaves; tables serialise as a Lua literal.
+    -- quote scalar leaves; tables serialise as a Lua literal (also string leaves).
     function gmcpdata_as_string(s)
       local v = snd_gmcp_path(s)
       local t = type(v)
