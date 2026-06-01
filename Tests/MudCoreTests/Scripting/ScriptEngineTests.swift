@@ -65,6 +65,40 @@ struct ScriptEngineTests {
         }
     }
 
+    /// The portal-when-worn bug (Finding 1): dinv registers its wish-capture
+    /// trigger via `AddTriggerEx(..., sequence: 0)` so it evaluates before any
+    /// co-loaded plugin's stop-on-match (`keep_evaluating="n"`) trigger that also
+    /// matches the owned wish lines. Our runtime `AddTriggerEx` path used to drop
+    /// the sequence (→ default 100), so the stopper pre-empted dinv's capture and
+    /// `dbot.wish.has("Portal")` came back false → dinv removed the wrong slot.
+    /// This locks the ordering guarantee the fix depends on: a low-sequence
+    /// continuing trigger still fires even though a higher-sequence stop-on-match
+    /// trigger matches the same line.
+    @Test("A low-sequence trigger fires before a higher-sequence stop-on-match trigger")
+    func lowSequenceTriggerWinsOverStopOnMatch() async throws {
+        let engine = try ScriptEngine()
+        // The "stopper": default sequence 100, stop-on-match (continueEvaluation
+        // false), matches everything — like a co-loaded plugin's catch-all.
+        try await engine.addTrigger(Trigger(
+            pattern: .regex("^(.*)$"),
+            sequence: 100,
+            continueEvaluation: false,
+            sendText: "STOP"
+        ))
+        // dinv's wish-capture analogue: sequence 0, continues — must still fire.
+        try await engine.addTrigger(Trigger(
+            pattern: .regex("^(.*)$"),
+            sequence: 0,
+            continueEvaluation: true,
+            sendText: "CAPTURE"
+        ))
+        let disposition = await engine.process(line: "* a portal")
+        #expect(
+            disposition.effects.contains(.send("CAPTURE")),
+            "sequence-0 capture trigger was pre-empted: \(disposition.effects)"
+        )
+    }
+
     @Test("run executes an arbitrary script and returns its effects")
     func runArbitrary() async throws {
         let engine = try ScriptEngine()

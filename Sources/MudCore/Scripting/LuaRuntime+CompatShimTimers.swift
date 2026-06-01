@@ -83,7 +83,7 @@ extension LuaRuntime {
     end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
       proteles.addTrigger(tostring(name), tostring(match), tonumber(flags) or 0,
-                          __triggerBody(name, response, script, sendto))
+                          __triggerBody(name, response, script, sendto), tonumber(seq) or 100)
       __triggerNames[tostring(name)] = true
       return error_code.eOK
     end

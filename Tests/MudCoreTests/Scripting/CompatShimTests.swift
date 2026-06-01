@@ -167,7 +167,13 @@ struct CompatShimTests {
         // Enabled(1) + RegularExpression(32) + OmitFromOutput(4) = 37; send_to=12
         // (script) runs the `send` text as Lua, so it's the trigger body.
         #expect(effects == [
-            .addTrigger(name: "gag1", pattern: "^junk$", flags: 37, script: "gagged = gagged + 1")
+            .addTrigger(
+                name: "gag1",
+                pattern: "^junk$",
+                flags: 37,
+                script: "gagged = gagged + 1",
+                sequence: 50
+            )
         ])
     }
 

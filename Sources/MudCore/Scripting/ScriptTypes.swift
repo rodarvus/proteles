@@ -184,9 +184,14 @@ public enum ScriptEffect: Sendable, Equatable {
     case scheduleAfter(seconds: Double, isScript: Bool, body: String)
     /// Register a trigger at runtime (MUSHclient `AddTriggerEx`). `flags` is the
     /// MUSHclient bitfield (Enabled/OmitFromOutput/IgnoreCase/RegularExpression);
-    /// `script` is the handler function name. Consumed by a plugin host that
-    /// owns its own trigger engine (Search-and-Destroy's scan/consider).
-    case addTrigger(name: String, pattern: String, flags: Int, script: String)
+    /// `script` is the handler function name. `sequence` is the MUSHclient
+    /// evaluation order (default 100; lower fires first) — honouring it is
+    /// essential: dinv registers its wish-capture trigger at sequence 0 so it
+    /// fires *before* any co-loaded plugin's stop-on-match (`keep_evaluating="n"`)
+    /// trigger that would otherwise pre-empt it on the owned wish lines. Consumed
+    /// by a plugin host that owns its own trigger engine (Search-and-Destroy's
+    /// scan/consider).
+    case addTrigger(name: String, pattern: String, flags: Int, script: String, sequence: Int)
     /// Register a runtime alias (MUSHclient `AddAlias`). `flags` is the
     /// `alias_flag` bitfield (Enabled/RegularExpression); `script` is the
     /// handler function name. Consumed by the plugin host into its alias engine
