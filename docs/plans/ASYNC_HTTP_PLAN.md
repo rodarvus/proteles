@@ -28,8 +28,8 @@ sendto.script)`.
 
 ## Why Proteles can do this cleanly
 
-- **`URLSession`** does HTTP **and HTTPS** natively — so this is independent of
-  the deferred telnet-TLS work (D-15). No LuaSocket/LuaSec/threads needed.
+- **`URLSession`** does HTTP **and HTTPS** natively. No LuaSocket/LuaSec/threads
+  needed.
 - The "do work, then re-enter Lua to run a stored callback with results" model
   is exactly what our `DoAfter` / timer path already does. We don't even need
   the 0.2s poll — URLSession's completion handler drives the callback directly.

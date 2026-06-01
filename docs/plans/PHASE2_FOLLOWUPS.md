@@ -18,27 +18,25 @@ global to a *different* value, so the remaining `SnDFixture.install()` callers
 (host/dispatch/campaign/XML) all set it to the same fixture dir and no longer
 race harmfully. Verified green across 6 consecutive `--parallel` runs.
 
-## 2. Session logging — rotation / retention
-Phase-1 writes one readable log per session (text/HTML) with no cap, so the logs
-dir grows unbounded. Decisions:
-- **Rotation trigger** — recommend **by session count** (keep the last N session
-  logs), simpler + matches "one file per session." Alternative: by total size.
-- **Retention N** — recommend **keep last 50** session logs (configurable in
-  Preferences ▸ Logging), delete older on connect.
-- **Per-world logs?** — recommend defer (a phase-2.1 nicety); v1 stays global.
-- **Input filtering** — recommend a "redact passwords" pass is already implicit
-  (autologin uses `redactInTranscript`); confirm we also redact in the *user*
-  log. (Quick check + fix if not.)
+## 2. Session logging — rotation / retention (DONE, D-68)
+Shipped in D-68: keep the newest **N** session logs (default **30**, 5–500 in
+Preferences ▸ Logging; pure `LogRetention.filesToPrune`, app deletes on
+connect); a **per-world** subfolder toggle; and confirmed passwords never reach
+the user log (autologin uses `sendLine`; echo-off prompts aren't echoed). Tests:
+`LogRetentionTests`. Nothing pending.
 
-## 3. Inventory Serials — secret storage
-Phase-1 keeps captured item serials in a plain per-world file. Decisions:
-- **Store in macOS Keychain vs plain file** — recommend **Keychain** (serials
-  are account-linked data; we already use `CredentialStore` for autologin creds,
-  so reuse that pattern) **only if** serials are sensitive enough to warrant it.
-  If they're not really secret, a plain file in the world-data dir is simpler —
-  **need your call** on sensitivity.
-- **Colour command** — the phase-2 note mentions a colour command for serials;
-  defer until the storage decision lands.
+## 3. Inventory Serials — colour command DONE (D-68); storage call OPEN
+Shipped in D-68: `keyring list` + `vault list` variants and `inventory serials
+color <@code>` (persisted via `persistentState`). **Still open (one decision):**
+whether captured serials are sensitive enough to move from the plain per-world
+file to the **macOS Keychain** (reusing `CredentialStore`). They're item ids,
+not credentials, so the plain file is probably fine — **need your call**; low
+priority.
+
+## (Net-new) Notifications phase-2
+Not started (task #16): richer notification rules beyond tells/name-mentions
+(e.g. configurable patterns, per-channel). Small; only remaining net-new item
+from this batch.
 
 ## 4. Levels window — visual polish (BACKLOG)
 The leveldb **Levels** window (D-71) works as intended, but the four faces are
@@ -48,6 +46,9 @@ with the rest of the app's panel chrome. **Deferred by the user** (2026-05-31):
 functional, not urgent; revisit as a dedicated polish task. No decision needed
 — purely visual refinement.
 
-## Recommendation
-Approve #1 outright (no decision). For #2 pick rotation policy + N; for #3 pick
-Keychain vs file. Then I implement all three in tested layers. #4 is parked.
+## Status (2026-06-01)
+#1 (S&D test flakiness) and #2 (logging retention/per-world/redaction) are
+**done** (D-68). #3's **colour command + keyring/vault** are done (D-68); only
+the Keychain-vs-plain-file *sensitivity call* remains (low priority). #4 (Levels
+visual polish) is **parked**. The one net-new item is **Notifications phase-2**.
+So this batch is effectively closed bar two optional, low-priority bits.

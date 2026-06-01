@@ -21,7 +21,6 @@
 | MSSP (server status) | ⛔ | single-MUD client; irrelevant. |
 | MSP / MCMP (sound protocols) | 🔴 | relevant only if we do soundpack (gated on GPLv3). |
 | MNES / MTTS / charset nego | 🟡 | we negotiate the essentials; MTTS (terminal-type) could be added cheaply. |
-| TLS | 🔴 | deferred post-1.0 (D-15, issue #3). |
 | Proxy support | ⛔ | not needed. |
 
 ## Scripting & automation

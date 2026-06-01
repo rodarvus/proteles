@@ -131,7 +131,6 @@ community's MUSHclient plugins, ships first on macOS, and ports to iPad.
 ### 2.2 Non-goals (v1)
 - Multi-MUD genericity (Aardwolf only).
 - Multi-session/multi-play (Aardwolf prohibits it; **D-11**).
-- TLS (deferred post-1.0; **D-15**).
 - A generic MUSHclient `Window*` immediate-mode drawing API (**D-19**).
 - Mac App Store at launch (direct, notarized download first; **D-05** pending).
 
@@ -209,8 +208,8 @@ window (not separate windows that fall behind the game window; **D-27**).
 ## 4. Technology stack
 
 - **Swift 6**, strict concurrency from day one (**D-07**).
-- **Networking:** `Network.framework` (`NWConnection`), plain telnet (TLS
-  deferred, **D-15**); a connect timeout guards against hangs.
+- **Networking:** `Network.framework` (`NWConnection`), plain telnet; a connect
+  timeout guards against hangs.
 - **Compression:** MCCP2 via `CZlib`.
 - **Text rendering:** TextKit 2 in `NSTextView`, stock `NSTextStorage` bounded
   by eviction-event propagation (**D-02/D-04/D-12** — the custom storage
@@ -388,8 +387,7 @@ work (mapper, lsqlite3, S&D) has landed on `main` since.
   recording/replay (**D-13/D-14**).
 - **Phase 3 — Session management.** ✅ Profiles, Keychain credentials,
   prompt-driven autologin (**D-16**), one-shot connection + durable state +
-  autoreconnect (**D-17**), command input history/completion (**D-18**). TLS
-  removed (**D-15**).
+  autoreconnect (**D-17**), command input history/completion (**D-18**).
 - **Phase 4 — GMCP & Aardwolf surface.** ✅ GMCP handshake + module decode,
   status HUD, chat capture, room/group panels.
 - **Phase 5 — Scripting foundation.** ✅ Lua runtime + sandbox + event bus +

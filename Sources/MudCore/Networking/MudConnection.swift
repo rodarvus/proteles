@@ -9,7 +9,7 @@ import Foundation
 /// `bytes`/`states` are `nonisolated` so the session can read the streams
 /// synchronously (as it does today); the I/O methods stay `async`.
 public protocol MudConnection: Sendable {
-    /// Inbound byte chunks (post-TLS-none, raw wire) as they arrive.
+    /// Inbound raw wire byte chunks as they arrive.
     nonisolated var bytes: AsyncStream<[UInt8]> { get }
     /// Connection-state transitions.
     nonisolated var states: AsyncStream<NetworkConnection.State> { get }
