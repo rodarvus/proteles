@@ -74,40 +74,42 @@ Windows-CRLF gag list — the stray `\r` made every literal pattern miss); and
 Databases menu, since plugin-owned SQLite can't be safely merged like the
 mapper/S&D).
 
-**dinv `wish list` gag — FIXED at the host level (D-79); needs a fresh live
-confirm.** The live leak: dinv's hidden `wish list` probe showed **only the owned
-`*` rows** (header/unowned/totals/fence all gagged). D-77 armed dinv's own gag
-earlier, but the faithful harness (`DinvWishGagTests` — real `getCR` coroutine +
-real `SessionController` + the exact ANSI-coloured rows) gags **every** row in
-both pre- and post-D-77 modes, so the leak is **environmental** (the live
-multi-plugin set / login burst) and a dinv-trigger fix can't be trusted to cover
-it. The reliable fix is host-side and deterministic (D-79): dinv re-sends
-`wish list` through its bypass (`pluginProcessingSend` true — distinct from a user
-*typing* it), so `SessionController.armWishProbeGagIfNeeded` arms a gag on that
-send and `consumeWishProbeGag` withholds every line until dinv's `DINV wish list
-fence` (80-line cap). Tests: `WishProbeHostGagTests` (bypass probe with NO gag
-trigger still gagged; user-typed `wish list` shows). D-77 stays as defense in
-depth. Ruled out: script-error dropping the gag (`GagOnScriptErrorTests`). A
-**`GAG` transcript category** now logs every withheld line + reason
-(`script`/`snd`/`richexits`/`blank`/`wishprobe`) for future diagnosis. **If it
-STILL leaks live:** the bypass `wish list` isn't being recognised — check the new
-recording's `GAG` lines (a `[wishprobe]` entry on each wish row = host gag fired).
+**dinv `wish list` gag — FIXED at the host level (D-79), live-confirmed.** The
+live leak: dinv's hidden `wish list` probe showed **only the owned `*` rows**
+(header/unowned/totals/fence all gagged). A `GAG`-transcript recording proved it
+precisely — dinv's own `^(.*)$` gag (`GAG [script]`) fired on every non-owned
+line but **never** on the 13 owned `*` rows (13 `RECV`, 0 `GAG`), i.e. another
+plugin was stealing the match on the `*`-marked lines before dinv's gag ran. Not
+reproducible offline (the faithful `DinvWishGagTests` — real `getCR` coroutine +
+real `SessionController` + the exact ANSI-coloured rows — gags every row), so it's
+environmental (the live plugin set). The fix is host-side + deterministic and so
+covers it regardless: dinv re-sends `wish list` through its bypass
+(`pluginProcessingSend` true — distinct from a user *typing* it), so
+`SessionController.armWishProbeGagIfNeeded` arms a gag on that send and
+`consumeWishProbeGag` withholds every line until dinv's `DINV wish list fence`
+(80-line cap). Tests: `WishProbeHostGagTests` (bypass probe with NO gag trigger
+still gagged; user-typed `wish list` shows). D-77 (arm dinv's own gag up front)
+stays as defense in depth. Lesson logged: when a gag is selective by row, suspect
+a cross-plugin trigger-match steal, and gag deterministically at the host rather
+than chasing the upstream trigger. The **`GAG` transcript category** (logs each
+withheld line + reason: `script`/`snd`/`richexits`/`blank`/`wishprobe`) was the
+diagnostic that cracked it — keep it.
 
 ### NEXT SESSION — start here
 
-**`v0.4.0` is cut and released** (git tag `v0.4.0` + GitHub release, non-notarized
-`Proteles-0.4.0.zip` attached). It bundles the post-0.3.0 work: leveldb Levels
-window (D-69/D-71), `async` plugin HTTP (D-67), the plugin-reliability batch
-(D-70/D-72/D-73/D-74 + the gagger CRLF fix), dinv+leveldb DB import (D-75), and
-the input/logging polish batch (D-68). Version lives in
-`apps/ProtelesApp_macOS/project.yml` (`CFBundleShortVersionString` +
-`MARKETING_VERSION`); `MudCore.version` reads it at runtime. Release flow:
-bump project.yml → `xcodegen generate` → Release build → zip the `.app` as
-`Proteles-<ver>.zip` → commit + tag `v<ver>` → `gh release create`.
+**`v0.4.0` is released; post-0.4.0 work on `main` is unreleased (a `v0.4.1`'s
+worth).** Since the tag: **hermetic plugin enable/disable** (D-76 — toggling one
+plugin no longer reloads the world), **dinv `wish list` gag fixed + live-confirmed**
+(D-77 dinv-side + **D-79 host-side gag**, the reliable one), **dock-drag reorder**
+within a same-axis split (D-78), a **`GAG` transcript category** for gag
+diagnosis, and the TLS-reference cleanup. All four gates green; ~1087 tests.
+**Next release:** bump `apps/ProtelesApp_macOS/project.yml`
+(`CFBundleShortVersionString` + `MARKETING_VERSION`; `MudCore.version` reads it at
+runtime) to `0.4.1` → `xcodegen generate` → Release build → zip the `.app` as
+`Proteles-<ver>.zip` → commit + tag `v<ver>` → `gh release create`. (Not cut yet —
+user decides when.)
 
-**Open / to re-test live in 0.4.0:** the dinv `wish list` gag (likely fixed by
-D-72/D-73 — see the Open note above; needs a fresh live check). The pre-0.4.0
-release work for `v0.3.0`: the clean-room `utils`
+**Older open / to re-test live** — the pre-0.4.0 `v0.3.0` work: the clean-room `utils`
 dialogs + **`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
 **compatibility-report honesty rework** + **dependency-nag stub** (D-64);
 **`GetInfo(56)` → the plugin's own folder** (D-65, for flat-file config like the
