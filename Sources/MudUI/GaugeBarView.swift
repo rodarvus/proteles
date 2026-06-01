@@ -5,9 +5,12 @@ import SwiftUI
 /// window (UI revamp — `docs/UI_REVAMP.md`). Mirrors Aardwolf's
 /// `aard_health_bars_gmcp`: up to six wide bars — Health, Mana, Moves, TNL
 /// (experience to next level), Enemy, and Alignment — sharing the width equally,
-/// with a connection dot at the leading edge. Which bars show and how their
-/// numbers are overlaid come from ``StatusBarConfig``. The enemy bar is always
-/// present (greyed when not fighting), matching MUSHclient.
+/// with a connection dot at the leading edge. Which bars show, their colours,
+/// the number overlay, and the quarter marks all come from ``StatusBarConfig``.
+/// The enemy bar is always present (greyed when not fighting), matching
+/// MUSHclient. Bars carry no text label — they're identified by colour/position
+/// (and a hover tooltip); only the optional number is drawn, outlined so it's
+/// legible on any fill colour.
 public struct GaugeBarView: View {
     private let state: StatusBarView.ConnectionState
     private let gmcp: GMCPState
@@ -21,18 +24,6 @@ public struct GaugeBarView: View {
         self.state = state
         self.gmcp = gmcp
         self.config = config
-    }
-
-    /// MUSHclient `aard_health_bars_gmcp` default bar colours (read as RGB).
-    private enum BarColor {
-        static let health = Color(rgb: 0x00FF00) // green
-        static let mana = Color(rgb: 0xFF5500) // orange
-        static let moves = Color(rgb: 0x00FFFF) // cyan
-        static let tnl = Color(rgb: 0xFFFFFF) // white
-        static let enemy = Color(rgb: 0x0000FF) // blue
-        static let alignEvil = Color(rgb: 0x0000FF) // blue
-        static let alignGood = Color(rgb: 0x00FFFF) // cyan
-        static let alignNeutral = Color(rgb: 0xCCCCCC) // grey
     }
 
     public var body: some View {
@@ -50,7 +41,7 @@ public struct GaugeBarView: View {
                         label: "HP",
                         current: vitals.hp,
                         max: max.maxhp,
-                        tint: BarColor.health,
+                        tint: Color(hex: config.colors.health),
                         mode: config.numberMode,
                         showTicks: config.showTicks
                     )
@@ -60,7 +51,7 @@ public struct GaugeBarView: View {
                         label: "MP",
                         current: vitals.mana,
                         max: max.maxmana,
-                        tint: BarColor.mana,
+                        tint: Color(hex: config.colors.mana),
                         mode: config.numberMode,
                         showTicks: config.showTicks
                     )
@@ -70,7 +61,7 @@ public struct GaugeBarView: View {
                         label: "MV",
                         current: vitals.moves,
                         max: max.maxmoves,
-                        tint: BarColor.moves,
+                        tint: Color(hex: config.colors.moves),
                         mode: config.numberMode,
                         showTicks: config.showTicks
                     )
@@ -95,8 +86,8 @@ public struct GaugeBarView: View {
     }
 
     /// Experience to next level: `char.status.tnl` out of `char.base.perlevel`.
-    /// Without `perlevel` (not yet seen) it shows as a full white bar carrying
-    /// just the remaining count.
+    /// Without `perlevel` (not yet seen) it shows as a full bar carrying just the
+    /// remaining count.
     @ViewBuilder private var tnlGauge: some View {
         let tnl = gmcp.status?.tnl ?? 0
         let perlevel = gmcp.base?.perlevel ?? 0
@@ -104,7 +95,7 @@ public struct GaugeBarView: View {
             label: "XP",
             current: tnl,
             max: perlevel > 0 ? perlevel : tnl,
-            tint: BarColor.tnl,
+            tint: Color(hex: config.colors.tnl),
             mode: config.numberMode,
             showTicks: config.showTicks
         )
@@ -118,7 +109,7 @@ public struct GaugeBarView: View {
                 label: target.name,
                 current: target.percent,
                 max: 100,
-                tint: BarColor.enemy,
+                tint: Color(hex: config.colors.enemy),
                 mode: config.numberMode,
                 showTicks: config.showTicks
             )
@@ -136,18 +127,13 @@ public struct GaugeBarView: View {
     }
 
     /// Alignment marker on a good↔evil axis (not a fill): a track with a marker
-    /// at `(align + 2500) / 5000`, coloured by tier. Greyed when no alignment.
+    /// at `(align + 2500) / 5000`, in the configured colour. Greyed when no
+    /// alignment has arrived.
     @ViewBuilder private var alignGauge: some View {
         if let align = gmcp.status?.align {
-            let tier = StatusBarFormat.alignTier(align)
-            let tint = switch tier {
-            case .evil: BarColor.alignEvil
-            case .good: BarColor.alignGood
-            case .neutral: BarColor.alignNeutral
-            }
             AlignGauge(
                 fraction: StatusBarFormat.alignFraction(align),
-                tint: tint,
+                tint: Color(hex: config.colors.align),
                 overlay: config.numberMode == .none ? nil : "\(align)"
             )
         } else {
@@ -173,8 +159,8 @@ public struct GaugeBarView: View {
     }
 }
 
-/// A wide proportional gauge filling the available width, with the label and an
-/// optional number overlay (none / raw value / percentage).
+/// A wide proportional gauge filling the available width: a flat colour fill,
+/// optional 25/50/75% quarter marks, and an optional centred, outlined number.
 private struct WideGauge: View {
     let label: String
     let current: Int
@@ -184,20 +170,17 @@ private struct WideGauge: View {
     var dimmed = false
     var showTicks = false
 
-    /// Quarter marks drawn across the bar when ticks are enabled.
     private static let tickFractions: [Double] = [0.25, 0.5, 0.75]
 
     var body: some View {
         let fraction = StatusBarFormat.fraction(current: current, max: max)
         let overlayText = StatusBarFormat.overlay(mode: mode, current: current, max: max)
-        ZStack(alignment: .leading) {
+        ZStack {
             GeometryReader { geo in
                 Capsule().fill(.quaternary)
-                // Flat fill (no gradient — reads cleaner / more native).
                 Capsule()
                     .fill(tint)
                     .frame(width: geo.size.width * fraction)
-                // Optional 25/50/75% quarter marks.
                 if showTicks {
                     ForEach(Self.tickFractions, id: \.self) { mark in
                         Rectangle()
@@ -207,19 +190,9 @@ private struct WideGauge: View {
                     }
                 }
             }
-            HStack(spacing: 4) {
-                Text(label)
-                    .font(.caption2.weight(.bold))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if let overlayText {
-                    Text(overlayText)
-                        .font(.caption2.monospacedDigit())
-                }
+            if let overlayText {
+                OutlinedText(overlayText).opacity(dimmed ? 0.6 : 1)
             }
-            .foregroundStyle(.white.opacity(dimmed ? 0.5 : 0.92))
-            .shadow(color: .black.opacity(0.4), radius: 1, y: 0.5)
-            .padding(.horizontal, 8)
         }
         .frame(height: 16)
         .frame(maxWidth: .infinity)
@@ -234,42 +207,27 @@ private struct AlignGauge: View {
     let overlay: String?
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack {
             GeometryReader { geo in
                 Capsule().fill(.quaternary)
-                // Axis line across the middle.
                 Rectangle()
                     .fill(tint.opacity(0.5))
                     .frame(height: 2)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
-                // Position marker.
                 Circle()
                     .fill(tint)
                     .frame(width: geo.size.height, height: geo.size.height)
                     .position(
                         x: Swift.max(
                             geo.size.height / 2,
-                            Swift.min(
-                                geo.size.width - geo.size.height / 2,
-                                geo.size.width * fraction
-                            )
+                            Swift.min(geo.size.width - geo.size.height / 2, geo.size.width * fraction)
                         ),
                         y: geo.size.height / 2
                     )
             }
-            HStack(spacing: 4) {
-                Text("Align")
-                    .font(.caption2.weight(.bold))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if let overlay {
-                    Text(overlay)
-                        .font(.caption2.monospacedDigit())
-                }
+            if let overlay {
+                OutlinedText(overlay)
             }
-            .foregroundStyle(.white.opacity(0.92))
-            .shadow(color: .black.opacity(0.4), radius: 1, y: 0.5)
-            .padding(.horizontal, 8)
         }
         .frame(height: 16)
         .frame(maxWidth: .infinity)
@@ -277,7 +235,36 @@ private struct AlignGauge: View {
     }
 }
 
-private extension Color {
+/// Text with a 1px contrasting contour, so it stays legible over any bar colour
+/// (the "outline in the inverse colour" trick): white glyphs stamped with a
+/// black outline at the eight surrounding offsets.
+struct OutlinedText: View {
+    let text: String
+    var fill: Color = .white
+    var outline: Color = .black
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    private static let offsets: [(x: CGFloat, y: CGFloat)] = [
+        (-1, -1), (0, -1), (1, -1),
+        (-1, 0), (1, 0),
+        (-1, 1), (0, 1), (1, 1)
+    ]
+
+    var body: some View {
+        ZStack {
+            ForEach(Array(Self.offsets.enumerated()), id: \.offset) { _, point in
+                Text(text).foregroundStyle(outline).offset(x: point.x, y: point.y)
+            }
+            Text(text).foregroundStyle(fill)
+        }
+        .font(.caption2.weight(.semibold).monospacedDigit())
+    }
+}
+
+public extension Color {
     /// Build a Color from a 0xRRGGBB literal.
     init(rgb: UInt32) {
         self = Color(
@@ -286,6 +273,17 @@ private extension Color {
             green: Double((rgb >> 8) & 0xFF) / 255,
             blue: Double(rgb & 0xFF) / 255
         )
+    }
+
+    /// Build a Color from a `#RRGGBB` (or `RRGGBB`) hex string; falls back to
+    /// grey on a malformed value so a bad stored colour never crashes.
+    init(hex: String) {
+        let trimmed = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard trimmed.count == 6, let value = UInt32(trimmed, radix: 16) else {
+            self = .gray
+            return
+        }
+        self.init(rgb: value)
     }
 }
 
@@ -297,7 +295,11 @@ private extension Color {
     state.base = CharBase(name: "Tester", class: "Mage", perlevel: 12000)
     return VStack(spacing: 0) {
         Color.black.frame(maxWidth: .infinity, maxHeight: .infinity)
-        GaugeBarView(state: .connected, gmcp: state)
+        GaugeBarView(
+            state: .connected,
+            gmcp: state,
+            config: StatusBarConfig(numberMode: .number)
+        )
     }
     .frame(width: 900, height: 160)
 }

@@ -1,5 +1,6 @@
 import AppKit
 import MudCore
+import MudUI
 import SwiftUI
 
 /// First-pass Preferences (⌘,). A tabbed Settings window; both controls here
@@ -168,16 +169,30 @@ private struct StatusBarSettingsView: View {
     @AppStorage("statusBar.align") private var statusBarAlign = true
     @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
     @AppStorage("statusBar.ticks") private var statusBarTicks = true
+    @AppStorage("statusBar.color.health") private var statusColorHealth = "#00C000"
+    @AppStorage("statusBar.color.mana") private var statusColorMana = "#2E6FFF"
+    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFD000"
+    @AppStorage("statusBar.color.tnl") private var statusColorTNL = "#CCCCCC"
+    @AppStorage("statusBar.color.enemy") private var statusColorEnemy = "#FF3333"
+    @AppStorage("statusBar.color.align") private var statusColorAlign = "#FFD000"
+
+    /// A `Binding<Color>` over a `#RRGGBB` `@AppStorage` hex string.
+    private func colorBinding(_ hex: Binding<String>) -> Binding<Color> {
+        Binding(
+            get: { Color(hex: hex.wrappedValue) },
+            set: { hex.wrappedValue = $0.hexRGB }
+        )
+    }
 
     var body: some View {
         Form {
             Section("Bars") {
-                Toggle("Health (HP)", isOn: $statusBarHealth)
-                Toggle("Mana (MP)", isOn: $statusBarMana)
-                Toggle("Moves (MV)", isOn: $statusBarMoves)
-                Toggle("Experience to next level (XP)", isOn: $statusBarTNL)
-                Toggle("Enemy", isOn: $statusBarEnemy)
-                Toggle("Alignment", isOn: $statusBarAlign)
+                barRow("Health (HP)", isOn: $statusBarHealth, color: $statusColorHealth)
+                barRow("Mana (MP)", isOn: $statusBarMana, color: $statusColorMana)
+                barRow("Moves (MV)", isOn: $statusBarMoves, color: $statusColorMoves)
+                barRow("Experience (XP)", isOn: $statusBarTNL, color: $statusColorTNL)
+                barRow("Enemy", isOn: $statusBarEnemy, color: $statusColorEnemy)
+                barRow("Alignment", isOn: $statusBarAlign, color: $statusColorAlign)
                 Text("Turn off every bar to hide the bottom bar entirely. The Enemy "
                     + "bar stays visible (greyed) when you're not in combat.")
                     .font(.caption)
@@ -200,6 +215,32 @@ private struct StatusBarSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// One bar's row: a visibility toggle plus a colour well.
+    private func barRow(
+        _ title: String,
+        isOn: Binding<Bool>,
+        color: Binding<String>
+    ) -> some View {
+        LabeledContent {
+            ColorPicker("", selection: colorBinding(color), supportsOpacity: false)
+                .labelsHidden()
+        } label: {
+            Toggle(title, isOn: isOn)
+        }
+    }
+}
+
+private extension Color {
+    /// Serialise to `#RRGGBB` for `@AppStorage` (sRGB, opacity dropped). Falls
+    /// back to white if the components can't be resolved.
+    var hexRGB: String {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .white
+        let r = Int((ns.redComponent * 255).rounded())
+        let g = Int((ns.greenComponent * 255).rounded())
+        let b = Int((ns.blueComponent * 255).rounded())
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 }
 

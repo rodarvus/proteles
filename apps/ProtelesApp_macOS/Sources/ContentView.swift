@@ -79,6 +79,13 @@ struct ContentView: View {
     @AppStorage("statusBar.align") private var statusBarAlign = true
     @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
     @AppStorage("statusBar.ticks") private var statusBarTicks = true
+    // Per-bar colours (user-pickable). Defaults mirror StatusBarColors().
+    @AppStorage("statusBar.color.health") private var statusColorHealth = "#00C000"
+    @AppStorage("statusBar.color.mana") private var statusColorMana = "#2E6FFF"
+    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFD000"
+    @AppStorage("statusBar.color.tnl") private var statusColorTNL = "#CCCCCC"
+    @AppStorage("statusBar.color.enemy") private var statusColorEnemy = "#FF3333"
+    @AppStorage("statusBar.color.align") private var statusColorAlign = "#FFD000"
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -95,7 +102,15 @@ struct ContentView: View {
             showEnemy: statusBarEnemy,
             showAlign: statusBarAlign,
             numberMode: StatusBarNumberMode(rawValue: statusBarNumberMode) ?? .none,
-            showTicks: statusBarTicks
+            showTicks: statusBarTicks,
+            colors: StatusBarColors(
+                health: statusColorHealth,
+                mana: statusColorMana,
+                moves: statusColorMoves,
+                tnl: statusColorTNL,
+                enemy: statusColorEnemy,
+                align: statusColorAlign
+            )
         )
     }
 

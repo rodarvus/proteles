@@ -66,6 +66,34 @@ struct StatusBarTests {
         #expect(off.isEmpty == false)
     }
 
+    // MARK: - Default colours (the BGR→RGB correction)
+
+    /// Parse `#RRGGBB` → (red, green, blue).
+    private struct RGB { let red: Int; let green: Int; let blue: Int }
+    private func rgb(_ hex: String) -> RGB {
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        let value = UInt32(digits, radix: 16) ?? 0
+        return RGB(red: Int((value >> 16) & 0xFF), green: Int((value >> 8) & 0xFF), blue: Int(value & 0xFF))
+    }
+
+    @Test("default bar colours match the corrected (RGB) semantics, not the BGR mix-up")
+    func defaultColourSemantics() {
+        let colors = StatusBarColors()
+        let health = rgb(colors.health), mana = rgb(colors.mana)
+        let moves = rgb(colors.moves), enemy = rgb(colors.enemy)
+        // Health is green-dominant.
+        #expect(health.green > health.red && health.green > health.blue)
+        // Mana is blue-dominant (the bug had it orange — red-dominant).
+        #expect(mana.blue > mana.red && mana.blue > mana.green, "mana should be blue: \(colors.mana)")
+        // Moves is yellow (high red + green, low blue).
+        #expect(
+            moves.red > 150 && moves.green > 150 && moves.blue < 100,
+            "moves should be yellow: \(colors.moves)"
+        )
+        // Enemy is red-dominant.
+        #expect(enemy.red > enemy.green && enemy.red > enemy.blue, "enemy should be red: \(colors.enemy)")
+    }
+
     // MARK: - GMCP decode
 
     @Test("char.base decodes perlevel (the TNL bar's denominator)")
