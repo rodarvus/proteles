@@ -40,8 +40,11 @@ extension ScriptEngine {
     /// if consumed, `false` if it's an outward effect the session should render.
     private func applyAutomationEffect(_ effect: ScriptEffect, owner: String?) -> Bool {
         switch effect {
-        case .addTrigger(let name, let pattern, let flags, let script):
-            addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
+        case .addTrigger(let name, let pattern, let flags, let script, let sequence):
+            addDynamicTrigger(
+                .init(name: name, pattern: pattern, flags: flags, script: script, sequence: sequence),
+                owner: owner
+            )
         case .addAlias(let name, let pattern, let flags, let script):
             addDynamicAlias(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
         case .scheduleAfter(let seconds, let isScript, let body):
@@ -156,33 +159,43 @@ extension ScriptEngine {
 
     // MARK: - Private
 
+    /// The decoded inputs of an `AddTrigger`/`AddTriggerEx` call, grouped so the
+    /// registration helper stays within the parameter budget.
+    private struct DynamicTriggerSpec {
+        let name: String
+        let pattern: String
+        let flags: Int
+        let script: String
+        /// MUSHclient evaluation order (lower fires first; default 100).
+        let sequence: Int
+    }
+
     /// Register an `AddTrigger`/`AddTriggerEx` trigger. The script name becomes
     /// the MUSHclient-style call `fn(name, matches[0], matches)` and runs in the
     /// owning plugin's environment. Honours the Enabled/IgnoreCase/Regex/Omit/
     /// OneShot flag bits.
-    private func addDynamicTrigger(
-        name: String,
-        pattern: String,
-        flags: Int,
-        script: String,
-        owner: String?
-    ) {
-        let isRegex = flags & TriggerFlag.regularExpression != 0
+    private func addDynamicTrigger(_ spec: DynamicTriggerSpec, owner: String?) {
+        let isRegex = spec.flags & TriggerFlag.regularExpression != 0
         // The shim hands us the full Lua body (function-call, raw response, or
         // a world Send), so run it verbatim — the fire path %-expands it.
-        let call = script.isEmpty ? nil : script
+        let call = spec.script.isEmpty ? nil : spec.script
         let trigger = Trigger(
-            name: name,
-            pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
-            caseSensitive: flags & TriggerFlag.ignoreCase == 0,
-            enabled: flags & TriggerFlag.enabled != 0,
-            oneShot: flags & TriggerFlag.oneShot != 0,
-            gag: flags & TriggerFlag.omitFromOutput != 0,
+            name: spec.name,
+            pattern: isRegex ? .regex(spec.pattern) : .wildcard(spec.pattern),
+            caseSensitive: spec.flags & TriggerFlag.ignoreCase == 0,
+            enabled: spec.flags & TriggerFlag.enabled != 0,
+            // Honour the MUSHclient evaluation order: dinv assigns its
+            // wish-capture trigger sequence 0 so it fires before any co-loaded
+            // plugin's stop-on-match trigger that would otherwise pre-empt it on
+            // the owned wish lines (the portal-when-worn bug). Default is 100.
+            sequence: spec.sequence,
+            oneShot: spec.flags & TriggerFlag.oneShot != 0,
+            gag: spec.flags & TriggerFlag.omitFromOutput != 0,
             script: call
         )
-        if let existing = triggerIDsByName[name] { triggers.remove(id: existing) }
+        if let existing = triggerIDsByName[spec.name] { triggers.remove(id: existing) }
         guard (try? triggers.add(trigger)) != nil else { return }
-        triggerIDsByName[name] = trigger.id
+        triggerIDsByName[spec.name] = trigger.id
         automationOwners[trigger.id] = owner
     }
 

@@ -365,8 +365,8 @@ public actor SearchAndDestroyHost {
             applyEnableEffect(effect)
         case .scheduleAfter(let seconds, let isScript, let body):
             scheduleOneShot(after: seconds, isScript: isScript, body: body)
-        case .addTrigger(let name, let pattern, let flags, let script):
-            addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script)
+        case .addTrigger(let name, let pattern, let flags, let script, let sequence):
+            addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script, sequence: sequence)
         case .setTriggerGroup(let name, let group):
             setDynamicTriggerGroup(name: name, group: group)
         default:
@@ -407,7 +407,7 @@ public actor SearchAndDestroyHost {
     /// S&D's `consider_trigger`/`scan_mob` iterate it to re-render the line, so
     /// the runtime sets the `styles` global per fire (`or {}` guards the no-line
     /// paths). Omitting it crashed `ipairs(nil)` and killed scan/consider output.
-    private func addDynamicTrigger(name: String, pattern: String, flags: Int, script: String) {
+    private func addDynamicTrigger(name: String, pattern: String, flags: Int, script: String, sequence: Int) {
         let isRegex = flags & TriggerFlag.regularExpression != 0
         let call = script.isEmpty ? nil
             : "\(script)(\(Self.luaString(name)), matches[0], matches, styles or {})"
@@ -416,6 +416,7 @@ public actor SearchAndDestroyHost {
             pattern: isRegex ? .regex(pattern) : .wildcard(pattern),
             caseSensitive: flags & TriggerFlag.ignoreCase == 0,
             enabled: flags & TriggerFlag.enabled != 0,
+            sequence: sequence,
             gag: flags & TriggerFlag.omitFromOutput != 0,
             script: call
         )

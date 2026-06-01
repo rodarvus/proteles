@@ -180,9 +180,13 @@ extension LuaRuntime {
         let pattern = argString(arguments, 1)
         let flags = Int(argDouble(arguments, 2))
         let script = argString(arguments, 3)
+        // Trigger sequence (arg 4); absent for AddAlias and bare AddTrigger.
+        // MUSHclient's default is 100. dinv passes 0 for its wish-capture trigger
+        // so it evaluates before any pre-empting stop-on-match trigger.
+        let sequence = arguments.count > 4 ? Int(argDouble(arguments, 4)) : 100
         return function == .addAlias
             ? .addAlias(name: name, pattern: pattern, flags: flags, script: script)
-            : .addTrigger(name: name, pattern: pattern, flags: flags, script: script)
+            : .addTrigger(name: name, pattern: pattern, flags: flags, script: script, sequence: sequence)
     }
 
     /// Map an `enable*(name, on)` host call to its effect (collapsed so
