@@ -29,6 +29,9 @@ public struct StatusBarConfig: Sendable, Equatable {
     /// Draw 25/50/75% quarter marks on the five fill bars (HP/MP/MV/TNL/Enemy).
     /// The alignment bar has its own axis and is unaffected.
     public var showTicks: Bool
+    /// Per-bar colours as `#RRGGBB` hex (user-pickable, persisted). Kept as
+    /// strings here so MudCore stays UI-agnostic; the renderer parses them.
+    public var colors: StatusBarColors
 
     public init(
         showHealth: Bool = true,
@@ -38,7 +41,8 @@ public struct StatusBarConfig: Sendable, Equatable {
         showEnemy: Bool = true,
         showAlign: Bool = true,
         numberMode: StatusBarNumberMode = .none,
-        showTicks: Bool = true
+        showTicks: Bool = true,
+        colors: StatusBarColors = StatusBarColors()
     ) {
         self.showHealth = showHealth
         self.showMana = showMana
@@ -48,11 +52,41 @@ public struct StatusBarConfig: Sendable, Equatable {
         self.showAlign = showAlign
         self.numberMode = numberMode
         self.showTicks = showTicks
+        self.colors = colors
     }
 
     /// True when no bar is enabled — the whole bar row can then be hidden.
     public var isEmpty: Bool {
         !(showHealth || showMana || showMoves || showTNL || showEnemy || showAlign)
+    }
+}
+
+/// Per-bar colours as `#RRGGBB` hex strings. Defaults match the colours the
+/// user picked off Aardwolf's bars (HP green, MP blue, MV yellow, TNL silver,
+/// Enemy red, Align yellow) — the MUSHclient hex was BGR-ordered, so these are
+/// the RGB-corrected equivalents. Users can override each via a colour picker.
+public struct StatusBarColors: Sendable, Equatable {
+    public var health: String
+    public var mana: String
+    public var moves: String
+    public var tnl: String
+    public var enemy: String
+    public var align: String
+
+    public init(
+        health: String = "#00C000",
+        mana: String = "#2E6FFF",
+        moves: String = "#FFD000",
+        tnl: String = "#CCCCCC",
+        enemy: String = "#FF3333",
+        align: String = "#FFD000"
+    ) {
+        self.health = health
+        self.mana = mana
+        self.moves = moves
+        self.tnl = tnl
+        self.enemy = enemy
+        self.align = align
     }
 }
 
