@@ -74,13 +74,20 @@ Windows-CRLF gag list — the stray `\r` made every literal pattern miss); and
 Databases menu, since plugin-owned SQLite can't be safely merged like the
 mapper/S&D).
 
-**Open (needs a fresh live re-test):** dinv's `wish list` probe output isn't
-gagged. Harness coverage now proves the gag mechanism + coroutine/nested-
-coroutine trigger registration all work in the current tree (no reproduction
-offline). The ungagged recordings predate the D-72 (per-plugin variable scope)
-and D-73 (cancellable timers) fixes, both of which touch dinv's wish machinery
-— so re-test live before more harness work. If it still leaks, the next step is
-a full `wish.getCR` drive (pagesize getConfig) in the harness. Don't guess-fix.
+**dinv `wish list` gag — FIXED (D-77), needs a fresh live confirm.** Built the
+full `wish.getCR` drive the prior note asked for: `DinvWishGagTests` runs the
+**real** coroutine through the **real `SessionController`** (re-entrancy guard +
+timer loop + inbound gag), answering the `pagesize` probe and replaying the
+user's real `wish list` output. Finding: with intact triggers the gag is sound
+(header→items→totals→fence all omitted). The leak is the **header-timing race**
+D-70 suspected — dinv arms the omit-from-output item trigger only when its START
+trigger matches the column header, so if the header beats the trigger going live
+(post-login burst / mid-probe reload teardown) the whole list prints. Fix: one
+line in `dbot.wish.setupFn` arms the item trigger up front (inside the safe-exec
+critical section, before `wish list` is sent; fence still disables it, no
+over-gag). Regression-guarded by `wishBodyGaggedWhenHeaderUnmatched` (a
+non-matching header still gags; reverting the line leaks the whole list). See
+`dinv/PROVENANCE.md`. Re-test live to confirm the login auto-probe is now quiet.
 
 ### NEXT SESSION — start here
 

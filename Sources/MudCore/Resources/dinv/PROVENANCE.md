@@ -47,8 +47,22 @@ re-deleting these alias blocks):
 shim's `DoAfterSpecial(…, sendto.script)`, which the host routes to a clean
 unload + reload of the bundled plugin.
 
-One more local edit, in `dinv_dbot.lua`:
+Two more local edits, in `dinv_dbot.lua`:
 
+- **`dbot.wish.setupFn()`** (D-77) — one added line: `EnableTrigger(dbot.wish.
+  trigger.itemName, true)`. Upstream arms the omit-from-output wish-item gag only
+  when its START trigger matches the `wish list` column header
+  (`Base…Cost…Adjustment…Your…Cost…Keyword`). If that header reaches output before
+  the START trigger is live — the post-login probe burst, or trigger teardown from
+  a mid-probe reload — the gag never arms and the whole list prints (the live
+  "wish output ungagged" report). `setupFn` runs inside the safe-exec critical
+  section immediately before the command is sent to the mud, so enabling the item
+  trigger there gags every wish line regardless of header timing; the fence
+  (`dbot.wish.fenceMsg`) still disables it, so it can't over-gag. The START
+  trigger is kept as a harmless belt-and-suspenders, so re-syncing upstream is just
+  deleting this one line. Proven by `DinvWishGagTests.wishBodyGaggedWhenHeaderUnmatched`
+  (with a deliberately non-matching header, the list still gags; reverting the line
+  leaks the whole list).
 - **`dbot.backup.preBuild()`** — neutralized to a no-op. It otherwise creates an
   automatic pre-build backup by copying the SQLite DB file via Lua `io`
   (`copyFile`), but the sandbox excludes `io`, so once the DB has items the

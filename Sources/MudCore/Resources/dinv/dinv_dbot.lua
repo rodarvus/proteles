@@ -2288,6 +2288,17 @@ function dbot.wish.setupFn()
                       custom_colour.Custom11,
                       0, "", "", sendto.script, 0))
 
+  -- Proteles local edit (D-77): arm the omit-from-output item trigger NOW, before
+  -- "wish list" is sent, rather than relying on the start trigger above to enable
+  -- it only once the column header arrives. The header-match approach leaves a
+  -- race: if the header reaches output before the start trigger is live (e.g. the
+  -- post-login burst, or trigger teardown from a mid-probe reload), the gag never
+  -- arms and the whole list prints. setupFn runs inside the safe-exec critical
+  -- section just before the command goes to the mud, so enabling here gags every
+  -- wish line; the fence (dbot.wish.fenceMsg) still disables it, so it can't
+  -- over-gag. The start trigger is kept as a harmless belt-and-suspenders.
+  check (EnableTrigger(dbot.wish.trigger.itemName, true))
+
   dbot.pagesize.hide()
 
 end -- dbot.wish.setupFn
