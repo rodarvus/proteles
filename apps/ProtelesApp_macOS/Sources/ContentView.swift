@@ -78,6 +78,7 @@ struct ContentView: View {
     @AppStorage("statusBar.enemy") private var statusBarEnemy = true
     @AppStorage("statusBar.align") private var statusBarAlign = true
     @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
+    @AppStorage("statusBar.ticks") private var statusBarTicks = true
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -93,7 +94,8 @@ struct ContentView: View {
             showTNL: statusBarTNL,
             showEnemy: statusBarEnemy,
             showAlign: statusBarAlign,
-            numberMode: StatusBarNumberMode(rawValue: statusBarNumberMode) ?? .none
+            numberMode: StatusBarNumberMode(rawValue: statusBarNumberMode) ?? .none,
+            showTicks: statusBarTicks
         )
     }
 

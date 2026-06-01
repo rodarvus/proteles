@@ -26,6 +26,9 @@ public struct StatusBarConfig: Sendable, Equatable {
     public var showEnemy: Bool
     public var showAlign: Bool
     public var numberMode: StatusBarNumberMode
+    /// Draw 25/50/75% quarter marks on the five fill bars (HP/MP/MV/TNL/Enemy).
+    /// The alignment bar has its own axis and is unaffected.
+    public var showTicks: Bool
 
     public init(
         showHealth: Bool = true,
@@ -34,7 +37,8 @@ public struct StatusBarConfig: Sendable, Equatable {
         showTNL: Bool = true,
         showEnemy: Bool = true,
         showAlign: Bool = true,
-        numberMode: StatusBarNumberMode = .none
+        numberMode: StatusBarNumberMode = .none,
+        showTicks: Bool = true
     ) {
         self.showHealth = showHealth
         self.showMana = showMana
@@ -43,6 +47,7 @@ public struct StatusBarConfig: Sendable, Equatable {
         self.showEnemy = showEnemy
         self.showAlign = showAlign
         self.numberMode = numberMode
+        self.showTicks = showTicks
     }
 
     /// True when no bar is enabled — the whole bar row can then be hidden.

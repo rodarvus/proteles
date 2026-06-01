@@ -52,6 +52,7 @@ struct StatusBarTests {
     @Test("isEmpty only when every bar is off")
     func configEmpty() {
         #expect(StatusBarConfig().isEmpty == false)
+        #expect(StatusBarConfig().showTicks == true) // quarter marks on by default
         var off = StatusBarConfig(
             showHealth: false,
             showMana: false,

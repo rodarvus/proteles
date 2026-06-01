@@ -167,6 +167,7 @@ private struct StatusBarSettingsView: View {
     @AppStorage("statusBar.enemy") private var statusBarEnemy = true
     @AppStorage("statusBar.align") private var statusBarAlign = true
     @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
+    @AppStorage("statusBar.ticks") private var statusBarTicks = true
 
     var body: some View {
         Form {
@@ -189,6 +190,13 @@ private struct StatusBarSettingsView: View {
                     Text("Percentage").tag(StatusBarNumberMode.percentage.rawValue)
                 }
                 .pickerStyle(.radioGroup)
+            }
+            Section("Marks") {
+                Toggle("Show 25 / 50 / 75% marks", isOn: $statusBarTicks)
+                Text("Draw quarter marks across the HP/MP/MV/XP/Enemy bars. The "
+                    + "alignment bar has its own scale.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
