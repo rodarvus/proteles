@@ -12,6 +12,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             AppearanceSettingsView()
                 .tabItem { Label("Appearance", systemImage: "textformat.size") }
+            StatusBarSettingsView()
+                .tabItem { Label("Status Bar", systemImage: "chart.bar.xaxis") }
             ConnectionSettingsView()
                 .tabItem { Label("Connection", systemImage: "network") }
             LoggingSettingsView()
@@ -153,6 +155,43 @@ private struct ThemePreview: View {
             green: Double(rgb.green) / 255,
             blue: Double(rgb.blue) / 255
         )
+    }
+}
+
+/// The bottom vitals bars: which of the six show, and how their numbers appear.
+private struct StatusBarSettingsView: View {
+    @AppStorage("statusBar.health") private var statusBarHealth = true
+    @AppStorage("statusBar.mana") private var statusBarMana = true
+    @AppStorage("statusBar.moves") private var statusBarMoves = true
+    @AppStorage("statusBar.tnl") private var statusBarTNL = true
+    @AppStorage("statusBar.enemy") private var statusBarEnemy = true
+    @AppStorage("statusBar.align") private var statusBarAlign = true
+    @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
+
+    var body: some View {
+        Form {
+            Section("Bars") {
+                Toggle("Health (HP)", isOn: $statusBarHealth)
+                Toggle("Mana (MP)", isOn: $statusBarMana)
+                Toggle("Moves (MV)", isOn: $statusBarMoves)
+                Toggle("Experience to next level (XP)", isOn: $statusBarTNL)
+                Toggle("Enemy", isOn: $statusBarEnemy)
+                Toggle("Alignment", isOn: $statusBarAlign)
+                Text("Turn off every bar to hide the bottom bar entirely. The Enemy "
+                    + "bar stays visible (greyed) when you're not in combat.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Numbers") {
+                Picker("Show on each bar", selection: $statusBarNumberMode) {
+                    Text("No text").tag(StatusBarNumberMode.none.rawValue)
+                    Text("Raw number").tag(StatusBarNumberMode.number.rawValue)
+                    Text("Percentage").tag(StatusBarNumberMode.percentage.rawValue)
+                }
+                .pickerStyle(.radioGroup)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
