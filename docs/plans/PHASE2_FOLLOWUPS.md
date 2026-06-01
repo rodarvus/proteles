@@ -25,13 +25,11 @@ connect); a **per-world** subfolder toggle; and confirmed passwords never reach
 the user log (autologin uses `sendLine`; echo-off prompts aren't echoed). Tests:
 `LogRetentionTests`. Nothing pending.
 
-## 3. Inventory Serials — colour command DONE (D-68); storage call OPEN
+## 3. Inventory Serials — DONE (D-68)
 Shipped in D-68: `keyring list` + `vault list` variants and `inventory serials
-color <@code>` (persisted via `persistentState`). **Still open (one decision):**
-whether captured serials are sensitive enough to move from the plain per-world
-file to the **macOS Keychain** (reusing `CredentialStore`). They're item ids,
-not credentials, so the plain file is probably fine — **need your call**; low
-priority.
+color <@code>` (persisted via `persistentState`). No storage decision needed —
+serials are **stable** identifiers, not secrets, so the plain per-world file is
+correct (no Keychain). Nothing pending.
 
 ## (Net-new) Notifications phase-2
 Not started (task #16): richer notification rules beyond tells/name-mentions
@@ -47,8 +45,7 @@ functional, not urgent; revisit as a dedicated polish task. No decision needed
 — purely visual refinement.
 
 ## Status (2026-06-01)
-#1 (S&D test flakiness) and #2 (logging retention/per-world/redaction) are
-**done** (D-68). #3's **colour command + keyring/vault** are done (D-68); only
-the Keychain-vs-plain-file *sensitivity call* remains (low priority). #4 (Levels
-visual polish) is **parked**. The one net-new item is **Notifications phase-2**.
-So this batch is effectively closed bar two optional, low-priority bits.
+#1 (S&D test flakiness), #2 (logging retention/per-world/redaction), and #3
+(inventory serials — colour/keyring/vault; no storage change, serials are stable
+non-secrets) are all **done** (D-68). #4 (Levels visual polish) is **parked**.
+The one net-new item is **Notifications phase-2** (small). This batch is closed.

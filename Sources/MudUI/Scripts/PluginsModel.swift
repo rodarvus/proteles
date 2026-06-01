@@ -126,7 +126,6 @@ public final class PluginsModel {
     private let session: SessionController
     private var profileID: UUID?
     private var library: PluginLibraryStore?
-    private var resync: (@MainActor () async -> Void)?
 
     public init(session: SessionController) {
         self.session = session
@@ -152,13 +151,31 @@ public final class PluginsModel {
 
     // MARK: - Lifecycle
 
-    /// Point the model at the active profile (for per-world enablement) and
-    /// supply the re-sync action (reloading the profile's scripts + plugins).
+    /// Point the model at the active profile (for per-world enablement). Enable/
+    /// disable/add/remove apply **hermetically** to the live session (load or
+    /// unload just the one plugin via ``SessionController/enablePlugin(directory:character:)``
+    /// / ``disablePlugin(id:directory:)``), not a full world reload.
     /// Call when the Plugins window appears / the active profile changes.
-    public func prepare(profileID: UUID, resync: @escaping @MainActor () async -> Void) {
+    public func prepare(profileID: UUID) {
         self.profileID = profileID
-        self.resync = resync
         library = (try? PluginLibraryStore.defaultStoreURL()).map { PluginLibraryStore(url: $0) }
+    }
+
+    /// The active character's data-dir key (for the per-character plugin data dir).
+    private func characterKey() async -> String {
+        guard let profileID else { return "" }
+        return await ScriptsModel.characterKey(forProfile: profileID)
+    }
+
+    /// Load one plugin into the live session (hermetic enable).
+    private func enableLive(_ directory: URL?) async {
+        guard let directory else { return }
+        await session.enablePlugin(directory: directory, character: characterKey())
+    }
+
+    /// Unload one plugin from the live session (hermetic disable).
+    private func disableLive(_ pluginID: String, directory: URL?) async {
+        await session.disablePlugin(id: pluginID, directory: directory)
     }
 
     /// Load the library from disk into displayable rows (parsing each plugin's
@@ -283,32 +300,37 @@ public final class PluginsModel {
         }
         try? await library.upsert(result.entry)
         await refresh()
-        await resync?()
+        await enableLive(try? result.entry.directory())
         selection = .library(result.entry.pluginID)
         return result.entry.pluginID
     }
 
-    /// Remove a plugin from the library — deletes its directory and the registry
-    /// entry — and re-sync so it stops loading.
+    /// Remove a plugin from the library — unload it from the live session, then
+    /// delete its directory and the registry entry.
     public func remove(pluginID: String) async {
         guard let library else { return }
         let entry = await library.entries.first { $0.pluginID == pluginID }
-        if let dir = try? entry?.directory() {
-            try? FileManager.default.removeItem(at: dir)
-        }
+        let dir = try? entry?.directory()
+        await disableLive(pluginID, directory: dir)
+        if let dir { try? FileManager.default.removeItem(at: dir) }
         try? await library.remove(pluginID: pluginID)
         if selection == .library(pluginID) { selection = nil }
         await refresh()
-        await resync?()
     }
 
-    /// Toggle a plugin for the active world and re-sync (a disabled plugin isn't
-    /// loaded).
+    /// Toggle a plugin for the active world: persist the per-world flag, then
+    /// load or unload **just that plugin** in the live session (hermetic — other
+    /// plugins + the mapper/S&D host keep running).
     public func setEnabled(_ enabled: Bool, pluginID: String) async {
         guard let library, let profileID else { return }
+        let dir = try? await (library.entries.first { $0.pluginID == pluginID })?.directory()
         try? await library.setEnabled(enabled, pluginID: pluginID, forProfile: profileID)
         await refresh()
-        await resync?()
+        if enabled {
+            await enableLive(dir)
+        } else {
+            await disableLive(pluginID, directory: dir)
+        }
     }
 
     /// Replace a plugin's files from new local `sources`, preserving its
@@ -330,13 +352,17 @@ public final class PluginsModel {
         await replace(pluginID: pluginID, sources: [temp], origin: .url(urlString))
     }
 
-    /// Shared replace: keep the old enablement, drop the old dir, install fresh.
+    /// Shared replace: unload the old plugin live, drop the old dir, install
+    /// fresh, then re-load the new files live (if still enabled). Keeps the old
+    /// enablement. Hermetic — other plugins are untouched.
     private func replace(pluginID: String, sources: [URL], origin: PluginOrigin) async {
         guard let library, let profileID,
               let old = await library.entries.first(where: { $0.pluginID == pluginID }),
               let pluginsDir = try? ProtelesPaths.pluginsDirectory()
         else { return }
-        if let oldDir = try? old.directory() { try? FileManager.default.removeItem(at: oldDir) }
+        let oldDir = try? old.directory()
+        await disableLive(pluginID, directory: oldDir)
+        if let oldDir { try? FileManager.default.removeItem(at: oldDir) }
         guard let result = try? PluginInstaller.installFromFiles(
             sources, into: pluginsDir, origin: origin, enabledFor: profileID, now: Date()
         ) else { return }
@@ -348,6 +374,8 @@ public final class PluginsModel {
         if entry.pluginID != pluginID { try? await library.remove(pluginID: pluginID) }
         try? await library.upsert(entry)
         await refresh()
-        await resync?()
+        if entry.enabledProfiles.contains(profileID) {
+            await enableLive(try? entry.directory())
+        }
     }
 }
