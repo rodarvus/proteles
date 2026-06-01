@@ -29,7 +29,7 @@
 | Triggers (regex/substring/colour/line) | ✅ | regex + plain; colour-triggers are a possible gap |
 | Aliases | ✅ | |
 | Timers (incl. temp/offset) | ✅ | |
-| **Keybindings (TKey)** | 🔴 | **MacroEngine** (planned) closes this — see MACRO_ENGINE_PLAN.md |
+| **Keybindings (TKey)** | ✅ | **MacroEngine** shipped (D-50, v0.3.0) |
 | **Buttons / button bars (TAction)** | 🔴 | clickable command buttons; could pair with MacroEngine |
 | Lua scripting API | ✅ | `proteles.*` + Lua 5.1; MUSHclient compat shim is a Proteles-only superpower Mudlet lacks |
 | Per-profile scripts/persistence | ✅ | |
@@ -70,11 +70,11 @@
 ## Quality-of-life / integrations
 | Mudlet | Proteles | Notes |
 |---|---|---|
-| **Logging (HTML/text, per session)** | 🔴 | **planned** — see LOGGING_PLAN.md (we have a debug transcript, no user logging) |
-| **Notifications** | 🔴 | **planned** — see NOTIFICATIONS_PLAN.md |
+| **Logging (HTML/text, per session)** | ✅ | shipped — session logging + retention/per-world (D-49/D-68) |
+| **Notifications** | 🟡 | phase-1 shipped (tells/name-mentions, D-49); phase-2 (richer rules) net-new |
 | Discord rich presence | ⛔ | out of scope for v1 |
 | IRC client | ⛔ | skip |
-| Spellchecker (input) | 🔴 | macOS text fields get this ~free; low effort |
+| Spellchecker (input) | ✅ | command-line spell-check + no-autocorrect (D-68) |
 | Multi-playing / multiple profiles open | 🟡 | single active session by design (D-11); multiple worlds configured, one connected |
 | Lua console / error reporting | 🟡 | errors surface as red notes; no interactive Lua console |
 | Auto-updater (Sparkle-like) | 🔴 | Phase 8 (notarisation doc mentions Sparkle) |
@@ -82,9 +82,9 @@
 
 ## Summary — gaps worth closing, ranked
 
-**Already planned (docs in this folder):** MacroEngine (keybindings), TTS,
-Logging, Notifications. These are the highest-value Mudlet gaps and are all on
-the Phase-7 list.
+**Shipped since this doc was first written:** MacroEngine/keybindings (D-50),
+Logging (D-49/D-68), Notifications phase-1 (D-49), input spellcheck (D-68). The
+remaining planned gap is **TTS** (D-41, deferred until a VI player can validate).
 
 **Worth considering next:**
 1. **Buttons / command-button bar** — pairs naturally with MacroEngine; cheap,
