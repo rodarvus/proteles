@@ -127,11 +127,7 @@ public struct LinePipeline {
     public mutating func consume(_ wireBytes: [UInt8]) throws -> Output {
         var output = Output()
 
-        var buffer: [UInt8] = if let inflater {
-            try inflater.inflate(wireBytes)
-        } else {
-            wireBytes
-        }
+        var buffer = try inflateOrPassThrough(wireBytes)
 
         var index = 0
         while index < buffer.count {
@@ -156,17 +152,28 @@ public struct LinePipeline {
 
             if activated {
                 output.activatedCompression = true
-                let newInflater = try Inflater()
-                inflater = newInflater
+                inflater = try Inflater()
                 if index < buffer.count {
-                    let remainder = Array(buffer[index...])
-                    buffer = try newInflater.inflate(remainder)
+                    buffer = try inflateOrPassThrough(Array(buffer[index...]))
                     index = 0
                 }
             }
         }
 
         return output
+    }
+
+    /// Decompress `bytes` through the active inflater, or pass them through
+    /// untouched when none is active. If the inflater reaches the end of the
+    /// compressed stream (MCCP2 ended — e.g. an Aardwolf ice-age copyover), drop
+    /// it and append the plaintext tail, so the telnet pass below sees the
+    /// server's re-negotiation (a fresh `COMPRESS2` there restarts compression).
+    private mutating func inflateOrPassThrough(_ bytes: [UInt8]) throws -> [UInt8] {
+        guard let inflater else { return bytes }
+        let decompressed = try inflater.inflate(bytes)
+        guard inflater.streamEnded else { return decompressed }
+        self.inflater = nil
+        return decompressed + inflater.leftover
     }
 
     /// Flush any in-progress line. Use at end-of-stream (disconnect,

@@ -122,6 +122,32 @@ struct InflaterErrorTests {
         }
     }
 
+    @Test("End-of-stream is reported with the unconsumed plaintext tail")
+    func streamEndExposesLeftover() throws {
+        // A finished (Z_FINISH) stream followed by trailing plaintext bytes —
+        // the shape an Aardwolf copyover produces (compressed stream ends, then
+        // plaintext telnet re-negotiation). Pre-fix this hung / errored.
+        let deflater = try Deflater()
+        let compressed = try deflater.deflate(Array("hello\n".utf8), flush: .finish)
+        let tail: [UInt8] = [0xFF, 0xFA, 86, 0xFF, 0xF0] // IAC SB MCCP2 IAC SE
+
+        let inflater = try Inflater()
+        let recovered = try inflater.inflate(compressed + tail)
+        #expect(String(decoding: recovered, as: UTF8.self) == "hello\n")
+        #expect(inflater.streamEnded)
+        #expect(inflater.leftover == tail)
+    }
+
+    @Test("A normal (open) stream does not report end-of-stream")
+    func openStreamNotEnded() throws {
+        let deflater = try Deflater()
+        let compressed = try deflater.deflate(Array("still going\n".utf8), flush: .sync)
+        let inflater = try Inflater()
+        _ = try inflater.inflate(compressed)
+        #expect(!inflater.streamEnded)
+        #expect(inflater.leftover.isEmpty)
+    }
+
     @Test("reset() returns the inflater to a fresh state")
     func resetAllowsReuse() throws {
         let plain = Array("first session".utf8)

@@ -212,11 +212,12 @@ extension SessionController {
         return (object["state"] as? Int) == 3 || (object["state"] as? String) == "3"
     }
 
-    /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set,
-    /// then the config/request batch). Sent at most once per connection.
+    /// Send the Aardwolf GMCP handshake (Core.Hello, Core.Supports.Set, then the
+    /// config/request batch). Fired on every server `WILL GMCP` — once at
+    /// connect, and again when the server re-negotiates GMCP after an ice-age
+    /// copyover, so the status/HUD modules resume. The handshake is idempotent,
+    /// so re-sending is safe.
     func sendGMCPHandshake() async {
-        guard !gmcpHandshakeSent else { return }
-        gmcpHandshakeSent = true
         for packet in GMCPMessage.aardwolfHandshake(clientVersion: MudCore.version) {
             try? await connection?.send(packet)
         }
