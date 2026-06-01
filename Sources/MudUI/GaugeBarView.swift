@@ -51,7 +51,8 @@ public struct GaugeBarView: View {
                         current: vitals.hp,
                         max: max.maxhp,
                         tint: BarColor.health,
-                        mode: config.numberMode
+                        mode: config.numberMode,
+                        showTicks: config.showTicks
                     )
                 }
                 if config.showMana {
@@ -60,7 +61,8 @@ public struct GaugeBarView: View {
                         current: vitals.mana,
                         max: max.maxmana,
                         tint: BarColor.mana,
-                        mode: config.numberMode
+                        mode: config.numberMode,
+                        showTicks: config.showTicks
                     )
                 }
                 if config.showMoves {
@@ -69,7 +71,8 @@ public struct GaugeBarView: View {
                         current: vitals.moves,
                         max: max.maxmoves,
                         tint: BarColor.moves,
-                        mode: config.numberMode
+                        mode: config.numberMode,
+                        showTicks: config.showTicks
                     )
                 }
                 if config.showTNL { tnlGauge }
@@ -102,7 +105,8 @@ public struct GaugeBarView: View {
             current: tnl,
             max: perlevel > 0 ? perlevel : tnl,
             tint: BarColor.tnl,
-            mode: config.numberMode
+            mode: config.numberMode,
+            showTicks: config.showTicks
         )
     }
 
@@ -115,7 +119,8 @@ public struct GaugeBarView: View {
                 current: target.percent,
                 max: 100,
                 tint: BarColor.enemy,
-                mode: config.numberMode
+                mode: config.numberMode,
+                showTicks: config.showTicks
             )
         } else {
             WideGauge(
@@ -124,7 +129,8 @@ public struct GaugeBarView: View {
                 max: 100,
                 tint: .gray.opacity(0.5),
                 mode: .none,
-                dimmed: true
+                dimmed: true,
+                showTicks: config.showTicks
             )
         }
     }
@@ -176,6 +182,10 @@ private struct WideGauge: View {
     let tint: Color
     let mode: StatusBarNumberMode
     var dimmed = false
+    var showTicks = false
+
+    /// Quarter marks drawn across the bar when ticks are enabled.
+    private static let tickFractions: [Double] = [0.25, 0.5, 0.75]
 
     var body: some View {
         let fraction = StatusBarFormat.fraction(current: current, max: max)
@@ -183,9 +193,19 @@ private struct WideGauge: View {
         ZStack(alignment: .leading) {
             GeometryReader { geo in
                 Capsule().fill(.quaternary)
+                // Flat fill (no gradient — reads cleaner / more native).
                 Capsule()
-                    .fill(tint.gradient)
+                    .fill(tint)
                     .frame(width: geo.size.width * fraction)
+                // Optional 25/50/75% quarter marks.
+                if showTicks {
+                    ForEach(Self.tickFractions, id: \.self) { mark in
+                        Rectangle()
+                            .fill(.black.opacity(0.3))
+                            .frame(width: 1, height: geo.size.height)
+                            .position(x: geo.size.width * mark, y: geo.size.height / 2)
+                    }
+                }
             }
             HStack(spacing: 4) {
                 Text(label)
@@ -224,7 +244,7 @@ private struct AlignGauge: View {
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 // Position marker.
                 Circle()
-                    .fill(tint.gradient)
+                    .fill(tint)
                     .frame(width: geo.size.height, height: geo.size.height)
                     .position(
                         x: Swift.max(
