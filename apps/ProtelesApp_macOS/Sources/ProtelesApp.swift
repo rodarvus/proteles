@@ -308,7 +308,7 @@ struct ProtelesApp: App {
     /// `~/Library/Application Support/com.proteles.ProtelesApp/logs` — where
     /// user session logs are written (used by the log-file builder + the
     /// "Open Log Folder" menu item).
-    static func logsDirectory() -> URL? {
+    nonisolated static func logsDirectory() -> URL? {
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         ) else { return nil }
@@ -317,11 +317,18 @@ struct ProtelesApp: App {
 
     /// The current world name, set on connect so the (Sendable, off-main) log
     /// URL closure can place per-world logs without reaching into the UI models.
-    static let logContext = LogContext()
+    nonisolated static let logContext = LogContext()
 
     /// Build the session-log URL: a per-world subfolder when enabled, pruning
     /// old logs to the retention limit first. Called by the session on connect.
-    static func makeLogURL(format: SessionLogFormat) -> URL? {
+    ///
+    /// **`nonisolated`** (and the helpers it calls): the session invokes this from
+    /// its own actor — *off* the main actor — via the `logFileURL` closure. SwiftUI's
+    /// `App` protocol is `@MainActor`, which otherwise infers `@MainActor` onto every
+    /// `ProtelesApp` member, so the off-main call trapped at runtime
+    /// (`dispatch_assert_queue(main)`) the moment session logging was enabled. The
+    /// work here is pure filesystem + `UserDefaults`, safe to run off-main.
+    nonisolated static func makeLogURL(format: SessionLogFormat) -> URL? {
         guard let base = logsDirectory() else { return nil }
         let defaults = UserDefaults.standard
         let directory = perWorldSubfolder(of: base) ?? base
@@ -334,14 +341,14 @@ struct ProtelesApp: App {
 
     /// The per-world log subfolder of `base`, or nil when per-world logging is
     /// off or no world name is set.
-    private static func perWorldSubfolder(of base: URL) -> URL? {
+    private nonisolated static func perWorldSubfolder(of base: URL) -> URL? {
         guard UserDefaults.standard.bool(forKey: "perWorldLogs"),
               let world = logContext.worldName, !world.isEmpty else { return nil }
         return base.appendingPathComponent(logFolderName(world), isDirectory: true)
     }
 
     /// Delete the oldest `.txt`/`.html` logs in `directory` beyond `keeping`.
-    static func pruneLogs(in directory: URL, keeping: Int) {
+    nonisolated static func pruneLogs(in directory: URL, keeping: Int) {
         let manager = FileManager.default
         guard let files = try? manager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
@@ -353,11 +360,13 @@ struct ProtelesApp: App {
     }
 
     /// A filesystem-safe folder name for a world (drops path separators/colons).
-    static func logFolderName(_ world: String) -> String {
+    nonisolated static func logFolderName(_ world: String) -> String {
         world.components(separatedBy: CharacterSet(charactersIn: "/\\:")).joined(separator: "-")
     }
 
-    static let logTimestampFormatter: DateFormatter = {
+    /// `nonisolated`: read from the off-main `makeLogURL` (touched serially on
+    /// the session actor).
+    nonisolated static let logTimestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         return formatter
