@@ -8,9 +8,10 @@ import SwiftUI
 /// with a connection dot at the leading edge. Which bars show, their colours,
 /// the number overlay, and the quarter marks all come from ``StatusBarConfig``.
 /// The enemy bar is always present (greyed when not fighting), matching
-/// MUSHclient. Bars carry no text label — they're identified by colour/position
-/// (and a hover tooltip); only the optional number is drawn, outlined so it's
-/// legible on any fill colour.
+/// MUSHclient. Each bar carries a left-aligned label and an optional
+/// right-aligned number, both drawn with a contrasting outline so they stay
+/// legible over any fill colour. The alignment marker is tier-coloured
+/// (good/evil/neutral) with boundary ticks, not a single fill.
 public struct GaugeBarView: View {
     private let state: StatusBarView.ConnectionState
     private let gmcp: GMCPState
@@ -38,7 +39,7 @@ public struct GaugeBarView: View {
             } else if let vitals = gmcp.vitals, let max = gmcp.maxStats {
                 if config.showHealth {
                     WideGauge(
-                        label: "HP",
+                        label: "Health",
                         current: vitals.hp,
                         max: max.maxhp,
                         tint: Color(hex: config.colors.health),
@@ -48,7 +49,7 @@ public struct GaugeBarView: View {
                 }
                 if config.showMana {
                     WideGauge(
-                        label: "MP",
+                        label: "Mana",
                         current: vitals.mana,
                         max: max.maxmana,
                         tint: Color(hex: config.colors.mana),
@@ -58,7 +59,7 @@ public struct GaugeBarView: View {
                 }
                 if config.showMoves {
                     WideGauge(
-                        label: "MV",
+                        label: "Moves",
                         current: vitals.moves,
                         max: max.maxmoves,
                         tint: Color(hex: config.colors.moves),
@@ -92,7 +93,7 @@ public struct GaugeBarView: View {
         let tnl = gmcp.status?.tnl ?? 0
         let perlevel = gmcp.base?.perlevel ?? 0
         WideGauge(
-            label: "XP",
+            label: "TNL",
             current: tnl,
             max: perlevel > 0 ? perlevel : tnl,
             tint: Color(hex: config.colors.tnl),
@@ -127,13 +128,19 @@ public struct GaugeBarView: View {
     }
 
     /// Alignment marker on a good↔evil axis (not a fill): a track with a marker
-    /// at `(align + 2500) / 5000`, in the configured colour. Greyed when no
-    /// alignment has arrived.
+    /// at `(align + 2500) / 5000`, **tier-coloured** (good = yellow, evil = red,
+    /// neutral = grey), plus boundary ticks where alignment actually changes
+    /// (±875). Greyed when no alignment has arrived.
     @ViewBuilder private var alignGauge: some View {
         if let align = gmcp.status?.align {
+            let tint = switch StatusBarFormat.alignTier(align) {
+            case .good: Color(rgb: 0xFFD000) // yellow
+            case .evil: Color(rgb: 0xFF3333) // red
+            case .neutral: Color(rgb: 0xCCCCCC) // grey
+            }
             AlignGauge(
                 fraction: StatusBarFormat.alignFraction(align),
-                tint: Color(hex: config.colors.align),
+                tint: tint,
                 overlay: config.numberMode == .none ? nil : "\(align)"
             )
         } else {
@@ -160,7 +167,8 @@ public struct GaugeBarView: View {
 }
 
 /// A wide proportional gauge filling the available width: a flat colour fill,
-/// optional 25/50/75% quarter marks, and an optional centred, outlined number.
+/// optional 25/50/75% quarter marks, a left-aligned outlined label, and an
+/// optional right-aligned outlined number.
 private struct WideGauge: View {
     let label: String
     let current: Int
@@ -190,9 +198,15 @@ private struct WideGauge: View {
                     }
                 }
             }
-            if let overlayText {
-                OutlinedText(overlayText).opacity(dimmed ? 0.6 : 1)
+            HStack(spacing: 4) {
+                OutlinedText(label)
+                Spacer(minLength: 4)
+                if let overlayText {
+                    OutlinedText(overlayText)
+                }
             }
+            .opacity(dimmed ? 0.6 : 1)
+            .padding(.horizontal, 8)
         }
         .frame(height: 16)
         .frame(maxWidth: .infinity)
@@ -200,11 +214,19 @@ private struct WideGauge: View {
     }
 }
 
-/// The alignment bar: a track with a position marker (good↔evil), not a fill.
+/// The alignment bar: a track with a position marker (good↔evil), not a fill,
+/// plus vertical boundary ticks where alignment tier actually changes (±875,
+/// mirroring MUSHclient's `aard_health_bars_gmcp`).
 private struct AlignGauge: View {
     let fraction: Double
     let tint: Color
     let overlay: String?
+
+    /// Tier-change boundaries as bar fractions: align = ∓875 → (∓875+2500)/5000.
+    private static let boundaryFractions: [Double] = [
+        StatusBarFormat.alignFraction(-875),
+        StatusBarFormat.alignFraction(875)
+    ]
 
     var body: some View {
         ZStack {
@@ -214,6 +236,14 @@ private struct AlignGauge: View {
                     .fill(tint.opacity(0.5))
                     .frame(height: 2)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                // Boundary ticks at the good/neutral/evil transitions.
+                ForEach(Self.boundaryFractions, id: \.self) { mark in
+                    Rectangle()
+                        .fill(.black.opacity(0.4))
+                        .frame(width: 1, height: geo.size.height)
+                        .position(x: geo.size.width * mark, y: geo.size.height / 2)
+                }
+                // Position marker.
                 Circle()
                     .fill(tint)
                     .frame(width: geo.size.height, height: geo.size.height)
@@ -225,9 +255,14 @@ private struct AlignGauge: View {
                         y: geo.size.height / 2
                     )
             }
-            if let overlay {
-                OutlinedText(overlay)
+            HStack(spacing: 4) {
+                OutlinedText("Alignment")
+                Spacer(minLength: 4)
+                if let overlay {
+                    OutlinedText(overlay)
+                }
             }
+            .padding(.horizontal, 8)
         }
         .frame(height: 16)
         .frame(maxWidth: .infinity)

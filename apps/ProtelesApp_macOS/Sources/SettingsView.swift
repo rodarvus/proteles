@@ -171,10 +171,9 @@ private struct StatusBarSettingsView: View {
     @AppStorage("statusBar.ticks") private var statusBarTicks = true
     @AppStorage("statusBar.color.health") private var statusColorHealth = "#00C000"
     @AppStorage("statusBar.color.mana") private var statusColorMana = "#2E6FFF"
-    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFD000"
+    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFFF00"
     @AppStorage("statusBar.color.tnl") private var statusColorTNL = "#CCCCCC"
     @AppStorage("statusBar.color.enemy") private var statusColorEnemy = "#FF3333"
-    @AppStorage("statusBar.color.align") private var statusColorAlign = "#FFD000"
 
     /// A `Binding<Color>` over a `#RRGGBB` `@AppStorage` hex string.
     private func colorBinding(_ hex: Binding<String>) -> Binding<Color> {
@@ -187,14 +186,16 @@ private struct StatusBarSettingsView: View {
     var body: some View {
         Form {
             Section("Bars") {
-                barRow("Health (HP)", isOn: $statusBarHealth, color: $statusColorHealth)
-                barRow("Mana (MP)", isOn: $statusBarMana, color: $statusColorMana)
-                barRow("Moves (MV)", isOn: $statusBarMoves, color: $statusColorMoves)
-                barRow("Experience (XP)", isOn: $statusBarTNL, color: $statusColorTNL)
+                barRow("Health", isOn: $statusBarHealth, color: $statusColorHealth)
+                barRow("Mana", isOn: $statusBarMana, color: $statusColorMana)
+                barRow("Moves", isOn: $statusBarMoves, color: $statusColorMoves)
+                barRow("TNL", isOn: $statusBarTNL, color: $statusColorTNL)
                 barRow("Enemy", isOn: $statusBarEnemy, color: $statusColorEnemy)
-                barRow("Alignment", isOn: $statusBarAlign, color: $statusColorAlign)
+                barRow("Alignment", isOn: $statusBarAlign, color: nil)
                 Text("Turn off every bar to hide the bottom bar entirely. The Enemy "
-                    + "bar stays visible (greyed) when you're not in combat.")
+                    + "bar stays visible (greyed) when you're not in combat. The "
+                    + "alignment marker is coloured by tier (good = yellow, evil = "
+                    + "red, neutral = grey).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -217,16 +218,22 @@ private struct StatusBarSettingsView: View {
         .formStyle(.grouped)
     }
 
-    /// One bar's row: a visibility toggle plus a colour well.
-    private func barRow(
+    /// One bar's row: a visibility toggle plus (when the bar has a single
+    /// configurable colour) a colour well. The alignment bar passes `nil` —
+    /// its marker is tier-coloured, not user-pickable.
+    @ViewBuilder private func barRow(
         _ title: String,
         isOn: Binding<Bool>,
-        color: Binding<String>
+        color: Binding<String>?
     ) -> some View {
-        LabeledContent {
-            ColorPicker("", selection: colorBinding(color), supportsOpacity: false)
-                .labelsHidden()
-        } label: {
+        if let color {
+            LabeledContent {
+                ColorPicker("", selection: colorBinding(color), supportsOpacity: false)
+                    .labelsHidden()
+            } label: {
+                Toggle(title, isOn: isOn)
+            }
+        } else {
             Toggle(title, isOn: isOn)
         }
     }
