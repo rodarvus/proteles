@@ -38,11 +38,35 @@ extension SessionController {
         }
         if !pluginsConnectFired, let scriptEngine {
             pluginsConnectFired = true
+            await replayGMCPToLoadedPlugins()
             await applyScriptEffects(scriptEngine.connectPlugins())
         }
         // Loads/connect commonly arm timers + schedule probes; re-arm the loop.
         await rearmTimerLoopIfScriptScheduled()
         await persistVariablesIfDirty()
+    }
+
+    /// Re-deliver the GMCP that arrived *before* the deferred plugins loaded, so
+    /// a late-loading plugin initialises from current state (e.g. `char.base`'s
+    /// `tier`/`level`, used to compute the effective level). Plugins are deferred
+    /// to the first in-game `char.status` (D-74), but `char.base` and friends
+    /// arrive earlier — so an event-driven plugin (one that recomputes on the
+    /// `char.base` broadcast) would otherwise never see them, unlike MUSHclient
+    /// where plugins load at connect and catch every broadcast. `char.status` is
+    /// excluded: the in-game one that triggered activation is delivered fresh
+    /// right after, by the caller. `applyGMCP` re-fires `OnPluginBroadcast` to
+    /// every loaded plugin (proteles.gmcp is already current); the subnegotiation
+    /// covers plugins reading the option-201 path (dinv's config detection).
+    private func replayGMCPToLoadedPlugins() async {
+        guard let scriptEngine else { return }
+        let priority = ["char.base", "char.maxstats", "char.worth", "char.vitals", "room.info"]
+        let ordered = priority.filter { latestGMCPByPackage[$0] != nil }
+            + latestGMCPByPackage.keys.filter { !priority.contains($0) && $0 != "char.status" }.sorted()
+        for package in ordered where package != "char.status" {
+            guard let json = latestGMCPByPackage[package] else { continue }
+            await applyScriptEffects(scriptEngine.applyGMCP(package: package, json: json))
+            await applyScriptEffects(scriptEngine.deliverGMCPSubnegotiation(package: package, json: json))
+        }
     }
 
     /// Run the armed initial loads: the enabled library plugins, the bundled
