@@ -532,8 +532,18 @@ public actor SessionController {
     public func sendRaw(_ bytes: [UInt8]) async throws {
         guard let connection else { throw SessionError.notConnected }
         lastOutboundActivity = Date()
+        // Time the actual socket write. The `.send` transcript line is logged
+        // before this await (it records intent); if the write itself stalls,
+        // that's an outbound-path delay we otherwise can't see in a recording
+        // (which only tees inbound). Surface a slow write so a "command response
+        // was late" report can be pinned to our side vs the server/network.
+        let writeStart = Date()
         do {
             try await connection.send(bytes)
+            let elapsed = Date().timeIntervalSince(writeStart)
+            if elapsed > 0.25 {
+                logTranscript(.note, "[slow-send] \(bytes.count)B socket write took \(Int(elapsed * 1000))ms")
+            }
         } catch let error as NetworkConnection.ConnectionError {
             switch error {
             case .notConnected:
