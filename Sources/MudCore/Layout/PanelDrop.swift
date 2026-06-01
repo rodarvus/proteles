@@ -47,9 +47,31 @@ public extension PanelLayout {
     /// it's re-inserted, so it never disappears.
     func moving(_ kind: PanelKind, onto target: PanelKind, zone: DropZone) -> PanelLayout {
         guard kind != target, contains(kind), contains(target) else { return self }
+        // Remember `kind`'s current share so a same-axis reorder can keep its size
+        // instead of being forced to half the target's slot.
+        let priorFraction = fraction(of: kind)
         // 1. Pull `kind` out of the tree (output included — it's re-placed below).
         guard let withoutKind = purged(kind)?.collapsed() else { return self }
-        // 2. Replace the node holding `target` with the combined node.
+        // 2a. Reorder/insert: when `target` is a direct child of a split already on
+        //     the drop's axis, slot `kind` in as an adjacent SIBLING rather than
+        //     wrapping the target in a fresh 50/50 split. This keeps a drag within a
+        //     row/column a true move — every panel just shrinks proportionally to
+        //     make room, instead of the target halving and an untouched sibling
+        //     ballooning to fill the renormalized remainder.
+        let reordered = zone.axis.flatMap { axis in
+            withoutKind.insertingSibling(
+                kind,
+                adjacentTo: target,
+                axis: axis,
+                before: zone.insertsBefore,
+                fraction: priorFraction
+            )
+        }
+        if let reordered {
+            return reordered.collapsed().renormalized()
+        }
+        // 2b. Otherwise (cross-axis edge, or a `.center` tab-merge): replace the
+        //     node holding `target` with the combined node (subdivide / tab group).
         let combined = withoutKind.replacingNode(holding: target) { targetNode in
             Self.combine(kind, with: targetNode, zone: zone)
         }
@@ -97,6 +119,61 @@ public extension PanelLayout {
         case .leaf(let kind): kind
         case .tabs(let panels, _): panels.first
         case .split(_, let items): items.lazy.compactMap(\.node.firstLeaf).first
+        }
+    }
+
+    /// Slot `kind` in as a sibling adjacent to `target` when `target` is a **direct
+    /// child of a split already on `axis`** — the same-axis reorder/insert. Returns
+    /// the rewritten tree, or `nil` when no such split exists (so the caller falls
+    /// back to wrapping the target in a new split). `kind` takes `fraction` of the
+    /// axis (its prior share, so a move preserves its size); `renormalized()` then
+    /// shrinks the existing children proportionally to make room. `before` puts it
+    /// on the leading/top side of `target`.
+    private func insertingSibling(
+        _ kind: PanelKind,
+        adjacentTo target: PanelKind,
+        axis: LayoutAxis,
+        before: Bool,
+        fraction: Double?
+    ) -> PanelLayout? {
+        guard case .split(let selfAxis, var items) = self else { return nil }
+        let directIndex = items.firstIndex { $0.node.isLeafOrTabs(holding: target) }
+        if selfAxis == axis, let index = directIndex {
+            let share = fraction ?? (1.0 / Double(items.count + 1))
+            items.insert(.init(fraction: share, node: .leaf(kind)), at: before ? index : index + 1)
+            return .split(axis: selfAxis, items: items)
+        }
+        // No same-axis direct slot here — descend.
+        for index in items.indices {
+            if let rewritten = items[index].node.insertingSibling(
+                kind, adjacentTo: target, axis: axis, before: before, fraction: fraction
+            ) {
+                items[index].node = rewritten
+                return .split(axis: selfAxis, items: items)
+            }
+        }
+        return nil
+    }
+
+    /// `kind`'s fraction within its immediate parent split (the share of the axis
+    /// it occupies), or `nil` if it isn't found / is the whole tree.
+    private func fraction(of kind: PanelKind) -> Double? {
+        guard case .split(_, let items) = self else { return nil }
+        for item in items {
+            if item.node.isLeafOrTabs(holding: kind) { return item.fraction }
+            if let deeper = item.node.fraction(of: kind) { return deeper }
+        }
+        return nil
+    }
+
+    /// True when this node is the leaf/tabs slot directly holding `kind` (the unit
+    /// a same-axis sibling docks beside — docking onto a tabbed panel's edge places
+    /// the new panel beside the whole tab group's slot).
+    private func isLeafOrTabs(holding kind: PanelKind) -> Bool {
+        switch self {
+        case .leaf(let existing): existing == kind
+        case .tabs(let panels, _): panels.contains(kind)
+        case .split: false
         }
     }
 

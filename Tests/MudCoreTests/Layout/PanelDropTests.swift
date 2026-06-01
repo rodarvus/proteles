@@ -85,6 +85,67 @@ struct PanelDropTests {
         assertNormalized(moved)
     }
 
+    // MARK: - Same-axis reorder (issue #8)
+
+    /// A three-way horizontal row, for reorder tests.
+    private var row: PanelLayout {
+        .split(axis: .horizontal, items: [
+            .init(fraction: 0.3, node: .leaf(.output)),
+            .init(fraction: 0.3, node: .leaf(.map)),
+            .init(fraction: 0.4, node: .leaf(.channels))
+        ])
+    }
+
+    /// Flatten a layout to its top-level split's ordered (kind, fraction) pairs
+    /// (each item must be a leaf for these tests).
+    private func leaves(_ layout: PanelLayout) -> [(PanelKind, Double)] {
+        guard case .split(_, let items) = layout else { return [] }
+        return items.compactMap { item in
+            if case .leaf(let kind) = item.node { return (kind, item.fraction) }
+            return nil
+        }
+    }
+
+    @Test("Reordering within a same-axis split stays flat (no nested 50/50 split)")
+    func sameAxisReorderStaysFlat() {
+        // Move channels to sit just after output (its trailing edge).
+        let moved = row.moving(.channels, onto: .output, zone: .trailing)
+        let pairs = leaves(moved)
+        #expect(pairs.count == 3, "reorder nested instead of staying flat: \(moved)")
+        #expect(pairs.map(\.0) == [.output, .channels, .map], "wrong order: \(pairs.map(\.0))")
+    }
+
+    @Test("Reordering preserves the moved panel's size and doesn't inflate siblings")
+    func sameAxisReorderPreservesSizes() {
+        // channels (0.4) moves between output and map; nobody should balloon.
+        let moved = row.moving(.channels, onto: .output, zone: .trailing)
+        let byKind = Dictionary(uniqueKeysWithValues: leaves(moved))
+        // The untouched sibling (map) keeps its share — the bug inflated it to 0.5.
+        #expect(abs((byKind[.map] ?? 0) - 0.3) < 1e-9, "map was resized by a reorder: \(byKind)")
+        #expect(abs((byKind[.channels] ?? 0) - 0.4) < 1e-9, "channels lost its size: \(byKind)")
+        #expect(abs((byKind[.output] ?? 0) - 0.3) < 1e-9, "output was resized by a reorder: \(byKind)")
+    }
+
+    @Test("A cross-axis edge drop still subdivides the target (not a flat reorder)")
+    func crossAxisStillSubdivides() {
+        // Drop channels on output's TOP edge (vertical) in a horizontal row → output's
+        // slot becomes a vertical split [channels, output], nested in the row.
+        let moved = row.moving(.channels, onto: .output, zone: .top)
+        var foundVerticalSplit = false
+        func walk(_ node: PanelLayout) {
+            if case .split(.vertical, let items) = node {
+                let kinds = items.compactMap { item -> PanelKind? in
+                    if case .leaf(let kind) = item.node { kind } else { nil }
+                }
+                if Set(kinds) == Set([.channels, .output]) { foundVerticalSplit = true }
+            }
+            if case .split(_, let items) = node { items.forEach { walk($0.node) } }
+        }
+        walk(moved)
+        #expect(foundVerticalSplit, "cross-axis drop didn't subdivide: \(moved)")
+        #expect(occurrences(of: .channels, in: moved) == 1)
+    }
+
     // MARK: - Re-show position memory
 
     @Test("anchorSlot describes a panel's neighbour + side; restore round-trips")
