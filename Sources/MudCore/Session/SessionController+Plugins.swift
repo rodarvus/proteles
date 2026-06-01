@@ -59,6 +59,68 @@ public extension SessionController {
         restartTimerLoop()
     }
 
+    /// Enable a single library plugin **hermetically** — load just it, leaving
+    /// every other plugin + the mapper/S&D host running untouched (MUSHclient
+    /// parity; not the old full-world-reload). When connected and **in-game**
+    /// (plugins live), it loads now and fires its `OnPluginConnect`; when
+    /// connected but pre-in-game it's added to the armed set (D-74) to load at
+    /// the in-game signal. When disconnected this is a no-op — the library
+    /// registry is the source of truth and the next connect re-arms from it.
+    func enablePlugin(directory: URL, character: String) async {
+        guard connection != nil else { return }
+        if pluginsLoaded {
+            await loadOnePlugin(directory: directory, character: character, fireConnect: seenCharInGame)
+            await rearmTimerLoopIfScriptScheduled()
+            await persistVariablesIfDirty()
+        } else {
+            if !pendingInitialPluginDirectories.contains(directory) {
+                pendingInitialPluginDirectories.append(directory)
+            }
+            pendingInitialPluginCharacter = character
+        }
+    }
+
+    /// Disable a single library plugin hermetically — unload just it (drops its
+    /// triggers/aliases/timers + Lua env) and recompute the module search path
+    /// from the remaining loaded plugins. No-op while disconnected (the registry
+    /// + next connect handle it). `directory` (if known) is dropped from the
+    /// armed set so a not-yet-in-game session won't load it.
+    func disablePlugin(id: String, directory: URL?) async {
+        guard connection != nil else { return }
+        if let directory { pendingInitialPluginDirectories.removeAll { $0 == directory } }
+        guard let scriptEngine, loadedPluginPaths[id] != nil else { return }
+        await scriptEngine.unloadPlugin(id)
+        loadedPluginPaths[id] = nil
+        await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map(\.code.path))
+    }
+
+    /// Load one library plugin into the live engine (the shared core of the bulk
+    /// ``loadPlugins(directories:character:)`` and the hermetic ``enablePlugin``).
+    /// Appends to ``loadedPluginPaths`` and re-derives the module search path as
+    /// the union of all loaded library plugins' dirs. `fireConnect` runs its
+    /// `OnPluginConnect` (a mid-session enable that's already in-game).
+    private func loadOnePlugin(directory: URL, character: String, fireConnect: Bool) async {
+        guard let scriptEngine,
+              let xml = PluginInstaller.resolvePluginXML(at: directory),
+              let data = try? Data(contentsOf: xml),
+              let plugin = try? MUSHclientPluginLoader.parse(data)
+        else { return }
+        let dataDir = Self.pluginDataDirectory(for: directory, character: character)
+        let dataPath = Self.directoryPath(dataDir)
+        loadedPluginPaths[plugin.id] = (code: directory, data: dataDir)
+        await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map { Self.directoryPath($0.code) })
+        let context = PluginContext(
+            pluginID: plugin.id,
+            pluginName: plugin.name,
+            pluginDirectory: Self.directoryPath(directory),
+            worldDirectory: dataPath,
+            appDirectory: dataPath,
+            stateDirectory: dataPath
+        )
+        await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        if fireConnect { await applyScriptEffects(scriptEngine.connectPlugin(plugin.id)) }
+    }
+
     /// A plugin's per-character data dir, `<plugin>/data/<character>/` (created),
     /// where its DB + state live (`GetInfo(66)`/`GetInfo(85)`).
     static func pluginDataDirectory(for codeDirectory: URL, character: String) -> URL {

@@ -291,10 +291,7 @@ struct ProtelesApp: App {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
                     guard let id = worlds.activeProfileID else { return }
-                    let scripts = scripts
-                    plugins.prepare(profileID: id) {
-                        await scripts.load(forProfile: id)
-                    }
+                    plugins.prepare(profileID: id)
                     await plugins.refreshNative()
                     await plugins.refresh()
                 }

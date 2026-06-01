@@ -91,6 +91,12 @@ extension ScriptEngine {
         return effects
     }
 
+    /// Fire `OnPluginConnect` on a **single** plugin (for a mid-session enable
+    /// while already in-game — the rest of the world keeps running untouched).
+    public func connectPlugin(_ id: String) async -> [ScriptEffect] {
+        await consumeRegistrations(runtime.callPluginCallback(id, "OnPluginConnect"), owner: id)
+    }
+
     /// Deliver an inbound GMCP message to every plugin's
     /// `OnPluginTelnetSubnegotiation(201, "<package> <json>")` — MUSHclient fires
     /// this for the raw GMCP subnegotiation (telnet option 201). dinv's config
