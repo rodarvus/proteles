@@ -115,6 +115,15 @@ public actor SessionController {
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?
     var dinvLoaded = false
+    /// Lines remaining to gag for dinv's background `wish list` probe. dinv runs
+    /// `wish list` as a hidden safe-exec probe and *should* gag the output with
+    /// its own omit-from-output trigger, but that gag has proven unreliable in the
+    /// live multi-plugin environment (the owned `*` rows leak). Since dinv re-sends
+    /// `wish list` through its bypass — `pluginProcessingSend` true, distinguishing
+    /// it from a user typing `wish list` — the host gags the probe's output itself,
+    /// deterministically, until dinv's `DINV wish list fence` marker (or this
+    /// safety cap of lines is hit). See ``armWishProbeGagIfNeeded``.
+    var wishProbeGagLinesRemaining = 0
     /// Seen an in-game `char.status` (state ≥ 3) this connection? Until then,
     /// `char.status` plugin broadcasts are held (MUSHclient parity — see
     /// `dispatchGMCP`). Reset on connect.

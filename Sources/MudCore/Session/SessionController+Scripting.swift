@@ -34,7 +34,11 @@ public extension SessionController {
         // and gag the tag-toggle confirmation. Runs after scripts/S&D so they
         // still see the raw line.
         let (outLine, richExitsGag) = applyRichExits(disposition.replacement ?? line, source: line)
-        if !disposition.gag, !sndGag, !omitBlank, !richExitsGag {
+        // Host-side gag of dinv's background `wish list` probe (its own
+        // omit-from-output trigger is unreliable under the live plugin set). Runs
+        // *after* process()/S&D so dinv still parses the wishes from the line.
+        let wishGag = consumeWishProbeGag(line)
+        if !disposition.gag, !sndGag, !omitBlank, !richExitsGag, !wishGag {
             await scrollbackStore.append(outLine)
         } else {
             // Record *why* a line was withheld (the transcript otherwise only has
@@ -44,7 +48,8 @@ public extension SessionController {
                 disposition.gag ? "script" : nil,
                 sndGag ? "snd" : nil,
                 richExitsGag ? "richexits" : nil,
-                omitBlank ? "blank" : nil
+                omitBlank ? "blank" : nil,
+                wishGag ? "wishprobe" : nil
             ].compactMap(\.self).joined(separator: "+")
             logTranscript(.gag, "[\(reasons)] \(line.text)")
         }
@@ -218,6 +223,11 @@ public extension SessionController {
         // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered
         // to the hook and re-queued.
         guard let scriptEngine, !pluginProcessingSend else {
+            // A bypass re-send (dinv sending from inside OnPluginSend). dinv's
+            // background `wish list` probe travels this path; arm the host-side
+            // gag of its output (a user typing `wish list` has
+            // pluginProcessingSend false and is never gagged).
+            armWishProbeGagIfNeeded(command)
             try? await sendLine(command)
             return
         }
@@ -296,6 +306,28 @@ public extension SessionController {
     /// and load on the first active `char.status` (see ``loadPendingDinv``).
     func armBundledDinv(stateDirectory: String) {
         pendingDinvStateDirectory = stateDirectory
+    }
+
+    /// dinv's background `wish list` probe marker — its output (a header, the
+    /// owned/unowned rows, totals) is bracketed by this echoed fence.
+    private static let wishProbeFence = "DINV wish list fence"
+
+    /// Arm the host-side gag of dinv's `wish list` probe output when dinv sends
+    /// the probe (recognised on its bypass path). The cap bounds the gag so a
+    /// missing fence can't swallow output forever — Aardwolf's full wish list is
+    /// ~35 rows; 80 is generous headroom.
+    func armWishProbeGagIfNeeded(_ command: String) {
+        if command == "wish list" { wishProbeGagLinesRemaining = 80 }
+    }
+
+    /// Whether `line` is part of dinv's in-flight `wish list` probe and should be
+    /// withheld. Decrements the safety cap and clears the gag once dinv's fence
+    /// marker arrives (that fence line is itself gagged).
+    func consumeWishProbeGag(_ line: Line) -> Bool {
+        guard wishProbeGagLinesRemaining > 0 else { return false }
+        wishProbeGagLinesRemaining -= 1
+        if line.text.contains(Self.wishProbeFence) { wishProbeGagLinesRemaining = 0 }
+        return true
     }
 
     /// Load dinv now that the character is active (called from the GMCP path).
