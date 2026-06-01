@@ -61,32 +61,31 @@ public struct StatusBarConfig: Sendable, Equatable {
     }
 }
 
-/// Per-bar colours as `#RRGGBB` hex strings. Defaults match the colours the
-/// user picked off Aardwolf's bars (HP green, MP blue, MV yellow, TNL silver,
-/// Enemy red, Align yellow) — the MUSHclient hex was BGR-ordered, so these are
-/// the RGB-corrected equivalents. Users can override each via a colour picker.
+/// Per-bar colours as `#RRGGBB` hex strings, for the five fill bars (HP/MP/MV/
+/// TNL/Enemy). Defaults match the user's MUSHclient profile (Moves = `#FFFF00`,
+/// read from the saved `showBar` state) with HP a touch darker by request. The
+/// alignment bar is **not** here — its marker is tier-coloured (good/evil/
+/// neutral), not a single user-pickable colour. Users override each via a
+/// colour picker.
 public struct StatusBarColors: Sendable, Equatable {
     public var health: String
     public var mana: String
     public var moves: String
     public var tnl: String
     public var enemy: String
-    public var align: String
 
     public init(
         health: String = "#00C000",
         mana: String = "#2E6FFF",
-        moves: String = "#FFD000",
+        moves: String = "#FFFF00",
         tnl: String = "#CCCCCC",
-        enemy: String = "#FF3333",
-        align: String = "#FFD000"
+        enemy: String = "#FF3333"
     ) {
         self.health = health
         self.mana = mana
         self.moves = moves
         self.tnl = tnl
         self.enemy = enemy
-        self.align = align
     }
 }
 

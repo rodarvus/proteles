@@ -82,10 +82,9 @@ struct ContentView: View {
     // Per-bar colours (user-pickable). Defaults mirror StatusBarColors().
     @AppStorage("statusBar.color.health") private var statusColorHealth = "#00C000"
     @AppStorage("statusBar.color.mana") private var statusColorMana = "#2E6FFF"
-    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFD000"
+    @AppStorage("statusBar.color.moves") private var statusColorMoves = "#FFFF00"
     @AppStorage("statusBar.color.tnl") private var statusColorTNL = "#CCCCCC"
     @AppStorage("statusBar.color.enemy") private var statusColorEnemy = "#FF3333"
-    @AppStorage("statusBar.color.align") private var statusColorAlign = "#FFD000"
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -108,8 +107,7 @@ struct ContentView: View {
                 mana: statusColorMana,
                 moves: statusColorMoves,
                 tnl: statusColorTNL,
-                enemy: statusColorEnemy,
-                align: statusColorAlign
+                enemy: statusColorEnemy
             )
         )
     }
