@@ -42,6 +42,10 @@ public final class SessionTranscript: @unchecked Sendable {
         case note = "NOTE"
         /// A GMCP packet (`package` + JSON), as dispatched.
         case gmcp = "GMCP"
+        /// A line withheld from the main output (a trigger/S&D/Rich-Exits/blank
+        /// gag). Logged with its reason so a recording shows *what* was gagged,
+        /// not just what arrived — `recv` is pre-gag, so it can't reveal that.
+        case gag = "GAG"
     }
 
     /// On-disk path of the transcript.
