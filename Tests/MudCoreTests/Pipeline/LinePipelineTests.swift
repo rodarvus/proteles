@@ -148,6 +148,39 @@ struct LinePipelineMCCP2Tests {
         #expect(output.lines.map(\.text) == ["Welcome!", "After."])
     }
 
+    /// Aardwolf "ice age" (copyover): the server ends the compressed stream
+    /// mid-session, sends plaintext telnet re-negotiation, then restarts
+    /// compression with a fresh stream — all while the TCP connection stays up.
+    /// The client must follow the restart, not hang or disconnect.
+    @Test("Ice-age copyover: stream end + plaintext re-negotiation recovers")
+    func iceAgeCopyoverRecovers() throws {
+        var pipeline = LinePipeline()
+
+        // Phase 1 — normal play: activate compression + an open (sync-flushed)
+        // stream that stays open (the live MCCP2 stream).
+        let live = try Deflater()
+        var chunk1 = Self.mccp2Start
+        try chunk1.append(contentsOf: live.deflate(Array("Playing normally\n".utf8), flush: .sync))
+        let out1 = try pipeline.consume(chunk1)
+        #expect(pipeline.isCompressionActive)
+        #expect(out1.lines.map(\.text) == ["Playing normally"])
+
+        // Phase 2 — copyover: the live stream ENDS (Z_FINISH), then plaintext
+        // telnet re-negotiation (a fresh COMPRESS2) and a brand-new compressed
+        // stream from the restarted server process — all in one chunk.
+        var chunk2 = try live.deflate(Array("World freezes\n".utf8), flush: .finish)
+        chunk2.append(contentsOf: Self.mccp2Start)
+        let fresh = try Deflater()
+        try chunk2.append(contentsOf: fresh.deflate(Array("You can play again\n".utf8), flush: .sync))
+
+        let out2 = try pipeline.consume(chunk2)
+        // Pre-end text, then post-copyover text — no hang, no thrown error.
+        #expect(out2.lines.map(\.text) == ["World freezes", "You can play again"])
+        // Compression re-activated from the fresh COMPRESS2 marker.
+        #expect(out2.activatedCompression)
+        #expect(pipeline.isCompressionActive)
+    }
+
     @Test("MCCP2 activation persists across consume() calls")
     func compressionPersistsAcrossCalls() throws {
         var pipeline = LinePipeline()

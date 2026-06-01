@@ -246,10 +246,6 @@ public actor SessionController {
     /// expected, not a dropped link. Aardwolf's is `quit`.
     public static let quitCommands: Set<String> = ["quit"]
 
-    /// Whether the GMCP handshake has been sent for the current
-    /// connection (sent once, when the server enables GMCP).
-    var gmcpHandshakeSent = false
-
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
     /// when autologin is not configured or has completed.
@@ -401,7 +397,6 @@ public actor SessionController {
     ) async throws {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
-        gmcpHandshakeSent = false
         pluginsConnectFired = false // per-connection; pluginsLoaded persists across reconnects
         sentExitsTag = false
         richExitsCardinals = []
