@@ -146,19 +146,26 @@ public struct CharBase: Codable, Sendable, Equatable {
     public let subclass: String?
     public let race: String?
     public let sex: String?
+    /// Experience required to gain one level at the current level — the
+    /// denominator for the TNL status bar (the numerator is
+    /// ``CharStatus/tnl``). Aardwolf sends this in `char.base`
+    /// (`gmcp_char.base.perlevel`, per `aard_health_bars_gmcp`).
+    public let perlevel: Int?
 
     public init(
         name: String? = nil,
         class: String? = nil,
         subclass: String? = nil,
         race: String? = nil,
-        sex: String? = nil
+        sex: String? = nil,
+        perlevel: Int? = nil
     ) {
         self.name = name
         self.class = `class`
         self.subclass = subclass
         self.race = race
         self.sex = sex
+        self.perlevel = perlevel
     }
 }
 

@@ -70,8 +70,31 @@ struct ContentView: View {
     /// with the menu toggle via the same UserDefaults key.
     @AppStorage("navigationMode") private var navigationMode = false
 
+    // Status bar (bottom vitals bars) — per-bar visibility + number overlay mode.
+    @AppStorage("statusBar.health") private var statusBarHealth = true
+    @AppStorage("statusBar.mana") private var statusBarMana = true
+    @AppStorage("statusBar.moves") private var statusBarMoves = true
+    @AppStorage("statusBar.tnl") private var statusBarTNL = true
+    @AppStorage("statusBar.enemy") private var statusBarEnemy = true
+    @AppStorage("statusBar.align") private var statusBarAlign = true
+    @AppStorage("statusBar.numberMode") private var statusBarNumberMode = StatusBarNumberMode.none.rawValue
+
     private var theme: Theme {
         Theme.with(id: themeID)
+    }
+
+    /// Assemble the persisted per-bar toggles + number mode into the value the
+    /// gauge bar renders from.
+    private var statusBarConfig: StatusBarConfig {
+        StatusBarConfig(
+            showHealth: statusBarHealth,
+            showMana: statusBarMana,
+            showMoves: statusBarMoves,
+            showTNL: statusBarTNL,
+            showEnemy: statusBarEnemy,
+            showAlign: statusBarAlign,
+            numberMode: StatusBarNumberMode(rawValue: statusBarNumberMode) ?? .none
+        )
     }
 
     /// UserDefaults flag marking that the app has completed first-run
@@ -79,106 +102,114 @@ struct ContentView: View {
     private static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
 
     var body: some View {
-        PanelLayoutView(store: layout, onDetach: detach) { kind in panelContent(kind) }
-            .frame(minWidth: 820, minHeight: 460)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) { panelsMenu }
+        VStack(spacing: 0) {
+            PanelLayoutView(store: layout, onDetach: detach) { kind in panelContent(kind) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Full-client-width vitals bars, below the whole dock (pushes the
+            // panes up), so all six bars get the window's full horizontal extent.
+            if !statusBarConfig.isEmpty {
+                GaugeBarView(state: connectionState, gmcp: gmcp, config: statusBarConfig)
             }
-            .task {
-                for await networkState in session.connectionStates {
-                    connectionState = Self.map(networkState)
-                }
+        }
+        .frame(minWidth: 820, minHeight: 460)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { panelsMenu }
+        }
+        .task {
+            for await networkState in session.connectionStates {
+                connectionState = Self.map(networkState)
             }
-            .task {
-                for await snapshot in await session.gmcpState.subscribe() {
-                    gmcp = snapshot
-                }
+        }
+        .task {
+            for await snapshot in await session.gmcpState.subscribe() {
+                gmcp = snapshot
             }
-            // Feed recent output lines to the Tab-completion word source.
-            .task {
-                for await line in await session.scrollbackStore.subscribe() {
-                    recentLines.append(line.text)
-                }
+        }
+        // Feed recent output lines to the Tab-completion word source.
+        .task {
+            for await line in await session.scrollbackStore.subscribe() {
+                recentLines.append(line.text)
             }
-            .task(id: omitBlankLines) {
-                await session.setOmitBlankLines(omitBlankLines)
+        }
+        .task(id: omitBlankLines) {
+            await session.setOmitBlankLines(omitBlankLines)
+        }
+        .task(id: richExits) {
+            await session.setRichExitsEnabled(richExits)
+        }
+        // Help is captured to the dedicated Help window (always on, so
+        // `help <topic>` can auto-open it); never printed inline.
+        .task {
+            await session.setHelpCaptureEnabled(true)
+        }
+        // Feed captured help articles to the Help window, auto-opening it,
+        // and route its link clicks + search back to the session.
+        .task {
+            help.onCommand = { command in Task { try? await session.send(command) } }
+            for await article in session.helpArticles {
+                await help.apply(article)
+                openWindow(id: ProtelesApp.helpWindowID)
             }
-            .task(id: richExits) {
-                await session.setRichExitsEnabled(richExits)
+        }
+        .task(id: autoReconnect) {
+            await session.setReconnectEnabled(autoReconnect)
+        }
+        .task(id: autoRecordSessions) {
+            await session.setAutoRecord(autoRecordSessions)
+        }
+        .task(id: keepAlive) {
+            await session.setKeepAliveEnabled(keepAlive)
+        }
+        .task(id: sessionLogging) {
+            await session.setLoggingEnabled(sessionLogging)
+        }
+        .task(id: sessionLogFormat) {
+            await session.setLogFormat(sessionLogFormat == "html" ? .html : .text)
+        }
+        .task(id: notificationsEnabled) {
+            await session.setNotificationsEnabled(notificationsEnabled)
+            if notificationsEnabled { notifications.requestAuthorizationIfNeeded() }
+        }
+        .task(id: "\(notifyOnTells)|\(notifyOnMention)") {
+            await session.setNotificationRules(tells: notifyOnTells, mention: notifyOnMention)
+        }
+        .task(id: notifyWhenFocused) {
+            notifications.notifyWhenFocused = notifyWhenFocused
+        }
+        .task {
+            for await note in session.notifications {
+                notifications.post(note)
             }
-            // Help is captured to the dedicated Help window (always on, so
-            // `help <topic>` can auto-open it); never printed inline.
-            .task {
-                await session.setHelpCaptureEnabled(true)
+        }
+        .task(id: themeID) {
+            // Flip the whole app's chrome (panels, materials, gauges) to
+            // match the theme's light/dark appearance.
+            NSApp.appearance = NSAppearance(named: theme.appearance == .light ? .aqua : .darkAqua)
+        }
+        .task {
+            // Feed Search-and-Destroy's published window model to the panel.
+            for await json in session.publishedModels {
+                snd.update(json: json)
             }
-            // Feed captured help articles to the Help window, auto-opening it,
-            // and route its link clicks + search back to the session.
-            .task {
-                help.onCommand = { command in Task { try? await session.send(command) } }
-                for await article in session.helpArticles {
-                    await help.apply(article)
-                    openWindow(id: ProtelesApp.helpWindowID)
-                }
+        }
+        .alert("Save Layout Preset", isPresented: $showingSavePreset) {
+            TextField("Preset name", text: $newPresetName)
+            Button("Save") { layout.savePreset(named: newPresetName) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Save the current panel arrangement so you can re-apply it later.")
+        }
+        .onAppear {
+            wireSearchAndDestroy()
+            // Bind the mapper at the app root so it's live regardless of which
+            // dock tab is shown (e.g. for a menu-triggered map import).
+            map.start()
+            // Re-open windows for panels that were detached last session.
+            for kind in layout.detached {
+                openWindow(value: kind)
             }
-            .task(id: autoReconnect) {
-                await session.setReconnectEnabled(autoReconnect)
-            }
-            .task(id: autoRecordSessions) {
-                await session.setAutoRecord(autoRecordSessions)
-            }
-            .task(id: keepAlive) {
-                await session.setKeepAliveEnabled(keepAlive)
-            }
-            .task(id: sessionLogging) {
-                await session.setLoggingEnabled(sessionLogging)
-            }
-            .task(id: sessionLogFormat) {
-                await session.setLogFormat(sessionLogFormat == "html" ? .html : .text)
-            }
-            .task(id: notificationsEnabled) {
-                await session.setNotificationsEnabled(notificationsEnabled)
-                if notificationsEnabled { notifications.requestAuthorizationIfNeeded() }
-            }
-            .task(id: "\(notifyOnTells)|\(notifyOnMention)") {
-                await session.setNotificationRules(tells: notifyOnTells, mention: notifyOnMention)
-            }
-            .task(id: notifyWhenFocused) {
-                notifications.notifyWhenFocused = notifyWhenFocused
-            }
-            .task {
-                for await note in session.notifications {
-                    notifications.post(note)
-                }
-            }
-            .task(id: themeID) {
-                // Flip the whole app's chrome (panels, materials, gauges) to
-                // match the theme's light/dark appearance.
-                NSApp.appearance = NSAppearance(named: theme.appearance == .light ? .aqua : .darkAqua)
-            }
-            .task {
-                // Feed Search-and-Destroy's published window model to the panel.
-                for await json in session.publishedModels {
-                    snd.update(json: json)
-                }
-            }
-            .alert("Save Layout Preset", isPresented: $showingSavePreset) {
-                TextField("Preset name", text: $newPresetName)
-                Button("Save") { layout.savePreset(named: newPresetName) }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Save the current panel arrangement so you can re-apply it later.")
-            }
-            .onAppear {
-                wireSearchAndDestroy()
-                // Bind the mapper at the app root so it's live regardless of which
-                // dock tab is shown (e.g. for a menu-triggered map import).
-                map.start()
-                // Re-open windows for panels that were detached last session.
-                for kind in layout.detached {
-                    openWindow(value: kind)
-                }
-            }
-            .task { await launch() }
+        }
+        .task { await launch() }
     }
 
     /// Tear `kind` out of the dock into its own window.
@@ -201,8 +232,9 @@ struct ContentView: View {
         }
     }
 
-    /// The main game column: MUD output, command input, and the full-width
-    /// graphical vitals bar (spanning the output, no duplicated text summary).
+    /// The main game column: MUD output + command input. (The graphical vitals
+    /// bar lives at the window level so it spans the full client width — see
+    /// ``body``.)
     private var gameColumn: some View {
         VStack(spacing: 0) {
             MudOutputView(
@@ -248,7 +280,6 @@ struct ContentView: View {
                         .help("Navigation mode: bare keys send movement while the input line is empty.")
                 }
             }
-            GaugeBarView(state: connectionState, gmcp: gmcp)
         }
     }
 
