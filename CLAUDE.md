@@ -74,26 +74,24 @@ Windows-CRLF gag list — the stray `\r` made every literal pattern miss); and
 Databases menu, since plugin-owned SQLite can't be safely merged like the
 mapper/S&D).
 
-**dinv `wish list` gag — D-77 closes the header-timing race; an `*`-only leak is
-NOT yet reproduced offline (OPEN).** `DinvWishGagTests` drives the **real**
-`wish.getCR` coroutine through the **real `SessionController`** (re-entrancy guard
-+ timer loop + inbound gag), answering the `pagesize` probe and replaying the
-user's real `wish list` output: with intact triggers the gag is sound
-(header→items→totals→fence all omitted). D-77 (one line in `dbot.wish.setupFn`)
-arms the omit-from-output item trigger up front instead of waiting to match the
-header, closing the timing race (proven by `wishBodyGaggedWhenHeaderUnmatched`).
-**But** a live recording (the `*`/owned wishes leaking while every other line is
-gagged) is NOT reproduced offline — in a clean harness dinv gags ALL wish lines
-in both pre- and post-D-77 modes. Ruled out: a trigger-script error dropping the
-gag (`GagOnScriptErrorTests` proves our engine gags regardless of a script
-error). The `*`-only pattern (only lines where dinv's item trigger runs
-`dbot.wish.table[wishName]=true`) needs a live condition the harness lacks (the
-multi-plugin login burst). The offending recording also **predates the D-77
-build**, so it doesn't test the fix. **Next:** re-test on the new build; the new
-**`GAG` transcript category** now logs every withheld line + its reason
-(`script`/`snd`/`richexits`/`blank`) — so the next recording shows exactly which
-wish lines were gagged vs shown (the old `RECV`-only transcript is pre-gag and
-can't). Don't guess-fix; drive from that recording.
+**dinv `wish list` gag — FIXED at the host level (D-79); needs a fresh live
+confirm.** The live leak: dinv's hidden `wish list` probe showed **only the owned
+`*` rows** (header/unowned/totals/fence all gagged). D-77 armed dinv's own gag
+earlier, but the faithful harness (`DinvWishGagTests` — real `getCR` coroutine +
+real `SessionController` + the exact ANSI-coloured rows) gags **every** row in
+both pre- and post-D-77 modes, so the leak is **environmental** (the live
+multi-plugin set / login burst) and a dinv-trigger fix can't be trusted to cover
+it. The reliable fix is host-side and deterministic (D-79): dinv re-sends
+`wish list` through its bypass (`pluginProcessingSend` true — distinct from a user
+*typing* it), so `SessionController.armWishProbeGagIfNeeded` arms a gag on that
+send and `consumeWishProbeGag` withholds every line until dinv's `DINV wish list
+fence` (80-line cap). Tests: `WishProbeHostGagTests` (bypass probe with NO gag
+trigger still gagged; user-typed `wish list` shows). D-77 stays as defense in
+depth. Ruled out: script-error dropping the gag (`GagOnScriptErrorTests`). A
+**`GAG` transcript category** now logs every withheld line + reason
+(`script`/`snd`/`richexits`/`blank`/`wishprobe`) for future diagnosis. **If it
+STILL leaks live:** the bypass `wish list` isn't being recognised — check the new
+recording's `GAG` lines (a `[wishprobe]` entry on each wish row = host gag fired).
 
 ### NEXT SESSION — start here
 

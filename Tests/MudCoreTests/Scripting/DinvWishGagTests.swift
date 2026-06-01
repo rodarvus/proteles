@@ -159,7 +159,27 @@ struct DinvWishGagTests {
             "VACUOUS: wish output never reached the pipeline (no sentinel): \(shown)"
         )
         await controller.disconnect()
-        return shown.filter { wishLines.contains($0) || $0 == "DINV wish list fence" }
+        // Scrollback text is ANSI-stripped, so compare against stripped wish lines.
+        let strippedWishes = Set(wishLines.map(Self.stripANSI))
+        return shown.filter { strippedWishes.contains($0) || $0 == "DINV wish list fence" }
+    }
+
+    /// Strip ANSI SGR escape sequences (`ESC [ … m`) from a string — the pipeline
+    /// does this when building `Line.text`, so a leaked line in the scrollback is
+    /// the stripped form.
+    private static func stripANSI(_ string: String) -> String {
+        var out = ""
+        var inEscape = false
+        for scalar in string.unicodeScalars {
+            if inEscape {
+                if scalar == "m" { inEscape = false }
+            } else if scalar == "\u{1b}" {
+                inEscape = true
+            } else {
+                out.unicodeScalars.append(scalar)
+            }
+        }
+        return out
     }
 
     @Test(
@@ -169,6 +189,47 @@ struct DinvWishGagTests {
     func wishBodyGagged() async throws {
         let leaked = try await runWishFlow(wishLines: Self.body)
         #expect(leaked.isEmpty, "wish-list body leaked to the user: \(leaked)")
+    }
+
+    /// The REAL output is ANSI-coloured: owned (`*`) rows begin with a bold-red
+    /// star (`ESC[0;1;31m*ESC[0;36m…`), non-owned rows don't. The live leak shows
+    /// only the owned rows, so reproduce with the actual colour codes (a plain-text
+    /// harness can't catch a colour-dependent gag failure).
+    private static let esc = "\u{1b}"
+    private static func ownedRow(_ name: String, _ keyword: String) -> String {
+        "\(esc)[0;1;31m*\(esc)[0;36m\(name)\(esc)[0;37m   6000   250   -- \(keyword)    \(esc)[0m"
+    }
+
+    private static func unownedRow(_ name: String, _ keyword: String) -> String {
+        "\(esc)[0;37m \(name)   3000   200   7000 \(keyword)    \(esc)[0m"
+    }
+
+    /// Wrap plain text in normal-white SGR (`ESC[0;37m … ESC[0m`).
+    private static func white(_ text: String) -> String {
+        "\(esc)[0;37m\(text)\(esc)[0m"
+    }
+
+    private static var colouredBody: [String] {
+        [
+            white("                                    Base Cost Adjustment Your Cost  Keyword"),
+            white(" ---------------------------------- --------- ---------- --------- -----------"),
+            ownedRow("Very fast spell-up time          ", "Spellup"),
+            unownedRow("No hunger or thirst             ", "Nohunger"),
+            ownedRow("Permanent Passdoor               ", "Passdoor"),
+            unownedRow("Immunity to Vorpal              ", "Novorpal"),
+            ownedRow("Add +1 bypass (all classes)      ", "Bypass"),
+            white("Your total adjustment cost is: 3000"),
+            white("Refer to 'help wish' for a description of each wish.")
+        ]
+    }
+
+    @Test(
+        "dinv gags the wish-list even when rows are ANSI-coloured (real output)",
+        .timeLimit(.minutes(1))
+    )
+    func wishBodyGaggedWithColour() async throws {
+        let leaked = try await runWishFlow(wishLines: Self.colouredBody)
+        #expect(leaked.isEmpty, "coloured wish rows leaked to the user: \(leaked)")
     }
 
     /// The live leak's failure mode (D-70/D-77): the column header reaches output
