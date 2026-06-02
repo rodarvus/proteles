@@ -35,6 +35,14 @@ public actor Mapper {
     var walkIndex = 0
     var walkExpect: String?
 
+    /// The last room a `goto`/`walkto`/`where` targeted — `mapper resume` re-runs
+    /// to it (reference `last_speedwalk_uid`/`last_hyperlink_uid`).
+    var lastSpeedwalkTarget: String?
+    /// The most recent `find`/`list` result (room uids) + a cursor, so
+    /// `mapper next [#]` walks through them (reference `last_result_list`).
+    var lastResultList: [String] = []
+    var lastResultIndex = 0
+
     /// On a `room.info`, advance a pending segmented walk. If we've arrived in the
     /// room the last-sent segment was heading to, send the next segment;
     /// otherwise (still en route, or no walk) do nothing. This is what makes a

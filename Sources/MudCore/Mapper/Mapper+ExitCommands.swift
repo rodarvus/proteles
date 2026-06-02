@@ -9,7 +9,6 @@ extension Mapper {
     /// ``handleSecondaryCommand`` to keep each within the complexity budget.
     func handleMapManagementCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
         switch sub {
-        case "findpath": findPath(arg)
         case "portals": listPortals(arg)
         case "portal": addPortalCommand(arg)
         case "fullportal": fullPortalCommand(arg)
@@ -269,23 +268,7 @@ extension Mapper {
         }
     }
 
-    // MARK: - findpath
-
-    /// `mapper findpath <from> <to>` — print the speedwalk + distance between
-    /// two rooms without moving (≈ reference `printpath`).
-    private func findPath(_ arg: String) -> [ScriptEffect] {
-        let parts = arg.split(separator: " ", maxSplits: 1)
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
-        guard parts.count == 2, let from = resolveUID(parts[0]), let to = resolveUID(parts[1]) else {
-            return [Self.note("Usage: mapper findpath <from> <to>  (room ids or unique names)")]
-        }
-        let options = Pathfinder.Options(level: level, tier: tier)
-        guard let path = Pathfinder(graph: graph).path(from: from, to: to, options: options) else {
-            return [Self.note("No route from \(from) to \(to).")]
-        }
-        let speed = path.isEmpty ? "(same room)" : Speedwalk.build(path)
-        return [Self.note("\(from) → \(to): \(speed)  — \(path.count) step(s)")]
-    }
+    // MARK: - portal/findpath argument resolution
 
     /// Resolve a findpath/portal argument: an all-digit room id, or a unique
     /// room-name match.

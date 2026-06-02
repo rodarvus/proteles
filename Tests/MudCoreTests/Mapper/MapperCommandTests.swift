@@ -63,20 +63,23 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         #expect(await walkCommands(mapper.handleCommand("mapper goto 1")).isEmpty)
-        #expect(await notes(mapper.handleCommand("mapper goto 1")).contains { $0.contains("already there") })
+        #expect(await notes(mapper.handleCommand("mapper goto 1"))
+            .contains { $0.contains("You are already in that room.") })
         // 9999 is neither a mapped room nor a known exit target → unreachable.
         #expect(await notes(mapper.handleCommand("mapper goto 9999"))
             .contains { $0.contains("No route found") })
     }
 
-    @Test("mapper where shows the room, area, and distance")
+    @Test("mapper where prints the printpath from the current room")
     func whereCommand() async throws {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        let result = await notes(mapper.handleCommand("mapper where 3")).joined()
-        #expect(result.contains("North End"))
-        #expect(result.contains("2 step"))
+        // Standing in room 1 → "Path to <dest> is:" (printpath, current==src).
+        let out = await notes(mapper.handleCommand("mapper where 3"))
+        #expect(out.first == "Path to 3 is:")
+        #expect(out[1] == "run 2n")
+        #expect(out.contains("Distance: 2"))
     }
 
     @Test("mapper find searches room names")
@@ -221,7 +224,10 @@ struct MapperCommandTests {
         await seed(mapper)
         let effects = await mapper.handleCommand("mapper findpath 1 3")
         #expect(walkCommands(effects).isEmpty) // findpath never walks
-        #expect(notes(effects).contains { $0.contains("run 2n") && $0.contains("2 step") })
+        // printpath format; current room is 1 == src → "Path to <dest> is:".
+        #expect(notes(effects).contains { $0 == "Path to 3 is:" })
+        #expect(notes(effects).contains { $0 == "run 2n" })
+        #expect(notes(effects).contains { $0 == "Distance: 2" })
     }
 
     @Test("A portal step in a goto path is emitted as .execute (not raw .send)")
