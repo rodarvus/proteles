@@ -124,6 +124,14 @@ struct ProtelesApp: App {
         // Single-session client: no window tabbing, so the "Show Tab Bar" /
         // "Show All Tabs" menu items don't clutter the menu bar.
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        // Opt-in crash/hang diagnostics (MetricKit): subscribe iff the user has
+        // enabled it. MetricKit delivers any pending payload shortly after launch.
+        #if canImport(MetricKit)
+            DiagnosticsController.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: DiagnosticsController.enabledKey)
+            )
+        #endif
     }
 
     var body: some Scene {
