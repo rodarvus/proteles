@@ -3,7 +3,7 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.4.3` — daily-usable.**
+> **Status: `v0.4.4` — daily-usable.**
 > Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
 > their own windows), a **full six-bar status display** (Health/Mana/Moves/TNL/
@@ -190,7 +190,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1077 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1205 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
