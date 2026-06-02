@@ -163,6 +163,12 @@ extension LuaRuntime {
                 name: Self.argString(arguments, 0),
                 group: Self.argString(arguments, 1)
             ))
+        case .setTriggerOption:
+            effects.append(.setTriggerOption(
+                name: Self.argString(arguments, 0),
+                option: Self.argString(arguments, 1),
+                value: Self.argString(arguments, 2)
+            ))
         default: recordOutputEffect(function, arguments)
         }
     }
