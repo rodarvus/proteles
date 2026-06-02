@@ -15,6 +15,7 @@ extension Mapper {
         case "cexits": listCustomExits(arg)
         case "cexit": customExitCommand(arg)
         case "fullcexit": fullCustomExitCommand(arg)
+        case "cexit_wait": cexitWaitCommand(arg)
         default: handleMaintenanceCommand(sub, arg)
         }
     }
@@ -155,34 +156,24 @@ extension Mapper {
             .sorted { $0.command < $1.command }
     }
 
-    /// `mapper cexits [filter|here]` — list custom (non-cardinal) exits.
-    private func listCustomExits(_ arg: String) -> [ScriptEffect] {
-        let filter = arg.isEmpty ? nil
-            : (arg.lowercased() == "here" ? graph.rooms[currentRoomUID ?? ""]?.area : arg)
-        let exits = (try? store.customExits(areaFilter: filter)) ?? []
-        guard !exits.isEmpty else {
-            return [Self.note("No custom exits\(filter.map { " for '\($0)'" } ?? "").")]
-        }
-        var effects = [Self.note("Custom exits (\(exits.count)):")]
-        for exit in exits {
-            let room = exit.roomName ?? exit.fromuid
-            effects.append(Self.note("  \(room) [\(exit.fromuid)] — \(exit.dir) → [\(exit.touid)]"))
-        }
-        return effects
-    }
-
-    /// `mapper cexit <dir>` — record a custom exit interactively: send the
-    /// direction command and record the room you land in as the destination
-    /// (resolved on the next room.info, mirroring the reference's run-and-sample).
+    /// `mapper cexit <command>` (reference `custom_exit`): run the command and
+    /// record the room you land in as the destination of a custom exit from the
+    /// current room. The confirmation/failure lands after the cexit delay
+    /// (``finalizeCexit``).
     private func customExitCommand(_ arg: String) -> [ScriptEffect] {
         let dir = arg.trimmingCharacters(in: .whitespaces)
         guard !dir.isEmpty else { return [Self.note("Usage: mapper cexit <direction command>")] }
         guard let from = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
+        guard from != "-1" else {
+            return [Self.note("CEXIT FAILED: You cannot link custom exits from unmappable rooms.")]
+        }
+        let delay = tempCexitDelay ?? Mapper.cexitDelaySeconds
+        tempCexitDelay = nil
         let generation = beginPendingCexit(from: from, dir: dir)
         // Run-and-sample: send the command, then check the destination after
         // the cexit delay (the reference's wait.time + current_room sample).
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Mapper.cexitDelaySeconds) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
             await self?.finalizeCexit(generation: generation)
         }
         return [
@@ -190,33 +181,38 @@ extension Mapper {
             // ExecuteWithWaits) so a stacked cexit like `open south;s` splits
             // into `open south` then `s` instead of being sent raw.
             .execute(dir),
-            Self.note(
-                "CEXIT: wait for confirmation before moving. "
-                    + "This should take about \(Mapper.cexitDelaySeconds) seconds."
-            )
+            Self.note("CEXIT: WAIT FOR CONFIRMATION BEFORE MOVING."),
+            Self.note("This should take about \(delay) seconds.")
         ]
     }
 
-    /// `mapper fullcexit {dir} <fromuid> <touid> <level>` — add a custom exit
-    /// with explicit endpoints. (The interactive `mapper cexit <dir>`, which
-    /// runs the command and samples the room you land in, needs live
-    /// room-change detection and lands in a later batch.)
+    /// `mapper fullcexit {command} <from> <to> [level]` (reference
+    /// `custom_fullexit`): add a custom exit with explicit endpoints. Both rooms
+    /// must be known; the level lock is taken as an arg (the reference dialog).
     private func fullCustomExitCommand(_ arg: String) -> [ScriptEffect] {
         let groups = Self.braceGroups(arg)
         let trailing = arg.components(separatedBy: "}").last ?? ""
         let tokens = trailing.split(separator: " ").map(String.init)
-        guard let dir = groups.first, tokens.count >= 2 else {
-            return [Self.note("Usage: mapper fullcexit {dir} <from-room> <to-room> [level]")]
+        guard let dir = groups.first, !dir.isEmpty else { return [Self.note("Nothing to do!")] }
+        guard let from = tokens.first else { return [Self.note("CEXIT FAILED: No start room provided.")] }
+        guard graph.rooms[from] != nil else {
+            return [Self.note("CEXIT FAILED: Room \(from) is unknown.")]
         }
-        let from = tokens[0], to = tokens[1]
-        let level = tokens.count > 2 ? (Int(tokens[2]) ?? 0) : 0
-        guard graph.rooms[from] != nil || looksLikeRoomID(from),
-              graph.rooms[to] != nil || looksLikeRoomID(to)
-        else { return [Self.note("Both rooms must be known room ids.")] }
+        guard tokens.count >= 2 else { return [Self.note("CEXIT FAILED: No destination room provided.")] }
+        let to = tokens[1]
+        guard graph.rooms[to] != nil else {
+            return [Self.note("CEXIT FAILED: Room \(to) is unknown.")]
+        }
+        guard to != from else {
+            return [Self.note("CEXIT FAILED: Custom Exit \(dir) leads back here!")]
+        }
+        let level = tokens.count > 2 ? max(0, Int(tokens[2]) ?? 0) : 0
+        let quiet = tokens.last == "quiet"
         do {
             try store.addCustomExit(dir: dir, from: from, to: to, level: level)
             reloadGraphAndPublish()
-            return [Self.note("Custom exit '\(dir)' from \(from) → \(to) stored.")]
+            if quiet { return [] }
+            return [Self.note("Custom Exit CONFIRMED: \(from) (\(dir)) -> \(to) [lock level \(level)]")]
         } catch {
             return [Self.note("Couldn't store that custom exit.")]
         }
@@ -312,10 +308,7 @@ extension Mapper {
         case "portal":
             return deletePortalEdit(tokens.count > 1 ? tokens[1] : "")
         case "cexits":
-            guard let uid = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
-            let count = (try? store.deleteCustomExits(from: uid)) ?? 0
-            if count > 0 { reloadGraphAndPublish() }
-            return [Self.note("Deleted \(count) custom exit(s) from room \(uid).")]
+            return deleteCustomExitsHere()
         case "exits":
             return deleteExitsCommand(tokens.count > 1 ? tokens[1] : "")
         default:
@@ -362,11 +355,30 @@ extension Mapper {
             reloadGraphAndPublish()
             return [Self.note("Purged all mapper portals.")]
         case "cexits":
-            // The cexits confirm flow lands with Phase 4; keep the immediate
-            // purge for now so the command still works.
+            pendingConfirm = "purge cexits"
+            return [Self.note(
+                "Are you sure you want to purge all custom mapper exits? "
+                    + "To confirm type 'mapper purge cexits confirm'."
+            )]
+        case "cexits confirm":
+            guard pendingConfirm == "purge cexits" else { return [confirmAborted()] }
+            pendingConfirm = nil
             try? store.purgeCustomExits(area: nil)
             reloadGraphAndPublish()
-            return [Self.note("Purged custom exits.")]
+            return [Self.note("Purged all custom exits.")]
+        case "cexits area":
+            pendingConfirm = "purge cexits area"
+            return [Self.note(
+                "Are you sure you want to purge all custom mapper exits in this area? "
+                    + "To confirm type 'mapper purge cexits area confirm'."
+            )]
+        case "cexits area confirm":
+            guard pendingConfirm == "purge cexits area" else { return [confirmAborted()] }
+            pendingConfirm = nil
+            let area = currentRoomUID.flatMap { graph.rooms[$0]?.area }
+            try? store.purgeCustomExits(area: area)
+            reloadGraphAndPublish()
+            return [Self.note("Purged all area custom exits.")]
         default:
             return [Self.note("Usage: mapper purge portals | purge cexits [area]")]
         }
