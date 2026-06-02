@@ -55,9 +55,34 @@ jobs:
         with:
           submodules: false
 
-      - name: Install linters
+      - name: Install pinned linters
+        env:
+          SWIFTLINT_VERSION: "0.63.3"
+          SWIFTFORMAT_VERSION: "0.61.1"
         run: |
-          brew install swiftformat swiftlint
+          set -euo pipefail
+          # Pin to the versions developers run locally, so lint/format rules
+          # don't drift when Homebrew ships a new release — that drift is pure CI
+          # noise (a new rule firing with no code change). Prebuilt release
+          # binaries, so no source compile. The Swift/Xcode toolchain is
+          # deliberately NOT pinned (see "Select Xcode") — toolchain drift is real
+          # signal we want CI to flag early, unlike linter drift.
+          mkdir -p "$RUNNER_TEMP/linters/swiftlint" "$RUNNER_TEMP/linters/swiftformat"
+          curl -fsSL -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          unzip -o -q "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/linters/swiftlint"
+          curl -fsSL -o "$RUNNER_TEMP/swiftformat.zip" \
+            "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
+          unzip -o -q "$RUNNER_TEMP/swiftformat.zip" -d "$RUNNER_TEMP/linters/swiftformat"
+          chmod +x "$RUNNER_TEMP/linters/swiftlint/swiftlint" "$RUNNER_TEMP/linters/swiftformat/swiftformat"
+          # Prepend to PATH for the following steps (GITHUB_PATH takes precedence).
+          echo "$RUNNER_TEMP/linters/swiftlint" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/linters/swiftformat" >> "$GITHUB_PATH"
+
+      - name: Linter versions
+        run: |
+          swiftlint --version
+          swiftformat --version
 
       - name: SwiftFormat (lint mode)
         run: swiftformat --lint .
