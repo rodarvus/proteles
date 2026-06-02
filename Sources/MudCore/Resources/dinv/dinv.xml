@@ -90,7 +90,7 @@ dbot.version  : Module to track version and changelog information and update the
    save_state="y"
    date_written="2017-08-12 08:45:15"
    requires="4.98"
-   version="3.0102"
+   version="3.0112"
    >
 <description trim="y">
 <![CDATA[

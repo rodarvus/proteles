@@ -2,7 +2,8 @@
 
 `leveldb.xml` is vendored **verbatim** (unmodified) from the upstream
 `rodarvus/leveldb` plugin (also tracked as the repo submodule at `/leveldb`),
-commit `a137c60`. MIT-licensed (see `LICENSE`).
+commit `1d8ca76` (v9.3 — WAL + `synchronous=NORMAL` to fix combat write stalls).
+MIT-licensed (see `LICENSE`).
 
 leveldb is a passive "leveling database": it watches the MUD output + GMCP and
 records kills / deaths / quests / campaigns / global-quests / power-ups / level

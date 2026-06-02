@@ -194,6 +194,17 @@ function inv.score.extended(itemOrSet, priorityName, handicap, level, isOffhand)
     end -- if
   end -- for
 
+  -- Add score bonus for metal weapons
+  local metalWeaponWeight = tonumber(priorityTable["metalweapon"] or 0)
+  if metalWeaponWeight ~= 0 then
+    local material   = string.lower(tostring(itemOrSet[invStatFieldMaterial]   or ""))
+    local weaponType = string.lower(tostring(itemOrSet[invStatFieldWeaponType] or ""))
+    if weaponType ~= "" and inv.metalMaterials[material] then
+      score = score + metalWeaponWeight
+      dbot.debug("Added " .. metalWeaponWeight .. " to score for metal weapon material \"" .. material .. "\"")
+    end -- if
+  end -- if
+
   -- Round to avoid floating-point noise
   score = tonumber(string.format("%.6f", score))
 

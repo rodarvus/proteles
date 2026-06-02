@@ -4,7 +4,7 @@ These files are the **dinv** inventory-manager plugin for Aardwolf, vendored
 verbatim and run through Proteles' MUSHclient compatibility shim (D-32).
 
 - **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin)
-- **Vendored version:** 3.0102 (see `dinv.manifest`)
+- **Vendored version:** 3.0112 (see `dinv.manifest`)
 - **License:** MIT (see `LICENSE`) — author: Durel (original `aard_inventory`),
   Rodarvus (the v3.x SQLite/modular fork). Bundling is unambiguous: MIT, and the
   Proteles author is the fork maintainer.

@@ -254,7 +254,7 @@ inv.stats.specials        = { name = "specials",
                               desc = "See \"@Ghelp weapon flags@W\" for an explanation of special behaviors" }
 
 inv.stats.location        = { name = "location",
-                              desc = "Item ID for the container holding this item" }
+                              desc = "Container item ID holding this item or \"inventory\" or a wear slot name (e.g. \"head\")." }
 inv.stats.rlocation       = { name = "rlocation",
                               desc = "Relative name (e.g., \"3.bag\") for the container holding this item" }
 inv.stats.rname           = { name = "rname",
@@ -382,4 +382,18 @@ invItemEffectsIronGrip     = "irongrip"
 invItemEffectsDualWield    = "dualwield"
 invItemEffectsShield       = "shield"
 invItemEffectsHammerswing  = "hammerswing"
+
+
+----------------------------------------------------------------------------------------------------
+-- Materials that a blacksmith can work with.  Used by the metalweapon priority scoring field.
+----------------------------------------------------------------------------------------------------
+
+inv.metalMaterials = {
+  adamantite = true, adamantium = true, aluminum  = true,
+  brass      = true, bronze     = true, copper    = true,
+  gold       = true, iron       = true, lead      = true,
+  metal      = true, mithril    = true, platinum  = true,
+  silver     = true, steel      = true, tin       = true,
+  titanium   = true,
+}
 

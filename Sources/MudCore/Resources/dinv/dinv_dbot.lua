@@ -1910,6 +1910,23 @@ invmon.typeStr[invmonTypeForge]          = "Forge"
 invmon.typeStr[invmonTypeRunestone]      = "Runestone"
 
 
+-- Returns true if an item type is one the frequent item cache may hold.  These
+-- are the only types for which cloning a template by name is safe: every
+-- instance of the same name is effectively interchangeable (e.g. bulk-bought
+-- potions).  Uniquely-enchanted gear that shares a base name -- several
+-- differently-enchanted "Aardwolf Bracers of Iron Grip", say -- must NOT be
+-- cloned, so it is excluded here.  Both the items-table template fallback in
+-- invitem handling and inv.cache.add gate on this.
+function invmon.isFrequentCacheType(typeName)
+  return (typeName == invmon.typeStr[invmonTypePotion]) or
+         (typeName == invmon.typeStr[invmonTypePill])   or
+         (typeName == invmon.typeStr[invmonTypeFood])   or
+         (typeName == invmon.typeStr[invmonTypeWand])   or
+         (typeName == invmon.typeStr[invmonTypeStaff])  or
+         (typeName == invmon.typeStr[invmonTypeScroll])
+end
+
+
 ----------------------------------------------------------------------------------------------------
 --
 -- dbot.ability: Module to check if a character has access to a specific skill or spell
@@ -2288,6 +2305,8 @@ function dbot.wish.setupFn()
                       custom_colour.Custom11,
                       0, "", "", sendto.script, 0))
 
+  dbot.pagesize.hide()
+
   -- Proteles local edit (D-77): arm the omit-from-output item trigger NOW, before
   -- "wish list" is sent, rather than relying on the start trigger above to enable
   -- it only once the column header arrives. The header-match approach leaves a
@@ -2298,8 +2317,6 @@ function dbot.wish.setupFn()
   -- wish line; the fence (dbot.wish.fenceMsg) still disables it, so it can't
   -- over-gag. The start trigger is kept as a harmless belt-and-suspenders.
   check (EnableTrigger(dbot.wish.trigger.itemName, true))
-
-  dbot.pagesize.hide()
 
 end -- dbot.wish.setupFn
 
@@ -3160,13 +3177,25 @@ function dbot.remote.getCR()
     return DRL_RET_INTERNAL_ERROR
   end -- if
 
-  local urlThread = async.request(dbot.remote.getPkg.url, dbot.remote.getPkg.protocol)
+  -- Fetch the URL, following HTTP redirects (3xx) up to a small hop limit.  Most
+  -- of our fetches (raw.githubusercontent.com) return 200 directly, so the loop
+  -- body runs exactly once for them.  Release-asset downloads
+  -- (github.com/.../releases/latest/download/...) redirect through one or more
+  -- hosts before reaching 200, so we follow the "location" header each time.
+  -- (LuaSocket lower-cases all header keys, hence headers.location.)
+  local url          = dbot.remote.getPkg.url
+  local protocol     = dbot.remote.getPkg.protocol
+  local maxRedirects = 5
 
-  if (urlThread == nil) then
-    dbot.warn("dbot.remote.getCR: Failed to create thread requesting remote data")
-    retval = DRL_RET_INTERNAL_ERROR
+  for hop = 0, maxRedirects do
+    local urlThread = async.request(url, protocol)
 
-  else
+    if (urlThread == nil) then
+      dbot.warn("dbot.remote.getCR: Failed to create thread requesting remote data")
+      retval = DRL_RET_INTERNAL_ERROR
+      break
+    end -- if
+
     local timeout = 10
     local totTime = 0
     while (urlThread:alive()) do
@@ -3179,18 +3208,44 @@ function dbot.remote.getCR()
       totTime = totTime + drlSpinnerPeriodDefault
     end -- while
 
-    local remoteRet, page, status, headers, fullStatus = urlThread:join()
-
-    if (status ~= 200) then
-      dbot.warn("dbot.remote.getCR: Failed to retrieve remote file")
-      retval = DRL_RET_INTERNAL_ERROR
-    else
-      dbot.remote.getPkg.fileData = page
+    if (retval == DRL_RET_TIMEOUT) then
+      dbot.warn("dbot.remote.getCR: Timed out retrieving \"@G" .. url .. "@W\"")
+      break
     end -- if
 
-    dbot.remote.getPkg.isDone = true
+    local remoteRet, page, status, headers, fullStatus = urlThread:join()
 
-  end -- if
+    if (status == 200) then
+      dbot.remote.getPkg.fileData = page
+      break
+
+    elseif (type(status) == "number") and (status >= 300) and (status < 400) then
+      -- Redirect: follow the location header on the next hop
+      local location = headers and (headers.location or headers["Location"])
+      if (location == nil) or (location == "") then
+        dbot.warn("dbot.remote.getCR: redirect (" .. tostring(status) ..
+                  ") with no location header")
+        retval = DRL_RET_INTERNAL_ERROR
+        break
+      end -- if
+      if (hop == maxRedirects) then
+        dbot.warn("dbot.remote.getCR: too many redirects (>" .. maxRedirects .. ")")
+        retval = DRL_RET_INTERNAL_ERROR
+        break
+      end -- if
+      dbot.debug("dbot.remote.getCR: following redirect (" .. tostring(status) ..
+                 ") to " .. location)
+      url = location
+
+    else
+      dbot.warn("dbot.remote.getCR: Failed to retrieve remote file (status " ..
+                tostring(status) .. ")")
+      retval = DRL_RET_INTERNAL_ERROR
+      break
+    end -- if
+  end -- for
+
+  dbot.remote.getPkg.isDone = true
 
   return retval
 end -- dbot.remote.getCR
@@ -3359,6 +3414,118 @@ function dbot.version.update.readLocalManifest()
 end
 
 
+-- Release-asset base URL for single-file installs.  "latest/download" always
+-- redirects to the newest published release's assets; dbot.remote follows the
+-- redirect chain.
+dbot.version.update.releaseAssetUrl = "https://github.com/rodarvus/dinv/releases/latest/download/"
+
+
+-- A "single-file" install is dinv_single.xml dropped in by itself: the separate
+-- module files (and dinv.manifest) are not on disk.  Detect by the absence of
+-- dinv_init.lua next to the plugin.
+function dbot.version.update.isSingleFile()
+  local pluginDir = GetPluginInfo(GetPluginID(), 20)
+  local f = io.open(pluginDir .. "dinv_init.lua", "r")
+  if f then f:close() return false end
+  return true
+end -- dbot.version.update.isSingleFile
+
+
+-- Update path for single-file installs.  The installable artifact is the latest
+-- *release* asset (dinv_single.xml), so we read the release's manifest for the
+-- version (master can be ahead of the latest release) and, on install, download
+-- the single file and swap it over the running plugin file.
+function dbot.version.update.singleFileCR(mode, endTag)
+  local protocol = "HTTPS"
+  local assetUrl = dbot.version.update.releaseAssetUrl
+
+  dbot.info("Checking for updates (single-file install)...")
+
+  -- The release's manifest tells us the latest released version
+  local manifestData, dlRetval = dbot.remote.get(assetUrl .. "dinv.manifest", protocol)
+  if (dlRetval ~= DRL_RET_SUCCESS) or (manifestData == nil) then
+    dbot.warn("Failed to retrieve the latest release manifest")
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, dlRetval or DRL_RET_MISSING_ENTRY)
+  end -- if
+
+  local ok, remoteManifest = pcall(json.decode, manifestData)
+  if not ok or not remoteManifest or not remoteManifest.plugin_version then
+    dbot.warn("Failed to parse the latest release manifest")
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, DRL_RET_INTERNAL_ERROR)
+  end -- if
+
+  local currentVersion = GetPluginInfo(GetPluginID(), 19) or 0
+  local currentVerStr  = string.format("%1.4f", currentVersion)
+  local remoteVersion  = tonumber(remoteManifest.plugin_version or "") or 0
+  local remoteVerStr   = string.format("%1.4f", remoteVersion)
+
+  if (remoteVersion <= currentVersion) then
+    if (remoteVersion < currentVersion) then
+      dbot.info("Your plugin (v" .. currentVerStr ..
+                ") is newer than the latest official release (v" .. remoteVerStr .. ")")
+    else
+      dbot.info("You are running the most recent release (v" .. currentVerStr .. ")")
+    end -- if
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, DRL_RET_SUCCESS)
+  end -- if
+
+  dbot.info("You are running v" .. currentVerStr .. ", latest release is v" .. remoteVerStr)
+
+  if (mode == drlDbotUpdateCheck) then
+    dbot.info("This is a single-file install.  Run \"@G" .. pluginNameCmd ..
+              " version update confirm@W\" to download and install the new dinv_single.xml.")
+    dbot.info("Changes since your version:")
+    dbot.version.update.pkg = nil
+    return dbot.version.changelog.get(currentVersion, endTag)
+  end -- if
+
+  -- Install: download the single-file build and swap it over the running plugin file
+  dbot.info("Updating to v" .. remoteVerStr .. " (single-file)...")
+  dbot.info("Please do not enter anything until the update completes")
+
+  local fileData, fileRetval = dbot.remote.get(assetUrl .. "dinv_single.xml", protocol)
+  if (fileRetval ~= DRL_RET_SUCCESS) or (fileData == nil) then
+    dbot.warn("Failed to download dinv_single.xml: " .. dbot.retval.getString(fileRetval or -1))
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, fileRetval or DRL_RET_MISSING_ENTRY)
+  end -- if
+
+  local pluginFile = GetPluginInfo(GetPluginID(), 6)
+  local tempPath   = pluginFile .. ".update_" .. string.format("%06x", math.random(0, 0xFFFFFF))
+
+  local f = io.open(tempPath, "w")
+  if not f then
+    dbot.warn("Failed to open a temp file for the update")
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, DRL_RET_INTERNAL_ERROR)
+  end -- if
+  f:write(fileData)
+  f:close()
+
+  -- Swap the downloaded file over the running plugin file (Windows requires the
+  -- destination be removed first), then schedule a reload.  Only the temp file
+  -- is touched until the download fully succeeds, so a failed download never
+  -- clobbers the running plugin.
+  os.remove(pluginFile)
+  local renamed, err = os.rename(tempPath, pluginFile)
+  if not renamed then
+    dbot.error("Failed to install the update: " .. (err or "unknown"))
+    os.remove(tempPath)
+    dbot.version.update.pkg = nil
+    return inv.tags.stop(invTagsVersion, endTag, DRL_RET_INTERNAL_ERROR)
+  end -- if
+
+  dbot.info("Update to v" .. remoteVerStr .. " complete. Reloading plugin...")
+  dbot.version.update.pkg = nil
+  dbot.reload()
+
+  return inv.tags.stop(invTagsVersion, endTag, DRL_RET_SUCCESS)
+end -- dbot.version.update.singleFileCR
+
+
 function dbot.version.update.releaseCR()
   if (dbot.version.update.pkg == nil) or (dbot.version.update.pkg.mode == nil) then
     dbot.error("dbot.version.update.releaseCR: Missing or invalid update package detected")
@@ -3370,6 +3537,13 @@ function dbot.version.update.releaseCR()
   local baseUrl  = dbot.version.update.baseUrl
   local protocol = "HTTPS"
   local retval   = DRL_RET_SUCCESS
+
+  -- Single-file installs (dinv_single.xml alone) have no local module files or
+  -- manifest and can't use the per-file path below; update them from the latest
+  -- release asset instead.
+  if dbot.version.update.isSingleFile() then
+    return dbot.version.update.singleFileCR(mode, endTag)
+  end -- if
 
   -- Download remote manifest
   dbot.info("Checking for updates...")
