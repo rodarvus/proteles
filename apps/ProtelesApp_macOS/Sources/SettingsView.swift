@@ -29,6 +29,7 @@ struct SettingsView: View {
 /// Display + input behaviour.
 private struct GeneralSettingsView: View {
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    @AppStorage("gagTagLines") private var gagTagLines = false
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
 
     var body: some View {
@@ -36,6 +37,11 @@ private struct GeneralSettingsView: View {
             Section {
                 Toggle("Omit blank lines", isOn: $omitBlankLines)
                 Text("Hide completely empty lines from the game output.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Hide Aardwolf tag lines", isOn: $gagTagLines)
+                Text("Hide leftover protocol tag lines like {rname} / {coords} "
+                    + "from the output. Display-only — plugins still receive them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

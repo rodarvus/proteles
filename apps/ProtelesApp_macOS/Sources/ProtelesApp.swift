@@ -427,6 +427,9 @@ private struct ProtelesCommands: Commands {
     /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
     /// the same key and pushes it to the session.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    /// Hide leftover Aardwolf tag lines ({rname}/{coords}/…) from the output;
+    /// persisted in UserDefaults, pushed to the session by ``ContentView``.
+    @AppStorage("gagTagLines") private var gagTagLines = false
     /// Rich Exits: make room exits (incl. custom exits) clickable in the main
     /// output. Persisted in UserDefaults; ``ContentView`` pushes it to the session.
     @AppStorage("richExits") private var richExits = false
@@ -507,6 +510,11 @@ private struct ProtelesCommands: Commands {
             // completely-empty MUD lines from the main output. Persists via
             // @AppStorage; ContentView pushes the value to the session.
             Toggle("Omit Blank Lines", isOn: $omitBlankLines)
+
+            // Hide leftover Aardwolf telnet-102 tag lines ({rname}/{coords}/…)
+            // from the output. Display-only + post-processing, so plugins still
+            // receive them; persists via @AppStorage, pushed by ContentView.
+            Toggle("Hide Aardwolf Tag Lines", isOn: $gagTagLines)
 
             // Make room exits (incl. custom exits) clickable in the main output
             // (native equivalent of Aardwolf-Rich-Exits, no miniwindow). Enabling

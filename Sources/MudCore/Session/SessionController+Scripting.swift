@@ -9,6 +9,35 @@ public extension SessionController {
         omitBlankLines && line.text.isEmpty
     }
 
+    /// True when `text` is an Aardwolf telnet-102 "tagged output" line — it
+    /// begins with `{tag}` or `{/tag}` where `tag` is a lowercase identifier
+    /// (ASCII letters/digits/underscore, no internal spaces): `{rname}`,
+    /// `{coords}`, `{invdata}`, `{/invdata}`, `{spellheaders}`, … These are
+    /// protocol markers; Aardwolf never starts player-visible prose (says/tells/
+    /// channels/descriptions) with `{lowercaseword}`, so withholding them from
+    /// the live window is safe. Used only as a *display* gag, applied after every
+    /// plugin has processed the line — so it's non-destructive (the line stays in
+    /// the recording + transcript and is still seen by triggers/plugins) and
+    /// non-disruptive. dinv's `{ DINV fence N }` (leading space, uppercase) does
+    /// NOT match — and is gagged by dinv itself anyway.
+    static func isAardwolfTagLine(_ text: String) -> Bool {
+        var rest = Substring(text)
+        guard rest.first == "{" else { return false }
+        rest = rest.dropFirst()
+        if rest.first == "/" { rest = rest.dropFirst() }
+        // The first identifier char must be a lowercase ASCII letter.
+        guard let firstID = rest.first, ("a"..."z").contains(firstID) else { return false }
+        rest = rest.dropFirst()
+        // Identifier body, then a closing brace, ends a valid tag.
+        for char in rest {
+            if char == "}" { return true }
+            let isBodyChar = ("a"..."z").contains(char)
+                || ("0"..."9").contains(char) || char == "_"
+            if !isBodyChar { return false }
+        }
+        return false // no closing brace → not a tag line
+    }
+
     /// Run a received line through the script engine (if any), then append
     /// it unless a trigger gagged it. Trigger sends/echoes are applied
     /// afterwards so echoes land just below the line that produced them.
@@ -38,7 +67,13 @@ public extension SessionController {
         // omit-from-output trigger is unreliable under the live plugin set). Runs
         // *after* process()/S&D so dinv still parses the wishes from the line.
         let wishGag = consumeWishProbeGag(line)
-        if !disposition.gag, !sndGag, !omitBlank, !richExitsGag, !wishGag {
+        // Opt-in: withhold leftover Aardwolf tag lines (`{rname}`/`{coords}`/…)
+        // from the live window. Tested on the OUTGOING line so a tag a plugin
+        // already transformed into shown text (Rich Exits' clickable exits) is
+        // never gagged; runs last so every plugin has already processed the raw
+        // line (display-only — still recorded + still seen by triggers).
+        let tagGag = gagTagLines && Self.isAardwolfTagLine(outLine.text)
+        if !disposition.gag, !sndGag, !omitBlank, !richExitsGag, !wishGag, !tagGag {
             await scrollbackStore.append(outLine)
         } else {
             // Record *why* a line was withheld (the transcript otherwise only has
@@ -49,7 +84,8 @@ public extension SessionController {
                 sndGag ? "snd" : nil,
                 richExitsGag ? "richexits" : nil,
                 omitBlank ? "blank" : nil,
-                wishGag ? "wishprobe" : nil
+                wishGag ? "wishprobe" : nil,
+                tagGag ? "tag" : nil
             ].compactMap(\.self).joined(separator: "+")
             logTranscript(.gag, "[\(reasons)] \(line.text)")
         }
