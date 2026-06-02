@@ -343,10 +343,8 @@ public actor ScriptEngine {
         await runtime.setSQLiteDirectory(directory)
     }
 
-    /// Install the app's `utils.*` dialog provider (native modals; `nil` = no-op).
-    public func setDialogProvider(_ provider: ScriptDialogProvider?) async {
-        await runtime.setDialogProvider(provider)
-    }
+    // App-provided I/O hooks (dialog + clipboard) live in
+    // `ScriptEngine+Providers.swift`.
 
     /// Install the accelerator registrar (plugin keybinds → MacroEngine).
     public func setAcceleratorRegistrar(_ registrar: (@Sendable (Macro) -> Void)?) async {

@@ -110,44 +110,8 @@ public actor LuaRuntime {
     /// `lua_pcall` (same actor executor) and `run` reads/clears it around that.
     nonisolated(unsafe) var effects: [ScriptEffect] = []
 
-    /// The `proteles.*` functions exposed to scripts; the rawValue is the
-    /// closure upvalue the C dispatcher routes on. Module-internal so the
-    /// host-dispatch extension can switch on it.
-    enum HostFunction: Int32 {
-        case send = 1
-        case sendNoEcho
-        case execute
-        case echo
-        case note
-        case onEvent
-        case raiseEvent
-        case onBroadcast
-        case broadcast
-        case export
-        case call
-        case getVar
-        case setVar
-        case deleteVar
-        case info
-        case pluginID
-        case getPluginVar
-        case compileChunk
-        case moduleSource
-        case sendGMCP
-        case isConnected
-        case jsonDecode
-        case jsonEncode
-        case echoAard, echoAnsi, simulate
-        case colourNote, hyperlink, mapperCall, chatCapture
-        case sqliteAllowed
-        case publish
-        case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
-        case fileExists, makeDirectory, reloadPlugin
-        case aardwolfTelnet
-        case readFile, writeFile
-        case dialog, accelerator, http
-    }
+    // `HostFunction` (the `proteles.*` dispatch enum) lives in
+    // `LuaRuntime+HostFunction.swift` — the case list keeps growing.
 
     /// Live connection state for `proteles.isConnected` (host-updated).
     nonisolated(unsafe) var connected = false
@@ -155,6 +119,10 @@ public actor LuaRuntime {
     /// App hook that fulfils a plugin's `utils.*` dialog synchronously (nil =
     /// dialogs degrade to a safe default). Set by ``setDialogProvider(_:)``.
     nonisolated(unsafe) var dialogProvider: ScriptDialogProvider?
+
+    /// App hook for `GetClipboard`/`SetClipboard` (nil = "" / no-op). Set by
+    /// ``setClipboardProvider(_:)``.
+    nonisolated(unsafe) var clipboardProvider: ClipboardProvider?
 
     /// App hook that registers a plugin's `Accelerator`/`AcceleratorTo` keybind
     /// into the live MacroEngine (nil = accelerators are inert). Set by
@@ -403,6 +371,8 @@ public actor LuaRuntime {
         setHostFunction("fileExists", .fileExists)
         setHostFunction("makeDirectory", .makeDirectory)
         setHostFunction("reloadPlugin", .reloadPlugin)
+        setHostFunction("clipboardGet", .clipboardGet)
+        setHostFunction("clipboardSet", .clipboardSet)
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
@@ -440,7 +410,7 @@ public actor LuaRuntime {
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
-             .readFile, .writeFile, .dialog:
+             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)

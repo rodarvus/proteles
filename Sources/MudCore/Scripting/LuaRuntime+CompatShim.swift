@@ -497,11 +497,11 @@ public extension LuaRuntime {
       __echoInput = (flag == false or flag == nil or flag == 0) and 0 or 1
       return error_code.eOK
     end
-    -- Clipboard: not yet wired to the native pasteboard (MudCore is
-    -- platform-agnostic). Reads return empty; writes are accepted as eOK so
-    -- copy/paste features (e.g. dinv priority copy) don't error.
-    function GetClipboard() return "" end
-    function SetClipboard(text) return error_code.eOK end
+    -- Clipboard: routes to the app's injected pasteboard provider (NSPasteboard
+    -- on macOS). With no provider (headless / tests) reads return "" and writes
+    -- are accepted, so copy/paste features (e.g. dinv priority copy) don't error.
+    function GetClipboard() return proteles.clipboardGet() or "" end
+    function SetClipboard(text) proteles.clipboardSet(tostring(text or "")); return error_code.eOK end
     -- Convert a plain (literal/wildcard) match to a regex, like MUSHclient's
     -- MakeRegularExpression — escape regex metacharacters so wait.match treats
     -- its text literally.

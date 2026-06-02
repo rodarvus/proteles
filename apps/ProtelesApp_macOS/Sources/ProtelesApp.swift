@@ -98,6 +98,8 @@ struct ProtelesApp: App {
                 // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
                 // pickers) for shim plugins that pop a dialog.
                 await scriptEngine.setDialogProvider(makeScriptDialogProvider())
+                // Native NSPasteboard for plugin GetClipboard/SetClipboard.
+                await scriptEngine.setClipboardProvider(makeClipboardProvider())
             }
         }
 

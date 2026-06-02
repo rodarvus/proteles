@@ -275,12 +275,25 @@ struct CompatShimTests {
         #expect(try await lua.number("IsTimer('m1')") == 30017)
     }
 
-    @Test("GetEchoInput / clipboard stubs don't error")
+    @Test("GetEchoInput / clipboard degrade safely with no provider")
     func echoAndClipboard() async throws {
         let lua = try await shimmed()
         #expect(try await lua.number("GetEchoInput()") == 1)
+        // No provider injected (headless): reads "" and writes are accepted.
         #expect(try await lua.string("GetClipboard()").isEmpty)
         #expect(try await lua.number("SetClipboard('x')") == 0)
+    }
+
+    // #30: GetClipboard/SetClipboard route through the app-injected provider
+    // (NSPasteboard on macOS), not the old "" / discard stubs.
+    @Test("GetClipboard/SetClipboard round-trip through an injected provider")
+    func clipboardProviderRoundTrip() async throws {
+        let lua = try await shimmed()
+        let box = ClipboardBox()
+        await lua.setClipboardProvider(ClipboardProvider(get: { box.value }, set: { box.value = $0 }))
+        #expect(try await lua.number("SetClipboard('hello')") == 0)
+        #expect(box.value == "hello") // write reached the provider
+        #expect(try await lua.string("GetClipboard()") == "hello") // read came back
     }
 
     @Test("stylesToANSI(ColoursToStyles(s)) round-trips coloured text")
@@ -365,5 +378,16 @@ struct CompatShimTests {
         #expect(try await lua.boolean("GetEchoInput() == 0"))
         _ = try await lua.run("SetEchoInput(true)")
         #expect(try await lua.boolean("GetEchoInput() == 1"))
+    }
+}
+
+/// A thread-safe string box for the clipboard-provider round-trip test (the
+/// provider closures are invoked synchronously on the script executor thread).
+private final class ClipboardBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = ""
+    var value: String {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); defer { lock.unlock() }; stored = newValue }
     }
 }
