@@ -31,3 +31,6 @@ apps/ProtelesApp_iOS/Proteles.entitlements
 
 # Live MUSHclient install copied for reference (large binary DBs); not repo content
 MUSHclient-live-from-windows/
+
+# Local-only Claude working notes (never committed)
+CLAUDE.local.md
