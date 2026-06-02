@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.3`.
+**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.4`.
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
@@ -491,6 +491,8 @@ superseded decisions are marked, not deleted.
 | D-88 | 2026-06-02 | Recording/transcript timestamps + filenames in local time (was UTC — a confusing offset + inconsistency with the logging feature) | adopted |
 | D-89 | 2026-06-02 | Opt-in gag of leftover Aardwolf tag lines (`{rname}`/`{coords}`), default off; a display-only, post-processing decision | adopted |
 | D-90 | 2026-06-02 | Byte-faithful `mapper` command interface — every command (nav/search/portals/cexits/room-info/notes/flags/maintenance/help) reproduces MUSHclient's exact output (lightgreen notes/red errors, bordered tables, clickable `mapper goto` rows) read from `aard_GMCP_mapper.xml`; display/multi-DB commands route to the native panel/Databases menu; documented divergences: dialog→arg forms, sorted `tprint` dumps, in-memory bounce designations | adopted |
+| D-91 | 2026-06-02 | S&D panel surfaces quest state, not just campaigns — open quest (with `go`-to-target nav reusing S&D's own `gotoList`), a green "return to questor" banner once the target's killed (qstat 3), an off-quest "can request" tag, and the cooldown countdown folded into the header (no wasted line). Bridged via the `proteles-snd-1.4` release `core.lua` (`quest`/`can_request_quest`/`gq_id`/`next_quest_time`); GQ detection cross-validated against leveldb's confirmed regex | adopted |
+| D-92 | 2026-06-02 | Compat-shim hardening from a live-plugin audit (the stub-audit gaps, GH #18/#29/#30): recurring (non-OneShot) `AddTimer` now re-fires every interval; `SetTriggerOption`/`SetTimerOption` honoured — `enabled`/`group` via their engine ops, the rest (`omit_from_output`/`keep_evaluating`/`ignore_case`/`sequence`/`match`) via a host mutate-by-name that reaches XML-plugin triggers too; `DeleteTemporary{Triggers,Timers}` bulk-clear by the Temporary flag; `GetClipboard`/`SetClipboard` wired to an injected `NSPasteboard` provider (mirrors the dialog provider). Fixed a latent gap where `proteles.removeTrigger` was absent from the host-dispatch list, so generic-shim `DeleteTrigger` never removed from the engine. `GetInfo(280/281)` output geometry left hardcoded (deferred, #30 — no current consumer) | adopted |
 
 ---
 
