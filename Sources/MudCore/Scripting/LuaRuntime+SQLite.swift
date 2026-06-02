@@ -67,6 +67,11 @@ extension LuaRuntime {
         dialogProvider = provider
     }
 
+    /// Install the app's clipboard provider (see ``ClipboardProvider``).
+    func setClipboardProvider(_ provider: ClipboardProvider?) {
+        clipboardProvider = provider
+    }
+
     /// Install the app's accelerator registrar (plugin `Accelerator`/
     /// `AcceleratorTo` → the live MacroEngine).
     func setAcceleratorRegistrar(_ registrar: (@Sendable (Macro) -> Void)?) {

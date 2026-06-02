@@ -16,7 +16,22 @@ extension LuaRuntime {
         case .monotonic: [.number(Date().timeIntervalSince1970)]
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
+        case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         default: []
+        }
+    }
+
+    /// `proteles.clipboardGet()` → the app clipboard provider's current string
+    /// (or "" with no provider); `proteles.clipboardSet(text)` writes it and
+    /// returns nothing. Split from ``queryValue`` because the set path has a
+    /// side effect (the query switch is an expression).
+    nonisolated func clipboardValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        switch function {
+        case .clipboardSet:
+            clipboardProvider?.set(Self.argString(arguments, 0))
+            return []
+        default:
+            return [.string(clipboardProvider?.get() ?? "")]
         }
     }
 
