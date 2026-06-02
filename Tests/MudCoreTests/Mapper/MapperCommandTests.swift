@@ -210,11 +210,14 @@ struct MapperCommandTests {
         let thisroom = await notes(mapper.handleCommand("mapper thisroom"))
         #expect(thisroom.contains { $0.contains("South End") })
         #expect(thisroom.contains { $0.contains("Exits: n") })
+        // `mapper area` now searches the current area's rooms via full_find
+        // (reference map_area): 3 rooms in area "z", empty pattern → %%.
         #expect(await notes(mapper.handleCommand("mapper area"))
-            .contains { $0.contains("3 room") })
-        // Room 1's only exit (n→2) is mapped, so nothing to explore.
+            .contains { $0 == "Found 3 targets matching '%%'." })
+        // Room 1's only exit (n→2) is mapped, so nothing to explore — the
+        // by-area unmapped table reports zero (reference show_known_unmapped_exits).
         #expect(await notes(mapper.handleCommand("mapper unmapped"))
-            .contains { $0.contains("No unmapped exits") })
+            .contains { $0 == "Found 0 unmapped exits." })
     }
 
     @Test("findpath prints the speedwalk + distance without moving")
@@ -328,9 +331,10 @@ struct MapperCommandTests {
 
         #expect(await mapper.graph.rooms.isEmpty)
         #expect(await mapper.currentRoomUID == nil)
-        // A search finds nothing now.
+        // With the current room forgotten, a search can't run (reference
+        // check_we_can_find → the LOOK hint).
         #expect(await notes(mapper.handleCommand("mapper find end"))
-            .contains { $0.lowercased().contains("no ") })
+            == ["I don't know where you are right now - try: LOOK"])
     }
 
     @Test("a room's note echoes on walk-in (shownotes), once per arrival")
