@@ -103,6 +103,8 @@ extension Mapper {
         case "blink": return blinkCommand(arg)
         default:
             if let search = handleSearchCommand(sub, arg) { return search }
+            if let display = handleDisplayCommand(sub, arg) { return display }
+            if let database = handleDatabaseCommand(sub, arg) { return database }
             return handleMapManagementCommand(sub, arg)
         }
     }
