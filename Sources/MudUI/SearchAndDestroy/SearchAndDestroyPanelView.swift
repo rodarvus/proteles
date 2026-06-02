@@ -110,15 +110,16 @@ public struct SearchAndDestroyPanelView: View {
 
     // MARK: - Quest banner
 
-    /// The open quest, shown above the campaign targets. Click X-runs to the
-    /// quest area (S&D's `xrt <area>` — the run-to that works from anywhere;
-    /// bare `qw` only finds the mob once you're already in the area). When the
-    /// target's been killed (qstat 3) the banner turns green: return to the
-    /// questor to complete.
+    /// The open quest, shown above the campaign targets. While the target's
+    /// alive (qstat 2) the row click runs straight to it via S&D's `go` (walks
+    /// `gotoList[1]` — the quest mob's room — cross-area through the mapper; S&D
+    /// builds that list on quest-request, so a single `go` gets you all the way,
+    /// no manual step). When killed (qstat 3) the banner turns green and is
+    /// informational: return to the questor to complete.
     private func questBanner(_ quest: SearchAndDestroyModel.Quest) -> some View {
-        let area = quest.area ?? quest.areaName
+        let canNavigate = model.isInteractive && quest.status == "2"
         return Button {
-            if model.isInteractive, let area { model.run("xrt \(area)") }
+            if canNavigate { model.run("go") }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 Image(systemName: quest.killed ? "checkmark.seal.fill" : "flag.checkered")
@@ -136,7 +137,7 @@ public struct SearchAndDestroyPanelView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!model.isInteractive || area == nil)
+        .disabled(!canNavigate)
         .padding(.horizontal, 11).padding(.vertical, 7)
         .background((quest.killed ? SnDPalette.complete : SnDPalette.accent)
             .opacity(quest.killed ? 0.18 : 0.08))
@@ -162,9 +163,10 @@ public struct SearchAndDestroyPanelView: View {
                 .padding(.horizontal, 7).padding(.vertical, 2)
                 .background(SnDPalette.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
             VStack(alignment: .leading, spacing: 1) {
-                Text("Search & Destroy").font(.subheadline.weight(.semibold))
-                Text(remainingSummary(snd)).font(.caption2).foregroundStyle(.secondary)
+                Text("Search & Destroy").font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(remainingSummary(snd)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
+            .layoutPriority(-1)
             // Actions sit right of the campaign label (was a separate toolbar
             // row — folded in here to save vertical space).
             actions
@@ -197,6 +199,8 @@ public struct SearchAndDestroyPanelView: View {
             Text("Quest ") + Text(Date(timeIntervalSince1970: unixTime), style: .relative)
         }
         .font(.system(size: 9, weight: .bold))
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(SnDPalette.unlikely)
         .padding(.horizontal, 5).padding(.vertical, 1)
         .background(SnDPalette.unlikely.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
@@ -272,6 +276,8 @@ public struct SearchAndDestroyPanelView: View {
     private func buttonLabel(_ label: String, prominent: Bool = false) -> some View {
         Text(label)
             .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(prominent ? Color.black.opacity(0.85) : .primary)
             .padding(.horizontal, 9).padding(.vertical, 3)
             .background(
