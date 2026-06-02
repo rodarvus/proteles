@@ -1,7 +1,12 @@
 # Known issues
 
-Recorded, de-prioritised issues — not on the active backlog. Pick up when a
-repro lands or priorities allow.
+> **The active backlog now lives in GitHub Issues** (`gh issue list`) — that's the
+> source of truth. The actionable entries that used to live here were migrated
+> there (recurring `AddTimer` → #18; the mapper-fidelity follow-ups → #20). This
+> file is kept as a **historical record** (the stub audit, resolved items);
+> don't add new backlog here — open an Issue.
+
+Recorded, de-prioritised notes — pick up when a repro lands or priorities allow.
 
 ## MUSHclient compat-shim gaps (stub audit, 2026-06-01)
 

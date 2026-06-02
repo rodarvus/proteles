@@ -11,8 +11,25 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 phases are **done**; we are now **polishing + debugging from live play**. The
 remaining gate to **1.0** is release engineering — notarization, an auto-updater,
 crash reporting. ~1188 tests, four gates green. See **PLAN.md §0** for what works
-and the **decision log (§12, D-01…D-90)** for history; **`docs/KNOWN_ISSUES.md`**
-for de-prioritised issues.
+and the **decision log (§12, D-01…D-90)** for history.
+
+## Backlog — GitHub Issues are the source of truth
+
+**All pending work — bugs, follow-ups, deferred features, the 1.0 gate — lives
+in GitHub Issues** (`gh issue list`), not in the docs. When you finish something
+tracked there, close its issue (`gh issue close <n>`); when you discover new
+deferred work, **open an issue** rather than burying it in a plan doc (that's
+how items got silently dropped in a past rewrite). Use `gh issue create` with a
+clear body + a source-doc pointer; labels in use: `bug`, `enhancement`,
+`mapper`, `accessibility`, `tech-debt`, `qa`, `1.0`, `documentation`.
+
+- **PLAN.md** keeps the *narrative* (architecture, what's built, decisions D-NN)
+  but no longer enumerates the backlog — it points here.
+- **`docs/KNOWN_ISSUES.md`** is a historical record (the stub audit, resolved
+  items); its actionable entries were migrated to Issues. Don't add new backlog
+  there.
+- **`docs/plans/*`** hold the *detailed design* for a feature; the *tracking* is
+  the Issue that links to the plan.
 
 ## Reference submodules — ALWAYS research them first
 
