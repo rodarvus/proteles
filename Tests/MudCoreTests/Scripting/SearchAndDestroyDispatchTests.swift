@@ -223,6 +223,44 @@ struct SearchAndDestroyDispatchTests {
         } == true)
     }
 
+    /// Faithful end-to-end of the xcp/go/nx post-navigation scan: configure the
+    /// action via the real `xset nx` command, arm a destination via the real
+    /// `set_going_to_room`, then deliver the destination's `room.info` and assert
+    /// a scan command is actually sent. This exercises the real arrival path
+    /// (`OnPluginBroadcast` → `going_to_room == current_room.rmid` →
+    /// `action_on_destination_arrived` → `smart_scan`/`quick_scan` → `Send`),
+    /// NOT just the type of a gmcp leaf. It is the regression that D-85 must
+    /// satisfy: `current_room.rmid` (= `gmcp("room.info").num`) must compare equal
+    /// to `going_to_room` (= `tostring(room_id)`), which only holds if the gmcp
+    /// leaf is a string. Fails (no scan) if `.num` comes back as a Lua number.
+    @Test("Arriving at the destination runs the configured local scan (xset nx → smartscan)")
+    func arrivalRunsConfiguredScan() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Configure the post-arrival action through the real command path.
+        _ = await host.expandCommand("xset nx smartscan")
+        // Establish a starting room so current_room is populated (set_going_to_room reads it).
+        _ = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":11111,"zone":"z","details":"","exits":{},"name":"Start"}"#
+        )
+        // Arm the destination exactly as go/xcp/nx do.
+        _ = try await host.run("set_going_to_room('35025')")
+        // Arrive: the destination's room.info → OnPluginBroadcast arrival check.
+        let effects = await host.applyGMCP(
+            package: "room.info",
+            json: #"{"num":35025,"zone":"z","details":"","exits":{},"name":"Dest"}"#
+        )
+        #expect(
+            effects.contains { effect in
+                if case .sendNoEcho(let cmd) = effect { return cmd == "scan" }
+                if case .send(let cmd) = effect { return cmd == "scan" }
+                return false
+            },
+            "no scan command was sent on arrival: \(effects)"
+        )
+    }
+
     @Test("EnableTriggerGroup drives the group enable (CP/GQ state machine)")
     func enableTriggerGroupBound() async throws {
         let host = try SearchAndDestroyHost()

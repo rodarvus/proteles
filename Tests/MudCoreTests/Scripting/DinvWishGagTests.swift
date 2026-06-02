@@ -92,7 +92,10 @@ struct DinvWishGagTests {
     /// list` probes. dinv's post-init 1s timer fires `dbot.wish.get` on its own.
     /// `wishLines` is the exact `wish list` body the fake MUD replays.
     /// Returns the lines that were SHOWN (not gagged) of that block.
-    private func runWishFlow(wishLines: [String]) async throws -> [String] {
+    private func runWishFlow(
+        wishLines: [String],
+        competing: [Trigger] = []
+    ) async throws -> (leaked: [String], wishHasPortal: Bool) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("dinv-wishsess-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -112,7 +115,45 @@ struct DinvWishGagTests {
         await controller.dispatchGMCP(GMCPMessage(
             package: "char.base", json: #"{"name":"Tester","class":"Mage"}"#
         ))
+        // Inject any competing triggers (e.g. the real Aardwolf_Rsocial_Capture
+        // `^\*.+$` stop-on-match trigger) into the SAME shared engine dinv's wish
+        // trigger lives in — so the sequence ordering is exercised live.
+        for trigger in competing {
+            try? await engine.addTrigger(trigger)
+        }
 
+        await driveDinvWishExchange(controller: controller, conn: conn, wishLines: wishLines)
+
+        let sent = conn.sentLines
+        #expect(sent.contains("wish list"), "VACUOUS: dinv never sent `wish list`: \(sent)")
+        let shown = await controller.scrollbackStore.snapshot().map(\.text)
+        // Non-vacuity: the post-fence sentinel proves the wish output reached the
+        // inbound pipeline (so an empty `leaked` means genuinely gagged, not
+        // never-delivered).
+        #expect(
+            shown.contains("PROTELES_SENTINEL_AFTER_FENCE"),
+            "VACUOUS: wish output never reached the pipeline (no sentinel): \(shown)"
+        )
+        // Probe the actual portal-slot determinant: did dinv parse the owned
+        // "Portal" wish? `inv.portal.use` branches on `dbot.wish.has("Portal")`;
+        // it's true only if dinv's wish trigger fired on the owned `*Portal` row.
+        let wishHasPortal = await Self.dinvHasWish("Portal", on: engine)
+
+        await controller.disconnect()
+        // Scrollback text is ANSI-stripped, so compare against stripped wish lines.
+        let strippedWishes = Set(wishLines.map(Self.stripANSI))
+        let leaked = shown.filter { strippedWishes.contains($0) || $0 == "DINV wish list fence" }
+        return (leaked: leaked, wishHasPortal: wishHasPortal)
+    }
+
+    /// Drive the real timer loop ~18s, answering dinv's `pagesize`/`wish list`
+    /// probes + fence echoes as the fake MUD would (split out of ``runWishFlow``
+    /// to keep it within the function-length budget).
+    private func driveDinvWishExchange(
+        controller: SessionController,
+        conn: InMemoryConnection,
+        wishLines: [String]
+    ) async {
         var answered = Set<String>()
         let deadline = ContinuousClock.now.advanced(by: .seconds(18))
         var tick = 0
@@ -147,21 +188,18 @@ struct DinvWishGagTests {
             }
             try? await Task.sleep(for: .milliseconds(20))
         }
+    }
 
-        let sent = conn.sentLines
-        #expect(sent.contains("wish list"), "VACUOUS: dinv never sent `wish list`: \(sent)")
-        let shown = await controller.scrollbackStore.snapshot().map(\.text)
-        // Non-vacuity: the post-fence sentinel proves the wish output reached the
-        // inbound pipeline (so an empty `leaked` means genuinely gagged, not
-        // never-delivered).
-        #expect(
-            shown.contains("PROTELES_SENTINEL_AFTER_FENCE"),
-            "VACUOUS: wish output never reached the pipeline (no sentinel): \(shown)"
-        )
-        await controller.disconnect()
-        // Scrollback text is ANSI-stripped, so compare against stripped wish lines.
-        let strippedWishes = Set(wishLines.map(Self.stripANSI))
-        return shown.filter { strippedWishes.contains($0) || $0 == "DINV wish list fence" }
+    /// Ask dinv (in its own plugin env) whether it has parsed a given wish.
+    private static func dinvHasWish(_ name: String, on engine: ScriptEngine) async -> Bool {
+        for case .note(let text, _, _) in await engine.runInPluginEnvironment(
+            DinvAssets.pluginID,
+            "proteles.note('DINVWISH=' .. tostring("
+                + "dbot and dbot.wish and dbot.wish.has and dbot.wish.has('\(name)')))"
+        ) where text.contains("DINVWISH=") {
+            return text.contains("DINVWISH=true")
+        }
+        return false
     }
 
     /// Strip ANSI SGR escape sequences (`ESC [ … m`) from a string — the pipeline
@@ -187,7 +225,7 @@ struct DinvWishGagTests {
         .timeLimit(.minutes(1))
     )
     func wishBodyGagged() async throws {
-        let leaked = try await runWishFlow(wishLines: Self.body)
+        let leaked = try await runWishFlow(wishLines: Self.body).leaked
         #expect(leaked.isEmpty, "wish-list body leaked to the user: \(leaked)")
     }
 
@@ -228,7 +266,7 @@ struct DinvWishGagTests {
         .timeLimit(.minutes(1))
     )
     func wishBodyGaggedWithColour() async throws {
-        let leaked = try await runWishFlow(wishLines: Self.colouredBody)
+        let leaked = try await runWishFlow(wishLines: Self.colouredBody).leaked
         #expect(leaked.isEmpty, "coloured wish rows leaked to the user: \(leaked)")
     }
 
@@ -244,7 +282,34 @@ struct DinvWishGagTests {
     func wishBodyGaggedWhenHeaderUnmatched() async throws {
         var mangled = Self.body
         mangled[0] = "  <<< some unexpected pre-header banner the start trigger can't match >>>"
-        let leaked = try await runWishFlow(wishLines: mangled)
+        let leaked = try await runWishFlow(wishLines: mangled).leaked
         #expect(leaked.isEmpty, "wish-list leaked when header didn't match: \(leaked)")
+    }
+
+    /// END-TO-END proof for D-84 (portal-when-worn / Finding 1). The live failure:
+    /// dinv never parsed the owned `*Portal` wish row, so `dbot.wish.has("Portal")`
+    /// was false and `inv.portal.use` targeted the hold slot (the Lasso) instead of
+    /// the worn portal slot. Root cause was a co-loaded plugin's stop-on-match
+    /// trigger pre-empting dinv's wish trigger on the `*` rows — the real culprit is
+    /// Aardwolf_Rsocial_Capture's `^\*.+$` (sequence 10, `keep_evaluating` absent →
+    /// stop). dinv registers its wish trigger via `AddTriggerEx(…, 0)` (sequence 0)
+    /// so it should win, but our runtime AddTriggerEx dropped the sequence (→ 100)
+    /// and lost. This drives the REAL dinv wish flow with the actual Rsocial trigger
+    /// present in the shared engine and asserts dinv still parses "Portal". With
+    /// D-84 it passes; reverting the sequence threading makes it fail (Portal lost).
+    @Test("dinv parses the owned Portal wish past a stop-on-match preemptor (D-84)", .timeLimit(.minutes(1)))
+    func ownedPortalWishParsedDespiteStopOnMatchPreemptor() async throws {
+        // The real Aardwolf_Rsocial_Capture trigger: matches any `*`-prefixed line,
+        // regex, NOT omit-from-output, sequence 10, keep_evaluating absent → STOP.
+        let rsocial = Trigger(
+            pattern: .regex("^\\*.+$"),
+            sequence: 10,
+            continueEvaluation: false
+        )
+        let result = try await runWishFlow(wishLines: Self.body, competing: [rsocial])
+        #expect(
+            result.wishHasPortal,
+            "dinv failed to parse the owned 'Portal' wish — a stop-on-match trigger pre-empted it"
+        )
     }
 }
