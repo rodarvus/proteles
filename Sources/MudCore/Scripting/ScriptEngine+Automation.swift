@@ -51,6 +51,8 @@ extension ScriptEngine {
             scheduleOneShot(after: seconds, isScript: isScript, body: body, owner: owner)
         case .setTriggerGroup(let name, let group):
             setDynamicTriggerGroup(name: name, group: group)
+        case .setTriggerOption(let name, let option, let value):
+            setTriggerOptionByName(name: name, option: option, value: value)
         case .removeTrigger(let name):
             if let id = triggerIDsByName.removeValue(forKey: name) {
                 triggers.remove(id: id)
@@ -250,6 +252,49 @@ extension ScriptEngine {
         triggers.remove(id: id)
         guard (try? triggers.add(trigger)) != nil else { return }
         triggerIDsByName[name] = trigger.id
+    }
+
+    /// Apply a `SetTriggerOption` option to a named trigger by mutating it in
+    /// place on the engine (remove + re-add with the same id), so it works for
+    /// XML-plugin-defined triggers — e.g. Galaban's exit plugin toggling
+    /// `omit_from_output` at runtime — not just shim-registered ones. `enabled`
+    /// and `group` are handled by their own effects; this covers the rest.
+    /// Unrecognised options are left untouched (the call still returns eOK).
+    private func setTriggerOptionByName(name: String, option: String, value: String) {
+        guard let id = triggerIDsByName[name],
+              var trigger = triggers.allTriggers.first(where: { $0.id == id })
+        else { return }
+        switch option {
+        case "omit_from_output": trigger.gag = Self.mushTruthy(value)
+        case "keep_evaluating": trigger.continueEvaluation = Self.mushTruthy(value)
+        case "ignore_case": trigger.caseSensitive = !Self.mushTruthy(value)
+        case "enabled": trigger.enabled = Self.mushTruthy(value)
+        case "sequence":
+            guard let sequence = Int(value) else { return }
+            trigger.sequence = sequence
+        case "match": trigger.pattern = Self.repattern(trigger.pattern, value)
+        default: return // an option we don't model — leave the trigger unchanged
+        }
+        triggers.remove(id: id)
+        guard (try? triggers.add(trigger)) != nil else { return }
+        triggerIDsByName[name] = trigger.id
+    }
+
+    /// MUSHclient option booleans: truthy unless empty / 0 / n[o] / false / off.
+    private static func mushTruthy(_ value: String) -> Bool {
+        let normalised = value.trimmingCharacters(in: .whitespaces).lowercased()
+        return !(["", "0", "n", "no", "false", "off"].contains(normalised))
+    }
+
+    /// Rebuild a trigger pattern with new text, preserving its match kind.
+    private static func repattern(_ current: TriggerPattern, _ text: String) -> TriggerPattern {
+        switch current {
+        case .substring: .substring(text)
+        case .beginsWith: .beginsWith(text)
+        case .exact: .exact(text)
+        case .wildcard: .wildcard(text)
+        case .regex: .regex(text)
+        }
     }
 
     /// A Lua string literal (escaped) for embedding a name in a generated call.

@@ -178,8 +178,8 @@ struct CompatShimTests {
     }
 
     // #29: SetTriggerOption was a no-op, so a plugin retuning a trigger at
-    // runtime silently had no effect. Now `enabled`/`group` route to the engine
-    // and `sequence`/`match` rebuild the named trigger.
+    // runtime silently had no effect. Now `enabled`/`group` route to their
+    // engine ops and the rest go to a host op that mutates the named trigger.
     @Test("SetTriggerOption routes enabled + group to the host engines")
     func setTriggerOptionEnabledGroup() async throws {
         let lua = try await shimmed()
@@ -194,36 +194,22 @@ struct CompatShimTests {
         ])
     }
 
-    @Test("SetTriggerOption sequence rebuilds the named trigger with the new sequence")
-    func setTriggerOptionSequence() async throws {
+    @Test("SetTriggerOption routes other options (sequence/match/flags) to the engine by name")
+    func setTriggerOptionToEngine() async throws {
         let lua = try await shimmed()
         _ = try await lua.run("AddTriggerEx('t', '^x$', '', 1, -1, 0, '', 'fn', 12, 100)")
-        let effects = try await lua.run("SetTriggerOption('t','sequence',40)")
-        // Rebuild with the same match/body/flags (Enabled=1), new sequence 40.
-        #expect(effects == [.addTrigger(
-            name: "t",
-            pattern: "^x$",
-            flags: 1,
-            script: "fn(\"t\", matches[0], matches)",
-            sequence: 40
-        )])
-    }
-
-    @Test("a SetTriggerOption rebuild preserves a runtime enable/disable toggle")
-    func rebuildPreservesEnabled() async throws {
-        let lua = try await shimmed()
-        _ = try await lua.run("AddTriggerEx('t', '^x$', '', 1, -1, 0, '', 'fn', 12, 100)")
-        _ = try await lua.run("SetTriggerOption('t','enabled',false)") // disable at runtime
-        let effects = try await lua.run("SetTriggerOption('t','match','^y$')") // rebuild
-        // The cleared Enabled bit must fold back into the rebuilt flags (1 → 0),
-        // else the rebuild would silently re-enable a disabled trigger.
-        #expect(effects == [.addTrigger(
-            name: "t",
-            pattern: "^y$",
-            flags: 0,
-            script: "fn(\"t\", matches[0], matches)",
-            sequence: 100
-        )])
+        // omit_from_output / sequence / match → one host op that mutates the
+        // named trigger on the engine (works for XML-defined triggers too).
+        let effects = try await lua.run("""
+        SetTriggerOption('t','omit_from_output','y')
+        SetTriggerOption('t','sequence',40)
+        SetTriggerOption('t','match','^y$')
+        """)
+        #expect(effects == [
+            .setTriggerOption(name: "t", option: "omit_from_output", value: "y"),
+            .setTriggerOption(name: "t", option: "sequence", value: "40"),
+            .setTriggerOption(name: "t", option: "match", value: "^y$")
+        ])
     }
 
     @Test("DeleteTemporaryTriggers removes only Temporary-flagged triggers")

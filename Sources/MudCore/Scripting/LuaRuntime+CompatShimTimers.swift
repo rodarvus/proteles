@@ -126,54 +126,32 @@ extension LuaRuntime {
       if sendtoVal == nil or sendtoVal == 12 or sendtoVal == 14 then return response end
       return "Send(" .. string.format("%q", response) .. ")"
     end
-    -- Per-trigger spec, so SetTriggerOption can rebuild a named trigger with a
-    -- changed match/sequence (the host's addTrigger replaces a same-named
-    -- trigger). `enabled` is tracked apart from `flags` because EnableTrigger /
-    -- SetTriggerOption("enabled") toggle engine state without rewriting flags; a
-    -- later rebuild must preserve that live enabled/disabled state. The temporary
-    -- bit (trigger_flag.Temporary) feeds DeleteTemporaryTriggers.
-    __triggerSpec = __triggerSpec or {}
+    -- Names of triggers armed with trigger_flag.Temporary (bit 14), so
+    -- DeleteTemporaryTriggers can bulk-clear exactly those (MUSHclient parity).
     __triggerTemporary = __triggerTemporary or {}
-    -- trigger_flag.Enabled is bit 0 (value 1); set/clear it arithmetically.
-    local function __withEnabled(flags, enabled)
-      local hasBit = (flags % 2) == 1
-      if enabled and not hasBit then return flags + 1 end
-      if (not enabled) and hasBit then return flags - 1 end
-      return flags
-    end
-    local function __registerTriggerSpec(key, match, flags, body, seq)
-      __triggerSpec[key] = { match = match, flags = flags, body = body, seq = seq,
-                             enabled = (flags % 2) == 1 }
+    local function __trackTriggerTemporary(key, flags)
       __triggerTemporary[key] = ((math.floor(flags / trigger_flag.Temporary) % 2) >= 1) or nil
     end
-    -- Re-create a named trigger from its spec with the live enabled state folded
-    -- back into the flags (the host's addTrigger replaces the same-named one).
-    local function __rebuildTrigger(key)
-      local s = __triggerSpec[key]
-      if not s then return end
-      proteles.addTrigger(key, s.match, __withEnabled(s.flags, s.enabled), s.body, s.seq)
-    end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
-      local key, m, f = tostring(name), tostring(match), tonumber(flags) or 0
-      local body, s = __triggerBody(name, response, script, sendto), tonumber(seq) or 100
-      proteles.addTrigger(key, m, f, body, s)
+      local key, f = tostring(name), tonumber(flags) or 0
+      proteles.addTrigger(key, tostring(match), f,
+                          __triggerBody(name, response, script, sendto), tonumber(seq) or 100)
       __triggerNames[key] = true
-      __registerTriggerSpec(key, m, f, body, s)
+      __trackTriggerTemporary(key, f)
       return error_code.eOK
     end
     function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
       -- AddTrigger has no send_to param; MUSHclient defaults to the world.
-      local key, m, f = tostring(name), tostring(match), tonumber(flags) or 0
-      local body = __triggerBody(name, response, script, 1)
-      proteles.addTrigger(key, m, f, body)
+      local key, f = tostring(name), tonumber(flags) or 0
+      proteles.addTrigger(key, tostring(match), f, __triggerBody(name, response, script, 1))
       __triggerNames[key] = true
-      __registerTriggerSpec(key, m, f, body, 100)
+      __trackTriggerTemporary(key, f)
       return error_code.eOK
     end
     function DeleteTrigger(name)
       local key = tostring(name)
       proteles.removeTrigger(key); __triggerNames[key] = nil
-      __triggerSpec[key] = nil; __triggerTemporary[key] = nil
+      __triggerTemporary[key] = nil
       return error_code.eOK
     end
     -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
@@ -207,27 +185,23 @@ extension LuaRuntime {
     function IsAlias(name)
       return __aliasNames[tostring(name)] and error_code.eOK or error_code.eAliasNotFound
     end
-    -- SetTriggerOption: honour the options that map to host operations —
-    -- `enabled` (engine toggle), `group` (move to a named group), and
-    -- `sequence`/`match` (rebuild the named trigger, since the host's addTrigger
-    -- replaces by name). The live enabled state is remembered so a rebuild
-    -- preserves it. Other options (omit_from_output, ignore_case, …) aren't
-    -- applied yet but still return eOK (a plugin setting them won't error).
+    -- SetTriggerOption: `enabled` and `group` route to their own engine ops
+    -- (both resolve a trigger by name, XML- or shim-registered). Everything else
+    -- — omit_from_output, keep_evaluating, ignore_case, sequence, match — goes to
+    -- proteles.setTriggerOption, which mutates the named trigger on the engine in
+    -- place (so it works for XML-plugin triggers too, e.g. Galaban's exit plugin
+    -- toggling omit_from_output). An option the host doesn't model is ignored
+    -- there; the call still returns eOK so a plugin setting it won't error.
     function SetTriggerOption(name, option, value)
       local key = tostring(name)
       if option == "enabled" then
         -- Falsy across the forms MUSHclient passes: boolean, number 0, string "0"/"false".
         local on = not (value == false or value == nil or value == 0 or value == "0" or value == "false")
         proteles.enableTrigger(key, on)
-        if __triggerSpec[key] then __triggerSpec[key].enabled = on end
       elseif option == "group" then
         proteles.setTriggerGroup(key, tostring(value))
-      elseif option == "sequence" and __triggerSpec[key] then
-        __triggerSpec[key].seq = tonumber(value) or __triggerSpec[key].seq
-        __rebuildTrigger(key)
-      elseif option == "match" and __triggerSpec[key] then
-        __triggerSpec[key].match = tostring(value)
-        __rebuildTrigger(key)
+      else
+        proteles.setTriggerOption(key, tostring(option), tostring(value))
       end
       return error_code.eOK
     end
@@ -257,7 +231,7 @@ extension LuaRuntime {
       local n = 0
       for key in pairs(__triggerTemporary) do
         proteles.removeTrigger(key)
-        __triggerNames[key] = nil; __triggerSpec[key] = nil
+        __triggerNames[key] = nil
         n = n + 1
       end
       __triggerTemporary = {}

@@ -200,6 +200,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Set a runtime trigger's group (MUSHclient `SetTriggerOption(.,"group",.)`),
     /// so `EnableTriggerGroup` can toggle it.
     case setTriggerGroup(name: String, group: String)
+    /// Set another `SetTriggerOption` option on a named trigger by mutating it on
+    /// the engine — so it works for XML-plugin-defined triggers too, not just
+    /// shim-registered ones. `value` is the raw MUSHclient option string (booleans
+    /// as y/n/0/1, sequence as a number, match as the pattern). Recognised options:
+    /// omit_from_output, keep_evaluating, ignore_case, sequence, match.
+    case setTriggerOption(name: String, option: String, value: String)
     /// Perform an outbound HTTP(S) request for a plugin's `async` helper. The
     /// host runs it off-actor (URLSession), then re-enters the script engine
     /// with the response to fire the plugin's stored Lua callback (kept in the
