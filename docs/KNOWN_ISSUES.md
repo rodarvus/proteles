@@ -2,9 +2,10 @@
 
 > **The active backlog now lives in GitHub Issues** (`gh issue list`) — that's the
 > source of truth. The actionable entries that used to live here were migrated
-> there (recurring `AddTimer` → #18; the mapper-fidelity follow-ups → #20). This
-> file is kept as a **historical record** (the stub audit, resolved items);
-> don't add new backlog here — open an Issue.
+> there (recurring `AddTimer` → #18, fixed; the mapper-fidelity follow-ups → #20,
+> done; the remaining compat-shim gaps → #29 and #30). This file is kept as a
+> **historical record** (the stub audit, resolved items); don't add new backlog
+> here — open an Issue.
 
 Recorded, de-prioritised notes — pick up when a repro lands or priorities allow.
 
@@ -24,41 +25,26 @@ audit claim was a **false alarm**: "dinv timers never fire via the S&D-host
 `AddTimer` no-op" — dinv runs on the **generic shim**, not the S&D host.
 
 The genuine, confirmed gaps in the **generic shim** (`LuaRuntime+CompatShim*.swift`)
-— these affect arbitrary 3rd-party plugins and *look* implemented but aren't:
+— these affect arbitrary 3rd-party plugins and *look* implemented but aren't.
+All five are now **tracked in GitHub Issues** (the source of truth); status here
+is a snapshot, not the backlog:
 
-1. **Recurring (non-OneShot) `AddTimer` fires only once (HIGH).**
-   `LuaRuntime+CompatShimTimers.swift:23-39` — `AddTimer` always becomes a
-   one-shot `proteles.doAfter` guarded by liveness+generation (so `DeleteTimer`
-   can cancel it; this is the D-73 fix). A plugin that arms a **repeating** timer
-   (periodic `who`/stat refresh/clock/spellup re-check) fires once and never
-   again. MUSHclient re-fires every interval. **Fix direction:** route a
-   non-OneShot `AddTimer` to a real recurring timer on the host `TimerEngine`
-   (which already supports recurrence + cancellation for XML-defined timers),
-   keeping the liveness/generation guard so `DeleteTimer`/Replace still cancel —
-   and **live-verify it doesn't reintroduce the D-73 repeating-spam** (that was a
-   *deleted* one-shot still firing; recurrence is orthogonal, but re-test).
-2. **`SetTriggerOption`/`SetTimerOption` are no-ops (MEDIUM).**
-   `LuaRuntime+CompatShimTimers.swift:130-131` — both return `eOK` without
-   applying. A plugin that retunes a trigger at runtime (change `match`,
-   `response`, `sequence`, or `group`) silently has no effect. (Note the S&D
-   *host* binding does honour the `group` option; the generic shim honours
-   none.) **Fix direction:** at least route `group` (→ `setTriggerGroup`) and
-   `sequence`/`enabled`; ideally rebuild the named trigger with the new option.
-3. **`DeleteTemporaryTriggers`/`DeleteTemporaryTimers` are no-ops (LOW).**
-   `LuaRuntime+CompatShimTimers.swift:132-133` — return `0`; temporary
-   automation isn't bulk-cleared. Rarely called; plugin unload clears anyway.
-4. **Clipboard not wired (LOW).** `LuaRuntime+CompatShim.swift:500-504` —
-   `GetClipboard()` returns `""`, `SetClipboard()` silently discards (MudCore is
-   platform-agnostic). A plugin offering copy/paste degrades silently. **Fix
-   direction:** a `proteles.clipboard` provider injected by the macOS app
-   (`NSPasteboard`), like the `proteles.dialog` provider.
-5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).**
-   `PluginContext.swift:125-126` — only matters for miniwindow-layout maths, and
-   we render those natively, so low impact until/unless a generic plugin sizes
-   itself from these.
-
-Recommended order if picked up: **#1 (recurring timers)** is the only broad,
-user-visible one; #2 next. None block current releases.
+1. **Recurring (non-OneShot) `AddTimer` fires only once (HIGH).** → **FIXED**
+   (#18, 2026-06-02). The fire body now re-arms itself via `__protelesReschedule`,
+   keeping the liveness/generation guard so `DeleteTimer`/Replace still cancel.
+2. **`SetTriggerOption`/`SetTimerOption` are no-ops (MEDIUM).** → **#29.**
+   `LuaRuntime+CompatShimTimers.swift:161-162` return `eOK` without applying, so a
+   plugin retuning a trigger/timer at runtime silently has no effect.
+3. **`DeleteTemporaryTriggers`/`DeleteTemporaryTimers` are no-ops (LOW).** → **#30.**
+   `LuaRuntime+CompatShimTimers.swift:163-164` return `0`; rarely called, and
+   plugin unload clears automation anyway.
+4. **Clipboard not wired (LOW).** → **#30.** `LuaRuntime+CompatShim.swift:503-504`:
+   `GetClipboard()` returns `""`, `SetClipboard()` discards. Fix: a
+   `proteles.clipboard` provider injected by the macOS app (`NSPasteboard`), like
+   the `proteles.dialog` provider.
+5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).** → **#30.**
+   `PluginContext.swift:54-55,125-126` — only matters for miniwindow-layout maths,
+   which we render natively, so low impact.
 
 ## Plugin outbound HTTP (`async`) — RESOLVED (D-67)
 
@@ -66,25 +52,16 @@ Implemented post-`0.3.0` over URLSession (full parity; outbound HTTP allowed
 freely). `require "async"` is now the real module — see
 `docs/plans/ASYNC_HTTP_PLAN.md`. No longer a limitation.
 
-## Mapper command-fidelity follow-ups (D-90, 2026-06-02)
+## Mapper command-fidelity follow-ups (D-90, 2026-06-02) — RESOLVED (#20)
 
-The byte-faithful `mapper` command pass (D-90) landed three deliberate,
-documented deferrals — small, non-blocking, picked up when convenient:
+The byte-faithful `mapper` command pass (D-90) landed three deliberate
+deferrals, **all since shipped** (#20, closed 2026-06-02):
 
-- **Bounce-designation persistence.** `mapper bounceportal`/`bouncerecall`
-  designations live in memory on the `Mapper` actor; the reference persists them
-  to a `storage` table so they survive a restart. Ours reset on a full world
-  reload (same replay-on-attach class as the other live state). Persist them to
-  the mapper DB to match.
-- **`mapper backup` → native Databases model.** Still our single-file timestamped
-  copy. The reference's `backup_databases` is a multi-file rotation with optional
-  compression + integrity checks; the faithful home for this is the native
-  Databases-menu backup model (the Phase-7 display/DB→native mapping), not a
-  command reimplementation.
-- **`mapper help search <txt>` highlighting.** Lists the matching help lines
-  under their section headers but doesn't colour-highlight the matched term the
-  way the reference does (cornflower/red). Cosmetic; would need per-line
-  `NoteSegment` splitting.
+- **Bounce-designation persistence** — `mapper bounceportal`/`bouncerecall`
+  designations now persist to the mapper DB's `storage` table (survive restart).
+- **`mapper backup` → native model** — now a rotated `db_backups/` directory.
+- **`mapper help search <txt>` highlighting** — the matched term is now
+  colour-highlighted per-line.
 
 Not follow-ups (justified divergences, no action): `thisroom` renders
 Exits/Exit-locks sorted (the reference's Lua `tprint` order is itself
