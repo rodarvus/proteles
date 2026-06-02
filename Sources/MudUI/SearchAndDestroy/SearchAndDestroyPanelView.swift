@@ -110,29 +110,36 @@ public struct SearchAndDestroyPanelView: View {
 
     // MARK: - Quest banner
 
-    /// The open quest, shown above the campaign targets. Click runs to the quest
-    /// mob via S&D's `qw` (quick-where) alias.
+    /// The open quest, shown above the campaign targets. Click X-runs to the
+    /// quest area (S&D's `xrt <area>` — the run-to that works from anywhere;
+    /// bare `qw` only finds the mob once you're already in the area). When the
+    /// target's been killed (qstat 3) the banner turns green: return to the
+    /// questor to complete.
     private func questBanner(_ quest: SearchAndDestroyModel.Quest) -> some View {
-        Button {
-            if model.isInteractive { model.run("qw") }
+        let area = quest.area ?? quest.areaName
+        return Button {
+            if model.isInteractive, let area { model.run("xrt \(area)") }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Image(systemName: "flag.checkered").font(.caption).foregroundStyle(SnDPalette.accent)
+                Image(systemName: quest.killed ? "checkmark.seal.fill" : "flag.checkered")
+                    .font(.caption)
+                    .foregroundStyle(quest.killed ? SnDPalette.complete : SnDPalette.accent)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(quest.mob ?? "Quest target")
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(quest.killed ? SnDPalette.dead : .primary)
-                    Text(questLocation(quest)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    Text(quest.killed ? "Target killed — return to the questor" : questLocation(quest))
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
-                if quest.killed { tag("KILLED — RETURN", color: SnDPalette.dead) }
+                if quest.killed { tag("RETURN TO QUESTOR", color: SnDPalette.complete, filled: true) }
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!model.isInteractive)
+        .disabled(!model.isInteractive || area == nil)
         .padding(.horizontal, 11).padding(.vertical, 7)
-        .background(SnDPalette.accent.opacity(0.08))
+        .background((quest.killed ? SnDPalette.complete : SnDPalette.accent)
+            .opacity(quest.killed ? 0.18 : 0.08))
     }
 
     private func questLocation(_ quest: SearchAndDestroyModel.Quest) -> String {
@@ -162,14 +169,37 @@ public struct SearchAndDestroyPanelView: View {
             // row — folded in here to save vertical space).
             actions
             Spacer()
-            // A new quest can be requested now → a quiet badge. (can_request is
-            // only true off-quest, so it never collides with the quest banner.)
+            // Off-quest: either a new quest can be requested now (qstat 0), or
+            // we're on cooldown (qstat 1) → show the remaining wait.
             if snd.canRequestQuest {
                 tag("QUEST READY", color: SnDPalette.express, filled: true)
+            } else if let cooldown = questCooldown(snd) {
+                questCooldownBadge(cooldown)
             }
         }
         .padding(.horizontal, 11).padding(.vertical, 9)
         .background(.ultraThinMaterial)
+    }
+
+    /// The off-quest cooldown's next-requestable time when waiting (qstat 1) and
+    /// it's still in the future; `nil` otherwise.
+    private func questCooldown(_ snd: SearchAndDestroyModel) -> Double? {
+        guard snd.quest?.status == "1", let next = snd.nextQuestTime,
+              next > Date().timeIntervalSince1970 else { return nil }
+        return next
+    }
+
+    /// The off-quest cooldown badge — a live-updating "Quest in N min" using the
+    /// next-requestable time. `.relative` ticks itself, no panel timer needed.
+    private func questCooldownBadge(_ unixTime: Double) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "hourglass")
+            Text("Quest ") + Text(Date(timeIntervalSince1970: unixTime), style: .relative)
+        }
+        .font(.system(size: 9, weight: .bold))
+        .foregroundStyle(SnDPalette.unlikely)
+        .padding(.horizontal, 5).padding(.vertical, 1)
+        .background(SnDPalette.unlikely.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
     }
 
     /// The activity badge — appends the global-quest id when on a GQ.
@@ -319,4 +349,6 @@ enum SnDPalette {
     static let dead = Color(red: 0.42, green: 0.42, blue: 0.46)
     static let currentRow = Color(red: 1.0, green: 0.18, blue: 0.57).opacity(0.14)
     static let button = Color(red: 0.11, green: 0.11, blue: 0.13)
+    /// Quest-complete green — target killed, return to the questor.
+    static let complete = Color(red: 0.30, green: 0.78, blue: 0.45)
 }

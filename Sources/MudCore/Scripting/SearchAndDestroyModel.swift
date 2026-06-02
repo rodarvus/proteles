@@ -17,6 +17,9 @@ public struct SearchAndDestroyModel: Sendable, Equatable, Codable {
     public var canRequestQuest = false
     /// The joined global-quest id, when on a GQ.
     public var gqId: String?
+    /// Unix time when a new quest can be requested (drives the cooldown countdown
+    /// while off-quest waiting, `quest.status == "1"`).
+    public var nextQuestTime: Double?
 
     /// The current quest target (reference `quest_target`).
     public struct Quest: Sendable, Equatable, Codable {
@@ -72,6 +75,7 @@ public struct SearchAndDestroyModel: Sendable, Equatable, Codable {
         case targets, quest
         case canRequestQuest = "can_request_quest"
         case gqId = "gq_id"
+        case nextQuestTime = "next_quest_time"
     }
 
     /// Decode a published JSON snapshot, or nil if it isn't valid.
@@ -107,6 +111,7 @@ public extension SearchAndDestroyModel {
         quest = try container.decodeIfPresent(Quest.self, forKey: .quest)
         canRequestQuest = try container.decodeIfPresent(Bool.self, forKey: .canRequestQuest) ?? false
         gqId = try container.decodeIfPresent(String.self, forKey: .gqId)
+        nextQuestTime = try container.decodeIfPresent(Double.self, forKey: .nextQuestTime)
     }
 }
 

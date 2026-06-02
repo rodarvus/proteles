@@ -10,11 +10,11 @@ by a native SwiftUI panel).
                           (UTF-8) from `Search_and_Destroy.xml`.
 - `Search_and_Destroy.xml` — the full plugin, normalised to UTF-8; kept as the
                           source for the automation (trigger/alias/timer)
-                          definitions. **Synced to the `proteles-snd-1.3` release**
+                          definitions. **Synced to the `proteles-snd-1.4` release**
                           (the version the in-app installer fetches via
                           `releases/latest`), so the parse/host tests validate the
                           shipped corpus (94 triggers, 100 aliases, 7 timers). The
-                          XML is unchanged 1.2→1.3; only `core.lua`'s bridge grew
+                          XML is unchanged 1.2→1.4; only `core.lua`'s bridge grew
                           (quest/GQ fields), so the automation counts are the same.
 - `areaReferences.lua`, `sqlSetup.lua`, `tablesSetup.lua` — S&D's data modules.
 - `constants.lua`       — S&D's `<include>`d constants.
@@ -33,7 +33,9 @@ Search/campaign/gquest logic is untouched.
 The bridge publishes `version`, `activity`, `player_on_cp`/`player_on_gq`,
 `target_count`, `targets`, plus (added in `proteles-snd-1.3`) the open `quest`
 (from `quest_target`: status/mob/area/area_name/room/killed), `can_request_quest`
-(`quest_target.qstat == "0"`), and `gq_id` (`gqid_joined`, while on a GQ).
+(`quest_target.qstat == "0"`), and `gq_id` (`gqid_joined`, while on a GQ); and
+(added in `proteles-snd-1.4`) `next_quest_time` (the unix time a new quest can be
+requested, for the off-quest cooldown countdown).
 
 LICENSING: upstream S&D ships no explicit licence; redistribution terms are a
 deferred decision (tracked with the GPLv3/starter-DB question). Vendored here

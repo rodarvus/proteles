@@ -5534,6 +5534,9 @@ function xg_draw_window()
             quest = quest,
             can_request_quest = (type(quest_target) == "table" and quest_target.qstat == "0") or false,
             gq_id = ((player_on_gq == "yes") and gqid_joined) or nil,
+            -- Unix time when a new quest can be requested (set from q.wait/q.timer);
+            -- the panel shows the remaining wait while on quest cooldown (qstat 1).
+            next_quest_time = next_quest_time,
         })
         if ok and encoded then proteles.publish(encoded) end
         return -- the native panel renders the model; skip the MUSHclient drawing
