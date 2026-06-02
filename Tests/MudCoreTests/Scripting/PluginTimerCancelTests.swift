@@ -56,6 +56,61 @@ struct PluginTimerCancelTests {
         #expect(try await lua.number("count") == 1)
     }
 
+    /// All deferred bodies an effect set carries (a recurring fire re-arms
+    /// itself, emitting a fresh `scheduleAfter` each time it runs).
+    private func deferredBodies(_ effects: [ScriptEffect]) -> [String] {
+        effects.compactMap { effect in
+            if case .scheduleAfter(_, _, let body) = effect { return body }
+            return nil
+        }
+    }
+
+    /// Regression for #18: a recurring (non-OneShot) AddTimer used to fire once
+    /// and never again — a plugin arming a periodic refresh (who/stat/clock)
+    /// ticked a single time. MUSHclient re-fires every interval; we now match by
+    /// having the fire body re-arm itself, guarded by the same liveness/generation
+    /// so DeleteTimer/Replace still stop it.
+    @Test("a recurring (non-OneShot) AddTimer re-fires every interval")
+    func recurringRefires() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("count = 0; function tick(n) count = count + 1 end")
+        // flags = 0 → not OneShot → recurring (MUSHclient's default).
+        let body = try await deferredBody(lua.run("AddTimer('r', 0, 0, 5, '', 0, 'tick')"))
+        // First fire: runs the script AND schedules the next interval.
+        let firstFire = try await lua.run(body)
+        #expect(try await lua.number("count") == 1)
+        let next = try #require(deferredBodies(firstFire).first, "a recurring fire must re-arm itself")
+        // Second fire from the re-armed body: fires again and re-arms again.
+        let secondFire = try await lua.run(next)
+        #expect(try await lua.number("count") == 2)
+        #expect(!deferredBodies(secondFire).isEmpty) // still recurring
+    }
+
+    @Test("a OneShot AddTimer fires once and does not re-arm")
+    func oneShotDoesNotRefire() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("count = 0; function tick(n) count = count + 1 end")
+        // timer_flag.OneShot == 4: fire exactly once, no re-arm scheduled.
+        let body = try await deferredBody(lua.run("AddTimer('o', 0, 0, 5, '', timer_flag.OneShot, 'tick')"))
+        let fire = try await lua.run(body)
+        #expect(try await lua.number("count") == 1)
+        #expect(deferredBodies(fire).isEmpty)
+    }
+
+    @Test("DeleteTimer stops a recurring timer mid-chain")
+    func deleteStopsRecurrence() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("count = 0; function tick(n) count = count + 1 end")
+        let body = try await deferredBody(lua.run("AddTimer('r', 0, 0, 5, '', 0, 'tick')"))
+        let firstFire = try await lua.run(body)
+        #expect(try await lua.number("count") == 1)
+        let next = try #require(deferredBodies(firstFire).first)
+        _ = try await lua.run("DeleteTimer('r')")
+        let secondFire = try await lua.run(next) // guard fails → no fire, no re-arm
+        #expect(try await lua.number("count") == 1)
+        #expect(deferredBodies(secondFire).isEmpty)
+    }
+
     @Test("EnablePlugin / DisablePlugin / IsPluginInstalled are benign (return eOK / self)")
     func pluginControlStubs() async throws {
         let lua = try await shimmed()
