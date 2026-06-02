@@ -21,6 +21,8 @@ struct SettingsView: View {
                 .tabItem { Label("Logging", systemImage: "doc.text") }
             NotificationsSettingsView()
                 .tabItem { Label("Notifications", systemImage: "bell") }
+            DiagnosticsSettingsView()
+                .tabItem { Label("Diagnostics", systemImage: "ladybug") }
         }
         .frame(width: 480)
     }
