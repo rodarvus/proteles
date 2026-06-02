@@ -280,17 +280,18 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper) // rooms 1,2,3; current = 1
-        // A non-cardinal exit "enter cloud" from room 1 → 3.
+        // A non-cardinal exit "enter cloud" from room 1 → 3 (reference wording).
         #expect(await notes(mapper.handleCommand("mapper fullcexit {enter cloud} 1 3"))
-            .contains { $0.contains("Custom exit 'enter cloud'") })
+            == ["Custom Exit CONFIRMED: 1 (enter cloud) -> 3 [lock level 0]"])
         let list = await notes(mapper.handleCommand("mapper cexits"))
-        #expect(list.contains { $0.contains("Custom exits (1)") })
-        #expect(list.contains { $0.contains("enter cloud") && $0.contains("[3]") })
-        // Deleting custom exits from the current room (1) removes it.
-        #expect(await notes(mapper.handleCommand("mapper delete cexits"))
-            .contains { $0.contains("Deleted 1 custom exit") })
-        #expect(await notes(mapper.handleCommand("mapper cexits"))
-            .contains { $0.contains("No custom exits") })
+        // The cexits table shows the *source* room (room 1 = "South End").
+        #expect(list.contains { $0.contains("enter cloud") && $0.contains("South End") })
+        #expect(list.contains("Found 1 custom exits."))
+        // Deleting custom exits from the current room (1) reports + removes it.
+        let deleted = await notes(mapper.handleCommand("mapper delete cexits"))
+        #expect(deleted.contains(#"Found custom exit "enter cloud" to room 3 "North End""#))
+        #expect(deleted.contains("Removed custom exits from the current room."))
+        #expect(await notes(mapper.handleCommand("mapper cexits")).contains("Found 0 custom exits."))
     }
 
     @Test("interactive cexit: sends the dir, samples the room after the delay")
@@ -318,7 +319,7 @@ struct MapperCommandTests {
         #expect(confirmation?.contains("(enter portal) -> 3") == true)
         // It now appears in the custom-exit list (back in room 1's exits).
         #expect(await notes(mapper.handleCommand("mapper cexits"))
-            .contains { $0.contains("enter portal") && $0.contains("[3]") })
+            .contains { $0.contains("enter portal") })
     }
 
     @Test("emptyDatabase wipes the live map and forgets the current room")
@@ -393,8 +394,7 @@ struct MapperCommandTests {
         var iterator = stream.makeAsyncIterator()
         let note = await iterator.next()
         #expect(note?.contains("CEXIT FAILED") == true)
-        #expect(await notes(mapper.handleCommand("mapper cexits"))
-            .contains { $0.contains("No custom exits") })
+        #expect(await notes(mapper.handleCommand("mapper cexits")).contains("Found 0 custom exits."))
     }
 
     @Test("portal edits: change name, recall toggle, level lock")

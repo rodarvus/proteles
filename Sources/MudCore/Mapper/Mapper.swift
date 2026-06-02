@@ -103,6 +103,10 @@ public actor Mapper {
     /// destination room (reference BASE_CEXIT_DELAY).
     static let cexitDelaySeconds = 2
 
+    /// A one-shot override of the cexit delay set by `mapper cexit_wait <n>`
+    /// (reference `temp_cexit_delay`), consumed by the next `mapper cexit`.
+    var tempCexitDelay: Int?
+
     /// Subscribers to one-off system notes the mapper pushes outside the GMCP
     /// flow (e.g. a delayed cexit confirmation/failure). The session echoes
     /// these to the output view.
@@ -152,12 +156,16 @@ public actor Mapper {
     func finalizeCexit(generation: Int) {
         guard generation == cexitGeneration, let pending = pendingCexit else { return }
         pendingCexit = nil
-        let dest = currentRoomUID
-        guard let dest, dest != "-1", dest != pending.from else {
-            emitNote(
-                "CEXIT FAILED: no new room within \(Self.cexitDelaySeconds)s — "
-                    + "no custom exit recorded for '\(pending.dir)'."
-            )
+        guard let dest = currentRoomUID else {
+            emitNote("CEXIT FAILED: Need to know where we ended up.")
+            return
+        }
+        if dest == "-1" {
+            emitNote("CEXIT FAILED: You cannot link custom exits to unmappable rooms.")
+            return
+        }
+        if dest == pending.from {
+            emitNote("CEXIT FAILED: Custom Exit \(pending.dir) leads back here!")
             return
         }
         try? store.addCustomExit(dir: pending.dir, from: pending.from, to: dest, level: 0)
