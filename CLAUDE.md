@@ -197,16 +197,6 @@ plugins (autobypass, mudbin, Orphean, Double Predictor via `SendSpecial`, …).
 "mapper loses its DB after reload churn" report (NO-GUESSING; needs a repro +
 transcript; re-check against the new global `Databases/` path).
 
-### ⚠️ Privacy (hard rule)
-The user has **private/local plugins** that must **NEVER** be named or even
-acknowledged as existing in anything committed/pushed to GitHub (repo files,
-commit messages, docs). The plugin mechanism is documented generically — the
-**Plugin Library** ("add a plugin from your Mac or a URL"; see
-`docs/plans/PLUGIN_LIBRARY_PLAN.md`) — and a user's actual plugin names never
-appear. A leak happened once and was scrubbed via force-push; do not repeat it.
-Sweep before pushing: `git grep -i <names>` **and**
-`git log -p origin/main..HEAD | grep -i <names>` must both be empty.
-
 ### Gotchas to remember
 - **600-line file budget** (swiftlint `file_length` warning → `--strict` error).
   When a file crosses 600, **split it** (a new `Type+Feature.swift` extension
