@@ -279,13 +279,13 @@ under `Resources/dinv`. Closing its API surface added shared infrastructure for
 the whole corpus (a `utils` library, dynamic `AddAlias`, `OnPluginSend`,
 gmcphelper scalar-stringification, Windows-path normalisation).
 
-### 7.8 The Lua sandbox & SQLite (D-26, with a known limitation)
+### 7.8 The Lua sandbox & SQLite (D-26)
 `installSQLite` exposes lsqlite3 as a `sqlite3` global with `sqlite3.open`
-constrained to `:memory:`/temp and files under the data tree. **Known limitation:**
-the guard is on the *open path* only — an opened handle's `db:exec("ATTACH …")`
-can reach other paths. Acceptable for the threat model (user-installed plugins,
-already far stricter than MUSHclient); harden with `sqlite3_set_authorizer`
-denying `ATTACH` (§11).
+constrained to `:memory:`/temp and files under the data tree. The open-path
+guard is backed by an engine-level **authorizer** — the vendored lsqlite3
+installs `sqlite3_set_authorizer` denying `ATTACH`/`DETACH` on every opened
+connection (`Sources/CLSQLite3/lsqlite3.c`), so a plugin can't bypass the guard
+via `db:exec("ATTACH …")` through any SQL entry point.
 
 ---
 
@@ -375,8 +375,8 @@ rewrite silently dropped a doc-only backlog list — Issues prevent that).
 - **Recurring (non-OneShot) `AddTimer` fires once** on the generic shim (it
   becomes a one-shot `doAfter`) — the one broad shim gap; the rest of the stub
   audit was intentional/correct (`docs/KNOWN_ISSUES.md`).
-- **lsqlite3 sandbox escape via `exec`/`ATTACH`** (§7.8). Bounded by threat
-  model; harden with an authorizer.
+- **lsqlite3 sandbox** (§7.8) — open-path guard + an engine-level authorizer
+  denying `ATTACH`/`DETACH` (D-26); no known escape.
 - **Plugin reload handler leak.** Lua registry refs for event/broadcast handlers
   aren't released on `reload`, so reloading a Lua plugin can double-fire (bounded
   to runtime lifetime). Native/S&D paths unaffected.
@@ -426,7 +426,7 @@ superseded decisions are marked, not deleted.
 | D-23 | 2026-05-22 | Native-plugin host: pure-Swift `NativePlugin` value types + registry, separate from the Lua shim path | adopted |
 | D-24 | 2026-05-22 | Per-plugin Lua environments via `setfenv` so plugins can't clobber each other's globals | adopted |
 | D-25 | 2026-05-23 | Native graphical mapper: GRDB store on the MUSHclient schema (read-compatible superset); fan-out BFS layout; Dijkstra pathfinding; incremental, non-destructive import | adopted |
-| D-26 | 2026-05-23 | lsqlite3 behind a sandboxed `sqlite3` global; open-path constrained to the data dir (known limit: `ATTACH` can escape — harden later) | adopted |
+| D-26 | 2026-05-23 | lsqlite3 behind a sandboxed `sqlite3` global; open-path constrained to the data dir + an engine-level authorizer denying `ATTACH`/`DETACH` on every connection (the open-path-bypass is closed) | adopted |
 | D-27 | 2026-05-22 | Live panels docked in the main window, not separate windows that fall behind the game | adopted |
 | D-28 | 2026-05-23 | Search-and-Destroy run natively: its `core.lua` verbatim on a dedicated runtime + curated bindings; triggers/aliases/timers on the host engines; a native SwiftUI panel via a published JSON model. **Not bundled** — an optional, user-installed download (`SearchAndDestroyInstaller`), unlike the vendored dinv/leveldb | adopted |
 | D-29 | 2026-05-23 | Mapper `CallPlugin` bridge: answer get_current_room/getkeyword/find and deliver results via `OnPluginBroadcast` (500/501/502) so plugins drive the native mapper | adopted |
