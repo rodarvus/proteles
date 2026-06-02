@@ -418,11 +418,21 @@ function inv.cache.add(cache, objId)
       dinv_db.saveCacheRecent(objId, copy)
     elseif (cache.name == inv.cache.frequent.name) then
       local name = inv.items.getStatField(objId, invStatFieldName)
+      local itemType = inv.items.getStatField(objId, invStatFieldType)
       -- Never cache an unidentified (stub) entry by name.  A none-level entry
       -- carries no real stats, so a frequent-cache hit on it leaves the item
       -- unidentified and the refresh re-IDs it on every pass.  Stubs reach this
       -- path via the items-table template fallback in invitem handling.
-      if (name ~= nil) and (name ~= "") and (idLevel ~= invIdLevelNone) then
+      --
+      -- Also gate on item type.  The frequent cache is keyed by name and a hit
+      -- clones the cached stats onto every same-named item, so it must hold only
+      -- interchangeable consumables (potion/pill/food/wand/staff/scroll).  An
+      -- ungated seed once let gear in (e.g. "Aardwolf Bracers of Iron Grip"),
+      -- which then re-cloned one bracer's stats onto all of them on every
+      -- refresh.  Refusing non-consumable types here is the single choke point
+      -- that keeps the cache clean regardless of caller.
+      if (name ~= nil) and (name ~= "") and (idLevel ~= invIdLevelNone) and
+         invmon.isFrequentCacheType(itemType) then
         -- invdata strips out commas in the names of items.  As a result, we won't find items in
         -- the cache unless we also store them in a form without commas.
         name = string.gsub(name, ",", "")

@@ -2,6 +2,117 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0112] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Add CONTRIBUTING.md and link it (plus RELEASE.md) from the
+           README so contributors can find the contribution and release
+           process.]]
+  }
+}
+
+dbot.changelog[3.0111] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Add RELEASE.md documenting the full release process (version
+           metadata rules, pre-release checks, tagging, and the automated
+           single-file asset build) so contributors can cut their own releases.]]
+  }
+}
+
+dbot.changelog[3.0110] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Single-file installs (dinv_single.xml) can now self-update.
+           "dinv version update" detects single-file installs and downloads the
+           latest release's dinv_single.xml, swapping it over the running plugin
+           and reloading.  The updater's downloader now follows HTTP redirects,
+           which release-asset URLs require.]]
+  }
+}
+
+dbot.changelog[3.0109] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Keep the frequent item cache consumable-only, and purge entries
+           that don't belong.  The cache is keyed by item name and a hit clones
+           the cached stats onto every same-named item, so it must hold only
+           interchangeable consumables.  A stray seed had let gear, keys, and
+           treasure in (e.g. "Aardwolf Bracers of Iron Grip"), and that polluted
+           entry re-cloned one instance's stats onto all of them on every
+           refresh -- which "dinv forget" + "dinv refresh all" could not heal,
+           since forget never touched the cache.  inv.cache.add now refuses
+           non-consumable types, and a one-time migration sweeps out any such
+           rows already stored.  To repair items still showing wrong data, run
+           "dinv forget <name>" then "dinv refresh all" once after updating.]]
+  }
+}
+
+dbot.changelog[3.0108] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Stop corrupting uniquely-enchanted gear that shares a base name.
+           When an item entered your inventory, dinv could clone a same-named
+           item's stats from the database (the invitem template fallback),
+           assuming every instance was identical.  That holds for consumables
+           but not for gear like four differently-enchanted "Aardwolf Bracers
+           of Iron Grip" -- all four ended up showing one bracer's level and
+           stats, and a refresh never fixed it.  The template clone is now
+           restricted to interchangeable consumable types (potion, pill, food,
+           wand, staff, scroll); gear is identified individually instead.]]
+  }
+}
+
+dbot.changelog[3.0107] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Credit OneToedSloth in the README for the metalweapon field,
+           the loc/organize search fixes, the single-file build, and the
+           migrate-reload fix.]]
+  }
+}
+
+dbot.changelog[3.0106] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Single-file distribution: a self-contained dinv_single.xml
+           (all modules embedded) is now built by build.py and attached to
+           each GitHub release as a download, for one-file installs.  Note:
+           single-file installs are not self-updating -- re-download the file
+           from the latest release to update.]]
+  }
+}
+
+dbot.changelog[3.0105] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix "dinv organize add/clear" to accept a numeric object ID
+           in addition to a relative name, report distinct errors for
+           zero vs. multiple matches, and allow containers in containers
+           following mud rules for such things.]]
+  }
+}
+
+dbot.changelog[3.0104] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Add metalweapon priority scoring field.  Set to a positive
+           weight to favor metal weapons in a priority (e.g. for blacksmith
+           builds).  Non-weapon items and weapons with unknown material are
+           unaffected.]]
+  }
+}
+
+dbot.changelog[3.0103] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix loc/location search query to accept string location names
+           (e.g. "loc inventory", "loc head").
+           Previously only numeric container IDs were matched; string values
+           silently matched everything.]]
+  }
+}
+
 dbot.changelog[3.0102] =
 {
   { change = drlDbotChangeLogTypeFix,

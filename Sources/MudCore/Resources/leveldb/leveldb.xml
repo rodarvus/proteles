@@ -11,7 +11,7 @@
    purpose="A simple leveling database for Aardwolf"
    date_written="2026-02-17 08:09:56"
    requires="5.07"
-   version="9.2"
+   version="9.3"
    save_state="y"
    >
 
@@ -1432,10 +1432,29 @@ end
 -- =============================================================================
 local function close_db()
    if db then
+      -- Fold the WAL back into the main db so a clean close/reload leaves no
+      -- un-checkpointed data and shrinks the -wal sidecar. No-op under DELETE.
+      db:exec("PRAGMA wal_checkpoint(TRUNCATE)")
       db:close()
       db = nil
       db_path = nil
    end
+end
+
+-- Per-connection tuning. journal_mode=WAL is persisted in the db header (set
+-- once, sticks forever); synchronous and wal_autocheckpoint are per-connection
+-- and must be reapplied on every open. WAL+NORMAL keeps fsync off the per-kill
+-- write path: a power loss can only lose the last few un-checkpointed kills, and
+-- the db never corrupts. SQLite silently falls back to the prior journal mode if
+-- WAL can't be enabled (e.g. network/cloud-synced filesystems), so attempting it
+-- is safe. Returns the journal mode actually in effect.
+local function configure_connection()
+   db:exec("PRAGMA journal_mode=WAL")
+   db:exec("PRAGMA synchronous=NORMAL")
+   db:exec("PRAGMA wal_autocheckpoint=1000")
+   local mode = "unknown"
+   for row in db:nrows("PRAGMA journal_mode") do mode = row.journal_mode end
+   return mode
 end
 
 local function open_db()
@@ -1453,6 +1472,15 @@ local function open_db()
 
    db = handle
    db_path = path
+
+   local jmode = configure_connection()
+   if jmode ~= "wal" then
+      ColourNote("yellow", "", PREFIX .. string.format(
+         "Note: SQLite journal mode is '%s', not WAL (WAL is unavailable on " ..
+         "network or cloud-synced folders). Data collection still works, but " ..
+         "writes are slower. Move the plugin off a synced drive for best speed.",
+         jmode))
+   end
 
    if not init_tables() then
       close_db()
@@ -5570,6 +5598,26 @@ function ldb_db_info(name, line, wildcards)
          size_str = string.format("%.1f MB", size / (1024 * 1024))
       end
       detail("Size:        ", size_str, PALETTE.number_fg)
+   end
+
+   -- Journal mode (WAL vs rollback) and the -wal sidecar size, if present
+   local jmode = "unknown"
+   for row in db:nrows("PRAGMA journal_mode") do jmode = row.journal_mode end
+   detail("Journal:     ", jmode, PALETTE.id_fg)
+
+   local wal = io.open(db_path .. "-wal", "r")
+   if wal then
+      local wsize = wal:seek("end")
+      wal:close()
+      local wal_str
+      if wsize < 1024 then
+         wal_str = wsize .. " bytes"
+      elseif wsize < 1024 * 1024 then
+         wal_str = string.format("%.1f KB", wsize / 1024)
+      else
+         wal_str = string.format("%.1f MB", wsize / (1024 * 1024))
+      end
+      detail("WAL size:    ", wal_str, PALETTE.number_fg)
    end
 
    -- Per-table counts as a small alt-row table

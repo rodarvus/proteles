@@ -1869,6 +1869,7 @@ inv.priority.fieldTable = {
   { "irongrip"    , "Value of an item's irongrip effect" },
   { "shield"      , "Value of a shield's damage reduction effect" },
   { "hammerswing" , "Value of a hammer weapon for the hammerswing skill" },
+  { "metalweapon" , "Score bonus for weapons made of metal (e.g. for blacksmith priorities)." },
 
   { "maxstr"      , "Value of hitting a level's strength ceiling" },
   { "maxint"      , "Value of hitting a level's intelligence ceiling" },

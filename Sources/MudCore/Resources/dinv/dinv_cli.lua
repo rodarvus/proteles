@@ -568,6 +568,9 @@ Examples:
      "@Gdinv search wearable head unused mage@W"
      "@Gdinv search type weapon ~unused mage@W"
      "@Gdinv put 2.bag unused all@W"
+
+ 11) Find all items in your main inventory (not worn, not in a container)
+     "@Gdinv search loc inventory@W"
 ]])
 
 end -- inv.cli.search.examples
@@ -3405,7 +3408,7 @@ end -- inv.cli.organize.fn3
 
 function inv.cli.organize.usage()
   dbot.print("@W    " .. pluginNameCmd .. " organize @G[add | clear | display] " ..
-             "@Y<container relative name> <query>@w") 
+             "@Y<container relative name or ID> <query>@w")
 end -- inv.cli.organize.usage
 
 

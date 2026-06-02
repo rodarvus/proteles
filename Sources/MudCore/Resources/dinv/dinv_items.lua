@@ -3384,8 +3384,9 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
           -- explicitly check for a location query and handle it as a one-off.  Yes, I should probably
           -- fix this at some point...
           if (key == invQueryKeyLocation) or (key == invQueryKeyLoc) then
-            if ((invert == false) and ((valueNum ~= nil) and (valueNum ~= objLoc))) or
-               ((invert == true)  and ((valueNum ~= nil) and (valueNum == objLoc))) then
+            -- make everything string as objLoc can be numeric or string
+            if ((invert == false) and (value ~= tostring(objLoc))) or
+               ((invert == true)  and (value == tostring(objLoc))) then
               itemMatches = false
               break
             end -- if
@@ -4510,15 +4511,17 @@ end -- inv.items.isInvis
 --       warn the user.  We could also implement a priority scheme for containers too, but that 
 --       seems like overkill...
 --
--- dinv organize [add | clear] <container relative name> <query>
+-- dinv organize [add | clear] <container relative name or ID> <query>
 -- dinv organize [display]
 -- dinv organize <query>
 --
 -- inv.items.organize.add(containerName, queryString, endTag)
--- inv.items.organize.addCR() 
+-- inv.items.organize.addCR()
 -- inv.items.organize.clear(containerName, endTag)
 -- inv.items.organize.clearCR()
 -- inv.items.organize.display(endTag)
+-- inv.items.organize.findContainer(nameOrId)
+-- inv.items.organize.canGoInContainer(itemId)
 -- inv.items.organize.getTargets()
 --
 -- inv.items.organize.cleanup(queryString, endTag)
@@ -4532,7 +4535,7 @@ inv.items.organize = {}
 inv.items.organize.addPkg = nil
 function inv.items.organize.add(containerName, queryString, endTag) 
   if (containerName == nil) or (containerName == "") then
-    dbot.warn("inv.items.organize.add: Missing container relative name")
+    dbot.warn("inv.items.organize.add: Missing container relative name or ID")
     return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
@@ -4560,32 +4563,17 @@ function inv.items.organize.add(containerName, queryString, endTag)
 end -- inv.items.organize.add
 
 
-function inv.items.organize.addCR() 
+function inv.items.organize.addCR()
   local retval
-  local objId
-  local idArray
 
   if (inv.items.organize.addPkg == nil) then
     dbot.error("inv.items.organize.addCR: addPkg is nil!")
     return inv.tags.stop(invTagsOrganize, "nil end tag", DRL_RET_INTERNAL_ERROR)
   end -- if
 
-  -- Find the unique container specified by the user via a relative name (e.g., "2.bag")
-  idArray, retval = inv.items.searchCR("type container rname " .. inv.items.organize.addPkg.container)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.items.organize.addCR: failed to search inventory table: " .. dbot.retval.getString(retval))
-  elseif (#idArray ~= 1) then
-    -- There should only be a single match to the container's relative name (e.g., "2.bag")
-    dbot.warn("Container relative name \"" .. inv.items.organize.addPkg.container .. 
-              "\" did not have a unique match for a container: skipping organization query request")
-  else
-    -- We found a single unique match for the relative name
-    objId = idArray[1]
-  end -- if
-
   local endTag = inv.items.organize.addPkg.endTag
+  local objId  = inv.items.organize.findContainer(inv.items.organize.addPkg.container)
 
-  -- Handle the error case where we couldn't find a matching container
   if (objId == nil) then
     inv.items.organize.addPkg = nil
     return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_MISSING_ENTRY)
@@ -4621,7 +4609,7 @@ end -- inv.items.organize.addCR
 inv.items.organize.clearPkg = nil
 function inv.items.organize.clear(containerName, endTag)
   if (containerName == nil) or (containerName == "") then
-    dbot.warn("inv.items.organize.clear: Missing container relative name")
+    dbot.warn("inv.items.organize.clear: Missing container relative name or ID")
     return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
@@ -4642,31 +4630,15 @@ end -- inv.items.organize.clear
 
 function inv.items.organize.clearCR()
   local retval
-  local objId
-  local idArray
 
   if (inv.items.organize.clearPkg == nil) then
     dbot.error("inv.items.organize.clearCR: clearPkg is nil!")
     return inv.tags.stop(invTagsOrganize, "nil end tag", DRL_RET_INTERNAL_ERROR)
   end -- if
 
-  -- Find the unique container specified by the user via a relative name (e.g., "2.bag")
-  idArray, retval = inv.items.searchCR("type container rname " .. inv.items.organize.clearPkg.container)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.items.organize.clearCR: failed to search inventory table: " ..
-              dbot.retval.getString(retval))
-  elseif (#idArray ~= 1) then
-    -- There should only be a single match to the container's relative name (e.g., "2.bag")
-    dbot.warn("Container relative name \"" .. inv.items.organize.clearPkg.container .. 
-              "\" did not have a unique match for a container: skipping organization query request")
-  else
-    -- We found a single unique match for the relative name
-    objId = idArray[1]
-  end -- if
-
   local endTag = inv.items.organize.clearPkg.endTag
+  local objId  = inv.items.organize.findContainer(inv.items.organize.clearPkg.container)
 
-  -- Handle the error case where we couldn't find a matching container
   if (objId == nil) then
     inv.items.organize.clearPkg = nil
     return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_MISSING_ENTRY)
@@ -4717,6 +4689,54 @@ function inv.items.organize.display(endTag)
 end -- inv.items.organize.display
 
 
+-- Returns true if itemId is eligible to be organized into a container.
+-- Non-containers are always eligible.  Containers are eligible only when
+-- empty (holding == 0) and carrying no weight reduction (weightReduction == 100),
+-- which are the MUD's requirements for placing a container inside another container.
+-- If the container's stats are unknown (unidentified), returns false.
+function inv.items.organize.canGoInContainer(itemId)
+  if (inv.items.getStatField(itemId, invStatFieldType) ~= invmon.typeStr[invmonTypeContainer]) then
+    return true
+  end
+  local holding         = tonumber(inv.items.getStatField(itemId, invStatFieldHolding)         or "")
+  local weightReduction = tonumber(inv.items.getStatField(itemId, invStatFieldWeightReduction) or "")
+  return (holding == 0) and (weightReduction == 100)
+end -- inv.items.organize.canGoInContainer
+
+
+-- Resolve a container by relative name (e.g. "2.bag") or numeric object ID.
+-- Returns objId on success, or nil on failure (warnings are printed here).
+function inv.items.organize.findContainer(nameOrId)
+  local numId = tonumber(nameOrId)
+  if (numId ~= nil) then
+    if (inv.items.getEntry(numId) == nil) then
+      dbot.warn("No item found with ID " .. numId)
+      return nil
+    elseif (inv.items.getStatField(numId, invStatFieldType) ~= invmon.typeStr[invmonTypeContainer]) then
+      dbot.warn("Item " .. numId .. " is not a container")
+      return nil
+    end
+    return numId
+  end
+
+  local idArray, retval = inv.items.searchCR("type container rname " .. nameOrId)
+  if (retval ~= DRL_RET_SUCCESS) then
+    dbot.warn("inv.items.organize.findContainer: failed to search inventory table: " ..
+              dbot.retval.getString(retval))
+    return nil
+  elseif (#idArray == 0) then
+    dbot.warn("No container found matching \"" .. nameOrId .. "\"")
+    return nil
+  elseif (#idArray > 1) then
+    dbot.warn("Container name \"" .. nameOrId ..
+              "\" matched " .. #idArray .. " containers: use a relative name (e.g. 2.bag) to disambiguate")
+    return nil
+  end
+
+  return idArray[1]
+end -- inv.items.organize.findContainer
+
+
 -- Build a lookup table mapping item objIds to their target container objId
 -- based on organize rules.  For each container with an organize query, run
 -- the query and record the first matching container for each matched item.
@@ -4730,8 +4750,7 @@ function inv.items.organize.getTargets()
       local matchedIds, retval = inv.items.searchCR(organizeQuery)
       if (retval == DRL_RET_SUCCESS) and (matchedIds ~= nil) then
         for _, matchedId in ipairs(matchedIds) do
-          -- Don't assign containers as targets of organize rules
-          if (inv.items.getStatField(matchedId, invStatFieldType) ~= invmon.typeStr[invmonTypeContainer]) then
+          if inv.items.organize.canGoInContainer(matchedId) then
             if not targets[matchedId] then
               targets[matchedId] = objId  -- first match wins
             end -- if
@@ -4796,8 +4815,7 @@ function inv.items.organize.cleanupCR()
         local containerName = inv.items.getField(objId, invFieldColorName) or "Unknown"
         for _, invId in ipairs(invIdArray) do
           for _, containerId in ipairs(containerIdArray) do
-            if (invId == containerId) and
-               (inv.items.getStatField(invId, invStatFieldType) ~= invmon.typeStr[invmonTypeContainer]) then
+            if (invId == containerId) and inv.items.organize.canGoInContainer(invId) then
               if not itemToContainers[invId] then
                 itemToContainers[invId] = {}
               end
@@ -4842,9 +4860,7 @@ function inv.items.organize.cleanupCR()
       -- This n^2 algorithm isn't efficient, but I don't think the speed is an issue for us
       for _, invId in ipairs(invIdArray) do
         for _, containerId in ipairs(containerIdArray) do
-          -- Note that we don't want to try sorting containers into other containers
-          if (invId == containerId) and 
-             (inv.items.getStatField(invId, invStatFieldType) ~= invmon.typeStr[invmonTypeContainer]) then
+          if (invId == containerId) and inv.items.organize.canGoInContainer(invId) then
             dbot.debug("Found item to organize: \"" .. 
                        (inv.items.getField(invId, invFieldColorName) or "Unidentified") ..
                        DRL_ANSI_WHITE .. "@W\"")
@@ -5909,8 +5925,16 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
       -- items) but the in-memory frequent cache doesn't currently know about it
       -- (e.g., the cache was pruned, or the lookup key happens to differ from
       -- what's been added this session).
+      --
+      -- Gate on the item type: cloning a template by name is only safe for
+      -- interchangeable consumables (potions, pills, etc.).  For uniquely-
+      -- enchanted gear that shares a base name -- e.g. several differently-
+      -- enchanted "Aardwolf Bracers of Iron Grip" -- adopting one instance's
+      -- stats for another silently corrupts the row (wrong level/stats, and it
+      -- gets marked fully identified so a refresh never fixes it).  Such items
+      -- fall through to the stub branch below and get individually identified.
       local fromSql = false
-      if (cachedEntry == nil) then
+      if (cachedEntry == nil) and invmon.isFrequentCacheType(typeName) then
         cachedEntry = inv.items.lookupTemplateBySql(itemName)
         fromSql = (cachedEntry ~= nil)
       end -- if
