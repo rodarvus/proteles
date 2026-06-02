@@ -25,8 +25,13 @@ by a native SwiftUI panel).
 current model as JSON (`proteles.publish`) for the native SwiftUI panel and
 `return`s, skipping the MUSHclient `Window*` drawing (which the native panel
 replaces). It lives inside `core.lua` because it must read S&D's display
-*locals* (`main_target_list`, `current_activity`, …). Search/campaign/gquest
-logic is untouched.
+*locals* (`main_target_list`, `current_activity`, `quest_target`, `gqid_*`, …).
+Search/campaign/gquest logic is untouched.
+
+The bridge publishes `version`, `activity`, `player_on_cp`/`player_on_gq`,
+`target_count`, `targets`, plus (added in `proteles-snd-1.3`) the open `quest`
+(from `quest_target`: status/mob/area/area_name/room/killed), `can_request_quest`
+(`quest_target.qstat == "0"`), and `gq_id` (`gqid_joined`, while on a GQ).
 
 LICENSING: upstream S&D ships no explicit licence; redistribution terms are a
 deferred decision (tracked with the GPLv3/starter-DB question). Vendored here

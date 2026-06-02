@@ -11,6 +11,30 @@ public struct SearchAndDestroyModel: Sendable, Equatable, Codable {
     public var playerOnGQ: Bool
     public var targetCount: Int
     public var targets: [Target]
+    /// The open quest, if any (`quest_target` with `qstat` 2/3); `nil` off-quest.
+    public var quest: Quest?
+    /// True when a new quest can be requested now (`quest_target.qstat == "0"`).
+    public var canRequestQuest = false
+    /// The joined global-quest id, when on a GQ.
+    public var gqId: String?
+
+    /// The current quest target (reference `quest_target`).
+    public struct Quest: Sendable, Equatable, Codable {
+        /// `quest_target.qstat`: "1" off/cooldown, "2" on-quest target alive,
+        /// "3" on-quest target killed (the bridge only sends it on 2/3/0/1).
+        public var status: String?
+        public var mob: String?
+        public var area: String? // area keyword (arid)
+        public var areaName: String?
+        public var room: String?
+        /// The quest target has been killed — return to complete (`qstat == "3"`).
+        public var killed: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case status, mob, area, room, killed
+            case areaName = "area_name"
+        }
+    }
 
     public struct Target: Sendable, Equatable, Codable, Identifiable {
         public var index: Int
@@ -45,7 +69,9 @@ public struct SearchAndDestroyModel: Sendable, Equatable, Codable {
         case playerOnCP = "player_on_cp"
         case playerOnGQ = "player_on_gq"
         case targetCount = "target_count"
-        case targets
+        case targets, quest
+        case canRequestQuest = "can_request_quest"
+        case gqId = "gq_id"
     }
 
     /// Decode a published JSON snapshot, or nil if it isn't valid.
@@ -78,6 +104,21 @@ public extension SearchAndDestroyModel {
         // An empty Lua table serialises to `{}` (object), not `[]`; tolerate
         // that by falling back to an empty list.
         targets = (try? container.decode([Target].self, forKey: .targets)) ?? []
+        quest = try container.decodeIfPresent(Quest.self, forKey: .quest)
+        canRequestQuest = try container.decodeIfPresent(Bool.self, forKey: .canRequestQuest) ?? false
+        gqId = try container.decodeIfPresent(String.self, forKey: .gqId)
+    }
+}
+
+public extension SearchAndDestroyModel.Quest {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        mob = try container.decodeIfPresent(String.self, forKey: .mob)
+        area = try container.decodeIfPresent(String.self, forKey: .area)
+        areaName = try container.decodeIfPresent(String.self, forKey: .areaName)
+        room = try container.decodeIfPresent(String.self, forKey: .room)
+        killed = try container.decodeIfPresent(Bool.self, forKey: .killed) ?? false
     }
 }
 

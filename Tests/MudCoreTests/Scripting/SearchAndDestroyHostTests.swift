@@ -132,4 +132,22 @@ struct SearchAndDestroyHostTests {
         #expect(model.targets.isEmpty)
         #expect(model.targetCount == 0)
     }
+
+    @Test("the bridge publishes can-request-quest from quest_status_gmcp (qstat 0)")
+    func publishesCanRequestQuest() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // The reference's off-quest "can request a new quest now" path sets
+        // quest_target = {qstat = "0"} (+ next_quest_time = now).
+        try await host.run(#"quest_status_gmcp({action = "status", status = "ready"})"#)
+        try await host.run("xg_draw_window()")
+        let json = try #require(await host.model)
+        let model = try #require(SearchAndDestroyModel.decode(json))
+        #expect(model.canRequestQuest)
+        #expect(model.quest?.status == "0")
+    }
+    // (The on-quest qstat-2 path runs target_quest_mob → a DB-backed search;
+    // the open-quest *field mapping* is covered by SearchAndDestroyModelTests'
+    // decodesQuest, and this host test proves the bridge reads quest_target +
+    // publishes end-to-end.)
 }
