@@ -10,10 +10,12 @@ by a native SwiftUI panel).
                           (UTF-8) from `Search_and_Destroy.xml`.
 - `Search_and_Destroy.xml` — the full plugin, normalised to UTF-8; kept as the
                           source for the automation (trigger/alias/timer)
-                          definitions. **Synced to the `proteles-snd-1.2` release**
+                          definitions. **Synced to the `proteles-snd-1.3` release**
                           (the version the in-app installer fetches via
                           `releases/latest`), so the parse/host tests validate the
-                          shipped corpus (94 triggers, 100 aliases, 7 timers).
+                          shipped corpus (94 triggers, 100 aliases, 7 timers). The
+                          XML is unchanged 1.2→1.3; only `core.lua`'s bridge grew
+                          (quest/GQ fields), so the automation counts are the same.
 - `areaReferences.lua`, `sqlSetup.lua`, `tablesSetup.lua` — S&D's data modules.
 - `constants.lua`       — S&D's `<include>`d constants.
 - `wait.lua`            — coroutine async helper S&D `require`s.
