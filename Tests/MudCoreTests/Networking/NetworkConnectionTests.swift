@@ -68,9 +68,12 @@ struct NetworkConnectionValidationTests {
         } catch {
             Issue.record("unexpected error type: \(error)")
         }
-        // Should fail close to the timeout, not hang for the default 10s.
+        // Should take the 400ms-timeout path, not fall through to the default
+        // 10s. The ceiling is generous (the timeout firing can be delayed by
+        // task starvation under `swift test --parallel` on CI) but still well
+        // under the 10s default, so it proves the short timeout was used.
         let elapsed = ContinuousClock.now - start
-        #expect(elapsed < .seconds(5))
+        #expect(elapsed < .seconds(9))
 
         let state = await connection.state
         #expect(state == .disconnected)

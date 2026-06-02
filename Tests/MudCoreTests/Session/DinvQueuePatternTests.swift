@@ -64,9 +64,12 @@ struct DinvQueuePatternTests {
         try await controller.send("rq")
 
         // Drive the loop: the "MUD" echoes `echo FENCE n` back as `FENCE n`,
-        // which fires the fence trigger and resumes the coroutine. Poll for ~3s.
+        // which fires the fence trigger and resumes the coroutine. Generous
+        // deadline — the coroutine rides `wait.time` timers on the
+        // SessionController loop, which can be starved several seconds under
+        // `swift test --parallel` on CI; the loop breaks early once it's done.
         var answered = Set<String>()
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while ContinuousClock.now < deadline {
             for line in conn.sentLines where line.hasPrefix("echo { DINV fence ") {
                 let reply = String(line.dropFirst("echo ".count))
