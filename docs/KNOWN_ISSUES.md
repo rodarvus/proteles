@@ -32,19 +32,21 @@ is a snapshot, not the backlog:
 1. **Recurring (non-OneShot) `AddTimer` fires only once (HIGH).** → **FIXED**
    (#18, 2026-06-02). The fire body now re-arms itself via `__protelesReschedule`,
    keeping the liveness/generation guard so `DeleteTimer`/Replace still cancel.
-2. **`SetTriggerOption`/`SetTimerOption` are no-ops (MEDIUM).** → **#29.**
-   `LuaRuntime+CompatShimTimers.swift:161-162` return `eOK` without applying, so a
-   plugin retuning a trigger/timer at runtime silently has no effect.
-3. **`DeleteTemporaryTriggers`/`DeleteTemporaryTimers` are no-ops (LOW).** → **#30.**
-   `LuaRuntime+CompatShimTimers.swift:163-164` return `0`; rarely called, and
-   plugin unload clears automation anyway.
-4. **Clipboard not wired (LOW).** → **#30.** `LuaRuntime+CompatShim.swift:503-504`:
-   `GetClipboard()` returns `""`, `SetClipboard()` discards. Fix: a
-   `proteles.clipboard` provider injected by the macOS app (`NSPasteboard`), like
-   the `proteles.dialog` provider.
-5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).** → **#30.**
-   `PluginContext.swift:54-55,125-126` — only matters for miniwindow-layout maths,
-   which we render natively, so low impact.
+2. **`SetTriggerOption`/`SetTimerOption` are no-ops (MEDIUM).** → **FIXED**
+   (#29). SetTriggerOption now honours `enabled`/`group`/`sequence`/`match`
+   (sequence/match rebuild the named trigger, preserving the live enabled state);
+   SetTimerOption honours `enabled`. (Exposed + fixed a latent bug: `.removeTrigger`
+   was missing from the host-dispatch list, so generic-shim `DeleteTrigger` never
+   removed from the engine.)
+3. **`DeleteTemporaryTriggers`/`DeleteTemporaryTimers` are no-ops (LOW).** →
+   **FIXED** (#30). Now track the Temporary flag at registration and bulk-remove
+   exactly those, returning the count.
+4. **Clipboard not wired (LOW).** → **FIXED** (#30). `GetClipboard`/`SetClipboard`
+   route through an app-injected `NSPasteboard` provider (mirrors the dialog
+   provider); degrades to `""`/no-op headless.
+5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).** → **#30** (open).
+   `PluginContext.swift:54-55,125-126` — deferred: needs the live output size
+   threaded MudCore→app, lowest impact, and no plugin we run consumes it.
 
 ## Plugin outbound HTTP (`async`) — RESOLVED (D-67)
 
