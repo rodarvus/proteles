@@ -215,8 +215,8 @@ back Rich Exits, Help cross-refs, and URL linkify.
    `proteles.*`, so unmodified third-party plugins run.
 3. **Native ports** — the load-bearing plugins are reimplemented natively
    (pure-Swift `NativePlugin` value types, D-23) or — for very large plugins —
-   vendored to run their Lua logic verbatim on a dedicated runtime with curated
-   bindings and a native UI (Search-and-Destroy, D-28).
+   run their Lua logic verbatim on a dedicated runtime with curated bindings and
+   a native UI (Search-and-Destroy, D-28 — an optional download, not bundled).
 
 ### 7.2 The Lua runtime + sandbox
 `LuaRuntime` (actor over Lua 5.1). The sandbox replaces `_G`, restricts `io`/`os`,
@@ -258,18 +258,20 @@ A from-scratch mapper driven by GMCP `room.info`/`room.area`/`room.sectors`:
   import (incl. the terrain palette — D-47/D-54). A `CallPlugin` bridge (D-29)
   answers mapper queries for plugins.
 
-### 7.6 Search-and-Destroy — vendored natively (D-28)
+### 7.6 Search-and-Destroy — runs natively, **not bundled** (optional download, D-28)
 S&D (campaign/gquest target search + navigation + its own SQLite + a clickable
-miniwindow) is vendored to **reuse its `core.lua` verbatim** while replacing
-presentation natively: its Lua runs on a dedicated `LuaRuntime` with curated
-bindings; its triggers/aliases/timers run on the host's own engines; it publishes
-a JSON model consumed by a **native SwiftUI panel**; `SnDdb.db` lives in the
-global `Databases/` dir. S&D runs its own commands verbatim — we reach
-world-API parity in the bindings and route `Execute("mapper goto …")` back
-through the command pipeline to the native mapper (D-30). The host's `gmcp()`
-stringifies every leaf at every depth to match the reference (D-85). The plugin
-itself is a **user-installed download** (`SearchAndDestroyInstaller`, pulling the
-latest `proteles-snd` release), not bundled.
+miniwindow) **reuses its `core.lua` verbatim** while replacing presentation
+natively. **Unlike dinv/leveldb (§7.7, genuinely vendored under `Resources/`),
+S&D is NOT shipped with the app** — it's an **optional, user-installed download**:
+`SearchAndDestroyInstaller` fetches the latest `proteles-snd` release on request
+(nothing ships in the binary). Once installed, its Lua runs on a dedicated
+`LuaRuntime` with curated bindings; its triggers/aliases/timers run on the host's
+own engines; it publishes a JSON model consumed by a **native SwiftUI panel**;
+`SnDdb.db` lives in the global `Databases/` dir. S&D runs its own commands
+verbatim — we reach world-API parity in the bindings and route
+`Execute("mapper goto …")` back through the command pipeline to the native mapper
+(D-30). The host's `gmcp()` stringifies every leaf at every depth to match the
+reference (D-85).
 
 ### 7.7 dinv inventory manager (D-32/D-42/D-43)
 dinv has no miniwindow, so it runs **verbatim through the generic shim** — the
@@ -415,7 +417,7 @@ superseded decisions are marked, not deleted.
 | D-25 | 2026-05-23 | Native graphical mapper: GRDB store on the MUSHclient schema (read-compatible superset); fan-out BFS layout; Dijkstra pathfinding; incremental, non-destructive import | adopted |
 | D-26 | 2026-05-23 | lsqlite3 behind a sandboxed `sqlite3` global; open-path constrained to the data dir (known limit: `ATTACH` can escape — harden later) | adopted |
 | D-27 | 2026-05-22 | Live panels docked in the main window, not separate windows that fall behind the game | adopted |
-| D-28 | 2026-05-23 | Search-and-Destroy vendored natively: its `core.lua` verbatim on a dedicated runtime + curated bindings; triggers/aliases/timers on the host engines; a native SwiftUI panel via a published JSON model | adopted |
+| D-28 | 2026-05-23 | Search-and-Destroy run natively: its `core.lua` verbatim on a dedicated runtime + curated bindings; triggers/aliases/timers on the host engines; a native SwiftUI panel via a published JSON model. **Not bundled** — an optional, user-installed download (`SearchAndDestroyInstaller`), unlike the vendored dinv/leveldb | adopted |
 | D-29 | 2026-05-23 | Mapper `CallPlugin` bridge: answer get_current_room/getkeyword/find and deliver results via `OnPluginBroadcast` (500/501/502) so plugins drive the native mapper | adopted |
 | D-30 | 2026-05-24 | S&D parity = glue, not re-implementation: it runs its own commands; we reach world-API parity in the bindings and route `mapper goto` natively. NO-GUESSING rule established | adopted |
 | D-31 | 2026-05-25 | Observability before guessing — the session transcript cracked the S&D campaign saga; clamp upstream Lua footguns in curated bindings, never edit `core.lua` | adopted |
@@ -488,7 +490,8 @@ superseded decisions are marked, not deleted.
 - `mudlet/src/` — `ctelnet.cpp` (telnet/GMCP/copyover), `T{Trigger,Alias,Timer}.cpp`,
   `TCommandLine.cpp`, `TBuffer.cpp`.
 - `search-and-destroy/` & `dinv/` — the large-plugin stress tests for the
-  scripting surface (S&D vendored; dinv is the motivating case for the module
+  scripting surface (these submodules are reference only; S&D runs natively from
+  an optional download, dinv is vendored + is the motivating case for the module
   loader + lsqlite3).
 - `iterm2/sources/` — the fallback custom-text-view reference.
 
@@ -505,7 +508,8 @@ superseded decisions are marked, not deleted.
   client. Reference only.
 - **aardwolfclientpackage** — Aardwolf's curated MUSHclient plugin package.
 - **S&D / Search-and-Destroy** — a large campaign/quest target-search +
-  navigation plugin; vendored natively (D-28).
+  navigation plugin; run natively from an optional, user-installed download
+  (D-28) — not bundled.
 - **Native plugin** — a pure-Swift `NativePlugin` value type (D-23), vs a Lua
   plugin run via the compat shim.
 - **Proteles** — genus of the aardwolf. Our project name.
