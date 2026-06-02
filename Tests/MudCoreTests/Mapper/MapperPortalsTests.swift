@@ -140,4 +140,102 @@ struct MapperPortalsTests {
         #expect(await notes(mapper.handleCommand("mapper purge portals confirm"))
             == ["Failed to confirm ''. Aborting."])
     }
+
+    // MARK: - delete / change by index or keywords
+
+    @Test("delete portal by #index reports the keywords + index")
+    func deleteByIndex() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        #expect(await notes(mapper.handleCommand("mapper delete portal #1"))
+            == ["Deleted mapper portal index #1 with keywords 'nexus'."])
+    }
+
+    @Test("delete of an unknown portal fails with the reference message")
+    func deleteUnknown() async throws {
+        let mapper = try await makeMapper()
+        #expect(await notes(mapper.handleCommand("mapper delete portal nope"))
+            == ["DELETE FAILED: Did not find a mapper portal with keywords 'nope'."])
+    }
+
+    @Test("delete of an out-of-range index fails with the reference message")
+    func deleteBadIndex() async throws {
+        let mapper = try await makeMapper()
+        let expected = "DELETE FAILED: Did not find portal #9 in the list of portals. "
+            + "Try 'mapper portals' to see the list."
+        #expect(await notes(mapper.handleCommand("mapper delete portal #9")) == [expected])
+    }
+
+    @Test("change portal renames the command")
+    func changeCommand() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        #expect(await notes(mapper.handleCommand("mapper change portal {nexus} {warp}"))
+            == ["Changed mapper portal to command 'warp'."])
+    }
+
+    // MARK: - portalrecall / portallevel by index
+
+    @Test("portalrecall toggles by index with the reference message")
+    func portalRecallByIndex() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        #expect(await notes(mapper.handleCommand("mapper portalrecall 1"))
+            == ["PORTALRECALL: Recall flag added to portal 'nexus' to 'Aylor Inn'."])
+    }
+
+    @Test("portalrecall with no index reports the parameter error")
+    func portalRecallNoIndex() async throws {
+        let mapper = try await makeMapper()
+        let out = await notes(mapper.handleCommand("mapper portalrecall"))
+        #expect(out.first?.hasPrefix("PORTALRECALL FAILED: The required parameter") == true)
+    }
+
+    @Test("portallevel sets the lock by index with the reference message")
+    func portalLevelByIndex() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        #expect(await notes(mapper.handleCommand("mapper portallevel 1 60"))
+            == ["Portal 'nexus' to 'Aylor Inn' given minimum level lock of 60."])
+    }
+
+    // MARK: - bounceportal / bouncerecall
+
+    @Test("bounceportal set/show/clear, and rejects a recall portal")
+    func bouncePortal() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0") // #1 regular
+        _ = await mapper.handleCommand("mapper portal recall 100 0") // #2 recall
+        #expect(await notes(mapper.handleCommand("mapper bounceportal")) ==
+            ["BOUNCEPORTAL: Not currently set."])
+        #expect(await notes(mapper.handleCommand("mapper bounceportal 1"))
+            ==
+            [
+                "BOUNCEPORTAL: Set portal #1 (nexus) as the bounce portal for portal-friendly norecall rooms."
+            ])
+        #expect(await notes(mapper.handleCommand("mapper bounceportal")) ==
+            ["BOUNCEPORTAL: Currently set to 'nexus'"])
+        // A recall portal can't be a bounce portal.
+        #expect(await notes(mapper.handleCommand("mapper bounceportal 2"))
+            .first?.hasPrefix("BOUNCEPORTAL FAILED: Portal #2 is a recall portal") == true)
+        #expect(await notes(mapper.handleCommand("mapper bounceportal clear")) == ["BOUNCEPORTAL: cleared."])
+    }
+
+    @Test("a designated bounce portal is marked with * in the table")
+    func bounceMarker() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper bounceportal 1")
+        let out = await notes(mapper.handleCommand("mapper portals"))
+        // The row's leading marker cell now carries '*' instead of a space.
+        #expect(out.contains { $0.hasPrefix("|*  1 |") })
+    }
+
+    @Test("bouncerecall requires a recall portal")
+    func bounceRecall() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper portal nexus 100 0") // #1 regular (not recall)
+        #expect(await notes(mapper.handleCommand("mapper bouncerecall 1"))
+            .first?.hasPrefix("BOUNCERECALL FAILED: Portal #1 is not a recall portal") == true)
+    }
 }

@@ -39,6 +39,8 @@ extension Mapper {
         case "change": changePortalCommand(arg)
         case "portalrecall": portalRecallCommand(arg)
         case "portallevel": portalLevelCommand(arg)
+        case "bounceportal": bouncePortalCommand(arg)
+        case "bouncerecall": bounceRecallCommand(arg)
         case "lockexit": lockExitCommand(arg)
         default: handleRoomFlagCommand(sub, arg)
         }
@@ -121,54 +123,6 @@ extension Mapper {
         try? store.upsert(room)
         publishLayout()
         return [Self.note("\(name) \(on ? "set on" : "cleared for") room \(uid).")]
-    }
-
-    /// Resolve a portal reference: `#N` (1-based index into the portal list) or
-    /// the portal's use-command directly.
-    private func resolvePortalDir(_ token: String) -> String? {
-        if token.hasPrefix("#"), let index = Int(token.dropFirst()), index >= 1 {
-            let portals = (try? store.portals()) ?? []
-            return index <= portals.count ? portals[index - 1].dir : nil
-        }
-        return token.isEmpty ? nil : token
-    }
-
-    /// `mapper change portal {old} {new}` — rename a portal's use-command.
-    private func changePortalCommand(_ arg: String) -> [ScriptEffect] {
-        let rest = arg.split(separator: " ", maxSplits: 1).map(String.init)
-        guard rest.first?.lowercased() == "portal" else {
-            return [Self.note("Usage: mapper change portal {old} {new}")]
-        }
-        let groups = Self.braceGroups(rest.count > 1 ? rest[1] : "")
-        guard groups.count >= 2, let old = resolvePortalDir(groups[0]) else {
-            return [Self.note("Usage: mapper change portal {old or #N} {new}")]
-        }
-        let changed = (try? store.changePortal(from: old, to: groups[1])) ?? false
-        if changed { reloadGraphAndPublish() }
-        return [Self.note(changed ? "Renamed portal to '\(groups[1])'." : "No portal '\(old)'.")]
-    }
-
-    /// `mapper portalrecall <#N|dir>` — toggle a portal's recall flag.
-    private func portalRecallCommand(_ arg: String) -> [ScriptEffect] {
-        guard let dir = resolvePortalDir(arg.trimmingCharacters(in: .whitespaces)) else {
-            return [Self.note("Usage: mapper portalrecall <#N or use-command>")]
-        }
-        guard let recall = (try? store.setPortalRecall(dir: dir)).flatMap(\.self) else {
-            return [Self.note("No portal '\(dir)'.")]
-        }
-        reloadGraphAndPublish()
-        return [Self.note("Recall flag \(recall ? "added to" : "removed from") portal '\(dir)'.")]
-    }
-
-    /// `mapper portallevel <#N|dir> <level>` — set a portal's level lock.
-    private func portalLevelCommand(_ arg: String) -> [ScriptEffect] {
-        let tokens = arg.split(separator: " ").map(String.init)
-        guard tokens.count >= 2, let dir = resolvePortalDir(tokens[0]), let level = Int(tokens[1]) else {
-            return [Self.note("Usage: mapper portallevel <#N or use-command> <level>")]
-        }
-        let changed = (try? store.setPortalLevel(dir: dir, level: level)) ?? false
-        if changed { reloadGraphAndPublish() }
-        return [Self.note(changed ? "Portal '\(dir)' level set to \(max(0, level))." : "No portal '\(dir)'.")]
     }
 
     /// `mapper lockexit <dir> <level>` — set the level lock on the current
@@ -356,11 +310,7 @@ extension Mapper {
         let tokens = arg.split(separator: " ", maxSplits: 1).map(String.init)
         switch tokens.first?.lowercased() {
         case "portal":
-            let dir = tokens.count > 1 ? tokens[1] : ""
-            guard !dir.isEmpty else { return [Self.note("Usage: mapper delete portal <use-command>")] }
-            let removed = (try? store.deletePortal(dir: dir)) ?? false
-            if removed { reloadGraphAndPublish() }
-            return [Self.note(removed ? "Deleted portal '\(dir)'." : "No portal '\(dir)'.")]
+            return deletePortalEdit(tokens.count > 1 ? tokens[1] : "")
         case "cexits":
             guard let uid = currentRoomUID else { return [Self.note("Your current location is unknown.")] }
             let count = (try? store.deleteCustomExits(from: uid)) ?? 0
@@ -406,6 +356,9 @@ extension Mapper {
             guard pendingConfirm == "purge portals" else { return [confirmAborted()] }
             pendingConfirm = nil
             try? store.purgePortals()
+            // map_portal_purge also clears the bounce designations.
+            bouncePortalDir = nil
+            bounceRecallDir = nil
             reloadGraphAndPublish()
             return [Self.note("Purged all mapper portals.")]
         case "cexits":
@@ -453,7 +406,7 @@ extension Mapper {
     }
 
     /// Extract `{…}` groups from a command argument (fullportal/fullcexit).
-    private static func braceGroups(_ string: String) -> [String] {
+    static func braceGroups(_ string: String) -> [String] {
         var groups: [String] = []
         var current = ""
         var inBrace = false

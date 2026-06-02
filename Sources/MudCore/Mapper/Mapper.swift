@@ -48,6 +48,12 @@ public actor Mapper {
     /// consumed by the matching `… confirm`.
     var pendingConfirm: String?
 
+    /// The designated bounce portal / recall use-commands (reference
+    /// `bounce_portal`/`bounce_recall`): the portal used to bounce out of
+    /// norecall/noportal rooms, set by `mapper bounceportal`/`bouncerecall <#>`.
+    var bouncePortalDir: String?
+    var bounceRecallDir: String?
+
     /// On a `room.info`, advance a pending segmented walk. If we've arrived in the
     /// room the last-sent segment was heading to, send the next segment;
     /// otherwise (still en route, or no walk) do nothing. This is what makes a
