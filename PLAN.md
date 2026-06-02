@@ -58,10 +58,11 @@ the daily experience is solid.
 opt-in crash reporting, a Sparkle updater, user docs, a direct notarized
 download. Ongoing: live-play polish + debugging; the backlog in `docs/plans/`
 (TTS accessibility, command-button bar, Notifications phase-2, remaining
-Preferences tabs); the one open shim gap (recurring `AddTimer` fires once —
-`docs/KNOWN_ISSUES.md`).
+Preferences tabs, the **Levels-window visual polish** parked in
+`PHASE2_FOLLOWUPS.md` §4); the open shim gap (recurring `AddTimer` fires once)
+and the mapper command-fidelity follow-ups (D-90) — both in `docs/KNOWN_ISSUES.md`.
 
-~1108 tests across ~235 suites; four gates green (`swift build`,
+~1188 tests across ~244 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
@@ -339,6 +340,52 @@ plugin migration); direct notarized download. MAS deferred (D-05).
   `swiftformat --lint .`, `swiftlint --strict`.
 - **Deferred:** CI performance gates, parser fuzzing, XCUITest smoke,
   accessibility (VoiceOver) — set up around release.
+
+---
+
+## 9a. Backlog — deferred & parked work (index)
+
+The single index of everything deliberately deferred or parked, so nothing is
+lost between rewrites. Details live in the linked docs / decision log;
+**reconfirm status before picking one up** (some neighbours have since shipped).
+
+**Accessibility & assets**
+- **TTS** (accessibility) — design recorded (D-41); validate with a real VI
+  player. `docs/plans/TTS_PLAN.md`, `docs/AARDPACKAGE_PORTING.md`.
+- **`aard_soundpack`** — native BYO-sounds engine (ship the event→filename map,
+  user supplies a sounds dir); drop the remote `!!SOUND(url)` download. Gated on
+  the GPLv3 call. `docs/AARDPACKAGE_PORTING.md`.
+- **GPLv3 licensing enquiry** — clears the soundpack `.wav`s, a starter map DB,
+  and bundled S&D data; blocks each bundle-vs-BYO decision.
+
+**UI / panels** (mostly to fold in with a panel rework)
+- **Levels-window visual polish** — parked (PHASE2_FOLLOWUPS §4).
+- **Autocomplete as-you-type ghost hint** — deferred (AUTOCOMPLETE_REDESIGN);
+  Tab autocomplete itself shipped.
+- **Notifications phase-2** — richer rules beyond tells/mentions (PHASE2_FOLLOWUPS).
+- **Command-button bar**; **remaining Preferences tabs**.
+- **Group-monitor / chat-panel refinements**, splitscreen scrollback, review
+  buffers, command-output capture, bigmap (AARDPACKAGE_PORTING "Phase C").
+  *(Theming, the Help panel, and the six-bar status panel from this bucket have
+  shipped — D-80.)*
+
+**Mapper / S&D**
+- **Mapper command-fidelity follow-ups** (D-90) — bounce persistence, native
+  backup, help-search highlight. `docs/KNOWN_ISSUES.md`.
+- **S&D audit follow-ups** — dinv DB rebuild re-test + the awaiting-approval
+  rewrite. `docs/plans/SND_AUDIT.md`.
+
+**Engine / hardening**
+- **Recurring `AddTimer` shim gap** (fires once) — `docs/KNOWN_ISSUES.md`.
+- **lsqlite3 `ATTACH` sandbox hardening** (`sqlite3_set_authorizer`) — D-26.
+
+**Pending live verification (batched)** — `aard_prompt_fixer` GA boundary
+(D-35), `Aardwolf_Tick_Timer` `comm.tick` (D-36), and the rest of the batch in
+`docs/AARDPACKAGE_PORTING.md`.
+
+**Toward 1.0 (release engineering)** — notarization + hardened runtime, a
+Sparkle auto-updater, opt-in crash reporting, user docs; CI performance gates,
+parser fuzzing, XCUITest smoke, VoiceOver. `docs/NOTARIZATION.md`.
 
 ---
 
