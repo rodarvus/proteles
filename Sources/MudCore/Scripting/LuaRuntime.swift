@@ -424,7 +424,7 @@ public actor LuaRuntime {
         switch function {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
-             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .enableAlias, .reloadPlugin,
+             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .removeTrigger, .enableAlias, .reloadPlugin,
              .aardwolfTelnet, .accelerator, .http:
             recordEffect(function, arguments)
             return []

@@ -111,6 +111,35 @@ struct PluginTimerCancelTests {
         #expect(deferredBodies(secondFire).isEmpty)
     }
 
+    // #29: SetTimerOption("enabled") on a shim timer (a doAfter chain, not a
+    // TimerEngine entry) pauses by clearing liveness and resumes by bumping the
+    // generation + re-arming from the spec.
+    @Test("SetTimerOption enabled pauses, then re-arms, a recurring shim timer")
+    func setTimerOptionEnabled() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("function tick(n) end")
+        let armed = try await lua.run("AddTimer('m', 0, 0, 5, '', 0, 'tick')")
+        #expect(!deferredBodies(armed).isEmpty) // first fire scheduled
+        // Disable → pause: nothing newly scheduled.
+        let off = try await lua.run("SetTimerOption('m','enabled',false)")
+        #expect(deferredBodies(off).isEmpty)
+        // Re-enable → re-armed: a fresh fire is scheduled.
+        let on = try await lua.run("SetTimerOption('m','enabled',1)")
+        #expect(!deferredBodies(on).isEmpty)
+    }
+
+    @Test("DeleteTemporaryTimers clears only Temporary-flagged timers")
+    func deleteTemporaryTimers() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("function tick(n) end")
+        // m1 Temporary; m2 permanent.
+        _ = try await lua.run("AddTimer('m1', 0, 0, 5, '', timer_flag.Temporary, 'tick')")
+        _ = try await lua.run("AddTimer('m2', 0, 0, 5, '', 0, 'tick')")
+        #expect(try await lua.number("DeleteTemporaryTimers()") == 1)
+        #expect(try await lua.number("IsTimer('m1')") == 30017) // gone
+        #expect(try await lua.number("IsTimer('m2')") == 0) // kept
+    }
+
     @Test("EnablePlugin / DisablePlugin / IsPluginInstalled are benign (return eOK / self)")
     func pluginControlStubs() async throws {
         let lua = try await shimmed()
