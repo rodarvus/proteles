@@ -68,16 +68,42 @@ extension Mapper {
         return [.sendGMCP("request room")]
     }
 
-    /// `mapper backup` — copy the map database to a timestamped file beside it.
+    /// `mapper backup` (reference `manual_backup`) — archive the map database
+    /// into a `db_backups/` directory beside it, keeping the most recent few.
     private func backupCommand() -> [ScriptEffect] {
         let stamp = Self.backupTimestamp.string(from: Date())
-        let dest = store.url.deletingPathExtension().appendingPathExtension("\(stamp).bak.db")
+        let dir = store.url.deletingLastPathComponent()
+            .appendingPathComponent("db_backups", isDirectory: true)
+        let base = store.url.deletingPathExtension().lastPathComponent
+        let dest = dir.appendingPathComponent("\(base).\(stamp).db")
         do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.copyItem(at: store.url, to: dest)
-            return [Self.note("Map backed up to \(dest.lastPathComponent).")]
+            Self.pruneBackups(in: dir, base: base, keep: Self.backupsToKeep)
+            return [Self.note("Map backed up to db_backups/\(dest.lastPathComponent).")]
         } catch {
             return [Self.note("Backup failed.")]
+        }
+    }
+
+    /// How many timestamped map backups to keep in `db_backups/`.
+    private static let backupsToKeep = 10
+
+    /// Keep the newest `keep` backups for `base`, deleting older ones — the
+    /// `yyyyMMdd-HHmmss` stamp in the filename sorts chronologically.
+    private static func pruneBackups(in dir: URL, base: String, keep: Int) {
+        let manager = FileManager.default
+        guard let files = try? manager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
+            return
+        }
+        let backups = files
+            .filter { $0.lastPathComponent.hasPrefix("\(base).") && $0.pathExtension == "db" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let excess = backups.count - keep
+        guard excess > 0 else { return }
+        for url in backups.prefix(excess) {
+            try? manager.removeItem(at: url)
         }
     }
 
@@ -316,6 +342,8 @@ extension Mapper {
             // map_portal_purge also clears the bounce designations.
             bouncePortalDir = nil
             bounceRecallDir = nil
+            try? store.deleteStorage(Self.bouncePortalKey)
+            try? store.deleteStorage(Self.bounceRecallKey)
             reloadGraphAndPublish()
             return [Self.note("Purged all mapper portals.")]
         case "cexits":

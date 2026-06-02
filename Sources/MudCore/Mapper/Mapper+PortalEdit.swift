@@ -149,6 +149,7 @@ extension Mapper {
         }
         if token.lowercased() == "clear" {
             bouncePortalDir = nil
+            try? store.deleteStorage(Self.bouncePortalKey)
             return [Self.note("BOUNCEPORTAL: cleared.")]
         }
         guard let pnum = Int(token) else {
@@ -169,6 +170,7 @@ extension Mapper {
             )]
         }
         bouncePortalDir = portal.dir
+        try? store.setStorage(Self.bouncePortalKey, portal.dir)
         return [Self.note(
             "BOUNCEPORTAL: Set portal #\(pnum) (\(portal.dir)) as the bounce portal "
                 + "for portal-friendly norecall rooms."
@@ -185,6 +187,7 @@ extension Mapper {
         }
         if token.lowercased() == "clear" {
             bounceRecallDir = nil
+            try? store.deleteStorage(Self.bounceRecallKey)
             return [Self.note("BOUNCERECALL: cleared.")]
         }
         guard let pnum = Int(token) else {
@@ -206,6 +209,7 @@ extension Mapper {
             )]
         }
         bounceRecallDir = portal.dir
+        try? store.setStorage(Self.bounceRecallKey, portal.dir)
         return [Self.note(
             "BOUNCERECALL: Set recall portal #\(pnum) (\(portal.dir)) as the bounce recall "
                 + "for recall-friendly noportal rooms."
