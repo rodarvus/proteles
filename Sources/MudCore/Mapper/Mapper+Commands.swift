@@ -23,7 +23,8 @@ extension Mapper {
         case "goto": return resolveAndRoute(arg, allowPortals: true)
         case "walkto": return resolveAndRoute(arg, allowPortals: false)
         case "where": return whereRoom(arg)
-        case "find", "list": return find(arg)
+        case "find": return find(arg)
+        case "list": return listSearch(arg)
         case "", "help": return helpOutput()
         default:
             if let nav = handleNavigationCommand(sub, arg) { return nav }
@@ -94,16 +95,32 @@ extension Mapper {
     /// ``handleCommand(_:)`` to keep each within the complexity budget.
     private func handleSecondaryCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
         switch sub {
-        case "note", "addnote": noteCommand(arg)
-        case "notes", "bookmarks": listNotes()
-        case "shownotes": showNotesCommand(arg)
-        case "thisroom": thisRoom()
-        case "unmapped": unmappedExits()
+        case "note", "addnote": return noteCommand(arg)
+        case "notes", "bookmarks": return listNotes()
+        case "shownotes": return showNotesCommand(arg)
+        case "thisroom": return thisRoom()
+        case "depth": return depthCommand(arg)
+        case "blink": return blinkCommand(arg)
+        default:
+            if let search = handleSearchCommand(sub, arg) { return search }
+            return handleMapManagementCommand(sub, arg)
+        }
+    }
+
+    /// The search-family secondary commands (`areas`/`area`/`unmapped` + the
+    /// `shops`/`train`/`quest`/`heal` special searches), split out of
+    /// ``handleSecondaryCommand`` to keep its dispatch within the
+    /// complexity budget. Returns `nil` for anything it doesn't own.
+    private func handleSearchCommand(_ sub: String, _ arg: String) -> [ScriptEffect]? {
+        switch sub {
         case "areas": areasTable(arg)
         case "area": areaCommand(arg)
-        case "depth": depthCommand(arg)
-        case "blink": blinkCommand(arg)
-        default: handleMapManagementCommand(sub, arg)
+        case "unmapped": unmappedExits(arg)
+        case "shops": specialSearch(["shop", "bank"], area: arg)
+        case "train": specialSearch(["trainer"], area: arg)
+        case "quest": specialSearch(["questor"], area: arg)
+        case "heal": specialSearch(["healer"], area: arg)
+        default: nil
         }
     }
 
@@ -311,58 +328,6 @@ extension Mapper {
         if !exits.isEmpty { effects.append(Self.note("  Exits: \(exits)")) }
         if let terrain = room.terrain, !terrain.isEmpty { effects.append(Self.note("  Terrain: \(terrain)")) }
         if let note = room.notes, !note.isEmpty { effects.append(Self.note("  Note: \(note)")) }
-        return effects
-    }
-
-    /// `mapper unmapped` — exits from the current room whose destination we
-    /// don't have in the database yet (somewhere to explore).
-    private func unmappedExits() -> [ScriptEffect] {
-        guard let uid = currentRoomUID, let room = graph.rooms[uid] else {
-            return [Self.note("Your current location is unknown.")]
-        }
-        let unknown = room.exits
-            .filter { $0.value.to.isEmpty || graph.rooms[$0.value.to] == nil }
-            .keys.sorted()
-        guard !unknown.isEmpty else { return [Self.note("No unmapped exits from here.")] }
-        return [Self.note("Unmapped exits: \(unknown.joined(separator: ", "))")]
-    }
-
-    /// `mapper area [name]` — the current area (with room count), or a search
-    /// of areas by name (≈ reference `mapper area <name>`).
-    private func areaCommand(_ arg: String) -> [ScriptEffect] {
-        if arg.isEmpty {
-            guard let uid = currentRoomUID, let area = graph.rooms[uid]?.area else {
-                return [Self.note("Your current area is unknown.")]
-            }
-            let count = graph.rooms.values.count { $0.area == area }
-            return [Self.note("Area: \(areaName(area)) [\(area)] — \(count) room(s) mapped.")]
-        }
-        let needle = arg.lowercased()
-        let matches = graph.areas.values
-            .filter { ($0.name ?? "").lowercased().contains(needle) || $0.uid.lowercased().contains(needle) }
-            .sorted { ($0.name ?? $0.uid) < ($1.name ?? $1.uid) }
-            .prefix(20)
-        guard !matches.isEmpty else { return [Self.note("No area matching '\(arg)'.")] }
-        var effects = [Self.note("Areas matching '\(arg)':")]
-        for area in matches {
-            let count = graph.rooms.values.count { $0.area == area.uid }
-            effects.append(Self.note("  [\(area.uid)] \(area.name ?? area.uid) — \(count) room(s)"))
-        }
-        return effects
-    }
-
-    private func find(_ text: String) -> [ScriptEffect] {
-        guard !text.isEmpty else { return [Self.note("Usage: mapper find <text>")] }
-        let needle = text.lowercased()
-        let matches = graph.rooms.values
-            .filter { !$0.uid.hasPrefix("*") && $0.name.lowercased().contains(needle) }
-            .sorted { $0.uid < $1.uid }
-            .prefix(20)
-        guard !matches.isEmpty else { return [Self.note("No rooms matching '\(text)'.")] }
-        var effects: [ScriptEffect] = [Self.note("Rooms matching '\(text)':")]
-        for room in matches {
-            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(areaName(room.area))"))
-        }
         return effects
     }
 
