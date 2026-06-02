@@ -19,6 +19,13 @@ enum MapperOutput {
     static let noteColour = "#90EE90"
     /// `maperror` colour — `ColourNameToRGB "red"`.
     static let errorColour = "#FF0000"
+    /// The reference's `ColourNote("yellow", …)` for portal auto-detect notices.
+    static let autoDetectColour = "#FFFF00"
+
+    /// A note line in an explicit colour (≈ the reference's `ColourNote`).
+    static func colourLine(_ text: String, colour: String) -> ScriptEffect {
+        .colourNote([NoteSegment(text: text, foreground: colour)])
+    }
 
     /// A mapper note line (≈ `mapprint`/`Note`), in the mapper colour.
     static func line(_ text: String) -> ScriptEffect {
@@ -31,11 +38,15 @@ enum MapperOutput {
     }
 
     /// A clickable mapper row that speedwalks on click — the native equivalent
-    /// of the reference's `Hyperlink("mapper goto <uid>", line, …)`.
-    static func gotoRow(_ text: String, uid: String, hint: String? = nil) -> ScriptEffect {
+    /// of the reference's `Hyperlink("mapper goto <uid>", line, …)`. `foreground`
+    /// overrides the row colour (e.g. red for recall portals), defaulting to the
+    /// mapper note colour.
+    static func gotoRow(
+        _ text: String, uid: String, hint: String? = nil, foreground: String? = nil
+    ) -> ScriptEffect {
         .colourNote([NoteSegment(
             text: text,
-            foreground: noteColour,
+            foreground: foreground ?? noteColour,
             link: LineLink(
                 action: .sendCommand("mapper goto \(uid)"),
                 hint: hint ?? "Click to speedwalk there"

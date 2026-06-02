@@ -281,39 +281,17 @@ extension Mapper {
     // MARK: - Portals
 
     /// `mapper portals [filter]` — list portals + recalls (filter by dest area).
-    private func listPortals(_ arg: String) -> [ScriptEffect] {
-        let filter = arg.isEmpty ? nil
-            : (arg.lowercased() == "here" ? graph.rooms[currentRoomUID ?? ""]?.area : arg)
-        let portals = (try? store.portals(areaFilter: filter)) ?? []
-        guard !portals.isEmpty else {
-            return [Self.note("No portals stored\(filter.map { " for '\($0)'" } ?? "").")]
-        }
-        var effects = [Self.note("Portals (\(portals.count)):")]
-        for (index, portal) in portals.enumerated() {
-            let kind = portal.isRecall ? "recall" : "portal"
-            let lvl = portal.level > 0 ? " L\(portal.level)" : ""
-            let dest = portal.roomName ?? "?"
-            effects.append(Self.note(
-                "  #\(index + 1) [\(kind)] \(portal.dir) → \(dest) [\(portal.touid)]\(lvl)"
-            ))
-        }
-        return effects
-    }
-
-    /// `mapper portal <dir> [touid] [level]` — add a portal whose use-command is
-    /// <dir>; destination defaults to the current room. A "home"/"recall"
-    /// keyword stores it as a recall.
+    /// `mapper portal <use-command> [destination] [level]` (reference
+    /// `map_portal`): store a portal from anywhere to the destination room
+    /// (default: the current room). Destination must be a *known* room. The
+    /// reference pops a dialog for the level when omitted; we take it as an
+    /// optional argument (default 0 = no lock).
     private func addPortalCommand(_ arg: String) -> [ScriptEffect] {
         let tokens = arg.split(separator: " ").map(String.init)
         guard let dir = tokens.first else {
             return [Self.note("Usage: mapper portal <use-command> [destination-room] [level]")]
         }
-        let touid = tokens.count > 1 ? tokens[1] : currentRoomUID
-        guard let destination = touid,
-              graph.rooms[destination] != nil || looksLikeRoomID(destination)
-        else {
-            return [Self.note("Unknown destination room (and your current room is unknown).")]
-        }
+        let destination = tokens.count > 1 ? tokens[1] : currentRoomUID
         let level = tokens.count > 2 ? (Int(tokens[2]) ?? 0) : 0
         return storePortal(dir: dir, touid: destination, level: level)
     }
@@ -330,14 +308,43 @@ extension Mapper {
         return storePortal(dir: groups[0], touid: groups[1], level: level)
     }
 
-    private func storePortal(dir: String, touid: String, level: Int) -> [ScriptEffect] {
+    /// The shared `create_portal` body: validate the destination, auto-detect a
+    /// recall portal (home/hom/recall), store it, and emit the reference's
+    /// messages verbatim.
+    private func storePortal(dir rawDir: String, touid: String?, level: Int) -> [ScriptEffect] {
+        let dir = rawDir.trimmingCharacters(in: .whitespaces)
+        guard let destination = touid else {
+            return [Self
+                .note(
+                    "PORTAL FAILED: No room received from the mud yet. Try using the 'LOOK' command first."
+                )]
+        }
+        guard graph.rooms[destination] != nil else {
+            return [Self.note("PORTAL [\(dir)] FAILED: Room \(destination) is unknown.")]
+        }
         let recall = ["home", "hom", "recall"].contains(dir.lowercased())
+        var out: [ScriptEffect] = []
+        if recall {
+            out.append(Self.note(""))
+            out.append(MapperOutput.colourLine(
+                "PORTAL AUTO-DETECT: '\(dir)' was automatically recognized as a recall portal.",
+                colour: MapperOutput.autoDetectColour
+            ))
+            out.append(MapperOutput.colourLine(
+                "If this is incorrect, you can change it using 'mapper portalrecall <index>' "
+                    + "(find the index with 'mapper portals').",
+                colour: MapperOutput.autoDetectColour
+            ))
+            out.append(Self.note(""))
+        }
         do {
-            try store.addPortal(dir: dir, touid: touid, level: level, recall: recall)
+            try store.addPortal(dir: dir, touid: destination, level: level, recall: recall)
             reloadGraphAndPublish()
-            let kind = recall ? "recall" : "portal"
-            let lvl = level > 0 ? " (level \(level))" : ""
-            return [Self.note("Stored '\(dir)' as a \(kind) to room \(touid)\(lvl).")]
+            out.append(Self.note("Storing '\(dir)' as a portal to room \(destination)."))
+            out.append(Self.note(""))
+            out.append(Self.note("Portal given minimum level lock of \(level)."))
+            out.append(Self.note(""))
+            return out
         } catch {
             return [Self.note("Couldn't store that portal.")]
         }
@@ -387,20 +394,35 @@ extension Mapper {
     }
 
     private func purgeCommand(_ arg: String) -> [ScriptEffect] {
-        let tokens = arg.split(separator: " ", maxSplits: 1).map(String.init)
-        switch tokens.first?.lowercased() {
+        let normalized = arg.lowercased().split(separator: " ").joined(separator: " ")
+        switch normalized {
         case "portals":
+            pendingConfirm = "purge portals"
+            return [Self.note(
+                "Are you sure you want to purge all portal exits? "
+                    + "To confirm type 'mapper purge portals confirm'."
+            )]
+        case "portals confirm":
+            guard pendingConfirm == "purge portals" else { return [confirmAborted()] }
+            pendingConfirm = nil
             try? store.purgePortals()
             reloadGraphAndPublish()
-            return [Self.note("Purged all portals.")]
+            return [Self.note("Purged all mapper portals.")]
         case "cexits":
-            let area = tokens.count > 1 ? tokens[1] : nil
-            try? store.purgeCustomExits(area: area)
+            // The cexits confirm flow lands with Phase 4; keep the immediate
+            // purge for now so the command still works.
+            try? store.purgeCustomExits(area: nil)
             reloadGraphAndPublish()
-            return [Self.note("Purged custom exits\(area.map { " in '\($0)'" } ?? "").")]
+            return [Self.note("Purged custom exits.")]
         default:
             return [Self.note("Usage: mapper purge portals | purge cexits [area]")]
         }
+    }
+
+    /// The reference's `confirm_catch` failure note for a `… confirm` that
+    /// doesn't match the armed token.
+    private func confirmAborted() -> ScriptEffect {
+        Self.note("Failed to confirm '\(pendingConfirm ?? "")'. Aborting.")
     }
 
     private func purgeRoomCommand() -> [ScriptEffect] {
