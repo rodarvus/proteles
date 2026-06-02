@@ -25,7 +25,7 @@ extension Mapper {
         case "where": return whereRoom(arg)
         case "find": return find(arg)
         case "list": return listSearch(arg)
-        case "", "help": return helpOutput()
+        case "", "help": return helpOutput(arg)
         default:
             if let nav = handleNavigationCommand(sub, arg) { return nav }
             return handleSecondaryCommand(sub, arg)
@@ -330,23 +330,6 @@ extension Mapper {
             )]
         default: return [Self.note("Usage: mapper shownotes on|off")]
         }
-    }
-
-    private func helpOutput() -> [ScriptEffect] {
-        [
-            "mapper goto <room|name>  — speedwalk to a room (id or name; portals ok)",
-            "mapper walkto <room|name> — walk there without portals",
-            "mapper where [room|name]  — current room, a room + distance, or a name search",
-            "mapper find <text>        — search rooms by name",
-            "mapper thisroom          — details of the room you're in",
-            "mapper unmapped          — exits from here with no mapped destination",
-            "mapper area [name]       — current area, or search areas by name",
-            "mapper note [text]       — note the current room (empty clears it)",
-            "mapper notes             — list rooms that have notes",
-            "mapper shownotes [on|off] — echo a room's note on arrival",
-            "mapper depth [n]         — how many rooms to draw outward",
-            "mapper blink [on|off]    — toggle the PK-room warning animation"
-        ].map { Self.note($0) }
     }
 
     func areaName(_ key: String?) -> String {
