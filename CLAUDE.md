@@ -4,18 +4,37 @@ Proteles is a native macOS (later iPad) MUD client focused exclusively on
 **Aardwolf**. Swift 6, strict concurrency. The living design doc is
 **PLAN.md** (read it first); decisions are logged there as D-NN.
 
-## Current status (2026-05-31)
+## Current status (2026-06-02)
 
-**Shipped `v0.4.0`** (tagged + GitHub release, non-notarized build attached).
-Headline since `v0.3.0`: **native leveling analytics** — the **Levels** window
-over the bundled **leveldb** plugin (collection via the shim, D-69; four
-read-only faces, D-71); **plugin outbound HTTP (`async`)** over URLSession (D-67,
-closing the last 0.3.0 limitation); a big **plugin-reliability batch** (per-plugin
-variable scope D-72, cancellable `AddTimer`/`DeleteTimer` + `EnablePlugin` D-73,
-**defer plugin init until in-game** D-74, CRLF `io.lines` for the gagger,
-trigger-output fidelity D-70); **dinv + leveldb DB import/reset** (D-75); and an
-input/logging polish batch (D-68). Read **PLAN.md** for the full status table +
-decision log (D-01…D-75). **1077 tests, four gates green.**
+**Shipped `v0.4.2`** (git tag `v0.4.2` + GitHub release, non-notarized
+`Proteles-0.4.2.zip` attached). A live-testing reliability + UX batch on top of
+`v0.4.1`. Headline (D-80…D-89): the **full six-bar status display**
+(Health/Mana/Moves/TNL/Enemy/Alignment — always-on Enemy, per-bar toggles +
+colour pickers, number modes, profile-sourced Moves colour, tier-coloured Align
+with boundary ticks, outlined text, flat fills + optional quarter ticks, D-80);
+**surviving an Aardwolf "ice age"** (MCCP2 copyover restart — D-81,
+**live-confirmed**); a **fix for the session-logging crash** (App-protocol
+`@MainActor` isolation trap on connect — D-82, **live-confirmed**); and a
+**navigation/plugin-correctness batch** found by live testing, each fixed with a
+faithful fails-without-the-fix test — `AddTriggerEx` sequence honoured so dinv's
+wish-capture trigger wins (worn-portal nav, D-84), S&D `gmcp()` leaves stringified
+at every depth so `xcp`/`go`/`nx` run the configured scan on arrival (D-85),
+custom exits preserved across a GMCP `room.info` (D-86), and a **segment-by-segment
+portal walk** that waits for the portal to land before the follow-on `run` (D-87).
+Plus GMCP replay to deferred plugins (D-83), **local-time** recording/transcript
+stamps (D-88), an **opt-in tag-line gag** (`{rname}`/`{coords}`, default off, D-89),
+a stub-audit recorded in `docs/KNOWN_ISSUES.md`, and the vendored
+**Search-and-Destroy synced to its `proteles-snd-1.2` release**. Read **PLAN.md**
+for the full status table + decision log (D-01…D-89). **1108 tests, four gates
+green.**
+
+**`v0.4.1` (prior):** hermetic plugin enable/disable (D-76), the dinv `wish list`
+host gag (D-77/D-79), dock-drag reorder (D-78), a `GAG` transcript category.
+**`v0.4.0` (prior):** **native leveling analytics** — the **Levels** window over
+the bundled **leveldb** plugin (D-69/D-71); **plugin outbound HTTP (`async`)**
+over URLSession (D-67); a **plugin-reliability batch** (D-70/D-72/D-73/D-74,
+CRLF `io.lines`); **dinv + leveldb DB import/reset** (D-75); input/logging polish
+(D-68).
 
 `v0.3.0` headline (prior): the **Plugin Library** (one discoverable
 `~/Documents/Proteles/` home; add from Mac/URL; export), **Phase-7 features**
@@ -92,27 +111,42 @@ still gagged; user-typed `wish list` shows). D-77 (arm dinv's own gag up front)
 stays as defense in depth. Lesson logged: when a gag is selective by row, suspect
 a cross-plugin trigger-match steal, and gag deterministically at the host rather
 than chasing the upstream trigger. The **`GAG` transcript category** (logs each
-withheld line + reason: `script`/`snd`/`richexits`/`blank`/`wishprobe`) was the
-diagnostic that cracked it — keep it.
+withheld line + reason: `script`/`snd`/`richexits`/`blank`/`wishprobe`/`tag`) was
+the diagnostic that cracked it — keep it.
 
 ### NEXT SESSION — start here
 
-**`v0.4.1` is cut and released** (git tag `v0.4.1` + GitHub release, non-notarized
-`Proteles-0.4.1.zip` attached). It bundles the post-0.4.0 work: **hermetic plugin
-enable/disable** (D-76 — toggling one plugin no longer reloads the world), **dinv
-`wish list` gag fixed + live-confirmed** (D-77 dinv-side + **D-79 host-side gag**,
-the reliable one), **dock-drag reorder** within a same-axis split (D-78), a **`GAG`
-transcript category** for gag diagnosis, and the TLS-reference cleanup. All four
-gates green; 1087 tests. Version lives in `apps/ProtelesApp_macOS/project.yml`
-(`CFBundleShortVersionString` + `MARKETING_VERSION`; `MudCore.version` reads it at
-runtime). Release flow: bump project.yml → `xcodegen generate` → Release build →
-`ditto -c -k --keepParent Proteles.app /tmp/Proteles-<ver>.zip` → commit + tag
-`v<ver>` → `gh release create v<ver> <zip> --title … --notes …`.
+**`v0.4.2` is cut and released** (git tag `v0.4.2` + GitHub release, non-notarized
+`Proteles-0.4.2.zip` attached; installed to `~/Applications`). It bundles the
+post-0.4.1 live-testing batch (D-80…D-89) — see the **Current status** block above
+for the full headline. The big wins: the **six-bar status display** (D-80); **ice-age
+survival** (D-81) and the **session-logging crash fix** (D-82), both **live-confirmed**
+this session; and the **navigation/plugin-correctness batch** (D-84 worn-portal/wish
+trigger sequence, D-85 S&D gmcp leaf stringify → scan-on-arrival, D-86 custom-exit
+preservation, D-87 segmented portal walk) — each fixed with a faithful,
+fails-without-the-fix test. Also D-88 local-time logs, D-89 opt-in tag-line gag, and
+S&D synced to `proteles-snd-1.2`. 1108 tests, four gates green.
+
+**Process lesson from this session (keep):** a passing *isolated* unit test that
+encodes your own hypothesis proves nothing — verify against the **live recording**
+and **build + install + check the binary contains the change** (via `nm`) before
+saying "test this"; prove every fix with a test that **fails when reverted**. A
+stale install (an earlier build still in `~/Applications`) made two real fixes look
+broken. Also: don't compare a UTC `…Z` transcript timestamp against a local `stat`
+time — that hour mismatch invented a phantom "the recording predates the build".
+
+Version lives in `apps/ProtelesApp_macOS/project.yml` (`CFBundleShortVersionString`
++ `MARKETING_VERSION`; `MudCore.version` reads it at runtime). Release flow: bump
+project.yml → `xcodegen generate` → Release build → `ditto -c -k --keepParent
+Proteles.app /tmp/Proteles-<ver>.zip` → commit + tag `v<ver>` → `gh release create
+v<ver> <zip> --title … --notes …`.
 
 **Candidate next (user to pick; see the backlog):** command-button bar (TAction —
 cheap, high daily value, pairs with MacroEngine), Notifications phase-2, continent
 graphical map, TTS (D-41, needs a VI player), or release-engineering for a real
-1.0 (notarization, Sparkle auto-update, crash reporting).
+1.0 (notarization, Sparkle auto-update, crash reporting). **One open gen-shim gap**
+from the stub audit (`docs/KNOWN_ISSUES.md`): recurring (non-OneShot) `AddTimer`
+fires only once — the one broad, user-visible item if a timer-using plugin needs it.
 
 **Older open / to re-test live** — the pre-0.4.0 `v0.3.0` work: the clean-room `utils`
 dialogs + **`Accelerator`/`AcceleratorTo` → MacroEngine bridge** (D-63); the
