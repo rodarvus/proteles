@@ -21,9 +21,10 @@ import Foundation
 /// Categories let a reader (or grep) separate MUD output (`RECV`), commands
 /// sent to the MUD (`SEND`), the user's raw typed input before alias expansion
 /// (`INPUT`), local script/echo output (`NOTE`), and GMCP packets (`GMCP`).
-/// Timestamps are UTC ISO-8601 with millisecond precision — enough to see, for
-/// example, whether two `do_cp_check` calls fall inside S&D's 1-second
-/// debounce window.
+/// Timestamps are **local-time** ISO-8601 with millisecond precision (the zone
+/// offset is included, e.g. `+01:00`/`Z`), so they match the user's wall clock —
+/// while still being precise enough to see, for example, whether two
+/// `do_cp_check` calls fall inside S&D's 1-second debounce window.
 ///
 /// Like ``SessionRecorder`` it is append-only, thread-safe (one `NSLock`),
 /// best-effort (write failures silence further writes rather than throw), and
@@ -82,7 +83,9 @@ public final class SessionTranscript: @unchecked Sendable {
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        // Local time (with offset) so timestamps match the user's wall clock; a
+        // non-UTC zone makes `.withInternetDateTime` emit `+HH:MM` instead of `Z`.
+        formatter.timeZone = TimeZone.current
         self.formatter = formatter
     }
 
