@@ -257,21 +257,22 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        // A recall keyword stores it as a recall to room 1.
+        // A recall keyword stores it as a recall to room 1 (reference wording).
         #expect(await notes(mapper.handleCommand("mapper portal recall 1"))
-            .contains { $0.contains("recall") && $0.contains("room 1") })
+            .contains { $0 == "Storing 'recall' as a portal to room 1." })
         // A regular portal (use-command "enter cloud") to room 3, level 50.
         _ = await mapper.handleCommand("mapper fullportal {enter cloud} {3} 50")
         let list = await notes(mapper.handleCommand("mapper portals"))
-        #expect(list.contains { $0.contains("Portals (2)") })
-        #expect(list.contains { $0.contains("enter cloud") && $0.contains("L50") })
-        #expect(list.contains { $0.contains("[recall]") })
-        // Delete one, then purge the rest.
+        #expect(list.contains { $0.contains("enter cloud") && $0.contains("50") })
+        #expect(list.contains { $0.contains("recall") })
+        // Delete one, then purge the rest (two-step confirm).
         #expect(await notes(mapper.handleCommand("mapper delete portal recall"))
             .contains { $0.contains("Deleted portal 'recall'") })
         _ = await mapper.handleCommand("mapper purge portals")
-        #expect(await notes(mapper.handleCommand("mapper portals"))
-            .contains { $0.contains("No portals") })
+        #expect(await notes(mapper.handleCommand("mapper purge portals confirm"))
+            == ["Purged all mapper portals."])
+        #expect(await !notes(mapper.handleCommand("mapper portals"))
+            .contains { $0.contains("enter cloud") })
     }
 
     @Test("custom exits: fullcexit add, list, delete-from-current, purge")
@@ -409,9 +410,9 @@ struct MapperCommandTests {
             .contains { $0.contains("level set to 40") })
         #expect(await notes(mapper.handleCommand("mapper portalrecall step"))
             .contains { $0.contains("Recall flag added") })
-        // It now lists as a recall at level 40.
+        // It now lists in the table as 'step' at level 40.
         let list = await notes(mapper.handleCommand("mapper portals"))
-        #expect(list.contains { $0.contains("[recall]") && $0.contains("step") && $0.contains("L40") })
+        #expect(list.contains { $0.contains("step") && $0.contains("40") })
     }
 
     @Test("room flags: noportal / norecall / ignore mismatch on the current room")

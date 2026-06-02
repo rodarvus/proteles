@@ -43,6 +43,11 @@ public actor Mapper {
     var lastResultList: [String] = []
     var lastResultIndex = 0
 
+    /// The armed token for a two-step destructive confirm (reference
+    /// `toConfirm`): set by `mapper purge …` (and later `set database …`),
+    /// consumed by the matching `… confirm`.
+    var pendingConfirm: String?
+
     /// On a `room.info`, advance a pending segmented walk. If we've arrived in the
     /// room the last-sent segment was heading to, send the next segment;
     /// otherwise (still en route, or no walk) do nothing. This is what makes a
