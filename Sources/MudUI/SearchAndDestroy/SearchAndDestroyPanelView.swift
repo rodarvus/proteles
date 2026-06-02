@@ -79,6 +79,12 @@ public struct SearchAndDestroyPanelView: View {
         VStack(spacing: 0) {
             header(snd)
             Divider()
+            // When on a quest, the quest shows first — a distinct banner with a
+            // small separator above the campaign/global targets.
+            if let quest = snd.quest, quest.status == "2" || quest.status == "3" {
+                questBanner(quest)
+                Divider()
+            }
             List {
                 ForEach(snd.targets) { target in
                     targetRow(target)
@@ -90,11 +96,48 @@ public struct SearchAndDestroyPanelView: View {
         }
     }
 
+    // MARK: - Quest banner
+
+    /// The open quest, shown above the campaign targets. Click runs to the quest
+    /// mob via S&D's `qw` (quick-where) alias.
+    private func questBanner(_ quest: SearchAndDestroyModel.Quest) -> some View {
+        Button {
+            if model.isInteractive { model.run("qw") }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: "flag.checkered").font(.caption).foregroundStyle(SnDPalette.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(quest.mob ?? "Quest target")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(quest.killed ? SnDPalette.dead : .primary)
+                    Text(questLocation(quest)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if quest.killed { tag("KILLED — RETURN", color: SnDPalette.dead) }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!model.isInteractive)
+        .padding(.horizontal, 11).padding(.vertical, 7)
+        .background(SnDPalette.accent.opacity(0.08))
+    }
+
+    private func questLocation(_ quest: SearchAndDestroyModel.Quest) -> String {
+        let area = quest.areaName ?? quest.area
+        return switch (quest.room, area) {
+        case (let room?, let area?): "Quest · '\(room)' (\(area))"
+        case (let room?, nil): "Quest · '\(room)'"
+        case (nil, let area?): "Quest · \(area)"
+        default: "Quest target"
+        }
+    }
+
     // MARK: - Header
 
     private func header(_ snd: SearchAndDestroyModel) -> some View {
         HStack(spacing: 8) {
-            Text(snd.activityLabel.uppercased())
+            Text(activityBadge(snd))
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(SnDPalette.accent)
                 .padding(.horizontal, 7).padding(.vertical, 2)
@@ -107,9 +150,20 @@ public struct SearchAndDestroyPanelView: View {
             // row — folded in here to save vertical space).
             actions
             Spacer()
+            // Off-quest and a new quest can be requested now → a quiet badge.
+            if snd.canRequestQuest, snd.quest == nil {
+                tag("QUEST READY", color: SnDPalette.express, filled: true)
+            }
         }
         .padding(.horizontal, 11).padding(.vertical, 9)
         .background(.ultraThinMaterial)
+    }
+
+    /// The activity badge — appends the global-quest id when on a GQ.
+    private func activityBadge(_ snd: SearchAndDestroyModel) -> String {
+        let label = snd.activityLabel.uppercased()
+        if let gqId = snd.gqId, !gqId.isEmpty, gqId != "-1" { return "\(label) #\(gqId)" }
+        return label
     }
 
     private func remainingSummary(_ snd: SearchAndDestroyModel) -> String {

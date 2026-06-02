@@ -5510,6 +5510,20 @@ function xg_draw_window()
                 }
             end
         end
+        -- [Proteles bridge] quest + global-quest state, read from core.lua's
+        -- scope. quest_target.qstat: "0" off-quest/can-request, "1" off/cooldown,
+        -- "2" on-quest target alive, "3" on-quest target killed.
+        local quest = nil
+        if type(quest_target) == "table" and quest_target.qstat then
+            quest = {
+                status = quest_target.qstat,
+                mob = quest_target.mob,
+                area = quest_target.arid,
+                area_name = quest_target.areaName,
+                room = quest_target.room,
+                killed = (quest_target.qstat == "3"),
+            }
+        end
         local ok, encoded = pcall(json.encode, {
             version = current_sd_version,
             activity = current_activity,
@@ -5517,6 +5531,9 @@ function xg_draw_window()
             player_on_gq = (player_on_gq == "yes"),
             target_count = #targets,
             targets = targets,
+            quest = quest,
+            can_request_quest = (type(quest_target) == "table" and quest_target.qstat == "0") or false,
+            gq_id = ((player_on_gq == "yes") and gqid_joined) or nil,
         })
         if ok and encoded then proteles.publish(encoded) end
         return -- the native panel renders the model; skip the MUSHclient drawing
