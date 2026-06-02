@@ -25,7 +25,22 @@ extension Mapper {
         case "where": return whereRoom(arg)
         case "find", "list": return find(arg)
         case "", "help": return helpOutput()
-        default: return handleSecondaryCommand(sub, arg)
+        default:
+            if let nav = handleNavigationCommand(sub, arg) { return nav }
+            return handleSecondaryCommand(sub, arg)
+        }
+    }
+
+    /// The remaining navigation/path verbs (`findpath`/`resume`/`stop`/`next`),
+    /// split out of ``handleCommand`` to keep its dispatch within the complexity
+    /// budget. Returns `nil` for anything it doesn't own.
+    private func handleNavigationCommand(_ sub: String, _ arg: String) -> [ScriptEffect]? {
+        switch sub {
+        case "findpath": findPathCommand(arg)
+        case "resume": resumeCommand()
+        case "stop": stopCommand()
+        case "next": nextCommand(arg)
+        default: nil
         }
     }
 
@@ -55,7 +70,11 @@ extension Mapper {
 
     private func resolveAndRoute(_ arg: String, allowPortals: Bool) -> [ScriptEffect] {
         let verb = allowPortals ? "goto" : "walkto"
-        guard !arg.isEmpty else { return [Self.note("Usage: mapper \(verb) <room id or name>")] }
+        // Reference wording (goto/walkto are room-id-first); we keep name
+        // resolution below as a superset.
+        guard !arg.isEmpty else {
+            return [Self.note("The mapper \(verb) command expects a room id as input.")]
+        }
         if looksLikeRoomID(arg) { return route(to: arg, allowPortals: allowPortals) }
         switch resolveRoom(arg) {
         case .uid(let uid):
@@ -147,7 +166,8 @@ extension Mapper {
         guard let path = Pathfinder(graph: graph).path(from: src, to: uid, options: options) else {
             return [Self.note("No route found to \(uid).")]
         }
-        if path.isEmpty { return [Self.note("You're already there.")] }
+        if path.isEmpty { return [Self.note("You are already in that room.")] }
+        lastSpeedwalkTarget = uid
         let name = graph.rooms[uid]?.name ?? "room \(uid)"
         var effects: [ScriptEffect] = [Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s).")]
         // Run each step through the command pipeline (`.execute`), not a raw
@@ -171,32 +191,114 @@ extension Mapper {
         return effects
     }
 
+    /// `mapper where <room id>` — the path *from where you are now* to the
+    /// target, in the reference `printpath` format. Mirrors `aard_GMCP_mapper.xml`
+    /// `map_where`: it needs to know your current room, takes a room id (we keep
+    /// name resolution as a superset), and rejects same-room.
     private func whereRoom(_ arg: String) -> [ScriptEffect] {
-        // No argument → describe the current room (≈ reference `mapper where`).
-        if arg.isEmpty {
-            guard let uid = currentRoomUID, graph.rooms[uid] != nil else {
-                return [Self.note("Your current location is unknown.")]
+        guard let src = currentRoomUID, graph.rooms[src] != nil else {
+            return [Self.note("I don't know where you are right now - try: LOOK")]
+        }
+        var dest = arg.trimmingCharacters(in: .whitespaces)
+        if dest.isEmpty {
+            guard let last = lastSpeedwalkTarget else {
+                return [Self.note("The mapper where command expects a room id number as input.")]
             }
-            return whereRoom(byUID: uid)
+            dest = last
+        } else if !looksLikeRoomID(dest) {
+            switch resolveRoom(dest) {
+            case .uid(let uid): dest = uid
+            case .matches: return find(dest) // name → search (our superset)
+            }
         }
-        // A room id → that room + its distance; otherwise a name search.
-        if looksLikeRoomID(arg) { return whereRoom(byUID: arg) }
-        switch resolveRoom(arg) {
-        case .uid(let uid): return whereRoom(byUID: uid)
-        case .matches: return find(arg)
-        }
+        if dest == src { return [Self.note("You are already in that room.")] }
+        return printpath(from: src, to: dest)
     }
 
-    private func whereRoom(byUID target: String) -> [ScriptEffect] {
-        guard let room = graph.rooms[target] else { return [Self.note("Unknown room \(target).")] }
-        var line = "Room \(target): \(room.name) — \(areaName(room.area))"
-        if let src = currentRoomUID, src != target {
-            let options = Pathfinder.Options(level: level, tier: tier)
-            if let path = Pathfinder(graph: graph).path(from: src, to: target, options: options) {
-                line += " (\(path.count) step(s) away)"
-            }
+    /// The reference `printpath(src, dest)` body (aard_GMCP_mapper.xml), emitted
+    /// as mapper notes — one note per `\n` in the original format string.
+    func printpath(from src: String, to dest: String) -> [ScriptEffect] {
+        if src == dest { return [Self.note("Pick different start and end rooms.")] }
+        guard graph.rooms[src] != nil else { return [Self.note("Room \(src) not known.")] }
+        guard graph.rooms[dest] != nil else { return [Self.note("Room \(dest) not known.")] }
+        let options = Pathfinder.Options(level: level, tier: tier)
+        guard let path = Pathfinder(graph: graph).path(from: src, to: dest, options: options) else {
+            return [Self.note("Path from \(src) to \(dest) not found.")]
         }
-        return [Self.note(line)]
+        let speedwalk = printpathSpeedwalk(path)
+        let header = currentRoomUID != src
+            ? "Path from \(src) to \(dest) is:"
+            : "Path to \(dest) is:"
+        // The reference format ends with "Distance: N\n", so a trailing blank.
+        return [Self.note(header), Self.note(speedwalk), Self.note("Distance: \(path.count)"), Self.note("")]
+    }
+
+    /// The reference `printpath` speedwalk string: build the compact speedwalk,
+    /// then for each `run …` segment space out the letters (screen-reader
+    /// friendly, `gsub("%a", "%1 ")`) and join all segments with ` ; `.
+    func printpathSpeedwalk(_ path: [PathStep]) -> String {
+        Speedwalk.segments(path).map(\.command).map { segment -> String in
+            guard segment.hasPrefix("run ") else { return segment }
+            let body = segment.dropFirst(4)
+            var spaced = ""
+            for ch in body {
+                spaced += ch.isLetter ? "\(ch) " : String(ch)
+            }
+            return "run " + spaced.trimmingCharacters(in: .whitespaces)
+        }.joined(separator: " ; ")
+    }
+
+    /// `mapper findpath <src> <dest>` — same `printpath` format as `where`, but
+    /// between two explicit rooms (room ids; names accepted as a superset).
+    private func findPathCommand(_ arg: String) -> [ScriptEffect] {
+        let parts = arg.split(separator: " ", maxSplits: 1).map { String($0) }
+        guard parts.count == 2 else {
+            return [Self.note("The mapper findpath command expects two room ids as input.")]
+        }
+        let resolved = parts.map { token -> String? in
+            if looksLikeRoomID(token) { return token }
+            if case .uid(let uid) = resolveRoom(token) { return uid }
+            return nil
+        }
+        guard let src = resolved[0] else { return [Self.note("Room \(parts[0]) not known.")] }
+        guard let dest = resolved[1] else { return [Self.note("Room \(parts[1]) not known.")] }
+        return printpath(from: src, to: dest)
+    }
+
+    /// `mapper resume` — re-run to the last goto/walkto/where target (reference
+    /// resumes the last speedwalk/hyperlink).
+    private func resumeCommand() -> [ScriptEffect] {
+        guard let target = lastSpeedwalkTarget else {
+            return [Self.note("No outstanding speedwalks or hyperlinks.")]
+        }
+        return route(to: target, allowPortals: true)
+    }
+
+    /// `mapper stop` — cancel an in-flight speedwalk (reference
+    /// `cancel_speedwalk`: "Speedwalk cancelled.", silent when nothing pending).
+    private func stopCommand() -> [ScriptEffect] {
+        let active = walkExpect != nil || !walkSegments.isEmpty
+        clearWalk()
+        return active ? [Self.note("Speedwalk cancelled.")] : []
+    }
+
+    /// `mapper next [#]` — walk the next (or #n) room in the last `find`/`list`
+    /// result (reference `do_next`).
+    private func nextCommand(_ arg: String) -> [ScriptEffect] {
+        let trimmed = arg.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty, let idx = Int(trimmed) {
+            guard idx >= 1, idx <= lastResultList.count else {
+                return [Self.note("NEXT ERROR: There is no NEXT result #\(idx).")]
+            }
+            lastResultIndex = idx
+            return route(to: lastResultList[idx - 1], allowPortals: true)
+        }
+        guard lastResultIndex < lastResultList.count else {
+            return [Self.note("NEXT ERROR: No more NEXT results left.")]
+        }
+        let uid = lastResultList[lastResultIndex]
+        lastResultIndex += 1
+        return route(to: uid, allowPortals: true)
     }
 
     /// `mapper thisroom` — details of the room you're standing in.
