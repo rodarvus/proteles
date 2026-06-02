@@ -9,6 +9,12 @@ public extension SessionController {
         omitBlankLines = enabled
     }
 
+    /// Withhold leftover Aardwolf tag lines (`{rname}`/`{coords}`/…) from the
+    /// live window. Display-only + post-processing: plugins still see the line.
+    func setGagTagLines(_ enabled: Bool) {
+        gagTagLines = enabled
+    }
+
     /// Enable/disable auto-reconnect. Maps to the standard backoff policy or
     /// none; takes effect on the next drop.
     func setReconnectEnabled(_ enabled: Bool) {

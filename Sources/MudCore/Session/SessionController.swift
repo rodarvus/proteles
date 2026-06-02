@@ -190,6 +190,10 @@ public actor SessionController {
     /// Drop empty MUD lines from output; off by default (`Omit_Blank_Lines`).
     public internal(set) var omitBlankLines = false
 
+    /// Withhold leftover Aardwolf telnet-102 tag lines (`{rname}`/`{coords}`/…)
+    /// from the live window; off by default (display-only, post-processing).
+    public internal(set) var gagTagLines = false
+
     /// Rewrite Aardwolf's exits line into clickable direction hyperlinks (Rich
     /// Exits); off by default. When on, sends `tags exits on` after login,
     /// rebuilds the line from ``richExitsCardinals`` + ``richExitsCustomExits``,
@@ -335,31 +339,6 @@ public actor SessionController {
     /// currently being decompressed.
     public var isCompressionActive: Bool {
         pipeline.isCompressionActive
-    }
-
-    /// True while a recording is being written. Surfaced for menu state
-    /// tracking; the view layer observes ``recordingStarted`` instead of polling.
-    public var isRecording: Bool {
-        recorder != nil
-    }
-
-    /// Start recording every inbound wire chunk to `url` (+ the paired debug
-    /// transcript); any prior recording is closed first. Captures raw wire bytes
-    /// (pre-decompression/telnet-parse), so a replay exercises the full stack
-    /// incl. MCCP2. Best-effort: write failures silence recording, not the session.
-    public func startRecording(to url: URL) throws {
-        recorder?.close()
-        transcript?.close()
-        recorder = try SessionRecorder(url: url)
-        transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
-    }
-
-    /// Stop the current recording. Idempotent.
-    public func stopRecording() {
-        recorder?.close()
-        recorder = nil
-        transcript?.close()
-        transcript = nil
     }
 
     /// Open a connection and start the inbound processing pipeline. If
