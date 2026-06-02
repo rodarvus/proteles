@@ -13,13 +13,25 @@ public struct SearchAndDestroyPanelView: View {
 
     public var body: some View {
         Group {
-            if let snd = model.model, snd.activity != nil, snd.activity != "init" {
+            if let snd = model.model, hasContent(snd) {
                 content(snd)
             } else {
                 emptyState
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Show the live panel when there's anything to surface — an activity, a
+    /// quest target, a requestable quest, or campaign/global targets. Otherwise
+    /// the empty/idle state. (`activity == "init"` alone — fresh load before any
+    /// detection — is *not* content, but a can-request quest published in that
+    /// state still is, which is why we don't gate purely on `activity`.)
+    private func hasContent(_ snd: SearchAndDestroyModel) -> Bool {
+        (snd.activity != nil && snd.activity != "init")
+            || snd.quest != nil
+            || snd.canRequestQuest
+            || !snd.targets.isEmpty
     }
 
     // MARK: - Empty state
@@ -150,8 +162,9 @@ public struct SearchAndDestroyPanelView: View {
             // row — folded in here to save vertical space).
             actions
             Spacer()
-            // Off-quest and a new quest can be requested now → a quiet badge.
-            if snd.canRequestQuest, snd.quest == nil {
+            // A new quest can be requested now → a quiet badge. (can_request is
+            // only true off-quest, so it never collides with the quest banner.)
+            if snd.canRequestQuest {
                 tag("QUEST READY", color: SnDPalette.express, filled: true)
             }
         }
@@ -167,6 +180,11 @@ public struct SearchAndDestroyPanelView: View {
     }
 
     private func remainingSummary(_ snd: SearchAndDestroyModel) -> String {
+        if snd.targets.isEmpty {
+            if let quest = snd.quest, quest.status == "2" || quest.status == "3" { return "On quest" }
+            if snd.canRequestQuest { return "Quest available" }
+            return "No active targets"
+        }
         let alive = snd.targets.count(where: { !$0.dead })
         return "\(snd.targets.count) targets · \(alive) left"
     }
