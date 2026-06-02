@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.2`.
+**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.3`.
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
@@ -316,8 +316,9 @@ are now polishing + debugging from live play. Phase 8 is release engineering.
   D-52), Notifications/Logging/Inventory Serials (D-49), the MacroEngine (D-50),
   the Scripts-editor rework (D-51); the Plugin Library (D-59/D-61); the
   aardwolfclientpackage triage + native completion (D-33/D-34…); leveldb +
-  the Levels window (D-69/D-71); the six-bar status display (D-80); plus the
-  steady live-debugging stream (D-55…D-89).
+  the Levels window (D-69/D-71); the six-bar status display (D-80); the
+  byte-faithful mapper command interface (D-90); plus the steady live-debugging
+  stream (D-55…D-89).
 
 **Phase 8 — macOS 1.0 release.** Signing, notarization, hardened runtime; opt-in
 crash reporting; a Sparkle updater; user docs (DocC + a static end-user site incl.
@@ -479,6 +480,7 @@ superseded decisions are marked, not deleted.
 | D-87 | 2026-06-02 | Segment-by-segment portal walk — wait for the portal to land before the follow-on `run` (no more aborted speedwalks) | adopted |
 | D-88 | 2026-06-02 | Recording/transcript timestamps + filenames in local time (was UTC — a confusing offset + inconsistency with the logging feature) | adopted |
 | D-89 | 2026-06-02 | Opt-in gag of leftover Aardwolf tag lines (`{rname}`/`{coords}`), default off; a display-only, post-processing decision | adopted |
+| D-90 | 2026-06-02 | Byte-faithful `mapper` command interface — every command (nav/search/portals/cexits/room-info/notes/flags/maintenance/help) reproduces MUSHclient's exact output (lightgreen notes/red errors, bordered tables, clickable `mapper goto` rows) read from `aard_GMCP_mapper.xml`; display/multi-DB commands route to the native panel/Databases menu; documented divergences: dialog→arg forms, sorted `tprint` dumps, in-memory bounce designations | adopted |
 
 ---
 

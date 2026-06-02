@@ -7,11 +7,11 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.4.2`** (tag + GitHub release, non-notarized build). The build-out
+**Shipped `v0.4.3`** (tag + GitHub release, non-notarized build). The build-out
 phases are **done**; we are now **polishing + debugging from live play**. The
 remaining gate to **1.0** is release engineering — notarization, an auto-updater,
-crash reporting. ~1108 tests, four gates green. See **PLAN.md §0** for what works
-and the **decision log (§12, D-01…D-89)** for history; **`docs/KNOWN_ISSUES.md`**
+crash reporting. ~1188 tests, four gates green. See **PLAN.md §0** for what works
+and the **decision log (§12, D-01…D-90)** for history; **`docs/KNOWN_ISSUES.md`**
 for de-prioritised issues.
 
 ## Reference submodules — ALWAYS research them first
