@@ -146,6 +146,21 @@ struct SearchAndDestroyHostTests {
         #expect(model.canRequestQuest)
         #expect(model.quest?.status == "0")
     }
+
+    @Test("the bridge publishes the quest cooldown (qstat 1 + next_quest_time)")
+    func publishesQuestCooldown() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Off-quest, must wait: a status update carrying a wait → qstat "1" and
+        // next_quest_time = now + wait*60.
+        try await host.run(#"quest_status_gmcp({action = "status", wait = 30})"#)
+        try await host.run("xg_draw_window()")
+        let json = try #require(await host.model)
+        let model = try #require(SearchAndDestroyModel.decode(json))
+        #expect(model.quest?.status == "1")
+        #expect(model.canRequestQuest == false)
+        #expect((model.nextQuestTime ?? 0) > 0)
+    }
     // (The on-quest qstat-2 path runs target_quest_mob → a DB-backed search;
     // the open-quest *field mapping* is covered by SearchAndDestroyModelTests'
     // decodesQuest, and this host test proves the bridge reads quest_target +
