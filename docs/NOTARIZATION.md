@@ -1,9 +1,13 @@
 # Notarisation — what we need + how it changes the workflow
 
-> Research note for the Phase 8 (v1.0 release) work. Status: **not yet
-> implemented.** Today's builds are signed with a local self-signed identity
-> (`Proteles Dev`) and are **not** notarised, so Gatekeeper warns on first
-> launch (right-click ▸ Open, or `xattr -dr com.apple.quarantine …`).
+> Phase 8 (v1.0 release) work, GH #22. Status: **tooling ready, awaiting Apple
+> Developer Program enrolment.** The release flow is implemented in
+> **`scripts/release.sh`** (build → Developer-ID sign → notarise → staple →
+> package → verify); it's push-button the moment a `Developer ID Application`
+> cert + notary credentials exist on the release machine. Until then, releases
+> ship signed with the local self-signed identity (`Proteles Dev`) and are
+> **not** notarised, so Gatekeeper warns on first launch (right-click ▸ Open, or
+> `xattr -dr com.apple.quarantine …`).
 
 ## TL;DR
 
@@ -76,43 +80,33 @@ the narrowest exception.
 A new `scripts/release.sh` (run on a machine with the Developer ID cert in its
 keychain + notary credentials stored once):
 
+This is implemented in **`scripts/release.sh`** — build → Developer-ID sign →
+deep re-sign (hardened runtime + timestamp) → package → `notarytool submit
+--wait` → `stapler staple` → re-package → `stapler validate` + `spctl` verify.
+It reads the version from `project.yml` and is parameterised by two env vars, so
+nothing secret is committed:
+
 ```sh
-# 0. One-time, per machine:
+# 0. One-time, on the release machine:
 #    - Install the "Developer ID Application: <Name> (<TeamID>)" cert.
-#    - Store notary creds in a keychain profile:
-#      xcrun notarytool store-credentials proteles-notary \
-#        --apple-id "<apple-id>" --team-id "<TEAMID>" \
-#        --password "<app-specific-password>"
-#      (Or an App Store Connect API key — preferred for automation.)
+#    - Store notary creds in a keychain profile (or use an App Store Connect
+#      API key — preferred for automation, doesn't expire like passwords):
+xcrun notarytool store-credentials proteles-notary \
+  --apple-id "<apple-id>" --team-id "<TEAMID>" --password "<app-specific-password>"
 
-# 1. Build Release signed with Developer ID (NOT the self-signed dev identity).
-xcodebuild -project apps/ProtelesApp_macOS/ProtelesApp_macOS.xcodeproj \
-  -scheme ProtelesApp_macOS -configuration Release \
-  -derivedDataPath /tmp/proteles-build/DerivedData \
-  CODE_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" \
-  CODE_SIGN_STYLE=Manual OTHER_CODE_SIGN_FLAGS="--timestamp" build
+# 1. Build + notarise + staple + verify (prints the artifact + next steps):
+PROTELES_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" \
+PROTELES_NOTARY_PROFILE="proteles-notary" \
+./scripts/release.sh
 
-APP=/tmp/proteles-build/DerivedData/Build/Products/Release/Proteles.app
-
-# 2. (Belt-and-suspenders) re-sign deep with hardened runtime + timestamp.
-codesign --force --options runtime --timestamp --deep \
-  --sign "Developer ID Application: <Name> (<TEAMID>)" "$APP"
-
-# 3. Zip for submission (ditto preserves symlinks/signature).
-ditto -c -k --sequesterRsrc --keepParent "$APP" /tmp/Proteles.zip
-
-# 4. Submit + wait for the ticket.
-xcrun notarytool submit /tmp/Proteles.zip \
-  --keychain-profile proteles-notary --wait
-
-# 5. Staple the ticket onto the app so it verifies offline.
-xcrun stapler staple "$APP"
-
-# 6. Re-package the stapled app (zip or a DMG) and attach to the GitHub release.
-ditto -c -k --sequesterRsrc --keepParent "$APP" /tmp/Proteles-<version>.zip
-xcrun stapler validate "$APP"      # sanity check
-spctl -a -vvv --type execute "$APP" # should say "accepted, source=Notarized Developer ID"
+# Validate signing BEFORE notary credentials exist (signed, not distributable):
+PROTELES_SIGN_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" \
+  ./scripts/release.sh --skip-notarize
 ```
+
+The script deliberately stops after producing the verified zip and prints the
+`git tag` + `gh release create` commands — publishing stays an explicit,
+user-gated step (CLAUDE.md "Release flow").
 
 ### How this differs from today's `xcodebuild + ditto + gh release`
 
@@ -134,8 +128,10 @@ stapled. For v1.0 a stapled zip is fine; a DMG is a polish item.
 
 ## Open decisions for the user
 
-1. **Apple Developer Program enrolment** — needed before any of this. Individual
-   vs. organisation account (affects the Team name shown in the cert).
+1. **Apple Developer Program enrolment** — the one remaining blocker (enrolment
+   in progress). Individual vs. organisation account (affects the Team name shown
+   in the cert). Once the `Developer ID Application` cert is installed + notary
+   creds are stored, `scripts/release.sh` does the rest.
 2. **App Store Connect API key vs app-specific password** for `notarytool` — API
    key is cleaner for scripting and doesn't expire like passwords.
 3. **Sparkle auto-updater** (Phase 8) interacts with signing — Sparkle requires
