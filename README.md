@@ -3,16 +3,19 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.4.0` — daily-usable.**
+> **Status: `v0.4.2` — daily-usable.**
 > Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
-> their own windows), a **theme gallery**, **clickable room exits**, an in-game
-> **Help reader**, **session logging**, **notifications**, keyboard **macros**,
-> the **dinv inventory manager**, **native leveling analytics** (the Levels
-> window over the leveldb plugin), the Aardwolf plugin package ported natively,
-> and a **discoverable plugin library** (add MUSHclient plugins from your Mac or
-> a URL, import your dinv/leveldb databases, all under `~/Documents/Proteles/`).
-> Plugins now run **outbound HTTP** and initialise only once you're in-game.
+> their own windows), a **full six-bar status display** (Health/Mana/Moves/TNL/
+> Enemy/Alignment, configurable), a **theme gallery**, **clickable room exits**,
+> an in-game **Help reader**, **session logging**, **notifications**, keyboard
+> **macros**, the **dinv inventory manager**, **native leveling analytics** (the
+> Levels window over the leveldb plugin), the Aardwolf plugin package ported
+> natively, and a **discoverable plugin library** (add MUSHclient plugins from
+> your Mac or a URL, import your dinv/leveldb databases, all under
+> `~/Documents/Proteles/`). It now **survives an Aardwolf "ice age"** (copyover
+> reboot) without dropping, and native **mapper / Search-and-Destroy navigation**
+> (portals, custom exits, scan-on-arrival) is live-hardened.
 > **MIT-licensed**. A **non-notarized
 > build** is attached to each [release](https://github.com/rodarvus/proteles/releases)
 > (right-click ▸ Open past Gatekeeper), or build from source (below). Design
