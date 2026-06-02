@@ -136,9 +136,12 @@ public final class SessionRecorder: @unchecked Sendable {
             throw RecorderError.openFailed(error.localizedDescription)
         }
 
+        // Local time (the user's wall clock) so the filename matches when they
+        // actually started the session — a UTC stamp drifts by the UTC offset
+        // (e.g. an hour in BST) and confuses "which file is my 10:17 session?".
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         let stamp = formatter.string(from: now)
         return folder.appendingPathComponent("session-\(stamp).jsonl")
     }

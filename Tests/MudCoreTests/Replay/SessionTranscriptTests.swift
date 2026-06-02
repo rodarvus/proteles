@@ -31,8 +31,13 @@ struct SessionTranscriptTests {
         #expect(lines[2].contains(" INPUT cp"))
         #expect(lines[3].contains(" NOTE  [SnD-DBG] do_cp_check clk=1700000000.120"))
         #expect(lines[4].contains(##" GMCP  char.status {"state":3}"##))
-        // The timestamp is UTC ISO-8601 with millisecond precision.
-        #expect(lines[0].hasPrefix("2023-11-14T22:13:20.123Z"))
+        // The timestamp is local-time ISO-8601 (with zone offset) — computed the
+        // same way here so the assertion holds on any machine's timezone.
+        let expected = ISO8601DateFormatter()
+        expected.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        expected.timeZone = TimeZone.current
+        let expectedPrefix = expected.string(from: Date(timeIntervalSince1970: 1_700_000_000.123))
+        #expect(lines[0].hasPrefix(expectedPrefix))
     }
 
     @Test("escapes embedded newlines so each event stays on one line")
