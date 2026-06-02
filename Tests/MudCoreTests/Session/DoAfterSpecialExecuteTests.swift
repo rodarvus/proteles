@@ -36,8 +36,13 @@ struct DoAfterSpecialExecuteTests {
 
         try await controller.send("fire")
 
-        // The deferred Execute fires after 0.05s and must split on `;`.
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        // The deferred Execute fires after 0.05s and must split on `;`. Poll
+        // with a generous deadline: the firing rides the SessionController's
+        // background timer loop, which can be starved for several seconds under
+        // `swift test --parallel` on a contended CI runner. A long ceiling costs
+        // wall-clock only if the action never fires (a real failure); on success
+        // the loop breaks the instant the command lands.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while ContinuousClock.now < deadline {
             if conn.sentLines.contains("put DEF BAG") { break }
             try? await Task.sleep(for: .milliseconds(20))
