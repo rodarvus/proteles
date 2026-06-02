@@ -80,6 +80,7 @@ extension Mapper {
         case "shownotes": showNotesCommand(arg)
         case "thisroom": thisRoom()
         case "unmapped": unmappedExits()
+        case "areas": areasTable(arg)
         case "area": areaCommand(arg)
         case "depth": depthCommand(arg)
         case "blink": blinkCommand(arg)
@@ -323,7 +324,62 @@ extension Mapper {
         key.flatMap { graph.areas[$0]?.name } ?? key ?? "?"
     }
 
+    /// One row of the `mapper areas` table (area keyword, name, mapped-room count).
+    private struct AreaRow { let uid: String; let name: String; let count: Int }
+
+    /// `mapper areas [name]` — the bordered area listing, faithful to the
+    /// reference `map_areas`: a leading blank + intro, a `+--+`/header/`+--+`
+    /// frame, one right-aligned-keyword / left-aligned-name / right-aligned-count
+    /// row per area that contains a mapped room (sorted by area name), the
+    /// closing border, and the `Found N areas containing M rooms mapped.` footer.
+    /// Rows are plain notes (the reference's `map_areas` rows are `Note`, not
+    /// hyperlinks). Distinct from `mapper area [name]` (rooms within an area).
+    func areasTable(_ arg: String) -> [ScriptEffect] {
+        let filter = arg.trimmingCharacters(in: .whitespaces)
+        let lowerFilter = filter.lowercased()
+
+        // Rooms per area (only areas that actually contain a mapped room).
+        var counts: [String: Int] = [:]
+        for room in graph.rooms.values {
+            guard let area = room.area, !area.isEmpty else { continue }
+            counts[area, default: 0] += 1
+        }
+        var areas = counts.keys.compactMap { uid -> AreaRow? in
+            let name = graph.areas[uid]?.name ?? ""
+            if !filter.isEmpty, !name.lowercased().contains(lowerFilter) { return nil }
+            return AreaRow(uid: uid, name: name, count: counts[uid] ?? 0)
+        }
+        areas.sort { $0.name.lowercased() < $1.name.lowercased() }
+
+        // Literal header from the reference; border computed (== the reference's
+        // `hl`, pinned in MapperOutputTests).
+        let header = "| keyword    | Area Name                               | Explored |"
+        let border = MapperOutput.border([10, 39, 8])
+        let intro = filter.isEmpty
+            ? "The following areas have been mapped:"
+            : "The following areas matching '\(filter)' have been mapped:"
+
+        var effects: [ScriptEffect] = [
+            MapperOutput.line(""), MapperOutput.line(intro),
+            MapperOutput.line(border), MapperOutput.line(header), MapperOutput.line(border)
+        ]
+        var total = 0
+        for area in areas {
+            total += area.count
+            effects.append(MapperOutput.line(MapperOutput.row([
+                MapperOutput.field(area.uid, 10),
+                MapperOutput.field(area.name, 39, leftAlign: true),
+                MapperOutput.field(String(area.count), 8)
+            ])))
+        }
+        effects.append(MapperOutput.line(border))
+        effects.append(MapperOutput.line("Found \(areas.count) areas containing \(total) rooms mapped."))
+        effects.append(MapperOutput.line(""))
+        return effects
+    }
+
+    /// A mapper note line, in the reference mapper colour (see ``MapperOutput``).
     static func note(_ text: String) -> ScriptEffect {
-        .colourNote([NoteSegment(text: text, foreground: "#7FB0FF")])
+        MapperOutput.line(text)
     }
 }
