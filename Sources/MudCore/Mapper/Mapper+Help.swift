@@ -11,22 +11,22 @@ extension Mapper {
 
     /// `mapper help [section|all|search <txt>]`.
     func helpOutput(_ arg: String) -> [ScriptEffect] {
-        var lines: [String] = ["", Self.helpHeaderTitle, Self.helpBorder]
+        var out: [ScriptEffect] = [Self.note(""), Self.note(Self.helpHeaderTitle), Self.note(Self.helpBorder)]
         let topic = arg.trimmingCharacters(in: .whitespaces)
         if topic.isEmpty {
-            lines += Self.helpIndex
+            out += Self.helpIndex.map { Self.note($0) }
         } else if topic == "all" {
             for key in Self.sectionOrder {
-                lines += Self.sectionLines(key)
+                out += Self.sectionLines(key).map { Self.note($0) }
             }
         } else if Self.sectionBodies[topic] != nil {
-            lines += Self.sectionLines(topic)
+            out += Self.sectionLines(topic).map { Self.note($0) }
         } else if topic.lowercased().hasPrefix("search ") {
-            lines += Self.helpSearch(String(topic.dropFirst("search ".count)))
+            out += Self.helpSearch(String(topic.dropFirst("search ".count)))
         } else {
-            lines += Self.helpIndex // badnews → the index
+            out += Self.helpIndex.map { Self.note($0) } // badnews → the index
         }
-        return lines.map { Self.note($0) }
+        return out
     }
 
     /// `show_help`: a blank line, the section header, a blank line, then the body.
@@ -35,13 +35,34 @@ extension Mapper {
         return ["", header, ""] + body.components(separatedBy: "\n")
     }
 
+    /// A help line with the search term highlighted — the matched runs render in
+    /// the error colour against the note colour (the reference colour-highlights
+    /// the match). Case-insensitive; an empty needle falls back to a plain note.
+    static func highlightedNote(_ line: String, match needle: String) -> ScriptEffect {
+        guard !needle.isEmpty else { return note(line) }
+        var segments: [NoteSegment] = []
+        var cursor = line.startIndex
+        while let range = line.range(of: needle, options: .caseInsensitive, range: cursor..<line.endIndex) {
+            if range.lowerBound > cursor {
+                segments.append(NoteSegment(
+                    text: String(line[cursor..<range.lowerBound]), foreground: MapperOutput.noteColour
+                ))
+            }
+            segments.append(NoteSegment(text: String(line[range]), foreground: MapperOutput.errorColour))
+            cursor = range.upperBound
+        }
+        if cursor < line.endIndex {
+            segments.append(NoteSegment(text: String(line[cursor...]), foreground: MapperOutput.noteColour))
+        }
+        return .colourNote(segments)
+    }
+
     /// `mapper help search <txt>`: list help lines containing the pattern under
-    /// their section headers (the reference also colour-highlights the match; we
-    /// list the matching lines plainly).
-    private static func helpSearch(_ pattern: String) -> [String] {
+    /// their section headers, with the matched term highlighted.
+    private static func helpSearch(_ pattern: String) -> [ScriptEffect] {
         let needle = pattern.trimmingCharacters(in: .whitespaces)
-        var out = ["", "Searching help for: \(needle)"]
-        guard !needle.isEmpty else { return helpIndex }
+        guard !needle.isEmpty else { return helpIndex.map { note($0) } }
+        var out: [ScriptEffect] = [note(""), highlightedNote("Searching help for: \(needle)", match: needle)]
         let lowered = needle.lowercased()
         for key in sectionOrder {
             guard let body = sectionBodies[key], let header = sectionHeaders[key] else { continue }
@@ -49,10 +70,10 @@ extension Mapper {
                 !$0.isEmpty && !$0.contains("--------") && $0.lowercased().contains(lowered)
             }
             if !matches.isEmpty {
-                out.append("")
-                out.append(header)
+                out.append(note(""))
+                out.append(note(header))
                 for match in matches {
-                    out.append(match)
+                    out.append(highlightedNote(match, match: needle))
                 }
             }
         }

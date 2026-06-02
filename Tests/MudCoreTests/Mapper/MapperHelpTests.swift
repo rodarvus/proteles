@@ -73,6 +73,22 @@ struct MapperHelpTests {
         #expect(!out.contains("===== MOVING ====================>"))
     }
 
+    @Test("help search highlights the matched term in red")
+    func helpSearchHighlight() async throws {
+        let mapper = try makeMapper()
+        let effects = await mapper.handleCommand("mapper help search bouncerecall")
+        // At least one row carries a red (error-colour) segment for the match.
+        let highlighted = effects.contains { effect in
+            if case .colourNote(let segs) = effect {
+                return segs.contains {
+                    $0.foreground == MapperOutput.errorColour && $0.text.lowercased().contains("bouncerecall")
+                }
+            }
+            return false
+        }
+        #expect(highlighted)
+    }
+
     @Test("an unknown help topic falls back to the index")
     func helpUnknown() async throws {
         let mapper = try makeMapper()

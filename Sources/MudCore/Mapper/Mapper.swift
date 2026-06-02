@@ -196,7 +196,15 @@ public actor Mapper {
         pkBlink = Self.persistedFlag(store, Self.pkBlinkKey, default: true)
         showNotes = Self.persistedFlag(store, Self.showNotesKey, default: true)
         scanDepth = Self.persistedInt(store, Self.scanDepthKey, default: Self.defaultScanDepth)
+        // Restore the designated bounce portal/recall (reference `storage` rows),
+        // so they survive a restart / world reload.
+        bouncePortalDir = (try? store.storageValue(Self.bouncePortalKey)).flatMap(\.self)
+        bounceRecallDir = (try? store.storageValue(Self.bounceRecallKey)).flatMap(\.self)
     }
+
+    /// `storage` row names for the bounce designations (reference parity).
+    static let bouncePortalKey = "bounce_portal"
+    static let bounceRecallKey = "bounce_recall"
 
     private static let showOtherAreasKey = "ui.show_other_areas"
     private static let showAreaExitsKey = "ui.show_area_exits"

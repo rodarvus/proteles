@@ -51,6 +51,24 @@ struct MapperMaintenanceTests {
         #expect(await notes(mapper.handleCommand("mapper clearcache")) == ["Cleared local room cache."])
     }
 
+    @Test("backup archives the DB into a db_backups/ directory")
+    func backup() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-backup-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Aardwolf.db")
+        let mapper = try Mapper(store: MapperStore(url: url))
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"aylor","name":"Aylor"}"#)
+
+        let out = await notes(mapper.handleCommand("mapper backup"))
+        #expect(out.first?.hasPrefix("Map backed up to db_backups/Aardwolf.") == true)
+        let backups = (try? FileManager.default.contentsOfDirectory(
+            at: dir.appendingPathComponent("db_backups"), includingPropertiesForKeys: nil
+        )) ?? []
+        #expect(backups.contains { $0.lastPathComponent.hasPrefix("Aardwolf.") && $0.pathExtension == "db" })
+    }
+
     @Test("reset re-requests the room silently and forgets position")
     func reset() async throws {
         let mapper = try await makeMapper()

@@ -231,6 +231,31 @@ struct MapperPortalsTests {
         #expect(out.contains { $0.hasPrefix("|*  1 |") })
     }
 
+    @Test("a bounce designation persists across a fresh Mapper on the same store")
+    func bouncePersists() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-bounce-persist-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let mapper = try Mapper(store: MapperStore(url: url))
+            _ = await mapper.ingest(package: "room.area", json: #"{"id":"aylor","name":"Aylor"}"#)
+            _ = await mapper.ingest(
+                package: "room.info",
+                json: #"{"num":100,"name":"Aylor Inn","zone":"aylor","exits":{}}"#
+            )
+            _ = await mapper.ingest(
+                package: "room.info",
+                json: #"{"num":1,"name":"Square","zone":"aylor","exits":{}}"#
+            )
+            _ = await mapper.handleCommand("mapper portal nexus 100 0")
+            _ = await mapper.handleCommand("mapper bounceportal 1")
+            #expect(await mapper.bouncePortalDir == "nexus")
+        }
+        // A fresh Mapper over the same on-disk store restores the designation.
+        let reopened = try Mapper(store: MapperStore(url: url))
+        #expect(await reopened.bouncePortalDir == "nexus")
+    }
+
     @Test("bouncerecall requires a recall portal")
     func bounceRecall() async throws {
         let mapper = try await makeMapper()
