@@ -177,6 +177,68 @@ struct CompatShimTests {
         ])
     }
 
+    // #29: SetTriggerOption was a no-op, so a plugin retuning a trigger at
+    // runtime silently had no effect. Now `enabled`/`group` route to the engine
+    // and `sequence`/`match` rebuild the named trigger.
+    @Test("SetTriggerOption routes enabled + group to the host engines")
+    func setTriggerOptionEnabledGroup() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("AddTriggerEx('t', '^x$', '', 1, -1, 0, '', 'fn', 12, 100)")
+        // enabled "0" (MUSHclient passes a string) → disable; group → move group.
+        let effects = try await lua.run(
+            "SetTriggerOption('t','enabled','0'); SetTriggerOption('t','group','grp')"
+        )
+        #expect(effects == [
+            .enableTrigger(name: "t", on: false),
+            .setTriggerGroup(name: "t", group: "grp")
+        ])
+    }
+
+    @Test("SetTriggerOption sequence rebuilds the named trigger with the new sequence")
+    func setTriggerOptionSequence() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("AddTriggerEx('t', '^x$', '', 1, -1, 0, '', 'fn', 12, 100)")
+        let effects = try await lua.run("SetTriggerOption('t','sequence',40)")
+        // Rebuild with the same match/body/flags (Enabled=1), new sequence 40.
+        #expect(effects == [.addTrigger(
+            name: "t",
+            pattern: "^x$",
+            flags: 1,
+            script: "fn(\"t\", matches[0], matches)",
+            sequence: 40
+        )])
+    }
+
+    @Test("a SetTriggerOption rebuild preserves a runtime enable/disable toggle")
+    func rebuildPreservesEnabled() async throws {
+        let lua = try await shimmed()
+        _ = try await lua.run("AddTriggerEx('t', '^x$', '', 1, -1, 0, '', 'fn', 12, 100)")
+        _ = try await lua.run("SetTriggerOption('t','enabled',false)") // disable at runtime
+        let effects = try await lua.run("SetTriggerOption('t','match','^y$')") // rebuild
+        // The cleared Enabled bit must fold back into the rebuilt flags (1 → 0),
+        // else the rebuild would silently re-enable a disabled trigger.
+        #expect(effects == [.addTrigger(
+            name: "t",
+            pattern: "^y$",
+            flags: 0,
+            script: "fn(\"t\", matches[0], matches)",
+            sequence: 100
+        )])
+    }
+
+    @Test("DeleteTemporaryTriggers removes only Temporary-flagged triggers")
+    func deleteTemporaryTriggers() async throws {
+        let lua = try await shimmed()
+        // t1 Temporary(16384)+Enabled(1); t2 Enabled(1) only.
+        _ = try await lua.run("AddTriggerEx('t1','^a$','',16385,-1,0,'','fn',12,100)")
+        _ = try await lua.run("AddTriggerEx('t2','^b$','',1,-1,0,'','fn',12,100)")
+        let removed = try await lua.run("n = DeleteTemporaryTriggers()")
+        #expect(removed == [.removeTrigger("t1")]) // only the temporary one
+        #expect(try await lua.number("n") == 1)
+        #expect(try await lua.number("IsTrigger('t1')") == 30005) // gone
+        #expect(try await lua.number("IsTrigger('t2')") == 0) // kept
+    }
+
     @Test("addxml.alias maps to AddAlias; MUSHclient y/n booleans accepted")
     func addxmlAlias() async throws {
         let lua = try await shimmed()
