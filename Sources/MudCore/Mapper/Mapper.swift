@@ -21,6 +21,45 @@ public actor Mapper {
     public internal(set) var graph: RoomGraph
     /// The uid of the room the player is currently in (nil until known).
     public private(set) var currentRoomUID: String?
+
+    /// In-progress speedwalk, sent segment-by-segment. Rather than firing every
+    /// segment at once (which races a portal hop against the follow-on `run` —
+    /// the post-portal `run` reached the MUD before the whoosh landed, so it
+    /// walked from the wrong room and aborted), we send one segment, then wait
+    /// for the destination `room.info` before sending the next. ``walkSegments``
+    /// is the full plan, ``walkIndex`` the segment we last sent, ``walkExpect``
+    /// the uid we're waiting to arrive in before sending the next (nil = no walk
+    /// pending / the final segment is in flight). Internal (not private) so the
+    /// `Mapper+Commands` extension's `route` can arm them.
+    var walkSegments: [Speedwalk.Segment] = []
+    var walkIndex = 0
+    var walkExpect: String?
+
+    /// On a `room.info`, advance a pending segmented walk. If we've arrived in the
+    /// room the last-sent segment was heading to, send the next segment;
+    /// otherwise (still en route, or no walk) do nothing. This is what makes a
+    /// portal hop wait for its whoosh before the follow-on `run` is sent.
+    /// Returns the command(s) to execute now.
+    public func advanceWalk() -> [ScriptEffect] {
+        guard let expect = walkExpect, currentRoomUID == expect else { return [] }
+        walkIndex += 1
+        guard walkIndex < walkSegments.count else {
+            walkExpect = nil
+            return []
+        }
+        let segment = walkSegments[walkIndex]
+        // Wait for this segment only if more follow; the last one needs no wait.
+        walkExpect = walkIndex < walkSegments.count - 1 ? segment.expectUID : nil
+        return [.execute(segment.command)]
+    }
+
+    /// Cancel any in-progress segmented walk (a new route supersedes the old).
+    func clearWalk() {
+        walkSegments = []
+        walkIndex = 0
+        walkExpect = nil
+    }
+
     /// Terrain environment code → name, and terrain name → packed colour,
     /// from `room.sectors` (used by the map panel's colouring).
     public private(set) var environments: [String: String] = [:]
@@ -291,20 +330,17 @@ public actor Mapper {
 
     // MARK: - room.info
 
-    private func ingestRoomInfo(_ json: String) -> [String] {
-        guard let info = try? JSONDecoder().decode(RoomInfo.self, from: Data(json.utf8)) else {
-            return []
-        }
-        let uid = Self.uid(for: info)
-        let previousRoomUID = currentRoomUID
-        currentRoomUID = uid
-
-        // Exits: dir → destination vnum (string). Preserve any existing
-        // per-exit metadata (level/weight/door) when the destination is
-        // unchanged, matching the original's lock preservation.
+    /// Build a room's exit set from a GMCP `room.info`. Compass exits come from
+    /// GMCP (preserving per-exit metadata — level/weight/door — when a dir's
+    /// destination is unchanged, matching the original's lock preservation).
+    /// Existing custom (non-compass) exits are CARRIED FORWARD: GMCP never
+    /// reports them, and `saveExits` delete-then-inserts, so without this a
+    /// revisit would wipe every player-added `open …`/`say …`/`enter …` exit.
+    /// The reference mapper's `save_room_exits` likewise only upserts GMCP dirs
+    /// and never deletes custom exits (aard_GMCP_mapper.xml).
+    private static func mergedExits(gmcp: [String: Int]?, existing: Room?) -> [String: Exit] {
         var exits: [String: Exit] = [:]
-        let existing = graph[uid]
-        for (dir, dest) in info.exits ?? [:] {
+        for (dir, dest) in gmcp ?? [:] {
             var exit = Exit(dir: dir, to: String(dest))
             if let old = existing?.exits[dir], old.to == exit.to {
                 exit.level = old.level
@@ -313,6 +349,23 @@ public actor Mapper {
             }
             exits[dir] = exit
         }
+        for (dir, exit) in existing?.exits ?? [:] {
+            guard !RichExits.isCardinalDirection(dir), exits[dir] == nil else { continue }
+            exits[dir] = exit
+        }
+        return exits
+    }
+
+    private func ingestRoomInfo(_ json: String) -> [String] {
+        guard let info = try? JSONDecoder().decode(RoomInfo.self, from: Data(json.utf8)) else {
+            return []
+        }
+        let uid = Self.uid(for: info)
+        let previousRoomUID = currentRoomUID
+        currentRoomUID = uid
+
+        let existing = graph[uid]
+        let exits = Self.mergedExits(gmcp: info.exits, existing: existing)
 
         var room = Room(
             uid: uid,

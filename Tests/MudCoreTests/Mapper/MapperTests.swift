@@ -11,6 +11,56 @@ struct MapperTests {
         return try (Mapper(store: store), url)
     }
 
+    /// Regression: revisiting a room must NOT wipe its custom exits. GMCP
+    /// `room.info` reports only compass exits, and `ingestRoomInfo` rebuilds the
+    /// room from GMCP then `saveExits` delete-then-inserts — so without carrying
+    /// the custom exits forward, every revisit drops them (the live bug that lost
+    /// the user's `open …`/`say …`/`enter …` exits). Fails (custom exit gone) if
+    /// `ingestRoomInfo` doesn't preserve non-compass exits.
+    @Test("Revisiting a room preserves its custom (non-compass) exits")
+    func revisitPreservesCustomExits() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-cexit-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mapper = try Mapper(store: MapperStore(url: url))
+
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"aylor","name":"Aylor"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Hole","zone":"aylor","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"aylor","exits":{"n":2}}"#
+        )
+
+        // Add a custom exit from room 1: `enter hole` → 2 (current room is 1).
+        _ = await mapper.handleCommand("mapper fullcexit {enter hole} 1 2")
+        #expect(
+            await mapper.currentRoomCustomExits().contains { $0.command == "enter hole" },
+            "custom exit was not stored"
+        )
+
+        // Revisit room 1 with a CHANGED compass-exit set (adds `s`), forcing the
+        // destructive saveExits path — exactly what happens walking back through.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"aylor","exits":{"n":2,"s":2}}"#
+        )
+
+        // In memory (what pathfinding reads) the custom exit must survive…
+        #expect(
+            await mapper.currentRoomCustomExits().contains { $0.command == "enter hole" },
+            "revisit wiped the custom exit from the in-memory graph"
+        )
+        // …and it must still be persisted (the user's actual data loss).
+        let dbExits = try MapperStore(url: url).customExits()
+        #expect(
+            dbExits.contains { $0.dir == "enter hole" && $0.fromuid == "1" },
+            "revisit wiped the custom exit from the database"
+        )
+    }
+
     @Test("A fresh mapper seeds the terrain palette from the persisted environments table")
     func seedsTerrainPaletteFromStore() async throws {
         let url = FileManager.default.temporaryDirectory

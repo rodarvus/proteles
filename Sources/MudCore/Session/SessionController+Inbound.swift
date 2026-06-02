@@ -87,6 +87,11 @@ extension SessionController {
             for packet in await mapper.ingest(package: message.package, json: message.json) {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
             }
+            // After a room change, release the next segment of any pending
+            // speedwalk. This is what makes a portal hop wait for its whoosh
+            // before the follow-on `run` is sent (otherwise the run races the
+            // portal, walks from the wrong room, and aborts).
+            await applyScriptEffects(mapper.advanceWalk())
         }
         // On each room.info (post-login), refresh Rich Exits and one-shot enable
         // any tag options whose features are on.

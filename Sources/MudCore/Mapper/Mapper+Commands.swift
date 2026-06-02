@@ -154,7 +154,19 @@ extension Mapper {
         // step that's a plugin/alias command — e.g. a portal hop stored as
         // `dinv portal use <id>` — is handled by its plugin instead of leaking
         // to the MUD. Plain directions (`run 3n2e`) match no alias and pass through.
-        effects += Speedwalk.commands(path).map { ScriptEffect.execute($0) }
+        //
+        // Send ONLY the first segment now; the rest are armed as a pending walk
+        // and released one at a time as each destination `room.info` arrives
+        // (``advanceWalk``). Firing them all at once raced a portal hop against
+        // the follow-on `run` (the run reached the MUD before the whoosh, walked
+        // from the wrong room, and aborted) — the reference mapper waits between
+        // steps for exactly this reason.
+        clearWalk()
+        let segments = Speedwalk.segments(path)
+        walkSegments = segments
+        walkIndex = 0
+        walkExpect = segments.count > 1 ? segments.first?.expectUID : nil
+        if let first = segments.first { effects.append(.execute(first.command)) }
         return effects
     }
 
