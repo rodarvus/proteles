@@ -50,9 +50,9 @@ struct SearchAndDestroyXMLTests {
 
         #expect(plugin.id == SearchAndDestroyHost.pluginID)
         #expect(plugin.name == "Search_and_Destroy")
-        // The full corpus: 94 triggers, 98 aliases, 7 timers.
+        // The full corpus (vendored S&D 1.2): 94 triggers, 100 aliases, 7 timers.
         #expect(plugin.triggers.count == 94)
-        #expect(plugin.aliases.count == 98)
+        #expect(plugin.aliases.count == 100)
         #expect(plugin.timers.count == 7)
 
         // A named-capture regex survived normalisation byte-for-byte.
