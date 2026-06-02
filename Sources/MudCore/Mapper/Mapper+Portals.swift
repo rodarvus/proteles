@@ -92,10 +92,11 @@ extension Mapper {
         )
     }
 
-    /// Whether a portal is the currently designated bounce portal/recall.
-    /// Bounce designation isn't implemented yet, so this is always `false`.
-    private func isDesignatedBounce(_: MapperStore.PortalEntry) -> Bool {
-        false
+    /// Whether a portal is the currently designated bounce portal/recall (the
+    /// reference's `*` marker).
+    private func isDesignatedBounce(_ portal: MapperStore.PortalEntry) -> Bool {
+        (bouncePortalDir != nil && portal.dir == bouncePortalDir)
+            || (bounceRecallDir != nil && portal.dir == bounceRecallDir)
     }
 
     /// Format one row's text. The leading marker takes the place of the usual

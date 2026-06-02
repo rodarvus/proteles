@@ -267,7 +267,7 @@ struct MapperCommandTests {
         #expect(list.contains { $0.contains("recall") })
         // Delete one, then purge the rest (two-step confirm).
         #expect(await notes(mapper.handleCommand("mapper delete portal recall"))
-            .contains { $0.contains("Deleted portal 'recall'") })
+            == ["Deleted mapper portal with keywords 'recall'."])
         _ = await mapper.handleCommand("mapper purge portals")
         #expect(await notes(mapper.handleCommand("mapper purge portals confirm"))
             == ["Purged all mapper portals."])
@@ -402,14 +402,15 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        _ = await mapper.handleCommand("mapper portal enter 3")
-        // Rename, set level, toggle recall — all by use-command or #1.
+        _ = await mapper.handleCommand("mapper portal enter 3 0")
+        // Change by keywords (reference wording).
         #expect(await notes(mapper.handleCommand("mapper change portal {enter} {step}"))
-            .contains { $0.contains("Renamed portal to 'step'") })
-        #expect(await notes(mapper.handleCommand("mapper portallevel step 40"))
-            .contains { $0.contains("level set to 40") })
-        #expect(await notes(mapper.handleCommand("mapper portalrecall step"))
-            .contains { $0.contains("Recall flag added") })
+            == ["Changed mapper portal to command 'step'."])
+        // Set level + toggle recall by index (#1).
+        #expect(await notes(mapper.handleCommand("mapper portallevel 1 40"))
+            == ["Portal 'step' to 'North End' given minimum level lock of 40."])
+        #expect(await notes(mapper.handleCommand("mapper portalrecall 1"))
+            == ["PORTALRECALL: Recall flag added to portal 'step' to 'North End'."])
         // It now lists in the table as 'step' at level 40.
         let list = await notes(mapper.handleCommand("mapper portals"))
         #expect(list.contains { $0.contains("step") && $0.contains("40") })
