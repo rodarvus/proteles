@@ -87,3 +87,28 @@ new layout before investigating.
 Implemented post-`0.3.0` over URLSession (full parity; outbound HTTP allowed
 freely). `require "async"` is now the real module — see
 `docs/plans/ASYNC_HTTP_PLAN.md`. No longer a limitation.
+
+## Mapper command-fidelity follow-ups (D-90, 2026-06-02)
+
+The byte-faithful `mapper` command pass (D-90) landed three deliberate,
+documented deferrals — small, non-blocking, picked up when convenient:
+
+- **Bounce-designation persistence.** `mapper bounceportal`/`bouncerecall`
+  designations live in memory on the `Mapper` actor; the reference persists them
+  to a `storage` table so they survive a restart. Ours reset on a full world
+  reload (same replay-on-attach class as the other live state). Persist them to
+  the mapper DB to match.
+- **`mapper backup` → native Databases model.** Still our single-file timestamped
+  copy. The reference's `backup_databases` is a multi-file rotation with optional
+  compression + integrity checks; the faithful home for this is the native
+  Databases-menu backup model (the Phase-7 display/DB→native mapping), not a
+  command reimplementation.
+- **`mapper help search <txt>` highlighting.** Lists the matching help lines
+  under their section headers but doesn't colour-highlight the matched term the
+  way the reference does (cornflower/red). Cosmetic; would need per-line
+  `NoteSegment` splitting.
+
+Not follow-ups (justified divergences, no action): `thisroom` renders
+Exits/Exit-locks sorted (the reference's Lua `tprint` order is itself
+non-deterministic); `lockexit` / portal-level / `addnote` take argument forms
+where the reference pops a dialog (the standard dialog→native decision).

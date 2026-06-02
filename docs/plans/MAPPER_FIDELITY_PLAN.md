@@ -1,5 +1,11 @@
 # Mapper command fidelity — bring our `mapper …` interface to MUSHclient parity
 
+> **STATUS: DONE (2026-06-02, D-90, shipped in `v0.4.3`).** All 8 phases landed
+> across commits `dca6d0b`…`2d83109`, 1188 tests, four gates green. Deferred
+> follow-ups + justified divergences are recorded in `docs/KNOWN_ISSUES.md`
+> ("Mapper command-fidelity follow-ups"). The phase plan below is kept as the
+> historical record.
+
 **Goal (user):** every `mapper` command should behave and *look* exactly like the
 reference Aardwolf mapper (`aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
 `worlds/plugins/aard_GMCP_mapper.xml`), not "our way." Three acceptance bars:
