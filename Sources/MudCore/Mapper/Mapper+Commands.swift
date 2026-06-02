@@ -95,8 +95,8 @@ extension Mapper {
     /// ``handleCommand(_:)`` to keep each within the complexity budget.
     private func handleSecondaryCommand(_ sub: String, _ arg: String) -> [ScriptEffect] {
         switch sub {
-        case "note", "addnote": return noteCommand(arg)
-        case "notes", "bookmarks": return listNotes()
+        case "note", "addnote": return addNoteCommand(arg)
+        case "notes", "bookmarks": return listNotes(arg)
         case "shownotes": return showNotesCommand(arg)
         case "thisroom": return thisRoom()
         case "depth": return depthCommand(arg)
@@ -139,33 +139,6 @@ extension Mapper {
         try? store.setNote(room.notes, uid: target)
         publishLayout()
         return true
-    }
-
-    /// `mapper note [text]` — set the current room's note (empty clears it).
-    private func noteCommand(_ text: String) -> [ScriptEffect] {
-        guard let uid = currentRoomUID, graph.rooms[uid] != nil else {
-            return [Self.note("Your current location is unknown.")]
-        }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        _ = setNote(trimmed, uid: uid)
-        if trimmed.isEmpty {
-            return [Self.note("Cleared the note for this room.")]
-        }
-        return [Self.note("Noted [\(uid)]: \(trimmed)")]
-    }
-
-    /// `mapper notes` / `mapper bookmarks` — list every room that has a note.
-    private func listNotes() -> [ScriptEffect] {
-        let noted = graph.rooms.values
-            .filter { !($0.notes ?? "").isEmpty }
-            .sorted { $0.uid < $1.uid }
-            .prefix(50)
-        guard !noted.isEmpty else { return [Self.note("No room notes yet.")] }
-        var effects: [ScriptEffect] = [Self.note("Room notes:")]
-        for room in noted {
-            effects.append(Self.note("  [\(room.uid)] \(room.name) — \(room.notes ?? "")"))
-        }
-        return effects
     }
 
     private func route(to uid: String, allowPortals: Bool) -> [ScriptEffect] {
@@ -316,19 +289,6 @@ extension Mapper {
         let uid = lastResultList[lastResultIndex]
         lastResultIndex += 1
         return route(to: uid, allowPortals: true)
-    }
-
-    /// `mapper thisroom` — details of the room you're standing in.
-    private func thisRoom() -> [ScriptEffect] {
-        guard let uid = currentRoomUID, let room = graph.rooms[uid] else {
-            return [Self.note("Your current location is unknown.")]
-        }
-        var effects = [Self.note("[\(uid)] \(room.name) — \(areaName(room.area))")]
-        let exits = room.exits.keys.sorted().joined(separator: ", ")
-        if !exits.isEmpty { effects.append(Self.note("  Exits: \(exits)")) }
-        if let terrain = room.terrain, !terrain.isEmpty { effects.append(Self.note("  Terrain: \(terrain)")) }
-        if let note = room.notes, !note.isEmpty { effects.append(Self.note("  Note: \(note)")) }
-        return effects
     }
 
     /// `mapper depth [rooms]` — show or set how far the map draws.
