@@ -60,10 +60,12 @@ extension Mapper {
         }
     }
 
-    /// `mapper reset` (resetaard) — forget the current room and re-request it.
+    /// `mapper reset` / `resetaard` (reference `reset_aard`): forget the current
+    /// room and re-request it. The reference re-initialises silently, so we emit
+    /// no note — just the GMCP room request.
     private func resetCommand() -> [ScriptEffect] {
         clearCurrentRoom()
-        return [.sendGMCP("request room"), Self.note("Mapper position reset — re-syncing room.")]
+        return [.sendGMCP("request room")]
     }
 
     /// `mapper backup` — copy the map database to a timestamped file beside it.
@@ -359,17 +361,28 @@ extension Mapper {
         return [Self.note("Purged room \(uid) from the map.")]
     }
 
+    /// `mapper purgezone <keyword>` (reference `map_purgezone`): delete a mapped
+    /// area by its keyword (must be a known area uid), reporting the area's
+    /// display name.
     private func purgeZoneCommand(_ arg: String) -> [ScriptEffect] {
-        let area = arg.isEmpty ? graph.rooms[currentRoomUID ?? ""]?.area : arg
-        guard let area else { return [Self.note("Usage: mapper purgezone [area]  (or stand in one)")] }
-        try? store.purgeZone(area: area)
+        let keyword = arg.trimmingCharacters(in: .whitespaces)
+        guard !keyword.isEmpty, let area = graph.areas[keyword] else {
+            return [
+                Self.note("Syntax: mapper purgezone <keyword>"),
+                Self.note("Try 'mapper areas' for a list of area keywords."),
+                Self.note("")
+            ]
+        }
+        try? store.purgeZone(area: keyword)
         reloadGraphAndPublish()
-        return [Self.note("Purged area '\(area)' from the map.")]
+        return [Self.note("Purged \(area.name ?? keyword) from the mapper database.")]
     }
 
+    /// `mapper clearcache` (reference `map_clearcache`): drop the in-memory room
+    /// cache (we reload it from the database).
     private func clearCacheCommand() -> [ScriptEffect] {
         reloadGraphAndPublish()
-        return [Self.note("Reloaded the map from the database.")]
+        return [Self.note("Cleared local room cache.")]
     }
 
     /// Reload the in-memory graph from the store and republish — after a
