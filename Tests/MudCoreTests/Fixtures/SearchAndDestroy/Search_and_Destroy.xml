@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><!DOCTYPE muclient>
+<?xml version="1.0" encoding="iso-8859-1"?><!DOCTYPE muclient>
 <!-- Saved on Saturday, July 05, 2008, 4:46 PM -->
 <muclient>
     <plugin version="5.99" name="Search_and_Destroy" id="30000000537461726C696E67" date_written="2018-12-31 23:00:00" author="Crowley" language="Lua" purpose="Safe, legal Search and Destroy" save_state="y" requires="4.90">
@@ -48,7 +48,7 @@ async_ok, async = pcall(require, "async")
 
 PLUGIN_VERSION = GetPluginInfo(GetPluginID(), 19)
 PLUGIN_NAME = GetPluginInfo(GetPluginID(), 1)
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 prevBeta = "5.9m"
 betaVersion = "5.9n"
@@ -74,7 +74,7 @@ showStr = "@W%s @wis found in @Y%s @win/around @G%s @w(@Cmapper goto %s@w)"
 
 PLUGIN_VERSION = GetPluginInfo(GetPluginID(), 19)
 PLUGIN_NAME = GetPluginInfo(GetPluginID(), 1)
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 UPDATE_CHECK_INTERVAL = 60 * 60 -- Check once per hour
 local last_update_check = -1
@@ -186,6 +186,7 @@ local autoHuntData = {}
 
 -- [[ hunt trick ]]
 local ht = {index = 1, first_target = true}
+local ht_last_found  -- set by ht_complete, used by ht_find to repeat last successful hunt
 
 -- [[ quick where ]]
 local qw = {index = 1}
@@ -204,6 +205,9 @@ local xset_vidblain_onoff = GetVariable("mcvar_xset_vidblain_onoff") or "off"
 
 -- [[ Extra GQ aliases ]]
 local xset_gq_check_extra_aliases = GetVariable("mcvar_xset_gq_check_extra_aliases") or "on"
+
+-- [[ Auto-navigate on single xcp/qw result ]]
+local xset_autonav_onoff = GetVariable("mcvar_xset_autonav_onoff") or "off"
 
 -- [[ Variables from old Mapper Extender ]]
 local area_range_index = {}
@@ -537,6 +541,10 @@ function migrate_database()
         add_history_table(db)
     end
 
+    if current_version < 7 then
+        normalize_existing_mobs(db)
+    end
+
     InfoNote("Migration complete!")
     db:execute(string.format("PRAGMA user_version = %i;", SCHEMA_VERSION))
 
@@ -665,6 +673,67 @@ function add_mob_area_index(db)
         CREATE INDEX IF NOT EXISTS mobs_zone_mob_room ON mobs (zone, mob, room);
         CREATE INDEX IF NOT EXISTS area_key ON area (key);
     ]])
+end
+
+function normalize_existing_mobs(db)
+    -- Schema v7: strip transient flag/aura prefixes (e.g. "(flying) (red aura) ")
+    -- from stored mob names and merge the resulting duplicate (mob, roomid) rows,
+    -- summing seen_count and kill_count. The scan path used to record a mob under
+    -- whatever combat flags it happened to be wearing, fragmenting one mob into
+    -- several rows and splitting its seen/kill history. This consolidates them.
+    DebugNote("Normalizing mob names and merging flag-duplicated rows")
+    local agg = {}
+    local order = {}
+    for row in db:nrows("SELECT mob, room, roomid, zone, seen_count, kill_count FROM mobs") do
+        local norm = normalize_mob_name(row.mob)
+        local key = string.lower(norm) .. "\0" .. tostring(row.roomid)
+        local e = agg[key]
+        if not e then
+            e = {mob = norm, room = row.room, roomid = row.roomid, zone = row.zone, seen = 0, kill = 0}
+            agg[key] = e
+            table.insert(order, key)
+        end
+        e.seen = e.seen + (tonumber(row.seen_count) or 0)
+        e.kill = e.kill + (tonumber(row.kill_count) or 0)
+        -- prefer an already-clean original as the canonical display name
+        if row.mob == norm then
+            e.mob = norm
+        end
+    end
+
+    local ops = {}
+    table.insert(ops, "ALTER TABLE mobs RENAME TO old_mobs;")
+    table.insert(
+        ops,
+        [[
+			CREATE TABLE mobs (
+				mob 		TEXT NOT NULL COLLATE NOCASE,
+				room 		TEXT NOT NULL COLLATE NOCASE,
+				roomid 		INTEGER NOT NULL,
+				zone 		TEXT NOT NULL,
+				seen_count 	INTEGER NOT NULL DEFAULT 0,
+				kill_count 	INTEGER NOT NULL DEFAULT 0,
+				UNIQUE(mob, roomid));
+		]]
+    )
+    for _, key in ipairs(order) do
+        local e = agg[key]
+        table.insert(
+            ops,
+            string.format(
+                "INSERT INTO mobs (mob,room,roomid,zone,seen_count,kill_count) VALUES (%s,%s,%i,%s,%i,%i);",
+                fixsql(e.mob),
+                fixsql(e.room),
+                tonumber(e.roomid),
+                fixsql(e.zone),
+                e.seen,
+                e.kill
+            )
+        )
+    end
+    table.insert(ops, "DROP TABLE old_mobs;")
+    table.insert(ops, "CREATE INDEX IF NOT EXISTS mobs_zone_mob_room ON mobs (zone, mob, room);")
+    execute_in_transaction(db, ops)
 end
 
 function write_marks_to_db(db)
@@ -1860,6 +1929,49 @@ function save_mob_keyword_keyword(area, mob_name, keyword)
     return true
 end
 
+-- Transient mob flags/auras the game prepends to a mob's displayed name
+-- (e.g. "(flying) (red aura) a goose", "(f)(g)(w) warloxan"). These are stripped
+-- before a mob is stored or keyed, so a single mob is not recorded as several
+-- different rows depending on the spells/flags it happened to be wearing.
+-- NOTE: identity-style parentheticals (e.g. School of Horror titles like
+-- "(Helper)", "(Shogun)") are deliberately NOT listed, so they are preserved.
+NORM_MOB_FLAGS = {
+    ["flying"] = true, ["hidden"] = true, ["invis"] = true, ["invisible"] = true,
+    ["translucent"] = true, ["wounded"] = true, ["aimed"] = true, ["charmed"] = true,
+    ["animated"] = true, ["diseased"] = true, ["angry"] = true, ["marked"] = true,
+    ["opk"] = true, ["!"] = true,
+    -- short scan flag codes
+    ["f"] = true, ["g"] = true, ["r"] = true, ["w"] = true, ["i"] = true, ["t"] = true,
+    ["h"] = true, ["p"] = true, ["d"] = true, ["x"] = true, ["c"] = true, ["a"] = true,
+}
+
+function normalize_mob_name(name)
+    if not name then
+        return name
+    end
+    local s = name
+    while true do
+        local pre, inner = string.match(s, "^(%s*%(([^()]*)%)%s*)")
+        if not inner then
+            break
+        end
+        local key = string.lower(inner)
+        key = string.gsub(key, "^%s+", "")
+        key = string.gsub(key, "%s+$", "")
+        if NORM_MOB_FLAGS[key] or string.match(key, "^%a+ aura$") then
+            s = string.sub(s, #pre + 1)
+        else
+            break -- unknown parenthetical: treat as part of the name, stop stripping
+        end
+    end
+    s = string.gsub(s, "^%s+", "")
+    s = string.gsub(s, "%s+$", "")
+    if s == "" then
+        return name -- never reduce a name to nothing
+    end
+    return s
+end
+
 function gmkw(s, a) -- guess mob keywords
     if not s then
         return ""
@@ -1916,20 +2028,56 @@ function gmkw(s, a) -- guess mob keywords
     else
         s3 = s2
     end
-    s3 = string.gsub(s3, "-", " ")
-
     local s4 = {}
     for w in string.gmatch(s3, "[^ ]+") do
         table.insert(s4, w)
     end
-    local len1 = #(s4[1])
-    local len2 = #(s4[#s4]) or 0
+
+    -- Aardwolf keeps "'" and "-" as literal characters in a mob's keyword and
+    -- matches keyword PREFIXES. A keyword that is truncated mid-punctuation
+    -- (e.g. "nulan'b" from "Nulan'Boar") or that fuses/splits a hyphenated word
+    -- ("yama uba" / "yamauba" from "yama-uba") does not match. Reduce each chosen
+    -- word to the clean segment BEFORE its first apostrophe/hyphen, which is
+    -- always a valid prefix of the full token, before truncating it. This
+    -- replaces the old blanket "s3 = gsub(-, ' ')", which only worked for the
+    -- subset of hyphenated mobs whose keyword happens to split on the hyphen.
+    local function punct_safe(w)
+        if not (string.find(w, "'", 1, true) or string.find(w, "-", 1, true)) then
+            return w
+        end
+        local seg = string.match(w, "^[^'%-]*")
+        if seg and #seg >= 3 then
+            return seg
+        end
+        -- Leading segment too short (e.g. "'cal", "o'", "t-rex"): fall back to
+        -- the segment after the first punctuation.
+        local after = string.match(w, "^[^'%-]*['%-](.*)$") or ""
+        local alt = string.match(after, "^[^'%-]*") or ""
+        if #alt >= 3 then
+            return alt
+        end
+        if seg and #seg > 0 then
+            return seg
+        elseif #alt > 0 then
+            return alt
+        end
+        local stripped = string.gsub(w, "['%-]", "")
+        return stripped
+    end
+
     if (#s4 > 1) then -- mob name has multiple words
+        local first = punct_safe(s4[1])
+        local last = punct_safe(s4[#s4])
         local x, y = math.random(4, 6), math.random(4, 6)
-        guess = string.sub(s4[1], 1, x) .. " " .. string.sub(s4[#s4], 1, y)
+        guess = string.sub(first, 1, x) .. " " .. string.sub(last, 1, y)
     elseif (#s4 == 1) then -- mob name has one word
-        local x = math.random(2 + round_banker(len1 * 0.5), len1)
-        guess = string.sub(s4[1], 1, x)
+        local only = punct_safe(s4[1])
+        local len1 = #only
+        -- Clamp the lower bound so the random range is never empty (min > max),
+        -- which errors for short segments such as "rex" (from "T-Rex").
+        local lo = math.min(2 + round_banker(len1 * 0.5), len1)
+        local x = math.random(lo, len1)
+        guess = string.sub(only, 1, x)
     else -- Sometimes all of the mob words get deleted, if so just use original input.  In theory, if we reached this step
         guess = s or "gmkw error in stage 4" -- then the input is non-nil and I've never seen it be "" ... so, if it errors it means Lua is propagating a nil
     end
@@ -2317,13 +2465,14 @@ end
 
 function record_target_killed(target)
     -- a mob was killed as part of a cp/gq
+    local mob = normalize_mob_name(target.mob)
     queries = {
         string.format(
             [[
 				INSERT OR IGNORE INTO mobs (mob,room,roomid,zone)
 				VALUES (%s,%s,%s,%s);
 			]],
-            fixsql(target.mob),
+            fixsql(mob),
             fixsql(current_room.name),
             tonumber(current_room.rmid),
             fixsql(current_room.arid)
@@ -2334,7 +2483,7 @@ function record_target_killed(target)
 				SET kill_count = kill_count + 1
 				WHERE mob = %s AND roomid = %i;
 			]],
-            fixsql(target.mob),
+            fixsql(mob),
             tonumber(current_room.rmid)
         )
     }
@@ -3267,7 +3416,7 @@ function ellipsify(str, max_length)
     if #str <= max_length then
         return str
     else
-        return str:sub(1, max_length - 1) .. "..."
+        return str:sub(1, max_length - 3) .. "..."
     end
 end
 
@@ -3390,12 +3539,25 @@ function xcp_goto_target(index)
             if is_character_ready() then
                 DebugNote("Character ready")
 				if is_express_target(t) then
-					next_room = t.roomid
-					table.insert(gotoList, 0, t.arid)
-					table.insert(gotoList, 1, t.roomid)
-					set_going_to_room(t.roomid)
-					goto_room_id(tostring(t.roomid), t.arid)
-					DebugNote("Attempting to go directly to an express target.")
+					-- Express: we already know room(s) for this mob from the DB.
+					-- List ALL of them best-bet first, then auto-go to #1; the
+					-- rest stay reachable via go 2..N / nx. Falls back to a direct
+					-- jump if (unexpectedly) no candidate rooms are found.
+					local n = search_rooms_by_mob(t.mob, t.arid)
+					if n and n > 0 then
+						if gotoList[1] then
+							set_going_to_room(gotoList[1])
+						end
+						Execute("go 1")
+						DebugNote("Express target: ", n, " candidate room(s), going to best.")
+					else
+						next_room = t.roomid
+						table.insert(gotoList, 0, t.arid)
+						table.insert(gotoList, 1, t.roomid)
+						set_going_to_room(t.roomid)
+						goto_room_id(tostring(t.roomid), t.arid)
+						DebugNote("Attempting to go directly to an express target.")
+					end
 				elseif (t.link_type == "area") then -- Area cp links - "xcp" goes to target area, then runs Hunt Trick to get target room.
                     if (action == "ht" and current_activity == "cp") then -- do hunt trick or quick where after arriving in area.
                         local func = function()
@@ -3414,8 +3576,22 @@ function xcp_goto_target(index)
                         --Execute("xrt " .. t.arid)
                         xrun_to(t.arid, true)
                     end
-                else -- Room cp:  get target room from mapper, but don't move yet.  "go" takes you to room.
-                    search_rooms_exact(t.roomName, t.arid, t.mob)
+                else -- Room cp:  get target room(s), but don't move yet.  "go" takes you to room.
+                    -- Prefer every room the mob is actually known to occupy (handles a
+                    -- mob living in several differently-named rooms, and avoids matching
+                    -- same-named rooms that don't contain it). Fall back to a mapper
+                    -- room-name search when the mob has never been recorded.
+                    local n = search_rooms_by_mob(t.mob, t.arid)
+                    if not n or n == 0 then
+                        search_rooms_exact(t.roomName, t.arid, t.mob)
+                    end
+
+                    -- When autonav is enabled and exactly one room was found,
+                    -- go there immediately (Pwar parity). Multi-result cases
+                    -- still require manual selection.
+                    if xset_autonav_onoff == "on" and gotoList[1] and not gotoList[2] then
+                        Execute("go 1")
+                    end
                 end
             else
                 InfoNote(string.format("\nYou can't run there while you're %s!\n", character_state_string()))
@@ -3882,8 +4058,11 @@ function qw_match(name, line, wildcards)
     xg_draw_window()
     search_rooms_exact(room, current_room.arid, Trim(wildcards.mobname))
 
-    if go_after then
-        goto_number(nil, nil, {})
+    -- When autonav is enabled and exactly one room was found, go there
+    -- immediately (Pwar parity). Replaces the prior dead `go_after` branch
+    -- that was referenced but never assigned anywhere.
+    if xset_autonav_onoff == "on" and gotoList[1] and not gotoList[2] then
+        Execute("go 1")
     end
 end
 
@@ -4009,6 +4188,9 @@ end
 function ht_complete(name, line, wildcards)
     EnableTriggerGroup("AutoHunt", false)
     local ix = ht.index or 1
+    if has_target() then
+        ht_last_found = {index = ix, keyword = current_target.keyword}
+    end
     if has_activity_target() then
         qw.index = ix
         qw_exact()
@@ -4037,6 +4219,19 @@ function ht_abort(name, line, wildcards)
     EnableTriggerGroup("HuntTrick", false)
     ht_reset()
     InfoNote("Search and Destroy:  Hunt trick cancelled.")
+end
+
+function ht_find()
+    if ht_last_found then
+        if ht_last_found.index == 1 then
+            Send(string.format("hunt %s", ht_last_found.keyword))
+        else
+            Send(string.format("hunt %d.%s", ht_last_found.index, ht_last_found.keyword))
+        end
+    else
+        InfoNote("\nSearch and Destroy: 'ht find' has no previous hunt to repeat.")
+        InfoNote("Run 'ht' or 'ht <mob>' first to find a target.\n")
+    end
 end
 
 -- [[ quick scan, quick kill ("kk") ]]
@@ -4099,6 +4294,84 @@ function xset_silentMode(name, line, wildcards)
 end
 
 -- [[ Room search processes ]]
+function search_rooms_by_mob(mob_name, arid)
+    -- Build the navigable room list from EVERY room the mob is known to occupy in
+    -- this zone (not just rooms that share one name), ranked best-bet first. This
+    -- is what lets a single named target that lives in several static rooms (e.g.
+    -- "Justice" across four different rooms in The Partroxis) be walked via
+    -- go 1 / go 2 / ... / nx. Returns the number of candidate rooms (0 if the mob
+    -- has never been recorded in this zone, so the caller can fall back).
+    if not mob_name or not arid or arid == "-1" then
+        return 0
+    end
+    local mob = normalize_mob_name(mob_name)
+    local SnDdb = assert(sqlite3.open(snd_db_file))
+    local rows = {}
+    local roomid_list = {}
+    local query =
+        string.format(
+        [[
+			SELECT roomid, room, seen_count, kill_count
+			FROM mobs
+			WHERE mob = %s AND zone = %s
+			ORDER BY kill_count DESC, seen_count DESC, roomid ASC;
+		]],
+        fixsql(mob),
+        fixsql(arid)
+    )
+    for row in SnDdb:nrows(query) do
+        table.insert(rows, row)
+        table.insert(roomid_list, tonumber(row.roomid))
+    end
+    SnDdb:close_vm()
+    if #rows == 0 then
+        return 0
+    end
+
+    -- Refresh room names/areas from the mapper (authoritative, current).
+    local namebyid = {}
+    local db = assert(sqlite3.open(mapper_db_file))
+    local mquery =
+        string.format("SELECT uid, name, area FROM rooms WHERE uid IN (%s);", table.concat(roomid_list, ","))
+    for r in db:nrows(mquery) do
+        namebyid[tonumber(r.uid)] = {name = r.name, area = r.area}
+    end
+    db:close_vm()
+
+    local sum = 0
+    for _, row in ipairs(rows) do
+        sum = sum + (tonumber(row.seen_count) or 0)
+    end
+
+    local results = {}
+    for _, row in ipairs(rows) do
+        local info = namebyid[tonumber(row.roomid)]
+        local seen = tonumber(row.seen_count) or 0
+        table.insert(
+            results,
+            {
+                rmid = tonumber(row.roomid),
+                name = (info and info.name) or row.room,
+                arid = (info and info.area) or arid,
+                seen_count = seen,
+                percentage = (sum > 0) and (seen / sum) or 0
+            }
+        )
+    end
+
+    -- Float any maze start rooms to the top (mirrors search_rooms()).
+    for k, v in ipairs(results) do
+        if mazeStartRooms[v.rmid] ~= nil then
+            local entry = table.remove(results, k)
+            entry.mz = "yes"
+            table.insert(results, 1, entry)
+        end
+    end
+
+    search_rooms_results(results)
+    return #results
+end
+
 function search_rooms_exact(room, arid, mob_name)
 	local select = ""
 	if ((arid == "soh") or (arid == "sohtwo")) then
@@ -4535,7 +4808,7 @@ function anex_can_get_new_cp() -- called by line 'You may take campaign this lev
             else
                 if (noexp_onoff == "on") then
                     anex_set_noexp("off")
-                    InfoNote("\nSearch and Destroy: Turning noexp OFF (you have reached level ", plevel, ")")
+                    InfoNote("\nSearch and Destroy: Turning noexp OFF (you have reached level ", level, ")")
                 end
             end
         else -- feature is turned off, just show reminder
@@ -7312,6 +7585,7 @@ function onHelp(name, line, wildcards)
 		"express",
         "xset nx",
         "xset con_overwrite",
+        "xset autonav",
         "xset gqalias",
 		"xset maze",
         "xset table notes",
@@ -7584,7 +7858,7 @@ function onHelp(name, line, wildcards)
             )
         )
     elseif str == "ht" then
-        ColourNote("yellow", "", "Syntax", "antiquewhite", "", ": ht <mob|stop>")
+        ColourNote("yellow", "", "Syntax", "antiquewhite", "", ": ht <mob|stop|find>")
         Note()
         ColourNote(
             "antiquewhite",
@@ -7792,6 +8066,20 @@ function onHelp(name, line, wildcards)
                 {
                     helpWrap(
                         "Disable replacing the output of consider. This is mainly for when you have other plugins that replace the output."
+                    )
+                }
+            )
+        )
+    elseif str == "xset autonav" then
+        ColourNote("yellow", "", "Syntax", "antiquewhite", "", ": xset autonav")
+        Note()
+        ColourNote(
+            "antiquewhite",
+            "",
+            unpack(
+                {
+                    helpWrap(
+                        "Toggles auto-navigation after 'xcp <index>' or 'qw <mob>' when there is exactly one matching mapper room. When enabled, SnD executes 'go 1' automatically as soon as the single-row table is shown instead of waiting for you to type it. Multi-room matches still require manual selection so you don't auto-navigate into the wrong area. Off by default. Matches Pwar's SnD behaviour for users migrating from that plugin. Does not affect quest retargeting, 'xm'/'xmall', or other research commands."
                     )
                 }
             )
@@ -8167,7 +8455,7 @@ function onHelp(name, line, wildcards)
             unpack(
                 {
                     helpWrap(
-                        "ht <mob|stop>:  Executes the 'hunt trick' for current target or argument. Use 'stop' to abort."
+                        "ht <mob|stop|find>:  Executes the 'hunt trick' for current target or argument. Use 'stop' to abort. Use 'find' to repeat the last successful hunt with the same index - useful for re-checking if your mob has moved into the current room without restarting the hunt sequence."
                     )
                 }
             )
@@ -8472,7 +8760,7 @@ function rawCopyPwarDB()
                     insertStatements,
                     string.format(
                         "INSERT OR IGNORE INTO mobs (mob,room,roomid,zone,seen_count) VALUES (%s,%s,%s,%s,%i);",
-                        fixsql(mob.mob),
+                        fixsql(normalize_mob_name(mob.mob)),
                         fixsql(room.name),
                         mob.roomid,
                         fixsql(room.area),
@@ -8823,6 +9111,12 @@ end
 
 function is_con_overwritten()
     return xset_overwrite_con == "on"
+end
+
+function xset_autonav()
+    xset_autonav_onoff = (xset_autonav_onoff == "on") and "off" or "on"
+    set_variable("mcvar_xset_autonav_onoff", xset_autonav_onoff)
+    InfoNote("\nAuto-navigate on single xcp/qw room result is now ", string.upper(xset_autonav_onoff), "\n")
 end
 
 function toggle_con_overwrite_triggers()
@@ -9196,6 +9490,7 @@ function write_mob_list_to_db(mob_list)
     local writes = {}
     local sql_mobs = {}
     for i, mob in ipairs(mob_list) do
+        mob = normalize_mob_name(mob)
         table.insert(sql_mobs, fixsql(mob))
         table.insert(
             writes,
@@ -9404,6 +9699,7 @@ local SCAN_FLAGS = {
     "W",
     "wounded",
     "aimed",
+    "!",
     "Old",
     "O"
 }
@@ -9425,7 +9721,13 @@ local CONSIDER_OUTCOMES = {
 }
 
 function setup_scan_con_triggers()
-    local flags_string = "(?<flags>(?: ?\\[AFK\\]| ?\\((?:" .. table.concat(SCAN_FLAGS, "|") .. ")\\))*)?"
+    -- The paren group matches either a single uppercase letter (catch-all for any
+    -- current or future Aardwolf single-letter flag) or an explicit entry from
+    -- SCAN_FLAGS. Without the [A-Z] catch-all, any scan line containing a flag
+    -- not yet added to SCAN_FLAGS silently fails the regex and mobs in the line
+    -- never get their [CP]/[GQ]/[Q] activity tag. Multi-char names like "(Helper)"
+    -- remain safe because they match neither [A-Z]{1} nor the whitelist.
+    local flags_string = "(?<flags>(?: ?\\[AFK\\]| ?\\((?:[A-Z]|" .. table.concat(SCAN_FLAGS, "|") .. ")\\))*)?"
     local match = "^ {5}-" .. flags_string .. " (?<mob_name>.+)$"
     local name
 
@@ -9958,7 +10260,7 @@ end
             <send>	EnableTrigger("trg_gq_check_end", true) </send>
         </trigger>
 
-        <trigger match="^(?!You still have to kill [1-3] \* .+ \(\S.+?(?: - Dead)?\))$" script="gq_check_end" name="trg_gq_check_end" group="trg_gq_check" enabled="n" regexp="y" sequence="500" keep_evaluating="y" omit_from_output="n" send_to="12"></trigger>
+        <trigger match="^(?!You still have to kill [1-3] \* .+ \(\S.+?(?: - Dead)?\)).*$" script="gq_check_end" name="trg_gq_check_end" group="trg_gq_check" enabled="n" regexp="y" sequence="500" keep_evaluating="y" omit_from_output="n" send_to="12"></trigger>
 
         <!-- gq messages to always listen for -->
         <trigger match="^You have now joined Global Quest # (?<gq_id>\d{1,5})\. See 'help gquest' for available commands\.$" script="gqmsg_joined" enabled="y" regexp="y" sequence="100" keep_evaluating="y" send_to="12"></trigger>
@@ -9999,7 +10301,7 @@ end
 
         <trigger match="^Find and kill 1 \* (?<target>.+)$" script="cp_info_line" name="trg_cp_info_line" group="trg_campaign" enabled="n" regexp="y" sequence="100" keep_evaluating="y" send_to="12"></trigger>
 
-        <trigger match="^(?!Find and kill 1 \* .+ \(.+\))$" script="cp_info_end" name="trg_cp_info_end" group="trg_campaign" enabled="n" regexp="y" sequence="100" keep_evaluating="y" send_to="12">
+        <trigger match="^(?!Find and kill 1 \* .+ \(.+\)).*$" script="cp_info_end" name="trg_cp_info_end" group="trg_campaign" enabled="n" regexp="y" sequence="100" keep_evaluating="y" send_to="12">
             <send>	EnableTrigger("trg_cp_info_line", false)
 					EnableTrigger("trg_cp_info_end", false) </send>
         </trigger>
@@ -10009,7 +10311,7 @@ end
         </trigger>
 
 
-        <trigger match="^(?!You still have to kill \* .+ \(.+?(?: - Dead)?\))$" script="cp_check_end" name="trg_cp_check_end" group="trg_campaign" enabled="n" regexp="y" sequence="100" keep_evaluating="y" omit_from_output="y" send_to="12">
+        <trigger match="^(?!You still have to kill \* .+ \(.+?(?: - Dead)?\)).*$" script="cp_check_end" name="trg_cp_check_end" group="trg_campaign" enabled="n" regexp="y" sequence="100" keep_evaluating="y" omit_from_output="y" send_to="12">
             <send>	EnableTrigger("trg_cp_check_gag_dead", true)
 					EnableTrigger("trg_cp_check_line", false)
 					EnableTrigger("trg_cp_check_end", false) </send>
@@ -10245,6 +10547,8 @@ end
         <!-- Hunt trick -->
         <alias match="^ht$" script="ht_noarg" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
 
+        <alias match="^ht find$" script="ht_find" enabled="y" regexp="y" sequence="50" ignore_case="y" send_to="12"></alias>
+
         <alias match="^ht (?:(?<index>\d+)\.)?(?<mob>.+)?$" script="ht_arg" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
 
         <alias match="^ht(?:a|0| abort| stop)$" script="ht_abort" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
@@ -10301,6 +10605,8 @@ end
         <alias match="^xset nx (?<action>smartscan|con|scan|scanhere|qs|none)$" script="xset_nx" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
 
         <alias match="^xset con_overwrite" script="xset_con_overwrite" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
+
+        <alias match="^xset autonav$" script="xset_autonav" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
 
         <alias match="^xset sound$" script="xset_sound" enabled="y" regexp="y" sequence="100" ignore_case="y" send_to="12"></alias>
 
