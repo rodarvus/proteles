@@ -98,16 +98,17 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        // Set a note on the current room (1).
+        // Set a note on the current room (1) — reference wording.
         #expect(await notes(mapper.handleCommand("mapper note recall point"))
-            .contains { $0.contains("Noted") })
-        // It appears in the listing.
+            == ["Note added to room 1 : recall point"])
+        // It appears in the notes search (the reason is the note text).
         let listed = await notes(mapper.handleCommand("mapper notes")).joined(separator: "\n")
         #expect(listed.contains("recall point"))
-        #expect(listed.contains("[1]"))
-        // Clearing it empties the list.
-        _ = await mapper.handleCommand("mapper note")
-        #expect(await notes(mapper.handleCommand("mapper notes")).contains { $0.contains("No room notes") })
+        // `delete note` clears it; the search then finds nothing.
+        #expect(await notes(mapper.handleCommand("mapper delete note"))
+            == ["Note for room 1 deleted. Was previously: recall point"])
+        #expect(await notes(mapper.handleCommand("mapper notes"))
+            .contains("Found 0 targets matching '[NOTE]'."))
     }
 
     @Test("setNote updates the room directly (used by the panel)")
@@ -117,7 +118,7 @@ struct MapperCommandTests {
         await seed(mapper)
         #expect(await mapper.setNote("treasure", uid: "3") == true)
         let listed = await notes(mapper.handleCommand("mapper notes")).joined(separator: "\n")
-        #expect(listed.contains("treasure") && listed.contains("[3]"))
+        #expect(listed.contains("treasure"))
     }
 
     @Test("mapper depth shows and sets (clamped) the scan depth")
@@ -208,8 +209,8 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         let thisroom = await notes(mapper.handleCommand("mapper thisroom"))
-        #expect(thisroom.contains { $0.contains("South End") })
-        #expect(thisroom.contains { $0.contains("Exits: n") })
+        #expect(thisroom.contains("Name: South End"))
+        #expect(thisroom.contains(#""n"="2""#))
         // `mapper area` now searches the current area's rooms via full_find
         // (reference map_area): 3 rooms in area "z", empty pattern → %%.
         #expect(await notes(mapper.handleCommand("mapper area"))
@@ -421,12 +422,13 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper) // current room = 1
-        #expect(await notes(mapper.handleCommand("mapper noportal on"))
-            .contains { $0.contains("noportal set on room 1") })
-        #expect(await notes(mapper.handleCommand("mapper norecall on"))
-            .contains { $0.contains("norecall set on room 1") })
-        #expect(await notes(mapper.handleCommand("mapper ignore mismatch on"))
-            .contains { $0.contains("ignore mismatch set on room 1") })
+        // Reference form: `<id> true|false` with the GMCP-Mapper wording.
+        #expect(await notes(mapper.handleCommand("mapper noportal 1 true"))
+            == ["GMCP Mapper: No-portal flag set on room 1."])
+        #expect(await notes(mapper.handleCommand("mapper norecall 1 true"))
+            == ["GMCP Mapper: No-recall flag set on room 1."])
+        #expect(await notes(mapper.handleCommand("mapper ignore mismatch 1 true"))
+            == ["Ignore exits mismatch flag set on room 1."])
         // Persisted on the room.
         #expect(await mapper.graph.rooms["1"]?.noportal == true)
         #expect(await mapper.graph.rooms["1"]?.norecall == true)

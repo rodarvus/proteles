@@ -53,8 +53,8 @@ extension Mapper {
         switch sub {
         case "reset", "resetaard": resetCommand()
         case "backup": backupCommand()
-        case "noportal": setCurrentRoomFlag(\.noportal, name: "noportal", arg: arg)
-        case "norecall": setCurrentRoomFlag(\.norecall, name: "norecall", arg: arg)
+        case "noportal": noportalCommand(arg)
+        case "norecall": norecallCommand(arg)
         case "ignore": ignoreMismatchCommand(arg)
         default: [Self.note("Unknown mapper command '\(sub)'. Try 'mapper help'.")]
         }
@@ -85,46 +85,6 @@ extension Mapper {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter
     }()
-
-    /// `mapper ignore mismatch [on|off]` — set the current room's
-    /// ignore-exits-mismatch flag.
-    private func ignoreMismatchCommand(_ arg: String) -> [ScriptEffect] {
-        let rest = arg.split(separator: " ", maxSplits: 1).map(String.init)
-        guard rest.first?.lowercased() == "mismatch" else {
-            return [Self.note("Usage: mapper ignore mismatch on|off")]
-        }
-        return setCurrentRoomFlag(
-            \.ignoreExitsMismatch,
-            name: "ignore mismatch",
-            arg: rest.count > 1 ? rest[1] : ""
-        )
-    }
-
-    /// Set (or show) a boolean flag on the current room (noportal/norecall/
-    /// ignore-mismatch); these feed the Pathfinder + redraw the map.
-    private func setCurrentRoomFlag(
-        _ keyPath: WritableKeyPath<Room, Bool>,
-        name: String,
-        arg: String
-    ) -> [ScriptEffect] {
-        guard let uid = currentRoomUID, var room = graph.rooms[uid] else {
-            return [Self.note("Your current location is unknown.")]
-        }
-        let on: Bool
-        switch arg.lowercased() {
-        case "on", "true", "yes": on = true
-        case "off", "false", "no": on = false
-        case "":
-            return [Self.note("\(name) for room \(uid) is \(room[keyPath: keyPath] ? "on" : "off").")]
-        default:
-            return [Self.note("Usage: mapper \(name) on|off")]
-        }
-        room[keyPath: keyPath] = on
-        graph[uid] = room
-        try? store.upsert(room)
-        publishLayout()
-        return [Self.note("\(name) \(on ? "set on" : "cleared for") room \(uid).")]
-    }
 
     /// `mapper lockexit <dir> <level>` — set the level lock on the current
     /// room's exit. (The reference uses a listbox; we take the dir explicitly.)
@@ -307,6 +267,8 @@ extension Mapper {
         switch tokens.first?.lowercased() {
         case "portal":
             return deletePortalEdit(tokens.count > 1 ? tokens[1] : "")
+        case "note":
+            return deleteNoteCommand()
         case "cexits":
             return deleteCustomExitsHere()
         case "exits":
