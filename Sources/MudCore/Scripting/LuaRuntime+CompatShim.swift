@@ -212,6 +212,20 @@ public extension LuaRuntime {
       proteles.notify(tostring(title or ""), tostring(body or ""))
       return error_code.eOK
     end
+    -- Command-button bar (#15): create/update/toggle buttons from scripts/plugins
+    -- (a Proteles extension — Mudlet can only toggle pre-made buttons). The app
+    -- applies the change to the live bar + persists it per-world.
+    Button = {
+      add = function(group, label, command)
+        proteles.button("add", tostring(group or "Buttons"), tostring(label or ""), tostring(command or ""))
+      end,
+      toggle = function(group, label, onCmd, offCmd)
+        proteles.button("toggle", tostring(group or "Buttons"), tostring(label or ""),
+                        tostring(onCmd or ""), tostring(offCmd or ""))
+      end,
+      state = function(label, on) proteles.button("state", tostring(label or ""), on and "1" or "0") end,
+      remove = function(label) proteles.button("remove", tostring(label or "")) end,
+    }
     -- SendSpecial(Message, Echo, Queue, Log, History): MUSHclient's send with
     -- options. We honour Echo (true → echo like Send; false/nil → no echo);
     -- Queue/Log/History don't apply and are ignored. The common one-arg call

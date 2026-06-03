@@ -19,6 +19,7 @@ struct DetachedPanelWindow: View {
     let snd: SnDPanelModel
     let help: HelpPanelModel
     let levels: LevelDBPanelModel
+    let scripts: ScriptsModel
 
     @Environment(\.dismiss) private var dismiss
     @State private var gmcp = GMCPState()
@@ -64,6 +65,7 @@ struct DetachedPanelWindow: View {
         case .info: InfoPanel(state: gmcp)
         case .help: HelpPanelView(model: help)
         case .levels: LevelDBPanelView(model: levels)
+        case .commandBar: CommandBarView(scripts: scripts)
         case .output: EmptyView() // output isn't detachable (it's the main window)
         }
     }

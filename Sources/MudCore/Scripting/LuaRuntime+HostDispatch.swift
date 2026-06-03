@@ -192,6 +192,8 @@ extension LuaRuntime {
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
         case .accelerator: registerAccelerator(arguments)
         case .http: registerHTTPRequest(arguments)
+        case .button:
+            if let command = Self.buttonCommand(arguments) { effects.append(.button(command)) }
         default: return false
         }
         return true
@@ -227,6 +229,35 @@ extension LuaRuntime {
         case .enableAlias: return .enableAlias(name: name, on: on)
         case .enableGroup: return .enableGroup(name: name, on: on)
         default: return .enableTrigger(name: name, on: on)
+        }
+    }
+
+    /// Parse `proteles.button(verb, …)` (the #15 scripting API) into a
+    /// ``ButtonCommand``. Verbs: add(group,label,command),
+    /// toggle(group,label,on,off), state(label, "1"/"0"/true), remove(label).
+    nonisolated static func buttonCommand(_ arguments: [LuaValue]) -> ButtonCommand? {
+        switch argString(arguments, 0).lowercased() {
+        case "add":
+            return .add(
+                group: argString(arguments, 1),
+                label: argString(arguments, 2),
+                command: argString(arguments, 3)
+            )
+        case "toggle":
+            return .toggle(
+                group: argString(arguments, 1),
+                label: argString(arguments, 2),
+                on: argString(arguments, 3),
+                off: argString(arguments, 4)
+            )
+        case "state":
+            let raw = argString(arguments, 2).lowercased()
+            let on = argBool(arguments, 2) || raw == "1" || raw == "on" || raw == "true"
+            return .setState(label: argString(arguments, 1), on: on)
+        case "remove":
+            return .remove(label: argString(arguments, 1))
+        default:
+            return nil
         }
     }
 

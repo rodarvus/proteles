@@ -25,6 +25,9 @@ extension SessionController {
         case .notify(let title, let body):
             // Script/plugin-raised notification (`Notify`/`proteles.notify`).
             notifyFromScript(title: title, body: body)
+        case .button(let command):
+            // Script/plugin button-bar change (#15) → forwarded to the app.
+            buttonCommandsContinuation.yield(command)
         default:
             break
         }
