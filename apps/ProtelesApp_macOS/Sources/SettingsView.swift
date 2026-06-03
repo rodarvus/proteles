@@ -24,7 +24,19 @@ struct SettingsView: View {
             DiagnosticsSettingsView()
                 .tabItem { Label("Diagnostics", systemImage: "ladybug") }
         }
-        .frame(width: 560)
+        // A flexible frame (not a fixed width) so the Settings window is
+        // resizable AND can't collapse: short tabs like Diagnostics used to
+        // shrink the window to their intrinsic height, and a macOS Settings
+        // window has no resize control to recover. The minimum keeps every tab
+        // usable; tall tabs grow to the ideal/scroll within the Form.
+        .frame(
+            minWidth: 520,
+            idealWidth: 580,
+            maxWidth: 820,
+            minHeight: 460,
+            idealHeight: 540,
+            maxHeight: 900
+        )
     }
 }
 
