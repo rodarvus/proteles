@@ -76,6 +76,12 @@ public actor SessionController {
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
+    /// Collapses duplicate banners at the publish gate (phase-3).
+    var notificationCoalescer = NotificationCoalescer()
+    /// Last HP percent seen, for edge-triggered `.hpBelow` rules.
+    var lastHPPercent: Int?
+    /// Last S&D quest-ready state, for the `.questReady` `false → true` edge.
+    var lastQuestReady = false
 
     /// The current connection (`nil` between sessions); fresh per connect (the
     /// byte stream finishes on disconnect). ``MudConnection`` so tests inject one.

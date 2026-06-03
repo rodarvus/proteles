@@ -29,7 +29,12 @@ final class NotificationController {
         let content = UNMutableNotificationContent()
         content.title = note.title
         content.body = note.body
-        if note.playSound { content.sound = .default }
+        if note.playSound {
+            // A named system sound (e.g. "Glass") if the rule chose one, else the
+            // default notification sound.
+            content.sound = note.soundName.map { UNNotificationSound(named: UNNotificationSoundName($0)) }
+                ?? .default
+        }
         let request = UNNotificationRequest(
             identifier: UUID().uuidString, content: content, trigger: nil
         )

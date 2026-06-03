@@ -108,6 +108,59 @@ struct NotificationMatcherTests {
         #expect(matcher.outputNotification(for: "vyll appears") == nil)
     }
 
+    // MARK: - Phase-3 (#14): regex, sound, templates, GMCP/quest
+
+    @Test("a regex keyword rule matches and exposes its capture to the template")
+    func regexKeyword() {
+        let rule = NotificationRule(
+            trigger: .keyword("the (\\w+) dies"),
+            regex: true,
+            bodyTemplate: "{capture} slain"
+        )
+        let matcher = NotificationMatcher(rules: [rule])
+        let note = matcher.outputNotification(for: "the dragon dies horribly")
+        #expect(note?.body == "dragon slain") // capture group 1 → {capture}
+        #expect(matcher.outputNotification(for: "the dragon lives") == nil)
+    }
+
+    @Test("a rule's sound + title template are applied")
+    func soundAndTemplate() {
+        let rule = NotificationRule(
+            trigger: .keyword("vyll"),
+            sound: .glass,
+            titleTemplate: "Boss sighted"
+        )
+        let note = NotificationMatcher(rules: [rule]).outputNotification(for: "Lord Vyll arrives")
+        #expect(note?.title == "Boss sighted")
+        #expect(note?.playSound == true)
+        #expect(note?.soundName == "Glass")
+        // A silent rule plays no sound.
+        let silent = NotificationRule(trigger: .keyword("x"), sound: .silent)
+        #expect(NotificationMatcher(rules: [silent]).outputNotification(for: "x")?.playSound == false)
+    }
+
+    @Test("hpBelow is edge-triggered: fires on crossing below, not while already below")
+    func hpBelowEdge() {
+        let matcher = NotificationMatcher(rules: [NotificationRule(trigger: .hpBelow(20))])
+        // Crossing 50% → 18% fires once.
+        #expect(matcher.hpNotifications(currentPercent: 18, previousPercent: 50).count == 1)
+        // Already below (18 → 15) does not re-fire.
+        #expect(matcher.hpNotifications(currentPercent: 15, previousPercent: 18).isEmpty)
+        // Unknown previous + below → fires (e.g. first vitals after login in danger).
+        #expect(matcher.hpNotifications(currentPercent: 15, previousPercent: nil).count == 1)
+        // Above the threshold → nothing.
+        #expect(matcher.hpNotifications(currentPercent: 25, previousPercent: 50).isEmpty)
+    }
+
+    @Test("questReady fires only on the became-ready edge and only with a rule")
+    func questReady() {
+        let matcher = NotificationMatcher(rules: [NotificationRule(trigger: .questReady)])
+        #expect(matcher.questReadyNotification(becameReady: true)?.title == "Quest ready")
+        #expect(matcher.questReadyNotification(becameReady: false) == nil)
+        // No quest-ready rule → nothing even on the edge.
+        #expect(NotificationMatcher().questReadyNotification(becameReady: true) == nil)
+    }
+
     @Test("keyword rules don't apply to the chat path, channel rules don't apply to output")
     func pathsAreSeparate() {
         let matcher = NotificationMatcher(
