@@ -28,15 +28,22 @@ public struct ProtelesNotification: Sendable, Equatable {
 public struct NotificationMatcher: Sendable, Equatable {
     public var notifyOnTells: Bool
     public var notifyOnMention: Bool
+    /// User-configured phase-2 rules (keyword on output, channel on chat).
+    public var rules: [NotificationRule]
 
-    public init(notifyOnTells: Bool = true, notifyOnMention: Bool = true) {
+    public init(
+        notifyOnTells: Bool = true,
+        notifyOnMention: Bool = true,
+        rules: [NotificationRule] = []
+    ) {
         self.notifyOnTells = notifyOnTells
         self.notifyOnMention = notifyOnMention
+        self.rules = rules
     }
 
     /// A notification for `chatLine` (a `comm.channel` line), or `nil`. Tells win
-    /// over mentions; a mention only fires when your `characterName` appears in a
-    /// *non-tell* channel message you didn't send.
+    /// over mentions, then a user `.channel` rule; a mention only fires when your
+    /// `characterName` appears in a *non-tell* channel message you didn't send.
     public func notification(for chatLine: ChatLine, characterName: String?) -> ProtelesNotification? {
         let channel = chatLine.channel.lowercased()
         let message = chatLine.line.text
@@ -52,7 +59,45 @@ public struct NotificationMatcher: Sendable, Equatable {
             let location = chatLine.channel.isEmpty ? "" : " on \(chatLine.channel)"
             return ProtelesNotification(title: who + location, body: message)
         }
+
+        // A user `.channel` rule fires on any chat for the named channel.
+        if channelRuleFires(channel: channel) {
+            let title = chatLine.channel.isEmpty ? "Channel" : chatLine.channel
+            let body = sender.isEmpty ? message : "\(sender): \(message)"
+            return ProtelesNotification(title: title, body: body)
+        }
         return nil
+    }
+
+    /// Whether any enabled `.keyword` rule exists — lets the per-line output
+    /// path skip the matcher entirely when there's nothing to match.
+    public var hasOutputRules: Bool {
+        rules.contains { rule in
+            guard rule.enabled, case .keyword = rule.trigger else { return false }
+            return true
+        }
+    }
+
+    /// A notification for an arbitrary output `line`, or `nil` — the first
+    /// enabled `.keyword` rule whose phrase appears (case-insensitively) in it.
+    /// Channel/tell/mention rules are chat-only (see ``notification(for:characterName:)``).
+    public func outputNotification(for line: String) -> ProtelesNotification? {
+        for rule in rules where rule.enabled {
+            guard case .keyword(let phrase) = rule.trigger, !phrase.isEmpty,
+                  line.range(of: phrase, options: .caseInsensitive) != nil
+            else { continue }
+            let title = rule.label.isEmpty ? "Match: \(phrase)" : rule.label
+            return ProtelesNotification(title: title, body: line)
+        }
+        return nil
+    }
+
+    /// Whether an enabled `.channel` rule matches `channel` (already lowercased).
+    private func channelRuleFires(channel: String) -> Bool {
+        rules.contains { rule in
+            guard rule.enabled, case .channel(let name) = rule.trigger, !name.isEmpty else { return false }
+            return channel.contains(name.lowercased())
+        }
     }
 
     /// Whether a non-tell `message` mentions the player by name — only when

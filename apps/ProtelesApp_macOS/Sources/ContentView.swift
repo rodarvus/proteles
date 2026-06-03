@@ -57,6 +57,7 @@ struct ContentView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("notifyOnTells") private var notifyOnTells = true
     @AppStorage("notifyOnMention") private var notifyOnMention = true
+    @AppStorage(NotificationRulesStorage.key) private var notificationRulesData = Data()
     /// Spell-check squiggles in the command input (General preference). Visual
     /// only; auto-correct/smart-quotes stay off regardless (they'd mangle
     /// commands). Default off — a command line squiggles a lot of game words.
@@ -190,8 +191,9 @@ struct ContentView: View {
             await session.setNotificationsEnabled(notificationsEnabled)
             if notificationsEnabled { notifications.requestAuthorizationIfNeeded() }
         }
-        .task(id: "\(notifyOnTells)|\(notifyOnMention)") {
+        .task(id: "\(notifyOnTells)|\(notifyOnMention)|\(notificationRulesData.hashValue)") {
             await session.setNotificationRules(tells: notifyOnTells, mention: notifyOnMention)
+            await session.setCustomNotificationRules(.decoded(from: notificationRulesData))
         }
         .task(id: notifyWhenFocused) {
             notifications.notifyWhenFocused = notifyWhenFocused

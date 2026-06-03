@@ -169,6 +169,11 @@ extension LuaRuntime {
                 option: Self.argString(arguments, 1),
                 value: Self.argString(arguments, 2)
             ))
+        case .notify:
+            effects.append(.notify(
+                title: Self.argString(arguments, 0),
+                body: Self.argString(arguments, 1)
+            ))
         default: recordOutputEffect(function, arguments)
         }
     }

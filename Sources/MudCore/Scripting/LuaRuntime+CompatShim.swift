@@ -204,6 +204,14 @@ public extension LuaRuntime {
     -- Sending ---------------------------------------------------------------
     function Send(text) proteles.send(tostring(text)); return error_code.eOK end
     function SendNoEcho(text) proteles.sendNoEcho(tostring(text)); return error_code.eOK end
+    -- Notify(title[, body]): raise a native macOS notification (Proteles
+    -- extension; gated by the user's master notifications enable). The
+    -- extensibility hook so any trigger/alias/plugin can alert the user — and
+    -- the regex escape-hatch for keyword alerts (a regex trigger calls Notify).
+    function Notify(title, body)
+      proteles.notify(tostring(title or ""), tostring(body or ""))
+      return error_code.eOK
+    end
     -- SendSpecial(Message, Echo, Queue, Log, History): MUSHclient's send with
     -- options. We honour Echo (true → echo like Send; false/nil → no echo);
     -- Queue/Log/History don't apply and are ignored. The common one-arg call
