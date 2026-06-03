@@ -55,6 +55,36 @@ struct ScriptStoreTests {
         #expect(await reopened.timers == [timer])
     }
 
+    /// Regression for #15: the button bar must persist + survive a reload. Before
+    /// the fix, `document` dropped `buttonBar` and `replace`/`setButtonBar` never
+    /// wrote it, so a freshly-added group vanished on the next `refresh()` — the
+    /// editor's "Add Group" looked like it did nothing.
+    @Test("Button bar persists through setButtonBar and a reload (#15)")
+    func buttonBarRoundTrips() async throws {
+        let dir = temporaryDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var bar = ButtonBar()
+        bar.groups.append(ButtonGroup(name: "Combat", buttons: [
+            CommandButton(label: "Flee", action: .command("flee"))
+        ]))
+
+        do {
+            let store = ScriptStore(directory: dir, character: "rodarvus")
+            try await store.load()
+            try await store.setButtonBar(bar)
+            // The in-memory document reflects the bar immediately (the bug: it didn't).
+            #expect(await store.document.buttonBar.groups.count == 1)
+        }
+        #expect(FileManager.default
+            .fileExists(atPath: dir.appendingPathComponent("rodarvus/buttonBar.json").path))
+
+        let reopened = ScriptStore(directory: dir, character: "rodarvus")
+        try await reopened.load()
+        #expect(await reopened.buttonBar == bar)
+        #expect(await reopened.document.buttonBar.groups.first?.name == "Combat")
+    }
+
     @Test("Every TriggerPattern and TimerSchedule case survives a round-trip")
     func encodesAllCases() async throws {
         let dir = temporaryDir()

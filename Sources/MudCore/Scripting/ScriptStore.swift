@@ -103,6 +103,9 @@ public actor ScriptStore {
     public private(set) var aliases: [Alias] = []
     public private(set) var timers: [MudTimer] = []
     public private(set) var macros: [Macro] = []
+    /// The command-button bar (#15). Always per-character (no ``ScriptScope``
+    /// sharing), persisted to `Scripts/<character>/buttonBar.json`.
+    public private(set) var buttonBar = ButtonBar()
 
     public init(directory: URL, character: String) {
         self.directory = directory
@@ -112,7 +115,13 @@ public actor ScriptStore {
 
     /// A snapshot of the current document (for loading into an engine).
     public var document: ScriptDocument {
-        ScriptDocument(triggers: triggers, aliases: aliases, timers: timers, macros: macros)
+        ScriptDocument(
+            triggers: triggers,
+            aliases: aliases,
+            timers: timers,
+            macros: macros,
+            buttonBar: buttonBar
+        )
     }
 
     // MARK: - Load
@@ -125,6 +134,7 @@ public actor ScriptStore {
         aliases = decode([Alias].self, .aliases)
         timers = decode([MudTimer].self, .timers)
         macros = decode([Macro].self, .macros)
+        buttonBar = loadButtonBar()
     }
 
     /// Replace the whole document at once (e.g. an import) and persist each kind.
@@ -133,9 +143,21 @@ public actor ScriptStore {
         aliases = document.aliases
         timers = document.timers
         macros = document.macros
+        buttonBar = document.buttonBar
         for kind in ScriptScope.Kind.allCases {
             try persist(kind)
         }
+        try persistButtonBar()
+    }
+
+    // MARK: - Button bar (#15)
+
+    /// Replace + persist the command-button bar. The light path used by the
+    /// editor (and the scripting `Button.*` API) so a single button edit doesn't
+    /// rewrite every trigger/alias/timer/macro file.
+    public func setButtonBar(_ bar: ButtonBar) throws {
+        buttonBar = bar
+        try persistButtonBar()
     }
 
     /// Toggle whether a kind is shared across characters. The current set moves
@@ -244,6 +266,31 @@ public actor ScriptStore {
 
     private func path(for kind: ScriptScope.Kind) -> URL {
         scopedDirectory(for: kind).appendingPathComponent("\(kind.rawValue).json")
+    }
+
+    /// The button bar's file — always under the per-character directory (it has
+    /// no ``ScriptScope`` sharing toggle). Created on demand.
+    private func buttonBarURL() -> URL {
+        let url = directory.appendingPathComponent(character, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url.appendingPathComponent("buttonBar.json")
+    }
+
+    private func loadButtonBar() -> ButtonBar {
+        guard let data = FileManager.default.contents(atPath: buttonBarURL().path) else {
+            return ButtonBar()
+        }
+        return (try? JSONDecoder().decode(ButtonBar.self, from: data)) ?? ButtonBar()
+    }
+
+    private func persistButtonBar() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            try encoder.encode(buttonBar).write(to: buttonBarURL(), options: .atomic)
+        } catch {
+            throw StoreError.saveFailed(error.localizedDescription)
+        }
     }
 
     private func decode<T: Decodable>(_: [T].Type, _ kind: ScriptScope.Kind) -> [T] {
