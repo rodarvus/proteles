@@ -22,16 +22,25 @@ public final class ScriptsModel {
     public private(set) var aliases: [Alias] = []
     public private(set) var timers: [MudTimer] = []
     public private(set) var macros: [Macro] = []
+    /// The command-button bar (#15) — mirrored from the store, edited via the
+    /// Buttons tab + the scripting API, shown in the command-bar panel.
+    public private(set) var buttonBar = ButtonBar()
+    /// Transient on/off state for toggle buttons (not persisted).
+    public var buttonToggleStates: [UUID: Bool] = [:]
 
     public var selectedTriggerID: UUID?
     public var selectedAliasID: UUID?
     public var selectedTimerID: UUID?
     public var selectedMacroID: UUID?
+    public var selectedButtonGroupID: UUID?
+    public var selectedButtonID: UUID?
     /// Which script kinds are shared across characters (for the editor toggles).
     public private(set) var scriptScope = ScriptScope()
 
-    private let session: SessionController
-    private var store: ScriptStore?
+    // Internal (not private) so the button-bar extension (ScriptsModel+Buttons)
+    // can persist + fire through the same store/session/refresh path.
+    let session: SessionController
+    var store: ScriptStore?
     private var profileID: UUID?
     /// Live keypress→action lookup, kept in sync with ``macros``. Held here
     /// (main-actor, value type) so the command field's key monitor can match
@@ -392,13 +401,14 @@ public final class ScriptsModel {
         return try? Mapper(store: store)
     }
 
-    private func refresh() async {
+    func refresh() async {
         guard let store else { return }
         let document = await store.document
         triggers = document.triggers
         aliases = document.aliases
         timers = document.timers
         macros = document.macros
+        buttonBar = document.buttonBar
         syncMacroEngine()
     }
 

@@ -24,6 +24,8 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case help
     /// Native leveldb reporting (live HUD / tables / analytics / journey).
     case levels
+    /// Configurable command-button bar (#15).
+    case commandBar
 
     public var id: String {
         rawValue
@@ -40,6 +42,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "Character"
         case .help: "Help"
         case .levels: "Levels"
+        case .commandBar: "Commands"
         }
     }
 
@@ -54,6 +57,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "Char"
         case .help: "Help"
         case .levels: "Levels"
+        case .commandBar: "Cmds"
         }
     }
 
@@ -68,6 +72,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "person.text.rectangle"
         case .help: "questionmark.circle"
         case .levels: "chart.line.uptrend.xyaxis"
+        case .commandBar: "rectangle.grid.2x2"
         }
     }
 

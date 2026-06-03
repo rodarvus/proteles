@@ -95,6 +95,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `proteles.notify`). Surfaced via the macOS notification layer, gated by
     /// the user's master notifications enable. The phase-2 extensibility hook.
     case notify(title: String, body: String)
+    /// A script/plugin change to the command-button bar (`Button.*` / #15). The
+    /// session forwards it to the app, which applies it to the live bar.
+    case button(ButtonCommand)
     /// Print coloured text to the scrollback. `foreground`/`background`
     /// are colour names (resolved by the host); `nil` uses defaults.
     case note(text: String, foreground: String?, background: String?)

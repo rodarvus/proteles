@@ -245,7 +245,8 @@ struct ProtelesApp: App {
                     asciiMap: asciiMap,
                     snd: snd,
                     help: help,
-                    levels: levels
+                    levels: levels,
+                    scripts: scripts
                 )
             }
         }

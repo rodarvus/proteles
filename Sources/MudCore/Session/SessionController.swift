@@ -73,6 +73,11 @@ public actor SessionController {
     /// User notifications (tells/mentions); the app subscribes + posts them.
     public nonisolated let notifications: AsyncStream<ProtelesNotification>
     nonisolated let notificationsContinuation: AsyncStream<ProtelesNotification>.Continuation
+
+    /// Script/plugin button-bar changes (`Button.*` / #15); the app applies them
+    /// to the live bar + persists.
+    public nonisolated let buttonCommands: AsyncStream<ButtonCommand>
+    nonisolated let buttonCommandsContinuation: AsyncStream<ButtonCommand>.Continuation
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
@@ -333,6 +338,8 @@ public actor SessionController {
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (notifications, notificationsContinuation) =
             AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
+        (buttonCommands, buttonCommandsContinuation) =
+            AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL

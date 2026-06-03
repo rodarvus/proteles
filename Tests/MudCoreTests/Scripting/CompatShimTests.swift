@@ -165,6 +165,19 @@ struct CompatShimTests {
         #expect(titleOnly == [.notify(title: "Heads up", body: "")])
     }
 
+    @Test("Button.* records button-bar effects (the #15 scripting API)")
+    func buttonScriptingAPI() async throws {
+        let lua = try await shimmed()
+        #expect(try await lua.run("Button.add('Combat', 'Heal', 'quaff heal')")
+            == [.button(.add(group: "Combat", label: "Heal", command: "quaff heal"))])
+        #expect(try await lua.run("Button.toggle('Combat', 'Wimpy', 'wimpy 200', 'wimpy 0')")
+            == [.button(.toggle(group: "Combat", label: "Wimpy", on: "wimpy 200", off: "wimpy 0"))])
+        #expect(try await lua.run("Button.state('Wimpy', true)")
+            == [.button(.setState(label: "Wimpy", on: true))])
+        #expect(try await lua.run("Button.remove('Heal')")
+            == [.button(.remove(label: "Heal"))])
+    }
+
     @Test("addxml.trigger maps an attribute table to AddTriggerEx flags + body")
     func addxmlTrigger() async throws {
         let lua = try await shimmed()

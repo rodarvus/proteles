@@ -1,0 +1,137 @@
+import MudCore
+import SwiftUI
+
+/// Detail editor for one ``CommandButton`` (Scripts ▸ Buttons). Binds live via
+/// ``ScriptsModel/binding(forButton:)`` — every edit persists + re-mirrors.
+struct CommandButtonEditor: View {
+    @Binding var button: CommandButton
+
+    /// Preset tints (avoids a Color↔hex round-trip); `nil` = the default accent.
+    private static let tints: [(name: String, hex: String?)] = [
+        ("Default", nil), ("Red", "#E5484D"), ("Orange", "#F76808"),
+        ("Yellow", "#FFC53D"), ("Green", "#30A46C"), ("Blue", "#3E63DD"),
+        ("Purple", "#8E4EC6"), ("Gray", "#8B8D98")
+    ]
+
+    var body: some View {
+        Form {
+            Section("Button") {
+                TextField("Label", text: $button.label)
+                Picker("Action", selection: kind(for: \.action)) {
+                    Text("Send command").tag(MacroActionKind.command)
+                    Text("Run Lua script").tag(MacroActionKind.script)
+                }
+                TextField(
+                    kind(for: \.action).wrappedValue == .script ? "Script (Lua)" : "Command",
+                    text: text(for: \.action),
+                    axis: .vertical
+                )
+                .font(.body.monospaced())
+                .lineLimit(1...8)
+            }
+
+            Section("Toggle") {
+                Toggle("Two-state toggle", isOn: isToggle)
+                if isToggle.wrappedValue {
+                    Picker("Off action", selection: offKind) {
+                        Text("Send command").tag(MacroActionKind.command)
+                        Text("Run Lua script").tag(MacroActionKind.script)
+                    }
+                    TextField(
+                        offKind.wrappedValue == .script ? "Off script (Lua)" : "Off command",
+                        text: offText,
+                        axis: .vertical
+                    )
+                    .font(.body.monospaced())
+                    .lineLimit(1...6)
+                    Text("On fires the action above; Off fires this. The panel tracks the state.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Appearance") {
+                Picker("Tint", selection: tintSelection) {
+                    ForEach(Self.tints, id: \.hex) { Text($0.name).tag($0.hex) }
+                }
+                TextField("SF Symbol name (optional)", text: $button.icon.orEmpty())
+                    .autocorrectionDisabled()
+            }
+
+            Section("Hotkey badge") {
+                Toggle("Show a hotkey badge", isOn: showsHotkey)
+                if showsHotkey.wrappedValue {
+                    KeyChordRecorder(chord: hotkeyBinding)
+                    Text("Display only — bind the real key in Macros.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(button.label.isEmpty ? "Button" : button.label)
+    }
+
+    // MARK: - Action bindings (reuse the Macro editor's kind/text helpers)
+
+    private func kind(for keyPath: WritableKeyPath<CommandButton, MacroAction>) -> Binding<MacroActionKind> {
+        Binding(
+            get: { if case .script = button[keyPath: keyPath] { .script } else { .command } },
+            set: { button[keyPath: keyPath] = MacroActionKind.make($0, text: button[keyPath: keyPath].text) }
+        )
+    }
+
+    private func text(for keyPath: WritableKeyPath<CommandButton, MacroAction>) -> Binding<String> {
+        Binding(
+            get: { button[keyPath: keyPath].text },
+            set: { button[keyPath: keyPath] = MacroActionKind.make(kind(for: keyPath).wrappedValue, text: $0)
+            }
+        )
+    }
+
+    // MARK: - Toggle bindings (the .toggle(off:) associated action)
+
+    private var isToggle: Binding<Bool> {
+        Binding(
+            get: { button.isToggle },
+            set: { button.kind = $0 ? .toggle(off: offAction) : .momentary }
+        )
+    }
+
+    private var offAction: MacroAction {
+        if case .toggle(let off) = button.kind { return off }
+        return .command("")
+    }
+
+    private var offKind: Binding<MacroActionKind> {
+        Binding(
+            get: { if case .script = offAction { .script } else { .command } },
+            set: { button.kind = .toggle(off: MacroActionKind.make($0, text: offAction.text)) }
+        )
+    }
+
+    private var offText: Binding<String> {
+        Binding(
+            get: { offAction.text },
+            set: { button.kind = .toggle(off: MacroActionKind.make(offKind.wrappedValue, text: $0)) }
+        )
+    }
+
+    // MARK: - Appearance / hotkey bindings
+
+    private var tintSelection: Binding<String?> {
+        Binding(get: { button.tint }, set: { button.tint = $0 })
+    }
+
+    private var showsHotkey: Binding<Bool> {
+        Binding(
+            get: { button.hotkeyEcho != nil },
+            set: { button.hotkeyEcho = $0 ? (button.hotkeyEcho ?? KeyChord(keyCode: 0)) : nil }
+        )
+    }
+
+    private var hotkeyBinding: Binding<KeyChord> {
+        Binding(
+            get: { button.hotkeyEcho ?? KeyChord(keyCode: 0) },
+            set: { button.hotkeyEcho = $0 }
+        )
+    }
+}

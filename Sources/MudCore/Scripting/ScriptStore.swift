@@ -7,21 +7,25 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
     public var aliases: [Alias]
     public var timers: [MudTimer]
     public var macros: [Macro]
+    /// The command-button bar (GH #15).
+    public var buttonBar: ButtonBar
 
     public init(
         triggers: [Trigger] = [],
         aliases: [Alias] = [],
         timers: [MudTimer] = [],
-        macros: [Macro] = []
+        macros: [Macro] = [],
+        buttonBar: ButtonBar = ButtonBar()
     ) {
         self.triggers = triggers
         self.aliases = aliases
         self.timers = timers
         self.macros = macros
+        self.buttonBar = buttonBar
     }
 
     private enum CodingKeys: String, CodingKey {
-        case triggers, aliases, timers, macros
+        case triggers, aliases, timers, macros, buttonBar
     }
 
     /// A collection missing from the file decodes as empty rather than failing
@@ -33,6 +37,7 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
         aliases = try container.decodeIfPresent([Alias].self, forKey: .aliases) ?? []
         timers = try container.decodeIfPresent([MudTimer].self, forKey: .timers) ?? []
         macros = try container.decodeIfPresent([Macro].self, forKey: .macros) ?? []
+        buttonBar = try container.decodeIfPresent(ButtonBar.self, forKey: .buttonBar) ?? ButtonBar()
     }
 }
 

@@ -25,6 +25,8 @@ public struct ScriptsView: View {
                 .tabItem { Label("Timers", systemImage: "timer") }
             macrosTab
                 .tabItem { Label("Macros", systemImage: "keyboard") }
+            buttonsTab
+                .tabItem { Label("Buttons", systemImage: "rectangle.grid.2x2") }
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
@@ -231,6 +233,67 @@ public struct ScriptsView: View {
     private func macroTitle(_ macro: Macro) -> String {
         if let name = macro.name, !name.isEmpty { return name }
         return KeyChordFormatter.describe(macro.chord)
+    }
+
+    // MARK: - Buttons (#15)
+
+    private var buttonsTab: some View {
+        NavigationSplitView {
+            List(selection: $model.selectedButtonID) {
+                ForEach(model.buttonBar.groups) { group in
+                    Section {
+                        ForEach(group.buttons) { button in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(button.label.isEmpty ? "—" : button.label)
+                                Text(button.action.text.isEmpty ? "—" : button.action.text)
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            .tag(button.id)
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    Task { await model.deleteButton(button.id) }
+                                }
+                            }
+                        }
+                        Button {
+                            Task { await model.addButton(toGroup: group.id) }
+                        } label: {
+                            Label("Add Button", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderless)
+                    } header: {
+                        HStack {
+                            TextField("Group", text: model.bindingForGroupName(group.id))
+                                .textFieldStyle(.plain)
+                            Spacer()
+                            Button(role: .destructive) {
+                                Task { await model.deleteButtonGroup(group.id) }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task { await model.addButtonGroup() }
+                    } label: {
+                        Label("Add Group", systemImage: "folder.badge.plus")
+                    }
+                    .help("Add a button group/page")
+                }
+            }
+        } detail: {
+            if let id = model.selectedButtonID, let binding = model.binding(forButton: id) {
+                CommandButtonEditor(button: binding)
+            } else {
+                unavailable("No Button Selected", systemImage: "rectangle.grid.2x2")
+            }
+        }
     }
 
     // MARK: - Helpers

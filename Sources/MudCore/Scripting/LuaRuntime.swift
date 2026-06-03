@@ -367,6 +367,7 @@ public actor LuaRuntime {
         setHostFunction("setTriggerGroup", .setTriggerGroup)
         setHostFunction("setTriggerOption", .setTriggerOption)
         setHostFunction("notify", .notify)
+        setHostFunction("button", .button)
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
         setHostFunction("monotonic", .monotonic)
@@ -397,7 +398,7 @@ public actor LuaRuntime {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
-             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify:
+             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button:
             recordEffect(function, arguments)
             return []
         case .call:

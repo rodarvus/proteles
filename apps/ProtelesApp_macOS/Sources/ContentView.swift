@@ -204,6 +204,12 @@ struct ContentView: View {
                 notifications.post(note)
             }
         }
+        .task {
+            // Apply script/plugin button-bar changes (#15 v3) to the live bar.
+            for await command in session.buttonCommands {
+                await scripts.applyButtonCommand(command)
+            }
+        }
         .task(id: themeID) {
             // Flip the whole app's chrome (panels, materials, gauges) to
             // match the theme's light/dark appearance.
@@ -235,22 +241,8 @@ struct ContentView: View {
         .task { await launch() }
     }
 
-    // `detach(_:)` lives in the extension below (keeps the view body within the
-    // type-length budget).
-
-    /// Map a panel kind to its live view (the layout engine supplies chrome).
-    private func panelContent(_ kind: PanelKind) -> AnyView {
-        switch kind {
-        case .output: AnyView(gameColumn)
-        case .map: AnyView(MapPanelView(model: map))
-        case .asciiMap: AnyView(MapView(model: asciiMap))
-        case .channels: AnyView(ChatView(model: chat))
-        case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
-        case .info: AnyView(InfoPanel(state: gmcp))
-        case .help: AnyView(HelpPanelView(model: help))
-        case .levels: AnyView(LevelDBPanelView(model: levels))
-        }
-    }
+    // `detach(_:)` + `panelContent(_:)` live in the extension below (keeps the
+    // view body within the type-length budget).
 
     /// The main game column: MUD output + command input. (The graphical vitals
     /// bar lives at the window level so it spans the full client width — see
@@ -509,6 +501,21 @@ extension ContentView {
     func detach(_ kind: PanelKind) {
         layout.detach(kind)
         openWindow(value: kind)
+    }
+
+    /// Map a panel kind to its live view (the layout engine supplies chrome).
+    func panelContent(_ kind: PanelKind) -> AnyView {
+        switch kind {
+        case .output: AnyView(gameColumn)
+        case .map: AnyView(MapPanelView(model: map))
+        case .asciiMap: AnyView(MapView(model: asciiMap))
+        case .channels: AnyView(ChatView(model: chat))
+        case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
+        case .info: AnyView(InfoPanel(state: gmcp))
+        case .help: AnyView(HelpPanelView(model: help))
+        case .levels: AnyView(LevelDBPanelView(model: levels))
+        case .commandBar: AnyView(CommandBarView(scripts: scripts))
+        }
     }
 }
 
