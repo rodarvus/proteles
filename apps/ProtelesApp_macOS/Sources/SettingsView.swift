@@ -33,6 +33,7 @@ private struct GeneralSettingsView: View {
     @AppStorage("omitBlankLines") private var omitBlankLines = false
     @AppStorage("gagTagLines") private var gagTagLines = false
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
+    @AppStorage("inputGhostHint") private var inputGhostHint = true
 
     var body: some View {
         Form {
@@ -48,6 +49,11 @@ private struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section("Command Input") {
+                Toggle("Suggest completions as you type", isOn: $inputGhostHint)
+                Text("Show a greyed hint after the caret for the best completion. "
+                    + "Press → or Tab to accept; Enter always sends exactly what you typed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Check spelling as you type", isOn: $commandSpellCheck)
                 Text("Show spell-check squiggles in the command line. Visual only — "
                     + "auto-correct and smart quotes stay off so commands like "

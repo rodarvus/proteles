@@ -62,10 +62,19 @@ fed by a `ScrollbackStore` subscription; GMCP room/group nouns; a verb set of
 common commands + channel names). **Enter now sends exactly what's typed** — the
 old auto-accept-on-Enter inline suggestion is gone (the core fix).
 
-**Deferred — the as-you-type ghost hint.** The chosen "subtle ghost" needs a
-*non-selected* grey trailing hint (fish/Warp-style) so it doesn't eat your
-spacebar or get auto-sent. Doing that well in an `NSTextField` field editor is
-fragile (the suffix would have to live in the editable string); it really wants
-a small custom `NSTextView` that draws ghost text outside the text storage.
-Pulled out of v1 so the robust Tab completion + the Enter-safety fix land now;
-the ghost is a focused follow-up with the right view.
+**Shipped (v2, #13 / D-96) — the as-you-type ghost hint.** A greyed,
+*non-interactive* trailing hint of the best current-word completion, drawn after
+the caret. **Approach:** rather than rewrite as a custom `NSTextView`, the ghost
+is an **overlay label that's never part of the editable text** — a sibling view
+in a small container, positioned at the field-editor caret rect
+(`firstRect(forCharacterRange:)`). So it can't be sent, can't eat the spacebar,
+and the Tab cycle / history / Enter-safety all stay exactly as they were. → or
+Tab accepts (fills the same top match in its proper casing); Esc dismisses;
+Enter sends only what's typed; any caret move/edit drops it (real typing
+re-shows it). Gated by a "Suggest completions as you type" toggle (default on).
+The suffix comes from a pure `CompletionVocabulary.ghostSuffix(forWord:isFirstWord:)`.
+
+*Decision deferred (iterate):* whether the overlay proves robust enough
+long-term or we move to a custom `NSTextView` — revisit if positioning/scroll
+edge cases bite. *Deferred (v3):* a whole-line **history** ghost (fish-style) as
+a second source; v2 is word-level only (predictable, matches Tab).

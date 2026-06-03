@@ -42,6 +42,18 @@ struct CompletionVocabularyTests {
         #expect(vocab.completions(forWord: "", isFirstWord: false).isEmpty)
         #expect(vocab.completions(forWord: "  ", isFirstWord: false).isEmpty)
     }
+
+    @Test("ghostSuffix is the top completion's tail in its own casing, nil when none")
+    func ghostSuffix() {
+        let vocab = CompletionVocabulary(contextWords: ["Galadon"], recentWords: ["sword"])
+        // Tail of the top match, dropping the typed length (best's casing).
+        #expect(vocab.ghostSuffix(forWord: "Gal", isFirstWord: false) == "adon")
+        #expect(vocab.ghostSuffix(forWord: "gal", isFirstWord: false) == "adon") // case-insensitive prefix
+        // No completion → nil.
+        #expect(vocab.ghostSuffix(forWord: "zzz", isFirstWord: false) == nil)
+        // An already-complete word has no longer match → nil.
+        #expect(vocab.ghostSuffix(forWord: "sword", isFirstWord: false) == nil)
+    }
 }
 
 @Suite("InputCompletion — word extraction + harvesting")

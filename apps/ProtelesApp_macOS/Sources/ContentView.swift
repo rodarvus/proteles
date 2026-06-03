@@ -62,6 +62,7 @@ struct ContentView: View {
     /// only; auto-correct/smart-quotes stay off regardless (they'd mangle
     /// commands). Default off — a command line squiggles a lot of game words.
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
+    @AppStorage("inputGhostHint") private var inputGhostHint = true
     /// Deliver notifications even while Proteles is frontmost (opt-out of
     /// suppress-when-focused).
     @AppStorage("notifyWhenFocused") private var notifyWhenFocused = false
@@ -234,11 +235,8 @@ struct ContentView: View {
         .task { await launch() }
     }
 
-    /// Tear `kind` out of the dock into its own window.
-    private func detach(_ kind: PanelKind) {
-        layout.detach(kind)
-        openWindow(value: kind)
-    }
+    // `detach(_:)` lives in the extension below (keeps the view body within the
+    // type-length budget).
 
     /// Map a panel kind to its live view (the layout engine supplies chrome).
     private func panelContent(_ kind: PanelKind) -> AnyView {
@@ -288,7 +286,8 @@ struct ContentView: View {
                     return true
                 },
                 vocabulary: { makeCompletionVocabulary() },
-                spellChecking: commandSpellCheck
+                spellChecking: commandSpellCheck,
+                ghostHint: inputGhostHint
             )
             .overlay(alignment: .trailing) {
                 if navigationMode {
@@ -502,6 +501,14 @@ struct ContentView: View {
         case .connected: .connected
         case .closing: .reconnecting
         }
+    }
+}
+
+extension ContentView {
+    /// Tear `kind` out of the dock into its own window.
+    func detach(_ kind: PanelKind) {
+        layout.detach(kind)
+        openWindow(value: kind)
     }
 }
 

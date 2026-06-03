@@ -65,6 +65,16 @@ public struct CompletionVocabulary: Sendable, Equatable {
         }
         return result
     }
+
+    /// The trailing text to show as the as-you-type ghost hint (#13): the best
+    /// completion for `prefix` with the already-typed portion dropped, or `nil`
+    /// when there's nothing to suggest. It's the tail of the same top match Tab
+    /// would fill (in that match's own casing), so the ghost and Tab agree.
+    public func ghostSuffix(forWord prefix: String, isFirstWord: Bool) -> String? {
+        guard let best = completions(forWord: prefix, isFirstWord: isFirstWord).first else { return nil }
+        let suffix = String(best.dropFirst(prefix.count)) // best is strictly longer, prefix-matched
+        return suffix.isEmpty ? nil : suffix
+    }
 }
 
 /// Caret-relative word extraction + a scrollback word harvester — the
