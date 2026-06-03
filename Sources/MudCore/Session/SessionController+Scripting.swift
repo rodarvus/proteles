@@ -296,6 +296,7 @@ public extension SessionController {
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):
             publishedModelsContinuation.yield(json)
+            checkQuestReady(json) // phase-3 quest-ready notification (S&D model edge)
         case .httpRequest(let request):
             performHTTPRequest(request)
         default:

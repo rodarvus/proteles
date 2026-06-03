@@ -6,16 +6,25 @@ import Foundation
 public struct ProtelesNotification: Sendable, Equatable {
     public let title: String
     public let body: String
-    /// Play the default notification sound.
+    /// Play a sound (false = silent).
     public let playSound: Bool
+    /// A macOS system sound name (e.g. "Glass"); `nil` = the default sound.
+    public let soundName: String?
     /// Suppress this notification while Proteles is the frontmost app (the app
     /// layer checks focus). Critical alerts can set this false to always notify.
     public let suppressWhenFocused: Bool
 
-    public init(title: String, body: String, playSound: Bool = true, suppressWhenFocused: Bool = true) {
+    public init(
+        title: String,
+        body: String,
+        playSound: Bool = true,
+        soundName: String? = nil,
+        suppressWhenFocused: Bool = true
+    ) {
         self.title = title
         self.body = body
         self.playSound = playSound
+        self.soundName = soundName
         self.suppressWhenFocused = suppressWhenFocused
     }
 }
@@ -61,10 +70,49 @@ public struct NotificationMatcher: Sendable, Equatable {
         }
 
         // A user `.channel` rule fires on any chat for the named channel.
-        if channelRuleFires(channel: channel) {
-            let title = chatLine.channel.isEmpty ? "Channel" : chatLine.channel
-            let body = sender.isEmpty ? message : "\(sender): \(message)"
-            return ProtelesNotification(title: title, body: body)
+        if let rule = firstChannelRule(channel: channel) {
+            let defaultBody = sender.isEmpty ? message : "\(sender): \(message)"
+            return make(
+                rule: rule,
+                defaultTitle: chatLine.channel.isEmpty ? "Channel" : chatLine.channel,
+                defaultBody: defaultBody,
+                tokens: ["channel": chatLine.channel, "player": sender, "message": message, "line": message]
+            )
+        }
+        return nil
+    }
+
+    /// An edge-triggered low-HP notification per `.hpBelow` rule that the player
+    /// just crossed below (was at/above `threshold` or unknown → now below).
+    /// `percent` values are pre-computed by the caller from GMCP vitals/maxstats.
+    public func hpNotifications(currentPercent: Int?, previousPercent: Int?) -> [ProtelesNotification] {
+        guard let current = currentPercent else { return [] }
+        return rules.compactMap { rule in
+            guard rule.enabled, case .hpBelow(let threshold) = rule.trigger else { return nil }
+            let wasAtOrAbove = previousPercent.map { $0 >= threshold } ?? true
+            guard current < threshold, wasAtOrAbove else { return nil }
+            return make(
+                rule: rule,
+                defaultTitle: "Low HP",
+                defaultBody: "HP at \(current)% (below \(threshold)%)",
+                tokens: ["percent": "\(current)", "threshold": "\(threshold)"]
+            )
+        }
+    }
+
+    /// A quest-ready notification if the player just became able to request one
+    /// (the caller detects the `false → true` edge from the S&D quest tracker).
+    public func questReadyNotification(becameReady: Bool) -> ProtelesNotification? {
+        guard becameReady else { return nil }
+        for rule in rules where rule.enabled {
+            if case .questReady = rule.trigger {
+                return make(
+                    rule: rule,
+                    defaultTitle: "Quest ready",
+                    defaultBody: "You can request a new quest.",
+                    tokens: [:]
+                )
+            }
         }
         return nil
     }
@@ -78,25 +126,83 @@ public struct NotificationMatcher: Sendable, Equatable {
         }
     }
 
+    /// Whether any enabled `.hpBelow` rule exists — lets the per-vitals HP check
+    /// skip the matcher when there's nothing to evaluate.
+    public var hasHPRules: Bool {
+        rules.contains { rule in
+            guard rule.enabled, case .hpBelow = rule.trigger else { return false }
+            return true
+        }
+    }
+
     /// A notification for an arbitrary output `line`, or `nil` — the first
     /// enabled `.keyword` rule whose phrase appears (case-insensitively) in it.
     /// Channel/tell/mention rules are chat-only (see ``notification(for:characterName:)``).
     public func outputNotification(for line: String) -> ProtelesNotification? {
         for rule in rules where rule.enabled {
             guard case .keyword(let phrase) = rule.trigger, !phrase.isEmpty,
-                  line.range(of: phrase, options: .caseInsensitive) != nil
+                  let captured = Self.keywordMatch(line, phrase: phrase, regex: rule.regex)
             else { continue }
-            let title = rule.label.isEmpty ? "Match: \(phrase)" : rule.label
-            return ProtelesNotification(title: title, body: line)
+            return make(
+                rule: rule,
+                defaultTitle: "Match: \(phrase)",
+                defaultBody: line,
+                tokens: ["line": line, "match": captured, "capture": captured]
+            )
         }
         return nil
     }
 
-    /// Whether an enabled `.channel` rule matches `channel` (already lowercased).
-    private func channelRuleFires(channel: String) -> Bool {
-        rules.contains { rule in
+    /// The matched text for a keyword rule, or `nil`. A regex rule returns its
+    /// first capture group (else the whole match); a plain rule the matched
+    /// substring. Both are case-insensitive.
+    static func keywordMatch(_ line: String, phrase: String, regex: Bool) -> String? {
+        guard regex else {
+            return line.range(of: phrase, options: .caseInsensitive).map { String(line[$0]) }
+        }
+        guard let expression = try? NSRegularExpression(pattern: phrase, options: .caseInsensitive),
+              let match = expression.firstMatch(in: line, range: NSRange(line.startIndex..., in: line))
+        else { return nil }
+        let group = match.numberOfRanges > 1 ? match.range(at: 1) : match.range(at: 0)
+        return Range(group, in: line).map { String(line[$0]) } ?? phrase
+    }
+
+    /// The first enabled `.channel` rule matching `channel` (already lowercased).
+    private func firstChannelRule(channel: String) -> NotificationRule? {
+        rules.first { rule in
             guard rule.enabled, case .channel(let name) = rule.trigger, !name.isEmpty else { return false }
             return channel.contains(name.lowercased())
+        }
+    }
+
+    /// Build a notification for a fired `rule`: title/body from its templates
+    /// (with `{token}` substitution) or the supplied defaults, and its sound.
+    private func make(
+        rule: NotificationRule,
+        defaultTitle: String,
+        defaultBody: String,
+        tokens: [String: String]
+    ) -> ProtelesNotification {
+        // Title precedence: explicit template → the rule's label → the default.
+        let title: String = if !rule.titleTemplate.isEmpty {
+            Self.fill(rule.titleTemplate, tokens)
+        } else if !rule.label.isEmpty {
+            rule.label
+        } else {
+            defaultTitle
+        }
+        return ProtelesNotification(
+            title: title,
+            body: rule.bodyTemplate.isEmpty ? defaultBody : Self.fill(rule.bodyTemplate, tokens),
+            playSound: rule.sound != .silent,
+            soundName: rule.sound.systemName
+        )
+    }
+
+    /// Replace `{token}` placeholders in `template` with their values.
+    static func fill(_ template: String, _ tokens: [String: String]) -> String {
+        tokens.reduce(template) { result, pair in
+            result.replacingOccurrences(of: "{\(pair.key)}", with: pair.value)
         }
     }
 

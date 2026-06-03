@@ -24,7 +24,7 @@ struct SettingsView: View {
             DiagnosticsSettingsView()
                 .tabItem { Label("Diagnostics", systemImage: "ladybug") }
         }
-        .frame(width: 480)
+        .frame(width: 560)
     }
 }
 
