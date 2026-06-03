@@ -152,6 +152,24 @@ struct NotificationMatcherTests {
         #expect(matcher.hpNotifications(currentPercent: 25, previousPercent: 50).isEmpty)
     }
 
+    @Test("commQuestIsReady reads Aardwolf's comm.quest actions (per the reference)")
+    func commQuestReady() {
+        // Ready: action ready / timeout, or status with status:ready.
+        #expect(NotificationMatcher.commQuestIsReady(action: "ready", status: nil))
+        #expect(NotificationMatcher.commQuestIsReady(action: "timeout", status: nil))
+        #expect(NotificationMatcher.commQuestIsReady(action: "status", status: "ready"))
+        #expect(NotificationMatcher.commQuestIsReady(action: "READY", status: nil)) // case-insensitive
+        // Not ready: on cooldown / on quest / completed.
+        #expect(!NotificationMatcher.commQuestIsReady(
+            action: "status",
+            status: nil
+        )) // {action:status, wait:N}
+        #expect(!NotificationMatcher.commQuestIsReady(action: "start", status: nil))
+        #expect(!NotificationMatcher.commQuestIsReady(action: "killed", status: nil))
+        #expect(!NotificationMatcher.commQuestIsReady(action: "comp", status: nil))
+        #expect(!NotificationMatcher.commQuestIsReady(action: nil, status: nil))
+    }
+
     @Test("questReady fires only on the became-ready edge and only with a rule")
     func questReady() {
         let matcher = NotificationMatcher(rules: [NotificationRule(trigger: .questReady)])
