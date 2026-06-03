@@ -3,7 +3,7 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.4.4` — daily-usable.**
+> **Status: `v0.4.5` — daily-usable.**
 > Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
 > their own windows), a **full six-bar status display** (Health/Mana/Moves/TNL/
@@ -16,10 +16,10 @@ for the modern Mac — no Wine, no VM, no emulator.
 > `~/Documents/Proteles/`). It now **survives an Aardwolf "ice age"** (copyover
 > reboot) without dropping, and native **mapper / Search-and-Destroy navigation**
 > (portals, custom exits, scan-on-arrival) is live-hardened.
-> **MIT-licensed**. A **non-notarized
+> **MIT-licensed**. A **notarized, Developer-ID-signed
 > build** is attached to each [release](https://github.com/rodarvus/proteles/releases)
-> (right-click ▸ Open past Gatekeeper), or build from source (below). Design
-> lives in **[PLAN.md](PLAN.md)**.
+> (download, unzip, drag to Applications — it opens with no Gatekeeper warning),
+> or build from source (below). Design lives in **[PLAN.md](PLAN.md)**.
 
 ---
 

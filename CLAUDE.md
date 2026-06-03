@@ -7,10 +7,12 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.4.4`** (tag + GitHub release, non-notarized build). The build-out
-phases are **done**; we are now **polishing + debugging from live play**. The
-remaining gate to **1.0** is release engineering — notarization, an auto-updater,
-crash reporting. ~1237 tests, four gates green. See **PLAN.md §0** for what works
+**Shipped `v0.4.5`** (tag + GitHub release, **notarized Developer-ID build** —
+the first; `scripts/release.sh` runs the build→sign→notarize→staple→verify flow).
+The build-out phases are **done**; we are now **polishing + debugging from live
+play**. The remaining gate to **1.0** is release engineering — an auto-updater
+(#23, Sparkle) is the last open item; notarization + crash reporting are landed.
+~1237 tests, four gates green. See **PLAN.md §0** for what works
 and the **decision log (§12, D-01…D-97)** for history.
 
 ## Backlog — GitHub Issues are the source of truth
