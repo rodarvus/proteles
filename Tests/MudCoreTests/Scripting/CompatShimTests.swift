@@ -155,6 +155,16 @@ struct CompatShimTests {
         ])
     }
 
+    @Test("Notify raises a .notify effect (the phase-2 scripting hook, #14)")
+    func notifyEffect() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("Notify('Quest done', 'return to the questor')")
+        #expect(effects == [.notify(title: "Quest done", body: "return to the questor")])
+        // Body is optional.
+        let titleOnly = try await lua.run("Notify('Heads up')")
+        #expect(titleOnly == [.notify(title: "Heads up", body: "")])
+    }
+
     @Test("addxml.trigger maps an attribute table to AddTriggerEx flags + body")
     func addxmlTrigger() async throws {
         let lua = try await shimmed()

@@ -22,6 +22,9 @@ extension SessionController {
             // Bridge `CallPlugin(<chat-capture>, "storeFromOutside", …)` to native
             // chat (rsocial/hadar_spellup); `text` may carry Aardwolf @-codes.
             await chatStore.append(channel: channel.isEmpty ? "Capture" : channel, player: "", message: text)
+        case .notify(let title, let body):
+            // Script/plugin-raised notification (`Notify`/`proteles.notify`).
+            notifyFromScript(title: title, body: body)
         default:
             break
         }

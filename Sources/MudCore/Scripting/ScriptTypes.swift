@@ -91,6 +91,10 @@ public enum ScriptEffect: Sendable, Equatable {
     case execute(String)
     /// Print plain text to the scrollback.
     case echo(String)
+    /// Raise a native user notification from a script/plugin (`Notify` /
+    /// `proteles.notify`). Surfaced via the macOS notification layer, gated by
+    /// the user's master notifications enable. The phase-2 extensibility hook.
+    case notify(title: String, body: String)
     /// Print coloured text to the scrollback. `foreground`/`background`
     /// are colour names (resolved by the host); `nil` uses defaults.
     case note(text: String, foreground: String?, background: String?)

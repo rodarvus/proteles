@@ -36,6 +36,7 @@ extension LuaRuntime {
         case enableTrigger, enableTimer, enableGroup, doAfter
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
         case setTriggerOption
+        case notify
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet
         case readFile, writeFile

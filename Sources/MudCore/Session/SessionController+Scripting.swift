@@ -75,6 +75,8 @@ public extension SessionController {
         let tagGag = gagTagLines && Self.isAardwolfTagLine(outLine.text)
         if !disposition.gag, !sndGag, !omitBlank, !richExitsGag, !wishGag, !tagGag {
             await scrollbackStore.append(outLine)
+            // Phase-2 keyword notifications fire on lines the user actually sees.
+            notifyForOutput(outLine.text)
         } else {
             // Record *why* a line was withheld (the transcript otherwise only has
             // the pre-gag RECV, so a leak/over-gag report can't be diagnosed from

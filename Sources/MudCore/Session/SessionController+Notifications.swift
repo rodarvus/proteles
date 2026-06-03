@@ -26,4 +26,26 @@ public extension SessionController {
         notificationMatcher.notifyOnTells = tells
         notificationMatcher.notifyOnMention = mention
     }
+
+    /// Replace the user's phase-2 custom rules (keyword / channel).
+    func setCustomNotificationRules(_ rules: [NotificationRule]) {
+        notificationMatcher.rules = rules
+    }
+
+    /// Match a displayed output line against the user's `.keyword` rules and
+    /// publish a notification if one fires. Gated + cheap: returns immediately
+    /// unless notifications are on and at least one keyword rule exists.
+    func notifyForOutput(_ text: String) {
+        guard notificationsEnabled, notificationMatcher.hasOutputRules else { return }
+        if let note = notificationMatcher.outputNotification(for: text) {
+            notificationsContinuation.yield(note)
+        }
+    }
+
+    /// Publish a script/plugin-raised notification (`Notify(...)` / `proteles
+    /// .notify`), gated by the master enable. The extensibility hook.
+    func notifyFromScript(title: String, body: String) {
+        guard notificationsEnabled else { return }
+        notificationsContinuation.yield(ProtelesNotification(title: title, body: body))
+    }
 }

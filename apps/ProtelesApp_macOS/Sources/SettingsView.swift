@@ -360,6 +360,8 @@ private struct NotificationsSettingsView: View {
                 Toggle("My name mentioned on a channel", isOn: $notifyOnMention)
             }
             .disabled(!notificationsEnabled)
+            NotificationRulesSection()
+                .disabled(!notificationsEnabled)
             Section("Delivery") {
                 Toggle("Also notify while Proteles is in focus", isOn: $notifyWhenFocused)
                 Text("By default, notifications are suppressed while Proteles is the "
