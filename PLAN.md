@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.4`.
+**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.5` (first notarized).
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
