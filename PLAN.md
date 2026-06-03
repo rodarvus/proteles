@@ -27,8 +27,9 @@ the daily experience is solid.
   (copyover reboot) without dropping (D-81).
 - **Prompt-driven autologin** (password in the Keychain) + connect timeout +
   **autoreconnect** with backoff.
-- **Command input** — history, Tab autocomplete, bare-Enter prompt nudges, stays
-  focused after a copy; **keyboard macros** + keypad navigation (D-50).
+- **Command input** — history, Tab autocomplete + an as-you-type **ghost hint**
+  (D-96), bare-Enter prompt nudges, stays focused after a copy; **keyboard
+  macros** + keypad navigation (D-50).
 - **Copy with colour** as ANSI / Aardwolf `@`-codes / HTML.
 
 **Aardwolf surface**
@@ -36,12 +37,20 @@ the daily experience is solid.
   capture; a **six-bar status display** (Health/Mana/Moves/TNL/Enemy/Alignment,
   configurable — D-80).
 - **Rich Exits** (clickable room exits, incl. custom exits — D-45), an in-game
-  **Help reader** (D-46/D-52), **Session Logging**, **Notifications**,
-  **Inventory Serials** (D-49).
+  **Help reader** (D-46/D-52), **Session Logging**, **Inventory Serials** (D-49).
+- **Notifications** (D-49/D-94): tells/mentions plus user rules — keyword (incl.
+  regex), per-channel, **low-HP** + **quest-ready** (pure `comm.quest` GMCP),
+  per-rule sound + `{token}` templates, duplicate-coalescing, and a `Notify(...)`
+  scripting hook.
+- **Group/party panel** (D-95): leader, alignment, HP numbers, a quest column
+  (`qt`/`qs`), a room-only filter + sort.
+- **Opt-in crash/hang diagnostics** via MetricKit (D-93), on-device only.
 
 **Scripting & plugins**
-- GUI **triggers/aliases/timers** (Lua 5.1) with a Test panel + regex validation;
-  per-world persistence.
+- GUI **triggers/aliases/timers/macros** (Lua 5.1) with a Test panel + regex
+  validation; per-world persistence.
+- A **command-button bar** (D-97): dockable/floating, momentary + toggle buttons
+  in groups, scriptable via `Button.*`.
 - The **MUSHclient compat shim** runs unmodified third-party plugins (per-plugin
   Lua environments, a sandboxed `sqlite3`, outbound HTTP); a **Plugin Library**
   to add plugins from your Mac or a URL, export them, and import plugin DBs — all
@@ -60,7 +69,7 @@ download. Ongoing: live-play polish + debugging. **All pending work is tracked i
 [GitHub Issues](https://github.com/rodarvus/proteles/issues)** (`gh issue list`) —
 the backlog source of truth (see §9a).
 
-~1188 tests across ~244 suites; four gates green (`swift build`,
+~1237 tests across ~249 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
