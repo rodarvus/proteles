@@ -31,9 +31,14 @@ for the modern Mac — no Wine, no VM, no emulator.
   a combat burst.
 - **Prompt-driven autologin** — your password lives in the Keychain, not a
   config file. Connect timeout + **autoreconnect** with backoff on a drop.
-- **Command input** with history recall (↑/↓), whole-line autocompletion (Tab),
-  and bare-Enter prompt nudges — and it **stays focused**, so you can type a
-  command even right after selecting/copying from the output.
+- **Command input** with history recall (↑/↓), **word completion** (Tab — from
+  on-screen targets, exits, group members + recent output) and a subtle
+  **as-you-type ghost hint** (→ to accept), and bare-Enter prompt nudges — and it
+  **stays focused**, so you can type a command even right after selecting/copying
+  from the output.
+- A configurable **command-button bar** (Panels ▸ Commands): grouped, clickable
+  command/toggle buttons in a dockable or floating panel; authored in Scripts ▸
+  Buttons and scriptable from plugins (`Button.*`).
 - **Copy with colour codes** — as ANSI (⇧⌘C), Aardwolf `@`-codes, or HTML — for
   pasting coloured snippets elsewhere.
 
@@ -68,10 +73,14 @@ for the modern Mac — no Wine, no VM, no emulator.
   with an activity heatmap. Read-only, so the plugin stays the source of truth.
 
 **Notifications & logging**
-- **Notifications** (Preferences ▸ Notifications): native macOS notifications
-  on **tells** and **name-mentions** while Proteles is in the background.
+- **Notifications** (Preferences ▸ Notifications): native macOS notifications on
+  **tells**, **name-mentions**, your own **keyword/regex** rules, a named
+  **channel**, **low HP**, and **quest-ready** — with per-rule sounds + templates,
+  plus a `Notify(...)` hook for scripts. (Suppressed while focused by default.)
 - **Session logging** (Preferences ▸ Logging): save a readable per-session log
   as plain text or colour-preserving **HTML**.
+- **Opt-in crash diagnostics** (Preferences ▸ Diagnostics): on-device MetricKit
+  crash/hang capture you can review + copy into a bug report. Off by default.
 
 **Scripting**
 - User **triggers / aliases / timers** edited in a GUI (⇧⌘T), persisted
@@ -190,7 +199,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1205 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1237 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
