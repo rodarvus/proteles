@@ -11,9 +11,9 @@ public extension ScriptsModel {
     /// `Sendable`.
     func updateButtonBar(_ transform: (inout ButtonBar) -> Void) async {
         guard let store else { return }
-        var document = await store.document
-        transform(&document.buttonBar)
-        try? await store.replace(with: document)
+        var bar = await store.buttonBar
+        transform(&bar)
+        try? await store.setButtonBar(bar)
         await refresh()
     }
 
