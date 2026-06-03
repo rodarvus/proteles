@@ -7,6 +7,10 @@ import SwiftUI
 public struct InfoPanel: View {
     private let state: GMCPState
 
+    /// Group-panel view prefs (#17), surfaced via the group header menu.
+    @AppStorage("group.roomOnly") private var groupRoomOnly = false
+    @AppStorage("group.sort") private var groupSortRaw = GroupMemberSort.standard.rawValue
+
     public init(state: GMCPState) {
         self.state = state
     }
@@ -158,32 +162,76 @@ public struct InfoPanel: View {
     }
 
     private func groupSection(_ group: GroupInfo) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            header(group.groupname?.isEmpty == false ? "Group · \(group.groupname!)" : "Group")
-            ForEach(group.members ?? []) { member in
-                memberRow(member)
+        let sort = GroupMemberSort(rawValue: groupSortRaw) ?? .standard
+        let members = group.displayMembers(sort: sort, roomOnly: groupRoomOnly)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                header(group.groupname?.isEmpty == false ? "Group · \(group.groupname!)" : "Group")
+                Spacer()
+                groupMenu
+            }
+            if members.isEmpty {
+                Text(groupRoomOnly ? "No group members in this room." : "No group members.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(members) { member in
+                memberRow(member, isLeader: member.name == group.leader)
             }
         }
     }
 
+    /// The group-panel options menu (room filter + sort).
+    private var groupMenu: some View {
+        Menu {
+            Toggle("This room only", isOn: $groupRoomOnly)
+            Picker("Sort", selection: $groupSortRaw) {
+                ForEach(GroupMemberSort.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle").font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
     @ViewBuilder
-    private func memberRow(_ member: GroupInfo.Member) -> some View {
+    private func memberRow(_ member: GroupInfo.Member, isLeader: Bool) -> some View {
         let info = member.info
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
+                alignDot(info?.align)
                 Text(member.name)
                     .font(.callout)
                     .foregroundStyle(info?.isHere == false ? .secondary : .primary)
+                if isLeader {
+                    Image(systemName: "crown.fill").font(.caption2).foregroundStyle(.yellow)
+                }
                 if let level = info?.level {
-                    Text("L\(level)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    Text("L\(level)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if let tag = info?.questTag {
+                    Text(tag)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(info?.onQuest == true ? .green : .secondary)
+                }
+                if let current = info?.hpCurrent, let maximum = info?.hpMax {
+                    Text("\(current)/\(maximum)").font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
             memberBar(Self.fraction(info?.hp, info?.mhp), tint: .red)
             memberBar(Self.fraction(info?.mn, info?.mmn), tint: .blue)
             memberBar(Self.fraction(info?.mv, info?.mmv), tint: .green)
+        }
+    }
+
+    /// A small alignment dot (good = blue, evil = red, neutral = grey) before
+    /// the member's name; absent when the member sends no alignment.
+    @ViewBuilder
+    private func alignDot(_ alignString: String?) -> some View {
+        if let align = alignString.flatMap({ Int($0) }) {
+            Circle().fill(alignmentColor(align)).frame(width: 6, height: 6)
         }
     }
 

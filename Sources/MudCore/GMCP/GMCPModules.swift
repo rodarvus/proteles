@@ -250,6 +250,11 @@ public struct GroupInfo: Codable, Sendable, Equatable {
             public let tnl: String?
             public let align: String?
             public let here: String?
+            /// Quest timer (minutes) and quest status (`"1"` = on a quest) — the
+            /// per-member quest fields Aardwolf's `group` GMCP carries (read by
+            /// the reference's group monitor). Optional → tolerated when absent.
+            public let qt: String?
+            public let qs: String?
 
             public init(
                 lvl: String? = nil,
@@ -261,7 +266,9 @@ public struct GroupInfo: Codable, Sendable, Equatable {
                 mmv: String? = nil,
                 tnl: String? = nil,
                 align: String? = nil,
-                here: String? = nil
+                here: String? = nil,
+                qt: String? = nil,
+                qs: String? = nil
             ) {
                 self.lvl = lvl
                 self.hp = hp
@@ -273,6 +280,8 @@ public struct GroupInfo: Codable, Sendable, Equatable {
                 self.tnl = tnl
                 self.align = align
                 self.here = here
+                self.qt = qt
+                self.qs = qs
             }
 
             public var level: Int? {
@@ -290,6 +299,27 @@ public struct GroupInfo: Codable, Sendable, Equatable {
             /// True when the member is in the same room (`here == "1"`).
             public var isHere: Bool {
                 here == "1"
+            }
+
+            /// The member is currently on a quest (`qs == "1"`).
+            public var onQuest: Bool {
+                qs == "1"
+            }
+
+            /// HP as a 0…1 fraction (full if unknown — so a member with no vitals
+            /// sorts as healthy rather than "most hurt").
+            public var hpFraction: Double {
+                guard let current = hpCurrent, let maximum = hpMax, maximum > 0 else { return 1 }
+                return Swift.max(0, Swift.min(1, Double(current) / Double(maximum)))
+            }
+
+            /// A compact quest tag for the panel: `[Q]` on a quest, else `Q:NN`
+            /// from the timer, else `nil` (no quest info to show).
+            public var questTag: String? {
+                if onQuest { return "[Q]" }
+                guard let qt = qt?.trimmingCharacters(in: .whitespaces),
+                      let minutes = Int(qt), minutes > 0 else { return nil }
+                return "Q:\(minutes)"
             }
         }
 
