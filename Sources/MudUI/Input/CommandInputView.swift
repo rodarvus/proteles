@@ -35,6 +35,7 @@ public struct CommandInputView: View {
     private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)?
     private let vocabulary: (@MainActor () -> CompletionVocabulary)?
     private let spellChecking: Bool
+    private let ghostHint: Bool
 
     /// - Parameters:
     ///   - onSubmit: called with the line when the user presses Enter.
@@ -52,12 +53,14 @@ public struct CommandInputView: View {
         onSubmit: @escaping (String) -> Void,
         onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil,
         vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
-        spellChecking: Bool = false
+        spellChecking: Bool = false,
+        ghostHint: Bool = true
     ) {
         self.onSubmit = onSubmit
         self.onMacroKey = onMacroKey
         self.vocabulary = vocabulary
         self.spellChecking = spellChecking
+        self.ghostHint = ghostHint
     }
 
     public var body: some View {
@@ -65,7 +68,8 @@ public struct CommandInputView: View {
             onSubmit: onSubmit,
             onMacroKey: onMacroKey,
             vocabulary: vocabulary,
-            spellChecking: spellChecking
+            spellChecking: spellChecking,
+            ghostHint: ghostHint
         )
         .frame(height: 20)
         .padding(.horizontal, 12)
@@ -87,12 +91,17 @@ public struct CommandInputView: View {
         let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
         let spellChecking: Bool
+        let ghostHint: Bool
 
         func makeCoordinator() -> Coordinator {
             Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
         }
 
-        func makeNSView(context: Context) -> NSTextField {
+        /// A container holding the field plus a non-interactive grey "ghost" label
+        /// drawn just after the caret. The ghost is never part of the editable
+        /// text (so it can't be sent, can't eat the spacebar) — it's positioned
+        /// over the empty area to the right of what's typed. #13 / D-96.
+        func makeNSView(context: Context) -> NSView {
             let field = AutoFocusTextField()
             field.onMacroKey = onMacroKey
             field.spellChecking = spellChecking
@@ -109,18 +118,40 @@ public struct CommandInputView: View {
             field.usesSingleLineMode = true
             field.cell?.wraps = false
             field.cell?.isScrollable = true
+
+            let ghost = NSTextField(labelWithString: "")
+            ghost.font = field.font
+            ghost.textColor = .tertiaryLabelColor
+            ghost.lineBreakMode = .byClipping
+            ghost.isHidden = true
+            ghost.refusesFirstResponder = true
+
+            let container = NSView()
+            field.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(field)
+            container.addSubview(ghost) // on top, in the empty area after the caret
+            NSLayoutConstraint.activate([
+                field.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                field.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                field.topAnchor.constraint(equalTo: container.topAnchor),
+                field.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            ])
             context.coordinator.field = field
-            return field
+            context.coordinator.ghost = ghost
+            context.coordinator.ghostHintEnabled = ghostHint
+            return container
         }
 
-        func updateNSView(_ nsView: NSTextField, context: Context) {
+        func updateNSView(_: NSView, context: Context) {
             context.coordinator.onSubmit = onSubmit
             context.coordinator.vocabulary = vocabulary
-            (nsView as? AutoFocusTextField)?.onMacroKey = onMacroKey
-            if let field = nsView as? AutoFocusTextField {
+            context.coordinator.ghostHintEnabled = ghostHint
+            if let field = context.coordinator.field as? AutoFocusTextField {
+                field.onMacroKey = onMacroKey
                 field.spellChecking = spellChecking
                 field.applyTextEditingPolicy() // re-apply if toggled while focused
             }
+            if !ghostHint { context.coordinator.hideGhost() }
         }
 
         @MainActor
@@ -128,6 +159,9 @@ public struct CommandInputView: View {
             var onSubmit: (String) -> Void
             var vocabulary: (@MainActor () -> CompletionVocabulary)?
             weak var field: NSTextField?
+            weak var ghost: NSTextField?
+            /// As-you-type ghost hint on/off (the Settings toggle).
+            var ghostHintEnabled = true
 
             private var history = CommandHistory()
 
@@ -156,6 +190,7 @@ public struct CommandInputView: View {
                 history.resetNavigation()
                 cycling = false
                 candidates = []
+                updateGhost() // refresh the as-you-type hint for the new text
             }
 
             func control(
@@ -185,13 +220,19 @@ public struct CommandInputView: View {
                 case #selector(NSResponder.insertBacktab(_:)):
                     cycleCompletion(forward: false)
                     return true
+                case #selector(NSResponder.moveRight(_:)):
+                    return acceptGhostOnRightArrow()
                 case #selector(NSResponder.cancelOperation(_:)):
+                    hideGhost()
                     return endCycle()
                 default:
-                    // Any other editing/navigation key ends the cycle but is
-                    // otherwise handled normally by the field editor.
+                    // Any other editing/navigation key ends the cycle and drops
+                    // the ghost (the caret may have moved off the end); the field
+                    // editor still handles the key normally. Real typing re-shows
+                    // the ghost via controlTextDidChange.
                     cycling = false
                     candidates = []
+                    hideGhost()
                     return false
                 }
             }
@@ -274,6 +315,7 @@ public struct CommandInputView: View {
             /// edits don't fire `controlTextDidChange`, so this won't clobber
             /// cycle / navigation state.
             private func setText(_ text: String) {
+                hideGhost() // every programmatic edit clears the hint
                 let end = (text as NSString).length
                 if let editor {
                     editor.string = text
@@ -281,6 +323,68 @@ public struct CommandInputView: View {
                 } else {
                     field?.stringValue = text
                 }
+            }
+
+            // MARK: - As-you-type ghost hint (#13)
+
+            func hideGhost() {
+                ghost?.isHidden = true
+            }
+
+            /// Right-arrow at end-of-line accepts a shown ghost; otherwise it's a
+            /// normal caret move (return false → the field editor handles it).
+            private func acceptGhostOnRightArrow() -> Bool {
+                guard ghost?.isHidden == false, caretIsAtEnd else {
+                    hideGhost()
+                    return false
+                }
+                acceptGhost()
+                return true
+            }
+
+            /// Accept the ghost: fill the field with the best current-word
+            /// completion (same as the first Tab), in the match's proper casing.
+            private func acceptGhost() {
+                guard let best = buildCandidates()?.first else { hideGhost(); return }
+                setText(best) // setText hides the ghost
+            }
+
+            /// Recompute + position the grey hint after the caret, or hide it.
+            /// Shows only when: enabled, the caret is at end-of-line, the current
+            /// word has a completion, and there's room to the right of the caret.
+            private func updateGhost() {
+                guard ghostHintEnabled, let ghost, let field, let vocabulary, caretIsAtEnd else {
+                    hideGhost(); return
+                }
+                let line = currentText
+                guard !line.isEmpty,
+                      let (word, _) = InputCompletion.currentWord(in: line, caret: line.count),
+                      !word.isEmpty,
+                      let suffix = vocabulary().ghostSuffix(
+                          forWord: word,
+                          isFirstWord: InputCompletion.isFirstWord(in: line, caret: line.count)
+                      ),
+                      let editor = field.currentEditor() as? NSTextView,
+                      let container = ghost.superview, let window = container.window
+                else { hideGhost(); return }
+                // The caret rect (field-editor geometry → container coords) so the
+                // hint sits exactly after the typed text, insets included.
+                let caret = (line as NSString).length
+                let screen = editor.firstRect(
+                    forCharacterRange: NSRange(location: caret, length: 0),
+                    actualRange: nil
+                )
+                let originX = container.convert(window.convertFromScreen(screen), from: nil).minX
+                guard originX.isFinite, originX < container.bounds.maxX - 12 else { hideGhost(); return }
+                ghost.stringValue = suffix
+                let width = Swift.min(ghost.intrinsicContentSize.width, container.bounds.maxX - originX)
+                ghost.frame = CGRect(
+                    x: originX,
+                    y: field.frame.minY,
+                    width: width,
+                    height: field.frame.height
+                )
+                ghost.isHidden = false
             }
         }
     }
