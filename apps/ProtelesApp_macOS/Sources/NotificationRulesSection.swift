@@ -123,8 +123,11 @@ struct NotificationRulesSection: View {
                 TextField(draftKind == .channel ? "channel name" : "text to match", text: $draftText)
                     .onSubmit(addDraft)
             } else if draftKind == .hpBelow {
-                Stepper("\(draftPercent)%", value: $draftPercent, in: 1...99, step: 5)
-                    .fixedSize()
+                // A compact value label + bare stepper arrows — a string-label
+                // Stepper is wide and pushed "Add" off the right edge.
+                Text("\(draftPercent)%").monospacedDigit().frame(width: 40, alignment: .leading)
+                Stepper("", value: $draftPercent, in: 1...99, step: 5)
+                    .labelsHidden().fixedSize()
             }
             Spacer()
             Button("Add", action: addDraft).disabled(!canAdd)
