@@ -41,12 +41,23 @@ public extension SessionController {
         }
     }
 
-    /// Quest-ready check off the published S&D model: fire on the
-    /// `canRequestQuest` `false → true` edge. Gated to S&D's bridge JSON.
+    /// Run GMCP-driven notification checks after a packet is applied. One entry
+    /// point (called unconditionally) so `dispatchGMCP` stays branch-light; the
+    /// per-package gating lives here.
+    func checkGMCPNotifications(package: String, json: String) async {
+        await checkHPNotifications()
+        if package.lowercased() == "comm.quest" { checkQuestReady(json) }
+    }
+
+    /// Quest-ready from Aardwolf's `comm.quest` GMCP — fire on the not-ready →
+    /// ready edge. Pure GMCP, no S&D dependency (S&D reads the same packet). The
+    /// "ready" conditions come from the reference's `quest_status_gmcp`.
     func checkQuestReady(_ json: String) {
-        guard notificationsEnabled, json.contains("can_request_quest"),
-              let model = SearchAndDestroyModel.decode(json) else { return }
-        let ready = model.canRequestQuest
+        guard notificationsEnabled, notificationMatcher.hasQuestReadyRule,
+              let data = json.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let action = object["action"] as? String else { return }
+        let ready = NotificationMatcher.commQuestIsReady(action: action, status: object["status"] as? String)
         defer { lastQuestReady = ready }
         guard ready, !lastQuestReady,
               let note = notificationMatcher.questReadyNotification(becameReady: true) else { return }

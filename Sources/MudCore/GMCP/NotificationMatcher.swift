@@ -100,8 +100,28 @@ public struct NotificationMatcher: Sendable, Equatable {
         }
     }
 
+    /// Whether any enabled `.questReady` rule exists — lets the `comm.quest`
+    /// GMCP path skip work when there's nothing to fire.
+    public var hasQuestReadyRule: Bool {
+        rules.contains { rule in
+            guard rule.enabled, case .questReady = rule.trigger else { return false }
+            return true
+        }
+    }
+
+    /// Whether an Aardwolf `comm.quest` GMCP message means "you can request a new
+    /// quest now". Mirrors the reference's `quest_status_gmcp` (S&D) which sets
+    /// `qstat = "0"` on `action == "ready"`/`"timeout"`, or `action == "status"`
+    /// with `status == "ready"`. Case-insensitive. No S&D dependency — pure GMCP.
+    public static func commQuestIsReady(action: String?, status: String?) -> Bool {
+        let action = action?.lowercased()
+        let status = status?.lowercased()
+        if action == "ready" || action == "timeout" { return true }
+        return action == "status" && status == "ready"
+    }
+
     /// A quest-ready notification if the player just became able to request one
-    /// (the caller detects the `false → true` edge from the S&D quest tracker).
+    /// (the caller detects the `false → true` edge from `comm.quest` GMCP).
     public func questReadyNotification(becameReady: Bool) -> ProtelesNotification? {
         guard becameReady else { return nil }
         for rule in rules where rule.enabled {

@@ -83,10 +83,10 @@ extension SessionController {
         latestGMCPByPackage[message.package.lowercased()] = message.json
         await gmcpState.apply(message)
         if let chatLine = await chatStore.ingest(message) { await notifyForChat(chatLine) }
-        // Edge-triggered low-HP notifications (phase-3). Called unconditionally —
-        // it self-gates on `hasHPRules` + vitals presence, so it's a cheap no-op
-        // unless an HP rule exists and the state changed.
-        await checkHPNotifications()
+        // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals
+        // update) + quest-ready (comm.quest). Self-gates on the relevant rules,
+        // so it's a cheap no-op when none exist.
+        await checkGMCPNotifications(package: message.package, json: message.json)
         if let mapper {
             for packet in await mapper.ingest(package: message.package, json: message.json) {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
