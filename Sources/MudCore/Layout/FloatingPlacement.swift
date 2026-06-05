@@ -31,15 +31,23 @@ public struct FloatingPlacement: Codable, Sendable, Equatable {
     public var offset: CGSize
     /// Explicit size, or `nil` to hug content.
     public var size: CGSize?
+    /// If set, this window is positioned flush **below** that floating sibling
+    /// (right-aligned to it), tracking its size/position — used for default
+    /// stacks like Character under the Text Map. Cleared once the user drags
+    /// the window (it becomes a free `anchor`/`offset` placement). A missing key
+    /// in older persisted data decodes as `nil`.
+    public var stackBelow: PanelKind?
 
     public init(
         anchor: FloatingAnchor = .topTrailing,
         offset: CGSize = CGSize(width: 12, height: 12),
-        size: CGSize? = nil
+        size: CGSize? = nil,
+        stackBelow: PanelKind? = nil
     ) {
         self.anchor = anchor
         self.offset = offset
         self.size = size
+        self.stackBelow = stackBelow
     }
 }
 
