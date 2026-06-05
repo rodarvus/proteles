@@ -74,7 +74,9 @@ public struct FloatingMiniWindow<Content: View>: View {
         .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
         .contentShape(Rectangle())
         .gesture(
-            DragGesture()
+            // Global space: the window is moved by `.offset`, so a `.local` drag
+            // would feed back on itself (jitter + tiny travel — GH follow-up).
+            DragGesture(coordinateSpace: .global)
                 .updating($dragTranslation) { value, state, _ in state = value.translation }
                 .onEnded { onMoved($0.translation) }
         )
@@ -100,7 +102,7 @@ public struct FloatingMiniWindow<Content: View>: View {
             .opacity(hovering ? 1 : 0)
             .contentShape(Rectangle())
             .gesture(
-                DragGesture()
+                DragGesture(coordinateSpace: .global)
                     .onChanged { value in
                         let base = resizeBase ?? explicitSize ?? measured
                         if resizeBase == nil { resizeBase = base }

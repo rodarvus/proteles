@@ -117,27 +117,34 @@ public enum FloatingSnap {
         for sibling in siblings {
             let xOverlap = rect.minX < sibling.maxX && rect.maxX > sibling.minX
             let yOverlap = rect.minY < sibling.maxY && rect.maxY > sibling.minY
-            if xOverlap { // stack below / above (share the sibling's x)
+            if xOverlap { // stack below / above — align x to the nearer L/R edge
+                let alignedX = nearer(rect.minX, to: sibling.minX, or: sibling.maxX - size.width)
                 consider(
-                    CGRect(origin: CGPoint(x: sibling.minX, y: sibling.maxY + gap), size: size),
+                    CGRect(origin: CGPoint(x: alignedX, y: sibling.maxY + gap), size: size),
                     abs(rect.minY - (sibling.maxY + gap))
                 )
                 consider(
-                    CGRect(origin: CGPoint(x: sibling.minX, y: sibling.minY - gap - size.height), size: size),
+                    CGRect(origin: CGPoint(x: alignedX, y: sibling.minY - gap - size.height), size: size),
                     abs(rect.maxY - (sibling.minY - gap))
                 )
             }
-            if yOverlap { // stack right / left (share the sibling's y)
+            if yOverlap { // stack right / left — align y to the nearer T/B edge
+                let alignedY = nearer(rect.minY, to: sibling.minY, or: sibling.maxY - size.height)
                 consider(
-                    CGRect(origin: CGPoint(x: sibling.maxX + gap, y: sibling.minY), size: size),
+                    CGRect(origin: CGPoint(x: sibling.maxX + gap, y: alignedY), size: size),
                     abs(rect.minX - (sibling.maxX + gap))
                 )
                 consider(
-                    CGRect(origin: CGPoint(x: sibling.minX - gap - size.width, y: sibling.minY), size: size),
+                    CGRect(origin: CGPoint(x: sibling.minX - gap - size.width, y: alignedY), size: size),
                     abs(rect.maxX - (sibling.minX - gap))
                 )
             }
         }
         return best?.rect
+    }
+
+    /// Whichever of the two candidates is closer to `value`.
+    private static func nearer(_ value: CGFloat, to first: CGFloat, or second: CGFloat) -> CGFloat {
+        abs(value - first) <= abs(value - second) ? first : second
     }
 }

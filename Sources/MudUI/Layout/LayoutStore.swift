@@ -210,10 +210,23 @@ public final class LayoutStore {
     public func float(_ kind: PanelKind, at placement: FloatingPlacement? = nil) {
         guard kind.isClosable, floating[kind] == nil else { return }
         rememberSlot(kind)
-        floating[kind] = placement ?? Self.defaultPlacement(for: kind)
+        floating[kind] = placement ?? freshPlacement(for: kind)
         detached.remove(kind)
         layout = layout.removing(kind)
         save()
+    }
+
+    /// A starting placement for a newly-floated panel that avoids piling onto an
+    /// occupied corner: pick the first corner no other floating panel anchors to
+    /// (so a Float lands in free space — e.g. opposite the Text Map — rather than
+    /// stacking on top of it). Falls back to top-right when all corners are used.
+    private func freshPlacement(for kind: PanelKind) -> FloatingPlacement {
+        let used = Set(floating.values.map(\.anchor))
+        let preferred: [FloatingAnchor] = [.topTrailing, .topLeading, .bottomTrailing, .bottomLeading]
+        let anchor = preferred.first { !used.contains($0) } ?? .topTrailing
+        var placement = Self.defaultPlacement(for: kind)
+        placement.anchor = anchor
+        return placement
     }
 
     /// Update a floating panel's placement after a drag/snap or a resize.
