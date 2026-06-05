@@ -109,7 +109,6 @@ public struct CommandInputView: View {
             // Stable id so the output view can find + refocus the command field
             // when the user types after selecting text (always-focused input).
             field.identifier = NSUserInterfaceItemIdentifier("proteles.command")
-            field.placeholderString = "Send command…"
             field.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             field.isBordered = false
             field.drawsBackground = false
