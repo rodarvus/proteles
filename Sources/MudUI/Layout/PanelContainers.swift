@@ -105,7 +105,9 @@ struct SplitContainer: View {
     }
 
     private func dragGesture(index: Int, total: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        // Global space: the divider moves as the fractions update, so a `.local`
+        // drag would feed back on itself and tear/jerk while resizing a split.
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .onChanged { value in
                 let base = dragBase ?? items.map(\.fraction)
                 if dragBase == nil { dragBase = base }
