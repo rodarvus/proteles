@@ -97,6 +97,11 @@ public extension GMCPMessage {
             // environments table — see Mapper.seedTerrainPaletteFromStore).
             "request sectors",
             "request quest",
+            // `group on` *subscribes* to live group pushes (joins/leaves/vitals);
+            // `request group` alone is only a one-time snapshot, so without this
+            // the group panel never updates after you join (matches the reference
+            // group monitor's `Send_GMCP_Packet("group on")`).
+            "group on",
             "request group"
         ]
         return payloads.map { encode(payload: $0) }
