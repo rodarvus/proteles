@@ -22,15 +22,21 @@ struct DetachedPanelWindow: View {
     let scripts: ScriptsModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.controlActiveState) private var controlActiveState
     @State private var gmcp = GMCPState()
 
     var body: some View {
         content
             .frame(minWidth: 280, minHeight: 220)
-            // Float above the main window so a torn-out panel stays visible even
-            // when the main Proteles window has focus (SwiftUI's .windowLevel is
-            // macOS 15+, so reach the NSWindow directly).
-            .background(WindowAccessor { $0.level = .floating })
+            // Float above the *main Proteles window* while Proteles is active, but
+            // drop to the normal level when Proteles is in the background so a
+            // torn-out panel never sits on top of OTHER apps (GH #36). Driving the
+            // NSWindow level off `controlActiveState` is reaction-free vs. AppKit
+            // notifications; SwiftUI's `.windowLevel` is macOS 15+, so we reach the
+            // NSWindow directly.
+            .background(WindowLevelAccessor(
+                level: controlActiveState == .inactive ? .normal : .floating
+            ))
             .navigationTitle(kind.title)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -71,18 +77,22 @@ struct DetachedPanelWindow: View {
     }
 }
 
-/// Reaches the hosting `NSWindow` so we can apply AppKit-only configuration
-/// (e.g. window level) not yet exposed by SwiftUI on macOS 14.
-private struct WindowAccessor: NSViewRepresentable {
-    let configure: (NSWindow) -> Void
+/// Reaches the hosting `NSWindow` to set its level (not exposed by SwiftUI on
+/// macOS 14). Re-applied whenever `level` changes — e.g. as the app activates or
+/// deactivates — so a detached panel floats above the main window only while
+/// Proteles is frontmost (GH #36).
+private struct WindowLevelAccessor: NSViewRepresentable {
+    let level: NSWindow.Level
 
     func makeNSView(context _: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { if let window = view.window { configure(window) } }
+        let level = level
+        DispatchQueue.main.async { view.window?.level = level }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context _: Context) {
-        DispatchQueue.main.async { if let window = nsView.window { configure(window) } }
+        let level = level
+        DispatchQueue.main.async { nsView.window?.level = level }
     }
 }
