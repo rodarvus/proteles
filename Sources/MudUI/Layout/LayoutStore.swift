@@ -35,6 +35,12 @@ public final class LayoutStore {
 
     public private(set) var dropHighlight: DropHighlight?
 
+    /// Safety-net timer that clears a stuck drop preview (GH #37). SwiftUI can
+    /// drop the final `dropExited` when a drag ends off every target, orphaning
+    /// the highlight ("the blue box"). While a drag is live, dragging-updated
+    /// events keep re-arming this; it only fires once the drag truly stops.
+    private var highlightWatchdog: Timer?
+
     /// Where each hidden/detached panel last sat in the dock, so re-showing it
     /// restores its position instead of dumping it at the bottom. Session-scoped
     /// (the persisted `layout` already captures positions across launches).
@@ -262,6 +268,7 @@ public final class LayoutStore {
     public func setDropHighlight(_ target: PanelKind, _ zone: DropZone) {
         let next = DropHighlight(target: target, zone: zone)
         if dropHighlight != next { dropHighlight = next }
+        armHighlightWatchdog()
     }
 
     /// Clear the drop preview. With a `target`, only clears if that target is
@@ -269,7 +276,21 @@ public final class LayoutStore {
     /// drag already left can't wipe the panel it's now over).
     public func clearDropHighlight(forTarget target: PanelKind? = nil) {
         if let target, dropHighlight?.target != target { return }
+        highlightWatchdog?.invalidate()
+        highlightWatchdog = nil
         dropHighlight = nil
+    }
+
+    /// (Re)arm the safety-net timer. Each drag-update call pushes it out, so it
+    /// fires only after dragging-updated events stop (the drag ended without a
+    /// clearing `dropExited`/`performDrop`), clearing any stuck preview. Worst
+    /// case — if SwiftUI sent no periodic updates during a long stationary hover
+    /// — the preview hides after the interval; the drop itself is unaffected.
+    private func armHighlightWatchdog() {
+        highlightWatchdog?.invalidate()
+        highlightWatchdog = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.clearDropHighlight() }
+        }
     }
 
     private func save() {
