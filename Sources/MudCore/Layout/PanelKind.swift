@@ -81,6 +81,17 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         self != .output
     }
 
+    /// As a floating miniwindow (GH #33), does this panel have a compact
+    /// intrinsic size to hug (Text Map, Commands), or is it a fill-style panel
+    /// (Channels, Map, S&D, Character) that needs an explicit initial size so it
+    /// doesn't collapse to nothing?
+    public var floatingHugsContent: Bool {
+        switch self {
+        case .asciiMap, .commandBar: true
+        default: false
+        }
+    }
+
     /// Panels a user can toggle from the Panels menu (everything but `output`).
     /// `help` and `levels` are excluded — they're dedicated windows now, not dock
     /// tiles (the cases remain so older saved layouts that docked them still
