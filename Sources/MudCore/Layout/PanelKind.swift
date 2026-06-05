@@ -87,7 +87,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     /// doesn't collapse to nothing?
     public var floatingHugsContent: Bool {
         switch self {
-        case .asciiMap, .commandBar: true
+        case .asciiMap, .commandBar, .info: true
         default: false
         }
     }

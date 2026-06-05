@@ -187,7 +187,8 @@ public struct FloatingPanelLayer: View {
         _ placement: FloatingPlacement,
         _ container: CGSize
     ) -> some View {
-        FloatingMiniWindow(
+        let resolved = effective(kind, placement, container)
+        return FloatingMiniWindow(
             kind: kind,
             hugContent: kind.floatingHugsContent,
             explicitSize: placement.size,
@@ -202,8 +203,29 @@ public struct FloatingPanelLayer: View {
             onClose: { store.toggle(kind) },
             content: { content(kind) }
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: placement.anchor.alignment)
-        .offset(restingOffset(placement))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: resolved.anchor.alignment)
+        .offset(restingOffset(resolved))
+    }
+
+    /// Resolve a `stackBelow` placement into a concrete anchor/offset positioned
+    /// flush below that sibling (right-aligned to it), tracking its live rect.
+    /// Returns the placement unchanged when it isn't stacked.
+    private func effective(
+        _ kind: PanelKind,
+        _ placement: FloatingPlacement,
+        _ container: CGSize
+    ) -> FloatingPlacement {
+        guard let below = placement.stackBelow, below != kind,
+              let belowPlacement = store.floating[below]
+        else { return placement }
+        let belowRect = rect(below, belowPlacement, container)
+        var resolved = placement
+        resolved.anchor = .topTrailing
+        resolved.offset = CGSize(
+            width: Swift.max(0, container.width - belowRect.maxX),
+            height: belowRect.maxY + 8
+        )
+        return resolved
     }
 
     /// The signed inward offset for `.offset`, given the anchor corner.
@@ -228,15 +250,18 @@ public struct FloatingPanelLayer: View {
         _ container: CGSize,
         _ translation: CGSize
     ) {
-        let moved = rect(kind, placement, container)
+        let moved = rect(kind, effective(kind, placement, container), container)
             .offsetBy(dx: translation.width, dy: translation.height)
         let siblings = kinds
             .filter { $0 != kind }
-            .compactMap { other in store.floating[other].map { rect(other, $0, container) } }
+            .compactMap { other in
+                store.floating[other].map { rect(other, effective(other, $0, container), container) }
+            }
         let snapped = FloatingSnap.snap(rect: moved, in: container, siblings: siblings)
         var next = placement
         next.anchor = snapped.anchor
         next.offset = snapped.offset
+        next.stackBelow = nil // dragging frees a stacked window into a free placement
         store.setFloatingPlacement(kind, next)
     }
 }

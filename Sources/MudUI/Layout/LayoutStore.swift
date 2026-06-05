@@ -25,7 +25,9 @@ public final class LayoutStore {
     /// Panels that float by default on a fresh install (the compact Text Map
     /// reads best as a top-right HUD rather than a dock tile).
     public static let defaultFloating: [PanelKind: FloatingPlacement] = [
-        .asciiMap: FloatingPlacement(anchor: .topTrailing)
+        .asciiMap: FloatingPlacement(anchor: .topTrailing),
+        // Character stat block floats by default, snapped under the Text Map.
+        .info: FloatingPlacement(anchor: .topTrailing, stackBelow: .asciiMap)
     ]
 
     /// Decode the persisted placement map (new format) from `data`, or nil.
