@@ -100,17 +100,19 @@ public struct InfoPanel: View {
         (Text("\(pad(label)) : [ ").foregroundStyle(.secondary)
             + Text(rightAlign(value)).foregroundStyle(color)
             + Text(" ]").foregroundStyle(.secondary))
-            .font(.system(.callout, design: .monospaced))
+            .font(.system(.footnote, design: .monospaced))
     }
 
-    /// The foe row: the target name (left-aligned, since it's not a number),
-    /// shown red while a foe is engaged and dimmed/empty otherwise.
+    /// The foe row: no brackets, and the name is **truncated** (…) rather than
+    /// allowed to widen the (content-hugging) window when a long-named foe is
+    /// engaged. Red while engaged, empty otherwise.
     private func foeLine(_ enemy: String?) -> some View {
-        let active = !(enemy ?? "").isEmpty
-        return (Text("\(pad("Foe")) : [ ").foregroundStyle(.secondary)
-            + Text(active ? enemy! : "").foregroundStyle(active ? Color.red : Color.secondary)
-            + Text(" ]").foregroundStyle(.secondary))
-            .font(.system(.callout, design: .monospaced))
+        let name = enemy ?? ""
+        let active = !name.isEmpty
+        let shown = name.count > 13 ? name.prefix(12) + "…" : name[...]
+        return (Text("\(pad("Foe")) : ").foregroundStyle(.secondary)
+            + Text(String(shown)).foregroundStyle(active ? Color.red : Color.secondary))
+            .font(.system(.footnote, design: .monospaced))
     }
 
     // MARK: - Formatting

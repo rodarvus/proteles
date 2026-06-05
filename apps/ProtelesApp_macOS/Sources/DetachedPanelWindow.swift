@@ -69,6 +69,7 @@ struct DetachedPanelWindow: View {
         case .channels: ChannelsView(model: chat)
         case .hunt: SearchAndDestroyPanelView(model: snd)
         case .info: InfoPanel(state: gmcp)
+        case .group: GroupPanel(state: gmcp)
         case .help: HelpPanelView(model: help)
         case .levels: LevelDBPanelView(model: levels)
         case .commandBar: CommandBarView(scripts: scripts)

@@ -512,6 +512,7 @@ extension ContentView {
         case .channels: AnyView(ChannelsView(model: chat))
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
         case .info: AnyView(InfoPanel(state: gmcp))
+        case .group: AnyView(GroupPanel(state: gmcp))
         case .help: AnyView(HelpPanelView(model: help))
         case .levels: AnyView(LevelDBPanelView(model: levels))
         case .commandBar: AnyView(CommandBarView(scripts: scripts))
