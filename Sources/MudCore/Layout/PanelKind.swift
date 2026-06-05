@@ -18,8 +18,10 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case channels
     /// Search-and-Destroy targets/navigation.
     case hunt
-    /// Character summary (level/class/align/worth) + group/party members.
+    /// Character summary (stats / resources / vitals / foe).
     case info
+    /// Group / party monitor (per-member vitals + quest).
+    case group
     /// In-game help reader (captured `help <topic>` with clickable cross-refs).
     case help
     /// Native leveldb reporting (live HUD / tables / analytics / journey).
@@ -40,6 +42,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "Channels"
         case .hunt: "Search & Destroy"
         case .info: "Character"
+        case .group: "Group"
         case .help: "Help"
         case .levels: "Levels"
         case .commandBar: "Commands"
@@ -55,6 +58,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "Chat"
         case .hunt: "S&D"
         case .info: "Char"
+        case .group: "Group"
         case .help: "Help"
         case .levels: "Levels"
         case .commandBar: "Cmds"
@@ -70,6 +74,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .channels: "bubble.left.and.bubble.right"
         case .hunt: "scope"
         case .info: "person.text.rectangle"
+        case .group: "person.3"
         case .help: "questionmark.circle"
         case .levels: "chart.line.uptrend.xyaxis"
         case .commandBar: "rectangle.grid.2x2"
@@ -87,7 +92,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     /// doesn't collapse to nothing?
     public var floatingHugsContent: Bool {
         switch self {
-        case .asciiMap, .commandBar, .info: true
+        case .asciiMap, .commandBar, .info, .group: true
         default: false
         }
     }

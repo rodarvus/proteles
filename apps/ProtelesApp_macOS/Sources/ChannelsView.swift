@@ -23,11 +23,13 @@ struct ChannelsView: View {
             MudOutputView(
                 store: model.renderStore,
                 palette: Theme.with(id: themeID).palette,
-                fontSize: CGFloat(outputFontSize),
+                // Two points smaller than the main game window (Channels only).
+                fontSize: CGFloat(max(8, outputFontSize - 2)),
                 fontName: outputFontName,
                 showsLiveTail: true
             )
             .id(model.renderToken)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task {
             model.setTimestamps(show: showTimestamps, seconds: timestampSeconds)
