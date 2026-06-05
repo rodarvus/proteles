@@ -12,7 +12,7 @@ the first; `scripts/release.sh` runs the build→sign→notarize→staple→veri
 The build-out phases are **done**; we are now **polishing + debugging from live
 play**. The remaining gate to **1.0** is release engineering — an auto-updater
 (#23, Sparkle) is the last open item; notarization + crash reporting are landed.
-~1237 tests, four gates green. See **PLAN.md §0** for what works
+~1238 tests, four gates green. See **PLAN.md §0** for what works
 and the **decision log (§12, D-01…D-97)** for history.
 
 ## Backlog — GitHub Issues are the source of truth
@@ -27,6 +27,10 @@ clear body + a source-doc pointer; labels in use: `bug`, `enhancement`,
 
 - **PLAN.md** keeps the *narrative* (architecture, what's built, decisions D-NN)
   but no longer enumerates the backlog — it points here.
+- **`docs/DESIGN.md`** is the **UI/UX north-star** (what Proteles should feel
+  like, ranked design principles, per-surface intent). UI/UX is the primary
+  remaining gate to 1.0; design/polish work is checked against it and tracked
+  under the GitHub `ux` label.
 - **`docs/KNOWN_ISSUES.md`** is a historical record (the stub audit, resolved
   items); its actionable entries were migrated to Issues. Don't add new backlog
   there.
@@ -124,8 +128,9 @@ read-compatible with the MUSHclient `Aardwolf.db`.
 The app signs with a stable self-signed dev identity **`Proteles Dev`**. Run once
 on a new machine: `./scripts/create-dev-signing-cert.sh`. Without it, `xcodebuild`
 falls back to ad-hoc signing (no stable code identity), so macOS re-prompts for
-Keychain access on every build. Releases will use a real Developer ID. (CI only
-runs `swift build`/`swift test`, so it never needs the cert.)
+Keychain access on every build. Releases use a real **Developer ID Application**
+cert (since `v0.4.5`) via `scripts/release.sh`. (CI only runs `swift build`/`swift
+test`, so it never needs either cert.)
 
 ## Definition of done — the four gates
 
@@ -153,7 +158,10 @@ Before committing, ALL must pass (from repo root):
 ### Release flow
 Bump `apps/ProtelesApp_macOS/project.yml` (`CFBundleShortVersionString` +
 `MARKETING_VERSION`; `MudCore.version` reads it at runtime) → `xcodegen generate`
-→ Release build → `ditto -c -k --keepParent Proteles.app /tmp/Proteles-<ver>.zip`
-→ commit + tag `v<ver>` → `gh release create v<ver> <zip> --title … --notes …`.
-Releases ship a non-notarized build (`docs/NOTARIZATION.md` is the eventual
-Developer-ID workflow).
+→ run **`scripts/release.sh`** (`PROTELES_SIGN_IDENTITY` + `PROTELES_NOTARY_PROFILE`):
+clean Release build → Developer-ID sign (hardened runtime + secure timestamp) →
+`notarytool submit --wait` → staple → `spctl` verify → zipped artifact → commit +
+tag `v<ver>` → `gh release create`. **Releases now ship a notarized Developer-ID
+build** (since `v0.4.5`); `docs/NOTARIZATION.md` documents the flow. The signing
+cert + `proteles-notary` keychain profile live only on the release machine — never
+commit notary credentials.

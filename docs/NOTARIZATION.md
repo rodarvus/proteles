@@ -1,13 +1,13 @@
 # Notarisation — what we need + how it changes the workflow
 
-> Phase 8 (v1.0 release) work, GH #22. Status: **tooling ready, awaiting Apple
-> Developer Program enrolment.** The release flow is implemented in
+> Phase 8 (v1.0 release) work, GH #22. Status: **DONE — live since `v0.4.5`**,
+> the first notarized Developer-ID release. The release flow is implemented in
 > **`scripts/release.sh`** (build → Developer-ID sign → notarise → staple →
-> package → verify); it's push-button the moment a `Developer ID Application`
-> cert + notary credentials exist on the release machine. Until then, releases
-> ship signed with the local self-signed identity (`Proteles Dev`) and are
-> **not** notarised, so Gatekeeper warns on first launch (right-click ▸ Open, or
-> `xattr -dr com.apple.quarantine …`).
+> package → verify) and runs with `PROTELES_SIGN_IDENTITY` (the `Developer ID
+> Application` cert) + `PROTELES_NOTARY_PROFILE` (a `notarytool` keychain
+> profile) on the release machine. Released builds now pass Gatekeeper cleanly
+> (download, unzip, drag to Applications — no right-click-to-open). The notes
+> below are kept as the reference for the setup + workflow.
 
 ## TL;DR
 
