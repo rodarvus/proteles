@@ -79,4 +79,21 @@ struct FloatingPlacementTests {
         #expect(result.anchor == .topLeading)
         #expect(result.offset == CGSize(width: 100, height: 208))
     }
+
+    @Test("Stacking below aligns to the nearer edge (right, not always left)")
+    func snapStackBelowAlignsNearerEdge() {
+        let sibling = CGRect(x: 100, y: 100, width: 300, height: 100) // right edge 400
+        // A narrow window dropped just below + near the sibling's RIGHT edge.
+        let dragged = CGRect(x: 290, y: 205, width: 100, height: 80)
+        let result = FloatingSnap.snap(
+            rect: dragged,
+            in: container,
+            siblings: [sibling],
+            margin: 10,
+            threshold: 18,
+            gap: 8
+        )
+        // Right-aligned: x = 400 - 100 = 300 (not 100). topLeading → offset.x == 300.
+        #expect(result.offset.width == 300)
+    }
 }
