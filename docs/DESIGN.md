@@ -93,27 +93,61 @@ The HUD is read in the corner of the eye.
   pulsing, no attention-grabs. Notifications are suppressed while focused by
   default.
 
-### 3.4 One window, many panels — your arrangement, remembered
-MUDs are information-dense, and power users stack plugin miniwindows. We **allow**
-that, but the *default* is calm: **start with a single output panel**, and let the
-user add more.
-- **Calm default, extensible + customisable.** Out of the box: one resizable
-  output window. Adding panels is an easy, obvious step — a comfortable target is
-  **2–3 panels visible at once** without it feeling cramped.
-- **A tiled dock first; floating is a deliberate, first-class capability** (not an
-  afterthought). The user can **pop a panel (or a plugin miniwindow) out** of the
-  dock and then choose to **anchor it to an edge** of their choosing *or* let it
-  **float freely**. Pop-out → anchor/float must be obvious, reversible, and
-  remembered. *(Today's floating-window implementation is weak and is a priority
-  rework — see the `ux` backlog.)*
-- **Plugin miniwindows are panels too.** A MUSHclient-style miniwindow becomes a
-  native pop-out-able panel, dockable or floating like any other — not a
-  pixel-copied overlay.
-- **Layout is the user's, and it persists** per world. Presets + Reset Layout
-  mean experimenting is safe.
-- **Panels are glance surfaces, not apps.** A panel shows one thing well (map,
-  group, channels, a plugin miniwindow). Deep interaction (editing scripts,
-  managing plugins) belongs in a dedicated window, not crammed into a dock tile.
+### 3.4 Windows and panels — your arrangement, remembered
+
+#### Vocabulary (we use these terms precisely)
+- **Main window** - the single primary window: the output, the docked panels, the
+  command input, and the vitals bar.
+- **Panel** - a content surface (Output, Map, Text Map, Channels, Commands, S&D,
+  Character/Group, plus plugin miniwindows). A panel has a *placement*:
+  - **Docked** - tiled inside the main window's dock (split/tabbed).
+  - **Floating miniwindow** - lifted out as a small, borderless, content-hugging
+    overlay that hugs its content, anchors to a corner/edge, and can stack against
+    other miniwindows. This is the "Text Map" style. *(Today only the Text Map can
+    do this, and only fixed top-right - that is the gap.)*
+  - **Detached window** - the panel in its own standard titled window, for
+    multi-monitor. This is the "Help-window-looking" style; useful, but it is NOT
+    what most pop-outs should default to.
+- **The dock** - the tiled, splittable region of the main window holding docked
+  panels. It can hold panels side by side (left/right) or stacked, via splits.
+- **Feature window** - a standalone top-level window that is *not* a panel:
+  Help, Levels, Plugins, Scripts, Worlds, Settings. Full standard chrome,
+  app-managed, opened from menus. (These are "apps within the app.")
+- **Plugin miniwindow** - a MUSHclient-style plugin surface, treated as a panel
+  (dockable or floating), never a pixel-copied overlay.
+
+#### Principles
+- **Calm default, extensible.** Out of the box: one main window with a single
+  Output panel. Adding panels is an easy, obvious step; 2-3 visible panels should
+  feel comfortable, not cramped.
+- **Multiple docked panels by placement, not configuration.** The dock already
+  supports splits; the user should be able to put one panel on the left and one
+  on the right, or two on the right, just by **moving a panel** to that edge. The
+  default is one; arranging more is a drag, not a settings dialog.
+- **Floating miniwindows are first-class and economical.** A pop-out defaults to a
+  *floating miniwindow* (the Text Map style), not a chrome-heavy detached window.
+  It is **sized to what it needs** - dynamically computed minimum, not fixed:
+  Commands asks for only enough to show its buttons; Channels wants as much as it
+  can get. Each miniwindow **stores its required width/height** and is economical.
+- **Anchoring + stacking.** Miniwindows **anchor to any corner**, and can anchor
+  **relative to each other** (above / below / left / right) so they **auto-stack**
+  cleanly instead of overlapping. Anchors are obvious, reversible, remembered.
+- **Z-order that behaves.** A floating miniwindow stays above the *main window*
+  while Proteles is active, but must **not** sit above *other apps* when Proteles
+  is in the background (today's detached windows wrongly stay in front across an
+  app switch - a bug to fix).
+- **No drag artifacts.** Re-docking/moving panels must not leave stray drop-zone
+  rectangles ("the blue box") behind - the drag affordance appears and clears
+  cleanly.
+- **Layout is the user's, and it persists** per world. Presets + Reset Layout make
+  experimenting safe.
+- **Panels are glance surfaces, not apps.** A panel shows one thing well. Deep
+  interaction (editing scripts, managing plugins) belongs in a *feature window*,
+  not crammed into a dock tile.
+
+*The whole windowing story (floating miniwindows, anchoring/stacking, economical
+sizing, multi-panel docking, the blue-box and z-order bugs) is the top `ux`
+priority - tracked in the GitHub `ux` backlog.*
 
 ### 3.5 Power, made discoverable
 Scripting/plugins are first-class, but the depth shouldn't be a cliff.
