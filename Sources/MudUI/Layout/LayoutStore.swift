@@ -116,21 +116,6 @@ public final class LayoutStore {
         }
         presets = UserDefaults.standard.data(forKey: presetsKey)
             .flatMap { try? JSONDecoder().decode([LayoutPreset].self, from: $0) } ?? []
-        migrateFloatCharacter(persistenceKey: persistenceKey)
-    }
-
-    /// One-time migration: float the Character panel by default for layouts saved
-    /// before it became a floating miniwindow. Keyed so a later manual dock sticks
-    /// (we don't re-float it on every launch).
-    private func migrateFloatCharacter(persistenceKey: String) {
-        let key = persistenceKey + ".infoFloatedV1"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
-        guard floating[.info] == nil, !detached.contains(.info),
-              let placement = Self.defaultFloating[.info] else { return }
-        floating[.info] = placement
-        layout = layout.removing(.info)
-        save()
     }
 
     /// Whether `kind` is currently shown — in the dock tree, a detached window,

@@ -77,6 +77,14 @@ public actor ScrollbackStore {
         return id
     }
 
+    /// Append many lines in a single actor hop (e.g. rebuilding a filtered view
+    /// like the Channels panel). Each gets the next monotonic ID.
+    public func appendBatch(_ newLines: [Line]) {
+        for line in newLines {
+            _ = append(line)
+        }
+    }
+
     /// Current number of lines resident in memory.
     public var count: Int {
         lines.count

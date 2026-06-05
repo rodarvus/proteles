@@ -66,7 +66,7 @@ struct DetachedPanelWindow: View {
         switch kind {
         case .map: MapPanelView(model: map)
         case .asciiMap: MapView(model: asciiMap)
-        case .channels: ChatView(model: chat)
+        case .channels: ChannelsView(model: chat)
         case .hunt: SearchAndDestroyPanelView(model: snd)
         case .info: InfoPanel(state: gmcp)
         case .help: HelpPanelView(model: help)
