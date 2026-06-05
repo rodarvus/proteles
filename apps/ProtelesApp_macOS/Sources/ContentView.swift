@@ -509,7 +509,7 @@ extension ContentView {
         case .output: AnyView(gameColumn)
         case .map: AnyView(MapPanelView(model: map))
         case .asciiMap: AnyView(MapView(model: asciiMap))
-        case .channels: AnyView(ChannelsView(model: chat))
+        case .channels: AnyView(ChatView(model: chat))
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
         case .info: AnyView(InfoPanel(state: gmcp))
         case .group: AnyView(GroupPanel(state: gmcp))

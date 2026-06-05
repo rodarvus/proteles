@@ -113,6 +113,13 @@
 
         public func updateNSView(_: NSView, context _: Context) {}
 
+        /// Cancel the render coordinator's frame ticker + store subscription when
+        /// SwiftUI tears the view down (e.g. an `.id(...)` change recreating it),
+        /// so the per-frame loop never lingers as a zombie eating the main actor.
+        public static func dismantleNSView(_: NSView, coordinator: Coordinator) {
+            coordinator.renderCoordinator?.detach()
+        }
+
         /// Build a configured read-only `MudTextView` (used for both the main
         /// history view and the live-tail mirror).
         private func makeTextView() -> MudTextView {
