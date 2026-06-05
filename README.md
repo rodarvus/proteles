@@ -199,7 +199,7 @@ Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
 ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
 **MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
 `CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1237 tests; four gates green on every commit.
+`apps/ProtelesApp_macOS/`. ~1238 tests; four gates green on every commit.
 
 The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
 `mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
@@ -210,8 +210,10 @@ encode years of real-world Aardwolf/MUD behaviour and are never modified.
 ## Documents
 
 - **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-70). Phase-7 feature plans live in
+  the append-only decision log (D-01…D-98). Phase-7 feature plans live in
   **[docs/plans/](docs/plans/)**.
+- **[docs/DESIGN.md](docs/DESIGN.md)** — the UI/UX north-star: what Proteles
+  should feel like, the ranked design principles, and the per-surface intent.
 - **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
   reference-driven, no-guessing rule for mapper/S&D work).
 

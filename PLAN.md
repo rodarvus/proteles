@@ -13,9 +13,12 @@ phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
 ports, the native graphical mapper, Search-and-Destroy and dinv running
 natively, the tiled panel dock, the Plugin Library, leveling analytics, and a
 six-bar status display all ship. **We are now in polish + debugging**, driven by
-live play. The remaining gate to a **1.0** is release engineering —
-**notarization**, an auto-updater, and crash reporting — which we'll take on when
-the daily experience is solid.
+live play. Release engineering is largely done — **notarization** (the first
+notarized Developer-ID build shipped in `v0.4.5`) and **opt-in crash reporting**
+are landed; the **Sparkle auto-updater** (#23) is the last release-engineering
+item. The remaining gate to a **1.0** is now mostly **UI/UX polish** — see
+**[docs/DESIGN.md](docs/DESIGN.md)**, the design north-star, with the polish
+backlog tracked under the GitHub `ux` label.
 
 ---
 
@@ -69,7 +72,7 @@ download. Ongoing: live-play polish + debugging. **All pending work is tracked i
 [GitHub Issues](https://github.com/rodarvus/proteles/issues)** (`gh issue list`) —
 the backlog source of truth (see §9a).
 
-~1237 tests across ~249 suites; four gates green (`swift build`,
+~1238 tests across ~249 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
@@ -507,6 +510,7 @@ superseded decisions are marked, not deleted.
 | D-95 | 2026-06-03 | Group-monitor panel refinements (GH #17, from the reference `aard_group_monitor_gmcp`): leader badge, alignment dot, HP cur/max numbers, and a **quest column** (`[Q]`/`Q:NN`) — `GroupInfo.Member.Info` gained `qt`/`qs` (the per-member quest fields Aardwolf's `group` GMCP actually carries; tolerant-decoded, absent-safe). A **room-only filter** (drop `here=="0"`) and **member sort** (default / most-hurt by HP% / quest-grouped) via a pure `GroupInfo.displayMembers(sort:roomOnly:)`, surfaced through an ellipsis menu in the group header (`@AppStorage` prefs). Deferred (low value): total-damage sort, per-player hide, compact/multi-column mode (the reference's ultracompact is a wide-miniwindow layout that doesn't fit a narrow sidebar) | adopted |
 | D-96 | 2026-06-03 | As-you-type ghost hint for the command input (GH #13). A greyed, non-interactive trailing hint of the best current-word completion (pure `CompletionVocabulary.ghostSuffix`). Rendered as an **overlay label never in the editable text** (a sibling view positioned at the field-editor caret rect) rather than rewriting the input as a custom `NSTextView` — so it can't be sent / eat the spacebar, and the existing Tab-cycle / history / Enter-safety are untouched. →/Tab accept (proper casing), Esc dismiss, Enter sends typed-only, any caret move drops it. Toggle "Suggest completions as you type" (default on). A modern (fish/Warp) pattern — Mudlet has no equivalent; its "autocompletion" is the selected-suffix history model Proteles deliberately removed. Deferred + iterate: overlay-vs-custom-NSTextView long-term; a whole-line history ghost (v3) | adopted |
 | D-97 | 2026-06-03 | Command-button bar (GH #15), v1–v3. Per-world `ButtonBar` (groups → `CommandButton`, reusing `MacroAction`) in `ScriptDocument`; a dockable/floating `PanelKind.commandBar` whose **adaptive grid follows placement** (horizontal bar docked top/bottom, column/grid docked side/floating) — no manual orientation; group tabs; momentary + toggle buttons with tint/icon + a hotkey-echo badge. Buttons fire through the command pipeline via `session.fire`. A dedicated **Scripts ▸ Buttons** editor (chosen over inline). **Scripting API** (`Button.add/toggle/state/remove` → `proteles.button` → a `.button` effect the session streams to the app, which applies + persists) lets plugins/triggers create/update/toggle buttons — a Proteles edge over Mudlet (whose Lua can only toggle pre-made buttons; the bar is GUI-authored). Pure model/apply in MudCore (tolerant Codable preserves older docs) | adopted |
+| D-98 | 2026-06-05 | **UI/UX is the primary remaining gate to 1.0**, so adopt **`docs/DESIGN.md`** as the design north-star (separate from PLAN's architecture/decisions and from the GitHub-Issues backlog, now with a `ux` label). Founding UX calls, settled with the maintainer: calm-but-extensible *density* (single-panel default, easy 2–3 panels); the **default theme matches the MUSHclient default**, derived faithfully from the references (current "Aardwolf" theme is approximate — several colours off, darker ones unreadable on black: GH #34); a **pop-out / anchor-to-edge / free-float panel model** (today's floating-window story is weak — priority rework, GH #33); sane discoverable defaults, no nanny; **stay Mac-pure** (an iPad port gets its own approach, no cross-platform lowest-common-denominator); neutral-native with a light, consistent identity. First polish-pass papercuts: the panel/float story (#33) and window polish across Scripts/Commands/Plugins/Settings (#35). Also fixed post-`v0.4.5`: button-bar persistence (the `ScriptStore` never stored `buttonBar`, so "Add Group" no-op'd — GH #15) and the Diagnostics tab collapsing a non-resizable Settings window (GH #24) | adopted |
 
 ---
 
