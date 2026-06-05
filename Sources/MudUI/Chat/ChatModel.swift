@@ -31,6 +31,16 @@ public final class ChatModel {
         return lines.filter { $0.channel == selectedChannel }
     }
 
+    /// Channels ordered by most-recent activity (newest first) for the tab strip.
+    public var recentChannels: [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for line in lines.reversed() where !line.channel.isEmpty {
+            if seen.insert(line.channel).inserted { result.append(line.channel) }
+        }
+        return result
+    }
+
     /// Begin mirroring the store: backfill the backlog, then append new
     /// lines as they arrive. Safe to call from `.task`.
     public func start() async {

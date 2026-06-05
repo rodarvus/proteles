@@ -300,6 +300,16 @@ struct OutlinedText: View {
 }
 
 public extension Color {
+    /// Build a Color from a MudCore ``RGB`` (theme palette colour).
+    init(_ rgb: RGB) {
+        self = Color(
+            .sRGB,
+            red: Double(rgb.red) / 255,
+            green: Double(rgb.green) / 255,
+            blue: Double(rgb.blue) / 255
+        )
+    }
+
     /// Build a Color from a 0xRRGGBB literal.
     init(rgb: UInt32) {
         self = Color(
