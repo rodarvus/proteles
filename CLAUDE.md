@@ -7,8 +7,8 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.4.5`** (tag + GitHub release, **notarized Developer-ID build** —
-the first; `scripts/release.sh` runs the build→sign→notarize→staple→verify flow).
+**Shipped `v0.4.6`** (tag + GitHub release, **notarized Developer-ID build**;
+`scripts/release.sh` runs the build→sign→notarize→staple→verify flow).
 The build-out phases are **done**; we are now **polishing + debugging from live
 play**. The remaining gate to **1.0** is release engineering — an auto-updater
 (#23, Sparkle) is the last open item; notarization + crash reporting are landed.

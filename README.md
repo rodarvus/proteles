@@ -3,7 +3,7 @@
 A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
 for the modern Mac — no Wine, no VM, no emulator.
 
-> **Status: `v0.4.5` — daily-usable.**
+> **Status: `v0.4.6` — daily-usable.**
 > Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
 > with a **tiled, resizable window** (drag panels to re-dock or tear them into
 > their own windows), a **full six-bar status display** (Health/Mana/Moves/TNL/
