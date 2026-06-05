@@ -16,13 +16,38 @@ public final class LayoutStore {
     /// so the app can re-open them on launch.
     public private(set) var detached: Set<PanelKind> = []
 
-    /// Panels shown as fixed top-right floating miniwindows over the game output
-    /// (not in the dock tree). Persisted. The Text Map floats by default.
-    public private(set) var floating: Set<PanelKind> = []
+    /// Panels shown as **in-window floating miniwindows** over the game output
+    /// (not in the dock tree), keyed to their per-panel ``FloatingPlacement``
+    /// (anchor + offset + optional size). Persisted. The Text Map floats by
+    /// default. (UI revamp — the floating-miniwindow rework, GH #33.)
+    public private(set) var floating: [PanelKind: FloatingPlacement] = [:]
 
     /// Panels that float by default on a fresh install (the compact Text Map
     /// reads best as a top-right HUD rather than a dock tile).
-    public static let defaultFloating: Set<PanelKind> = [.asciiMap]
+    public static let defaultFloating: [PanelKind: FloatingPlacement] = [
+        .asciiMap: FloatingPlacement(anchor: .topTrailing)
+    ]
+
+    /// Decode the persisted placement map (new format) from `data`, or nil.
+    private static func decodeFloating(_ data: Data?) -> [PanelKind: FloatingPlacement]? {
+        guard let data,
+              let decoded = try? JSONDecoder().decode([String: FloatingPlacement].self, from: data)
+        else { return nil }
+        return Dictionary(uniqueKeysWithValues: decoded.compactMap { key, value in
+            PanelKind(rawValue: key).map { ($0, value) }
+        })
+    }
+
+    /// A sensible starting placement when a panel is first floated: content-hug
+    /// panels (Text Map, Commands) self-size; fill-style panels get an initial
+    /// size so they don't collapse to nothing.
+    static func defaultPlacement(for kind: PanelKind) -> FloatingPlacement {
+        FloatingPlacement(
+            anchor: .topTrailing,
+            offset: CGSize(width: 12, height: 12),
+            size: kind.floatingHugsContent ? nil : CGSize(width: 360, height: 300)
+        )
+    }
 
     /// Where a drag-to-redock preview is currently shown — a *single* shared
     /// value rather than per-panel view state. Entering any target overwrites
@@ -72,14 +97,19 @@ public final class LayoutStore {
         layout = stored?.renormalized() ?? .standard
         let storedDetached = UserDefaults.standard.array(forKey: detachedKey) as? [String] ?? []
         detached = Set(storedDetached.compactMap(PanelKind.init(rawValue:)))
-        // First run with floating support → seed the defaults; else load.
-        if let storedFloating = UserDefaults.standard.array(forKey: floatingKey) as? [String] {
-            floating = Set(storedFloating.compactMap(PanelKind.init(rawValue:)))
+        // Load placements (new format), migrate the old set-of-kinds format, or
+        // seed the defaults on first run.
+        if let decoded = Self.decodeFloating(UserDefaults.standard.data(forKey: floatingKey)) {
+            floating = decoded
+        } else if let storedFloating = UserDefaults.standard.array(forKey: floatingKey) as? [String] {
+            floating = Dictionary(uniqueKeysWithValues: storedFloating
+                .compactMap(PanelKind.init(rawValue:))
+                .map { ($0, Self.defaultPlacement(for: $0)) })
         } else {
             floating = Self.defaultFloating
         }
         // A floating/detached panel must not also be in the dock tree.
-        for kind in floating.union(detached) {
+        for kind in Set(floating.keys).union(detached) {
             layout = layout.removing(kind)
         }
         presets = UserDefaults.standard.data(forKey: presetsKey)
@@ -89,7 +119,7 @@ public final class LayoutStore {
     /// Whether `kind` is currently shown — in the dock tree, a detached window,
     /// or a floating miniwindow (drives the Panels-menu checkmark).
     public func isVisible(_ kind: PanelKind) -> Bool {
-        layout.contains(kind) || detached.contains(kind) || floating.contains(kind)
+        layout.contains(kind) || detached.contains(kind) || floating[kind] != nil
     }
 
     /// Whether `kind` is currently in its own window.
@@ -99,7 +129,7 @@ public final class LayoutStore {
 
     /// Whether `kind` is currently a floating top-right miniwindow.
     public func isFloating(_ kind: PanelKind) -> Bool {
-        floating.contains(kind)
+        floating[kind] != nil
     }
 
     /// Show/hide a panel (Panels menu). A detached panel hides by closing its
@@ -107,8 +137,8 @@ public final class LayoutStore {
     public func toggle(_ kind: PanelKind) {
         if detached.contains(kind) {
             hideDetached(kind) // its window observes `isDetached` and dismisses
-        } else if floating.contains(kind) {
-            floating.remove(kind) // hide the miniwindow
+        } else if floating[kind] != nil {
+            floating[kind] = nil // hide the miniwindow
             save()
         } else if layout.contains(kind) {
             rememberSlot(kind)
@@ -151,7 +181,7 @@ public final class LayoutStore {
         guard kind.isClosable, !detached.contains(kind) else { return }
         rememberSlot(kind)
         detached.insert(kind)
-        floating.remove(kind)
+        floating[kind] = nil
         layout = layout.removing(kind)
         save()
     }
@@ -174,21 +204,28 @@ public final class LayoutStore {
 
     // MARK: - Float / dock (top-right miniwindow)
 
-    /// Lift `kind` out of the dock into a fixed top-right floating miniwindow.
-    /// Only the Text Map self-sizes into the compact HUD; other panels would
-    /// collapse, so floating them is rejected (they open in a window instead).
-    public func float(_ kind: PanelKind) {
-        guard kind == .asciiMap, !floating.contains(kind) else { return }
+    /// Lift `kind` out of the dock into an in-window floating miniwindow. Any
+    /// closable panel can float now (GH #33); a starting `placement` may be
+    /// supplied, else a sensible default (content-hug or an initial size).
+    public func float(_ kind: PanelKind, at placement: FloatingPlacement? = nil) {
+        guard kind.isClosable, floating[kind] == nil else { return }
         rememberSlot(kind)
-        floating.insert(kind)
+        floating[kind] = placement ?? Self.defaultPlacement(for: kind)
         detached.remove(kind)
         layout = layout.removing(kind)
         save()
     }
 
+    /// Update a floating panel's placement after a drag/snap or a resize.
+    public func setFloatingPlacement(_ kind: PanelKind, _ placement: FloatingPlacement) {
+        guard floating[kind] != nil else { return }
+        floating[kind] = placement
+        save()
+    }
+
     /// Return a floating `kind` to the dock.
     public func dockFloating(_ kind: PanelKind) {
-        guard floating.remove(kind) != nil else { return }
+        guard floating.removeValue(forKey: kind) != nil else { return }
         if !layout.contains(kind) { layout = restoredInsert(kind) }
         save()
     }
@@ -211,7 +248,7 @@ public final class LayoutStore {
         layout = .standard
         detached.removeAll()
         floating = Self.defaultFloating
-        for kind in floating {
+        for kind in floating.keys {
             layout = layout.removing(kind)
         }
         dropHighlight = nil // a drag preview can't survive a reset
@@ -233,7 +270,7 @@ public final class LayoutStore {
     /// overwriting any preset with the same name. Detached windows aren't part
     /// of a preset. A blank name is ignored.
     public func savePreset(named name: String) {
-        let preset = LayoutPreset(name: name, layout: layout, floating: Array(floating))
+        let preset = LayoutPreset(name: name, layout: layout, floating: Array(floating.keys))
         presets = presets.upserting(preset)
         savePresets()
     }
@@ -242,9 +279,11 @@ public final class LayoutStore {
     /// return any detached panels to the dock (their windows close themselves).
     public func applyPreset(_ preset: LayoutPreset) {
         detached.removeAll() // detached windows observe this and dismiss
-        floating = Set(preset.floating)
+        floating = Dictionary(uniqueKeysWithValues: preset.floating.map {
+            ($0, Self.defaultPlacement(for: $0))
+        })
         layout = preset.layout.renormalized()
-        for kind in floating {
+        for kind in floating.keys {
             layout = layout.removing(kind)
         }
         save()
@@ -298,6 +337,9 @@ public final class LayoutStore {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         UserDefaults.standard.set(detached.map(\.rawValue), forKey: detachedKey)
-        UserDefaults.standard.set(floating.map(\.rawValue), forKey: floatingKey)
+        let placements = Dictionary(uniqueKeysWithValues: floating.map { ($0.key.rawValue, $0.value) })
+        if let data = try? JSONEncoder().encode(placements) {
+            UserDefaults.standard.set(data, forKey: floatingKey)
+        }
     }
 }
