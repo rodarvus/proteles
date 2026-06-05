@@ -140,3 +140,34 @@ distinct notifications; tokens left literal instead of substituted.
   window and it can't be resized again. Also requested: make Settings (and all
   dialogs) resizable; a way to force a synthetic crash report for testing.
 - **#14 / #17** — feedback pending (separate round).
+
+---
+
+## Floating-miniwindow rework (#33) — dev build on top of v0.4.6
+
+The in-window floating-miniwindow system (architecture A): any panel can float
+inside the main window, economical by default, draggable + snapping + resizable.
+Vocabulary per `docs/DESIGN.md` §3.4: **Float** = in-window miniwindow;
+**Open in Window** = separate detached window (multi-monitor).
+
+| # | Steps | Expected |
+|---|---|---|
+| 33.1 | Hover a docked panel → ellipsis menu → **Float** | Panel lifts out as a compact in-window miniwindow (top-right by default) |
+| 33.2 | Float **Commands** | Hugs its buttons — small, economical (not a big empty box) |
+| 33.3 | Float **Channels** | Starts at a usable size (not collapsed); resizable to greedy |
+| 33.4 | Drag a miniwindow by its **header** | It follows the cursor live |
+| 33.5 | Release it near a **corner** | Snaps to that corner with a small margin |
+| 33.6 | Release it mid-screen | Anchors to the nearest corner by quadrant |
+| 33.7 | Float two panels; drag one so its edge nears the other's | Snaps flush — stacks below/above/left/right of the sibling |
+| 33.8 | Drag the **bottom-right grip** of a miniwindow | Resizes; size sticks |
+| 33.9 | Header **dock** button (arrow) | Returns the panel to the dock |
+| 33.10 | Header **✕** | Hides the panel (re-show from the Panels menu) |
+| 33.11 | Quit & relaunch | Floating panels + their positions/sizes persist per world |
+| 33.12 | Text Map | Still floats top-right by default (migrated) |
+| 33.13 | **Drag-to-edge docking:** drag a panel header onto another panel's left/right edge | Docks side-by-side (a split); centre = tab group; **no stuck blue box** |
+
+Known boundaries (not bugs): **Open in Window** is still the separate-window
+(standard chrome) path — distinct from **Float**; floating miniwindows stay
+*inside* the main window (no off-window/second-monitor floating yet, by design).
+Watch for: snap thresholds feeling too eager/lazy; a brief first-frame
+mis-position when a window first appears; the hug-vs-greedy default for any panel.
