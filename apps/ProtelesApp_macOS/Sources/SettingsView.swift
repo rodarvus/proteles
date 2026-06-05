@@ -46,6 +46,8 @@ private struct GeneralSettingsView: View {
     @AppStorage("gagTagLines") private var gagTagLines = false
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
     @AppStorage("inputGhostHint") private var inputGhostHint = true
+    @AppStorage("chat.timestamps") private var chatTimestamps = false
+    @AppStorage("chat.timestampSeconds") private var chatTimestampSeconds = false
 
     var body: some View {
         Form {
@@ -70,6 +72,15 @@ private struct GeneralSettingsView: View {
                 Text("Show spell-check squiggles in the command line. Visual only — "
                     + "auto-correct and smart quotes stay off so commands like "
                     + "cast 'armor' are never altered.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Channels") {
+                Toggle("Show timestamps", isOn: $chatTimestamps)
+                Toggle("Include seconds", isOn: $chatTimestampSeconds)
+                    .disabled(!chatTimestamps)
+                Text("Prefix each Channels line with the time it arrived "
+                    + "(your system 12/24-hour format).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
