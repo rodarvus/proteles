@@ -91,12 +91,18 @@ struct LayoutStoreDetachTests {
         #expect(!store.layout.contains(.asciiMap))
     }
 
-    @Test("Only the Text Map may float; other panels are rejected")
-    func onlyTextMapFloats() {
+    @Test("Any closable panel can float now; floating pulls it from the dock (#33)")
+    func anyPanelFloats() {
         let store = makeStore()
+        #expect(store.layout.contains(.channels))
         store.float(.channels)
+        #expect(store.isFloating(.channels))
+        #expect(!store.layout.contains(.channels)) // left the dock
+        // Fill-style panels get an initial size so they don't collapse.
+        #expect(store.floating[.channels]?.size != nil)
+        store.dockFloating(.channels)
         #expect(!store.isFloating(.channels))
-        #expect(store.layout.contains(.channels)) // stays docked
+        #expect(store.layout.contains(.channels)) // back in the dock
     }
 
     @Test("Re-showing a hidden panel restores its prior dock position")
