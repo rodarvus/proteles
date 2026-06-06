@@ -21,4 +21,18 @@ struct CharStatusCombatTargetTests {
         #expect(CharStatus(level: 100).combatTarget == nil)
         #expect(CharStatus(level: 100, enemy: "a goblin", enemypct: nil).combatTarget == nil)
     }
+
+    @Test("isSafeToInterrupt: blocks fighting/running/note-mode + active combat (#42)")
+    func safeToInterruptGuard() {
+        // Unsafe states (8 fighting, 12 running, 5 note-mode) → not safe.
+        #expect(!CharStatus(level: 100, state: 8).isSafeToInterrupt)
+        #expect(!CharStatus(level: 100, state: 12).isSafeToInterrupt)
+        #expect(!CharStatus(level: 100, state: 5).isSafeToInterrupt)
+        // Active combat target → not safe even if state is unknown.
+        #expect(!CharStatus(level: 100, enemy: "an orc", enemypct: 40).isSafeToInterrupt)
+        // Idle/standing (3) with no enemy → safe.
+        #expect(CharStatus(level: 100, state: 3).isSafeToInterrupt)
+        // Unknown state, no combat → falls back to safe.
+        #expect(CharStatus(level: 100).isSafeToInterrupt)
+    }
 }
