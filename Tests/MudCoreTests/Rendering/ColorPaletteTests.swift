@@ -170,3 +170,46 @@ struct ColorPaletteDarkRemapTests {
         #expect(ColorPalette.remappedDarkIndex(100) == 100) // identity elsewhere
     }
 }
+
+@Suite("ColorPalette — bold = bright (MUSHclient <bold> ANSI table)")
+struct ColorPaletteBoldBrightTests {
+    private let palette = Theme.aardwolf.palette
+
+    @Test("Bold upgrades the 8 basic named colours to their bright variants")
+    func boldUpgradesNamed() {
+        // Bold-black must NOT be (0,0,0) (invisible on black) — it's bright gray.
+        #expect(palette.resolveForeground(.named(.black), bold: true) == RGB(128, 128, 128))
+        // Bold-blue is bright blue (0,0,255), not dark navy (0,0,128).
+        #expect(palette.resolveForeground(.named(.blue), bold: true) == RGB(0, 0, 255))
+        #expect(palette.resolveForeground(.named(.cyan), bold: true) == RGB(0, 255, 255))
+        // Each bold named == the corresponding brightNamed entry.
+        for color in NamedColor.allCases {
+            #expect(
+                palette.resolveForeground(.named(color), bold: true)
+                    == palette.resolve(.brightNamed(color)),
+                "bold .named(\(color)) should equal .brightNamed(\(color))"
+            )
+        }
+    }
+
+    @Test("Non-bold named colours stay normal (dark)")
+    func nonBoldStaysNormal() {
+        #expect(palette.resolveForeground(.named(.black), bold: false) == RGB(0, 0, 0))
+        #expect(palette.resolveForeground(.named(.blue), bold: false) == RGB(0, 0, 128))
+        // The no-bold overload matches bold:false.
+        #expect(palette.resolveForeground(.named(.blue)) == RGB(0, 0, 128))
+    }
+
+    @Test("Bold does not alter xterm-256, 24-bit, or already-bright colours")
+    func boldLeavesExplicitColoursAlone() {
+        #expect(palette.resolveForeground(.palette(196), bold: true) == RGB(255, 0, 0))
+        #expect(
+            palette.resolveForeground(.rgb(red: 10, green: 20, blue: 30), bold: true)
+                == RGB(10, 20, 30)
+        )
+        #expect(
+            palette.resolveForeground(.brightNamed(.blue), bold: true)
+                == palette.resolve(.brightNamed(.blue))
+        )
+    }
+}

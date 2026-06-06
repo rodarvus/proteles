@@ -237,7 +237,7 @@ public actor SearchAndDestroyHost {
             guard lower >= 0, lower + length <= nsText.length else { return nil }
             return ScriptStyleRun(
                 text: nsText.substring(with: NSRange(location: lower, length: length)),
-                textColour: bgrInt(palette.resolveForeground(run.style.foreground)),
+                textColour: bgrInt(palette.resolveForeground(run.style.foreground, bold: run.style.bold)),
                 backColour: bgrInt(palette.resolveBackground(run.style.background))
             )
         }

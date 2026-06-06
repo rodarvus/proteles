@@ -66,11 +66,31 @@ public struct ColorPalette: Sendable, Equatable, Codable {
     /// ``defaultForeground`` when `nil`, then applying the legibility clamp
     /// (light themes only — see ``minForegroundContrast``).
     public func resolveForeground(_ color: ANSIColor?) -> RGB {
-        let resolved = color.map(resolve(_:)) ?? defaultForeground
+        resolveForeground(color, bold: false)
+    }
+
+    /// Resolve a foreground colour honouring the **bold = bright** convention:
+    /// a bold SGR (`\e[1;3Xm`) turns the eight basic named colours into their
+    /// bright variants — exactly MUSHclient's `<bold>` ANSI table (the reason a
+    /// world file carries separate `<normal>`/`<bold>` blocks). Without this,
+    /// bold-black renders as pure black (invisible on a black background) and
+    /// bold-blue as dark navy instead of bright blue. Only ``ANSIColor/named``
+    /// is upgraded; xterm-256, 24-bit, and already-bright colours pass through.
+    /// The light-theme legibility clamp still applies afterwards. (D-99)
+    public func resolveForeground(_ color: ANSIColor?, bold: Bool) -> RGB {
+        let effective = bold ? color.map(Self.boldUpgraded) : color
+        let resolved = effective.map(resolve(_:)) ?? defaultForeground
         guard let floor = minForegroundContrast,
               Self.contrastRatio(resolved, defaultBackground) < floor
         else { return resolved }
         return defaultForeground
+    }
+
+    /// The bold-bright upgrade for a single colour: `.named` → `.brightNamed`,
+    /// everything else unchanged.
+    private static func boldUpgraded(_ color: ANSIColor) -> ANSIColor {
+        if case .named(let name) = color { return .brightNamed(name) }
+        return color
     }
 
     /// WCAG relative luminance of an sRGB colour (0…1).
