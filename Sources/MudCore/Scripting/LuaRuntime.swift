@@ -98,7 +98,7 @@ public actor LuaRuntime {
     public var executionTimeout: Duration
 
     /// How often (in VM instructions) the timeout hook checks the clock.
-    private static let hookInstructionInterval: Int32 = 1000
+    static let hookInstructionInterval: Int32 = 1000
 
     /// Accessed only on the actor, except in `deinit` (which runs when no
     /// other reference survives) — hence `nonisolated(unsafe)`. Module-internal
@@ -567,7 +567,7 @@ public actor LuaRuntime {
     }
 
     /// Pop the error object at the top of the stack as a String.
-    private func popError() -> String {
+    func popError() -> String {
         Self.popMessage(state)
     }
 }
