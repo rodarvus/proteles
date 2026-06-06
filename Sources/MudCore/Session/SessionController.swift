@@ -486,6 +486,11 @@ public actor SessionController {
             try await sendLine(command)
             return
         }
+        // `/lua …` — evaluate one-off Lua on the script engine (#41), not the MUD.
+        if let code = Self.luaConsoleCode(command) {
+            await runLuaConsole(code)
+            return
+        }
         // Native `mapper …` commands are handled in-app, not sent to the MUD.
         if command.split(separator: " ").first?.lowercased() == "mapper", let mapper {
             await applyScriptEffects(mapper.handleCommand(command))
