@@ -77,6 +77,23 @@ struct ButtonBarTests {
         #expect(bar.button(label: "Heal") == nil)
     }
 
+    @Test("button(forHotkey:) finds the button bound to a chord across groups (#40)")
+    func buttonForHotkey() {
+        let chord = KeyChord(keyCode: 122, isFunctionKey: true) // F1
+        let bar = ButtonBar(groups: [
+            ButtonGroup(name: "Combat", buttons: [
+                CommandButton(label: "Kick", action: .command("kick")),
+                CommandButton(label: "Bash", action: .command("bash"), hotkeyEcho: chord)
+            ]),
+            ButtonGroup(name: "Travel", buttons: [
+                CommandButton(label: "Recall", action: .command("recall"))
+            ])
+        ])
+        #expect(bar.button(forHotkey: chord)?.label == "Bash")
+        // An unbound chord matches nothing.
+        #expect(bar.button(forHotkey: KeyChord(keyCode: 120, isFunctionKey: true)) == nil)
+    }
+
     @Test("ScriptDocument tolerates a file written before buttonBar existed")
     func documentBackwardCompatible() throws {
         // An older document JSON with no buttonBar key still decodes (empty bar).

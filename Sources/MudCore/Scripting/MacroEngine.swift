@@ -174,19 +174,27 @@ public struct MacroEngine {
         return .bare
     }
 
+    /// Whether a chord may fire *right now* given its tier and the context — a
+    /// modifier/function/keypad chord always may; a bare main-keyboard key only
+    /// when Navigation mode is on *and* the input is empty. The shared gate used
+    /// by both macro matching and command-button hotkeys (#40), so they agree.
+    public static func chordMayFire(_ chord: KeyChord, context: MacroContext) -> Bool {
+        switch tier(for: chord) {
+        case .chord, .keypad:
+            true
+        case .bare:
+            context.navigationModeOn && context.inputIsEmpty
+        }
+    }
+
     /// The macro that should fire for `chord` given `context`, or `nil` if
     /// none is bound or its tier forbids firing right now (a bare key with
     /// Navigation mode off or a non-empty input line).
     public func match(_ chord: KeyChord, context: MacroContext) -> Macro? {
-        guard let macro = macros.first(where: { $0.enabled && $0.chord == chord }) else {
-            return nil
-        }
-        switch Self.tier(for: chord) {
-        case .chord, .keypad:
-            return macro
-        case .bare:
-            return context.navigationModeOn && context.inputIsEmpty ? macro : nil
-        }
+        guard let macro = macros.first(where: { $0.enabled && $0.chord == chord }),
+              Self.chordMayFire(chord, context: context)
+        else { return nil }
+        return macro
     }
 }
 
