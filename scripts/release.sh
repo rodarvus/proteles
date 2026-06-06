@@ -89,8 +89,18 @@ APP="$BUILD_DIR/Build/Products/Release/Proteles.app"
 # (deepest), then the framework binary + bundle, then the outer app. Each gets the
 # hardened runtime + a secure timestamp. (Was a single `--deep` pass through
 # v0.4.7, before Sparkle was embedded.)
+#
+# `--preserve-metadata=entitlements` is REQUIRED: without it a re-sign strips the
+# entitlements xcodebuild applied — including `com.apple.security.cs.disable-
+# library-validation`, whose absence makes the hardened runtime reject the
+# embedded Sparkle.framework and crash the app at launch. (Notarisation does NOT
+# catch this — it doesn't validate entitlements.) Preserving keeps each item's
+# own entitlements (the app's app set; Sparkle's helpers their own).
 step "codesign (Sparkle inside-out, hardened runtime, --timestamp)"
-sign() { codesign --force --options runtime --timestamp --sign "$PROTELES_SIGN_IDENTITY" "$@"; }
+sign() {
+    codesign --force --options runtime --timestamp \
+        --preserve-metadata=entitlements --sign "$PROTELES_SIGN_IDENTITY" "$@"
+}
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 if [[ -d "$SPARKLE" ]]; then
     V="$SPARKLE/Versions/Current"
