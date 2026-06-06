@@ -38,16 +38,32 @@ extension ContentView {
     }
 
     /// Mirror a network-state change into the status bar, and — on connect —
-    /// clear the resume banner and (re)write the resume breadcrumb so a restart
-    /// while connected resumes this world (#42).
+    /// clear the resume banner and write the resume breadcrumb so a restart while
+    /// connected resumes this world (#42).
     func noteConnection(_ networkState: NetworkConnection.State) {
         connectionState = Self.map(networkState)
         guard case .connected = networkState else { return }
         resumeBanner = nil
-        if let id = worlds.activeProfile?.id {
-            try? resumeStore?.write(
-                ResumeToken(worldID: id, appVersion: MudCore.version, stamp: Date())
-            )
+        writeResumeToken()
+    }
+
+    /// (Re)write the resume breadcrumb for the active world while connected (#42).
+    /// Called on connect *and* on a heartbeat so the token stays within its
+    /// freshness window through a long session — otherwise a session online
+    /// longer than the window wouldn't resume after an update.
+    func writeResumeToken() {
+        guard connectionState == .connected, let id = worlds.activeProfile?.id else { return }
+        try? resumeStore?.write(
+            ResumeToken(worldID: id, appVersion: MudCore.version, stamp: Date())
+        )
+    }
+
+    /// Heartbeat that keeps the resume breadcrumb fresh (every 60 s, well inside
+    /// the 120 s freshness window) for as long as the connection is up (#42).
+    func refreshResumeTokenLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(60))
+            writeResumeToken()
         }
     }
 

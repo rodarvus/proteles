@@ -151,6 +151,8 @@ struct ContentView: View {
                 noteConnection(networkState)
             }
         }
+        // Keep the resume breadcrumb fresh through a long session (#42).
+        .task { await refreshResumeTokenLoop() }
         // Main-thread stall monitor (perf diagnostics) — logs UI-thread hitches
         // to the session transcript. Body lives in the extension (type budget).
         .task { await monitorMainThreadStalls() }
