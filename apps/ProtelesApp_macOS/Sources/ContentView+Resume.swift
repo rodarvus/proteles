@@ -23,9 +23,17 @@ extension ContentView {
         // Resuming after a restart (#42): show the banner and connect even if
         // autoconnect is off — we were connected when the process restarted.
         if let resumeToken {
-            resumeBanner = resumeToken.wasUpdated(runningVersion: MudCore.version)
+            let updated = resumeToken.wasUpdated(runningVersion: MudCore.version)
+            resumeBanner = updated
                 ? "Updated to \(MudCore.version) — reconnecting…"
                 : "Reconnecting…"
+            // Record it so a resume is visible in the session transcript (the
+            // banner + scrollback restore are otherwise UI-only — invisible to
+            // the wire recording). Makes resume self-verifying in tests (#42).
+            await session.recordNote(
+                "session resumed (was v\(resumeToken.appVersion), now v\(MudCore.version)"
+                    + ", \(updated ? "post-update" : "restart") — restoring scrollback + reconnecting)"
+            )
         }
         if let active = worlds.activeProfile, active.autoconnect || resumeToken != nil {
             ProtelesApp.logContext.worldName = active.name
