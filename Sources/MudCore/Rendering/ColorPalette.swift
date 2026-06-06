@@ -21,19 +21,31 @@ public struct ColorPalette: Sendable, Equatable, Codable {
     /// resolved foreground below the floor falls back to ``defaultForeground``
     /// (the theme's ink). The bit Mudlet/MUSHclient never did.
     public let minForegroundContrast: Double?
+    /// Remap the very-darkest xterm-256 indices to readable substitutes before
+    /// resolving them — the dark-theme counterpart to ``minForegroundContrast``.
+    /// This is **not** an invented clamp: it replicates Aardwolf's own
+    /// `aardwolf_colors.lua` `x_not_too_dark` table (which "bumps a few very dark
+    /// xterm colors to brighter values to improve visibility"), so near-black /
+    /// dark-navy codes don't vanish on a black background. See
+    /// ``remappedDarkIndex(_:)`` for the exact mapping. Off for light themes
+    /// (which use the contrast clamp instead, and where black→silver would be
+    /// wrong).
+    public let remapsDarkXterm: Bool
 
     public init(
         named: [NamedColor: RGB],
         brightNamed: [NamedColor: RGB],
         defaultForeground: RGB,
         defaultBackground: RGB,
-        minForegroundContrast: Double? = nil
+        minForegroundContrast: Double? = nil,
+        remapsDarkXterm: Bool = false
     ) {
         self.named = named
         self.brightNamed = brightNamed
         self.defaultForeground = defaultForeground
         self.defaultBackground = defaultBackground
         self.minForegroundContrast = minForegroundContrast
+        self.remapsDarkXterm = remapsDarkXterm
     }
 
     /// Resolve an ``ANSIColor`` to its concrete ``RGB``.
@@ -85,8 +97,22 @@ public struct ColorPalette: Sendable, Equatable, Codable {
 
     // MARK: - Private
 
+    /// Aardwolf's `x_not_too_dark` remap (from `aardwolf_colors.lua`): the few
+    /// xterm-256 indices the game itself bumps to brighter, readable values on a
+    /// black background. Identity for every other index. Verbatim from the
+    /// reference — `0/16 → 7` (black → silver), `17/18 → 19` (dark navy → blue),
+    /// `232…237 → 238` (the darkest grays → a readable gray).
+    static func remappedDarkIndex(_ value: Int) -> Int {
+        switch value {
+        case 0, 16: 7
+        case 17, 18: 19
+        case 232, 233, 234, 235, 236, 237: 238
+        default: value
+        }
+    }
+
     private func resolvePalette(_ index: UInt8) -> RGB {
-        let value = Int(index)
+        let value = remapsDarkXterm ? Self.remappedDarkIndex(Int(index)) : Int(index)
         if value < 8 {
             let base = NamedColor(rawValue: UInt8(value))
             return base.flatMap { named[$0] } ?? defaultForeground
