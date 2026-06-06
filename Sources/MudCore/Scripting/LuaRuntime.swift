@@ -141,6 +141,13 @@ public actor LuaRuntime {
     /// regardless of load order. Set by ``setPluginContext``.
     nonisolated(unsafe) var pluginContexts: [String: PluginContext] = [:]
 
+    /// Live output-view pixel size, answered for `GetInfo(280/281)` (#30). Pushed
+    /// from the app as the window resizes; defaults to MUSHclient's classic
+    /// 800×600 so a plugin reading geometry before the app reports a size still
+    /// gets a sane value.
+    nonisolated(unsafe) var outputPixelWidth = 800
+    nonisolated(unsafe) var outputPixelHeight = 600
+
     /// Per-plugin sandbox environments (plugin id → registry ref of an env table
     /// whose `__index` falls back to `_G`), so plugins can't clobber each other's
     /// globals. See `LuaRuntime+PluginEnvironments`.

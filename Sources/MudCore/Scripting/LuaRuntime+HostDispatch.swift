@@ -52,16 +52,25 @@ extension LuaRuntime {
     /// `proteles.info(code)` → the resolved value as a Lua value, or `nil`
     /// for an unimplemented code.
     nonisolated func infoValue(_ arguments: [LuaValue]) -> LuaValue {
-        guard let code = arguments.first?.numberValue.map({ Int($0) }),
-              let value = pluginContext.info(code)
-        else {
-            return .nil
-        }
+        guard let code = arguments.first?.numberValue.map({ Int($0) }) else { return .nil }
+        // Output-window client geometry (#30) — answered live from the real
+        // output-view size, not a per-plugin constant: 280 = client height,
+        // 281 = client width (MUSHclient's GetClientRect bottom / right).
+        if code == 280 { return .number(Double(outputPixelHeight)) }
+        if code == 281 { return .number(Double(outputPixelWidth)) }
+        guard let value = pluginContext.info(code) else { return .nil }
         switch value {
         case .text(let text): return .string(text)
         case .number(let number): return .number(number)
         case .flag(let flag): return .boolean(flag)
         }
+    }
+
+    /// Push the live output-view pixel size, surfaced via `GetInfo(280/281)`
+    /// (#30). Called from the app as the output view resizes.
+    func setOutputGeometry(width: Int, height: Int) {
+        outputPixelWidth = max(0, width)
+        outputPixelHeight = max(0, height)
     }
 
     /// `proteles.dialog(kind, …)` → build a ``ScriptDialog``, run it through the
