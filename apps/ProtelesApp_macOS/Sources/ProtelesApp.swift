@@ -135,6 +135,7 @@ struct ProtelesApp: App {
         )
         resumeStore = resumed.store
         resumeToken = resumed.token
+        ProtelesApp.wireResumeClear(session: session, store: resumed.store)
 
         // Single-session client: no window tabbing, so the "Show Tab Bar" /
         // "Show All Tabs" menu items don't clutter the menu bar.

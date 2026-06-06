@@ -34,4 +34,13 @@ extension ProtelesApp {
         }
         return (resumeStore, token)
     }
+
+    /// Drop the resume breadcrumb when the user **intentionally** ends the
+    /// session — a `quit` command or an explicit disconnect — but not on a drop
+    /// or an app / Sparkle-update shutdown (those leave the session's clean-end
+    /// flags false), so update-resume keeps working (#42). Static so `init` can
+    /// call it without the escaping `Task` capturing `self`.
+    static func wireResumeClear(session: SessionController, store: ResumeTokenStore?) {
+        Task { await session.setCleanSessionEndHandler { store?.clear() } }
+    }
 }

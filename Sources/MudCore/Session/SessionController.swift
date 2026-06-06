@@ -261,6 +261,18 @@ public actor SessionController {
     /// expected, not a dropped link. Aardwolf's is `quit`.
     public static let quitCommands: Set<String> = ["quit"]
 
+    /// Called when the user **intentionally** ends the session — a `quit`
+    /// command or an explicit ``disconnect()`` — but *not* on a drop or an app /
+    /// Sparkle-update shutdown (those leave ``userInitiatedDisconnect`` /
+    /// ``expectsCleanClose`` false). The app uses it to drop the session-resume
+    /// breadcrumb so the next launch doesn't restore a session the user left
+    /// (#42). Gating on these flags is what keeps update-resume working.
+    var cleanSessionEndHandler: (@Sendable () -> Void)?
+
+    public func setCleanSessionEndHandler(_ handler: @escaping @Sendable () -> Void) {
+        cleanSessionEndHandler = handler
+    }
+
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
     /// when autologin is not configured or has completed.
@@ -429,24 +441,6 @@ public actor SessionController {
         restartTimerLoop()
     }
 
-    /// Close the connection. Idempotent. A user-initiated disconnect — it
-    /// suppresses autoreconnect.
-    public func disconnect() async {
-        userInitiatedDisconnect = true
-        isReconnecting = false
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        timerTask?.cancel()
-        timerTask = nil
-
-        if let conn = connection {
-            teardownSession()
-            await conn.disconnect()
-            await flushOnDisconnect()
-        }
-        updateState(.disconnected)
-    }
-
     /// Send a user-typed command (aliases when a script engine is present, else
     /// verbatim; `\r\n` appended). Tracks `quit` so the ensuing server close is
     /// a clean logout, not a dropped link that would autoreconnect.
@@ -454,6 +448,9 @@ public actor SessionController {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
+        // A `quit` is an intentional session end — drop the resume breadcrumb now
+        // (don't wait for the server close, which may race a follow-on app quit).
+        if expectsCleanClose { cleanSessionEndHandler?() }
         // Echo typed input (dimmed) so it's visible — e.g. while writing a note.
         // Suppressed when the server echoes (passwords) and for the bare
         // prompt-refresh Enter; the transcript tap is gated the same way.
