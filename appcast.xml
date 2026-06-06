@@ -1,10 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Proteles</title>
-    <link>https://rodarvus.github.io/proteles/appcast.xml</link>
-    <description>Proteles auto-update feed (Sparkle). Interim host until proteles.net.</description>
-    <language>en</language>
-    <!-- Items are generated + signed by `generate_appcast` per release. -->
-  </channel>
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Proteles</title>
+        <item>
+            <title>0.4.9</title>
+            <pubDate>Sat, 06 Jun 2026 13:29:34 +0100</pubDate>
+            <sparkle:version>37</sparkle:version>
+            <sparkle:shortVersionString>0.4.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://rodarvus.github.io/proteles/Proteles-0.4.9.zip" length="7925148" type="application/octet-stream" sparkle:edSignature="RynzalLaFWTZkHHyqjpWBZhdcZNtxzVCQ93cLgsmP2Ok75WniPZxHWqfiYn/ED6DAPFeriIO7aMNtOPcbAoQDQ=="/>
+            <sparkle:deltas>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles37-36.delta" sparkle:deltaFrom="36" length="224726" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="KdGV+d+zCjWYHNJl9o2f7I5vguhOY6lCvlIRYeD5+cAOCpY3ErZlcfx5qlCMhCkya1tI///0zGqE/uBPO+WFDw=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
+            <title>0.4.8</title>
+            <pubDate>Sat, 06 Jun 2026 13:29:34 +0100</pubDate>
+            <sparkle:version>36</sparkle:version>
+            <sparkle:shortVersionString>0.4.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://rodarvus.github.io/proteles/Proteles-0.4.8.zip" length="7925215" type="application/octet-stream" sparkle:edSignature="VJhM8qb9jTviItvvOUgBgT+JFXbj8gwvcBLnRca51XhebZcvUWB5vpWRvP+hfVwvyC8o/ihfNjd2EZfDJMi4AA=="/>
+        </item>
+    </channel>
 </rss>
