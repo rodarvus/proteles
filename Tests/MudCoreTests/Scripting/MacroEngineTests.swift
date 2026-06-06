@@ -205,4 +205,32 @@ struct MacroEngineTests {
         let json = String(decoding: data, as: UTF8.self)
         #expect(json.contains("\"modifiers\":9"))
     }
+
+    // MARK: - Shared tier gate (#40)
+
+    @Test("chordMayFire: modifier/function/keypad always fire; bare needs nav+empty")
+    func chordMayFireTierGate() {
+        let modifier = KeyChord(keyCode: 38, modifiers: [.command])
+        let function = KeyChord(keyCode: KeyCode.f1, isFunctionKey: true)
+        let keypad = KeyChord(keyCode: KeyCode.keypad8, isKeypad: true)
+        let bare = KeyChord(keyCode: 38)
+
+        // Always-fire tiers ignore the context.
+        for chord in [modifier, function, keypad] {
+            #expect(MacroEngine.chordMayFire(chord, context: MacroContext()))
+            #expect(MacroEngine.chordMayFire(
+                chord, context: MacroContext(inputIsEmpty: false, navigationModeOn: false)
+            ))
+        }
+        // A bare key fires only with Navigation mode on AND an empty input line.
+        #expect(MacroEngine.chordMayFire(
+            bare, context: MacroContext(inputIsEmpty: true, navigationModeOn: true)
+        ))
+        #expect(!MacroEngine.chordMayFire(
+            bare, context: MacroContext(inputIsEmpty: true, navigationModeOn: false)
+        ))
+        #expect(!MacroEngine.chordMayFire(
+            bare, context: MacroContext(inputIsEmpty: false, navigationModeOn: true)
+        ))
+    }
 }

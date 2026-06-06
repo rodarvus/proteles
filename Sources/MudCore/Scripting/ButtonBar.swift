@@ -50,6 +50,13 @@ public struct ButtonBar: Codable, Sendable, Equatable {
         groups.lazy.flatMap(\.buttons).first { $0.label == label }
     }
 
+    /// The first button bound to `chord` via its ``CommandButton/hotkeyEcho``,
+    /// across all groups (#40). Pure lookup — the caller applies the macro tier
+    /// gate (``MacroEngine/chordMayFire(_:context:)``) before firing.
+    public func button(forHotkey chord: KeyChord) -> CommandButton? {
+        groups.lazy.flatMap(\.buttons).first { $0.hotkeyEcho == chord }
+    }
+
     /// Apply a script-issued `add`/`toggle`/`remove` to the bar (mutating).
     /// `setState` changes only transient toggle state, so it's a no-op here —
     /// the caller applies it via ``button(label:)``.

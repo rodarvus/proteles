@@ -111,4 +111,13 @@ public extension ScriptsModel {
         await session.fire(button.action(currentlyOn: isOn))
         if button.isToggle { buttonToggleStates[id] = !isOn }
     }
+
+    /// The id of the command button bound to `chord` that may fire right now,
+    /// or `nil` (#40). Applies the same tier gate as macros so a bare-key hotkey
+    /// only fires on an empty line in Navigation mode; modifier/function/keypad
+    /// chords always fire. The caller (key monitor) runs ``fireButton(_:)``.
+    func matchButtonHotkey(_ chord: KeyChord, context: MacroContext) -> UUID? {
+        guard MacroEngine.chordMayFire(chord, context: context) else { return nil }
+        return buttonBar.button(forHotkey: chord)?.id
+    }
 }

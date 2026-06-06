@@ -275,11 +275,17 @@ struct ContentView: View {
                         inputIsEmpty: inputIsEmpty,
                         navigationModeOn: navigationMode
                     )
-                    guard let action = scripts.matchMacro(chord, context: context) else {
-                        return false
+                    // Macros take precedence; a command-button hotkey (#40) is the
+                    // fallback binding for the same chord.
+                    if let action = scripts.matchMacro(chord, context: context) {
+                        Task { await session.fire(action) }
+                        return true
                     }
-                    Task { await session.fire(action) }
-                    return true
+                    if let buttonID = scripts.matchButtonHotkey(chord, context: context) {
+                        Task { await scripts.fireButton(buttonID) }
+                        return true
+                    }
+                    return false
                 },
                 vocabulary: { makeCompletionVocabulary() },
                 spellChecking: commandSpellCheck,
