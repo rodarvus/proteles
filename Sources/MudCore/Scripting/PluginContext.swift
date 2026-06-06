@@ -36,9 +36,6 @@ public struct PluginContext: Sendable, Equatable {
     public var stateDirectory: String
     public var soundsDirectory: String
     public var logDirectory: String
-    /// Output-view pixel size — stubbed; only used by miniwindow layout.
-    public var outputWidth: Int
-    public var outputHeight: Int
 
     public init(
         pluginID: String,
@@ -50,9 +47,7 @@ public struct PluginContext: Sendable, Equatable {
         appDirectory: String = "",
         stateDirectory: String = "",
         soundsDirectory: String = "",
-        logDirectory: String = "",
-        outputWidth: Int = 800,
-        outputHeight: Int = 600
+        logDirectory: String = ""
     ) {
         self.pluginID = pluginID
         self.pluginName = pluginName
@@ -64,8 +59,6 @@ public struct PluginContext: Sendable, Equatable {
         self.stateDirectory = stateDirectory
         self.soundsDirectory = soundsDirectory
         self.logDirectory = logDirectory
-        self.outputWidth = outputWidth
-        self.outputHeight = outputHeight
     }
 
     /// The context for the user's own (non-plugin) scripts.
@@ -118,12 +111,11 @@ public struct PluginContext: Sendable, Equatable {
         }
     }
 
-    /// Numeric codes (time, output geometry — geometry is a stub until
-    /// miniwindows exist).
+    /// Numeric codes (time). Output-window geometry (`GetInfo(280/281)`) is
+    /// answered live by ``LuaRuntime`` from the real output-view size (#30), not
+    /// here — it isn't a per-plugin constant.
     private func numberInfo(_ code: Int, now: Date) -> Double? {
         switch code {
-        case 280: Double(outputHeight)
-        case 281: Double(outputWidth)
         case 304: now.timeIntervalSince1970
         default: nil
         }

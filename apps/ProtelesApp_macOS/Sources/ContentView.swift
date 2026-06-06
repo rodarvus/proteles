@@ -282,6 +282,10 @@ struct ContentView: View {
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Report the live output-view size for plugins' GetInfo(280/281) (#30).
+            .background(GeometryReader { proxy in
+                Color.clear.task(id: proxy.size) { await reportOutputGeometry(proxy.size) }
+            })
             // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
             // the game output, layered over it — not over the side dock.
             .overlay(alignment: .topTrailing) {
