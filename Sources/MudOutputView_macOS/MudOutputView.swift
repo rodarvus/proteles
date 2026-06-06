@@ -19,6 +19,11 @@
         /// the newest lines while scrolled up). Pointless for static content
         /// like a captured help article, so the Help window turns it off.
         private let showsLiveTail: Bool
+        /// Per-frame render-cost probe: invoked with each flush's telemetry
+        /// (paint cost + worst arrival→paint latency) so a caller can log slow
+        /// text-render frames to the session transcript (perf diagnosis — see
+        /// ``RenderCoordinator/RenderFrameStats``).
+        private let onFrameFlush: ((RenderFrameStats) -> Void)?
 
         public init(
             store: ScrollbackStore,
@@ -26,7 +31,8 @@
             fontSize: CGFloat = 13,
             fontName: String = "",
             showsLiveTail: Bool = true,
-            onCommand: ((String) -> Void)? = nil
+            onCommand: ((String) -> Void)? = nil,
+            onFrameFlush: ((RenderFrameStats) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
@@ -34,6 +40,7 @@
             self.fontName = fontName
             self.showsLiveTail = showsLiveTail
             self.onCommand = onCommand
+            self.onFrameFlush = onFrameFlush
         }
 
         /// The base output font: the named family if available, else the system
@@ -68,6 +75,7 @@
             // split — there's nothing "streaming" to mirror.
             if !showsLiveTail {
                 let coordinator = RenderCoordinator(textView: textView, palette: palette)
+                coordinator.onFrameFlush = onFrameFlush
                 context.coordinator.renderCoordinator = coordinator
                 let storeRef = store
                 Task { @MainActor in
@@ -102,6 +110,7 @@
 
             let coordinator = RenderCoordinator(textView: textView, palette: palette)
             coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
+            coordinator.onFrameFlush = onFrameFlush
             context.coordinator.renderCoordinator = coordinator
             let storeRef = store
             Task { @MainActor in

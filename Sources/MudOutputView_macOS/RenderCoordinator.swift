@@ -29,12 +29,33 @@
     /// the view jumps to the new bottom after the append. Otherwise scroll
     /// position is preserved so the user can read older lines while new
     /// ones stream in.
+    /// Per-flush render telemetry: how long the paint took, how much it painted,
+    /// and — the key perf number — the worst **arrival→paint** latency among the
+    /// lines shown this frame (`Date.now − line.timestamp`). Because `Line` is
+    /// stamped at parse time (in `pipeline.consume`, *before* the GMCP-dispatch
+    /// loop), that latency captures the whole path from "bytes arrived from the
+    /// MUD" to "pixels on screen": GMCP-dispatch wait + queueing + frame wait +
+    /// the flush itself. A high latency with a *low* `flushDuration` means the
+    /// stall is upstream (processing), not the paint.
+    public struct RenderFrameStats: Sendable {
+        public let flushDuration: Duration
+        public let appendedLines: Int
+        public let maxArrivalLatency: TimeInterval
+
+        public init(flushDuration: Duration, appendedLines: Int, maxArrivalLatency: TimeInterval) {
+            self.flushDuration = flushDuration
+            self.appendedLines = appendedLines
+            self.maxArrivalLatency = maxArrivalLatency
+        }
+    }
+
     @MainActor
     public final class RenderCoordinator {
-        /// Optional callback fired after every flush with the wall-clock
-        /// duration the flush took. Used by the validation spike to measure
-        /// frame timing without coupling to a logging framework.
-        public var onFrameFlush: ((Duration) -> Void)?
+        /// Optional callback fired after every flush with that frame's render
+        /// telemetry (see ``RenderFrameStats``). Used by perf diagnosis (and the
+        /// original validation spike) to measure timing without coupling to a
+        /// logging framework.
+        public var onFrameFlush: ((RenderFrameStats) -> Void)?
 
         /// Distance from the bottom (in points) within which auto-scroll
         /// remains engaged.
@@ -184,8 +205,11 @@
             pendingEvents.removeAll(keepingCapacity: true)
 
             let start = ContinuousClock.now
+            let wallNow = Date()
             let stickToBottom = isScrolledToBottom(textView)
             var didAppend = false
+            var appendedCount = 0
+            var maxArrivalLatency: TimeInterval = 0
 
             storage.beginEditing()
 
@@ -212,6 +236,8 @@
                         recentLines.removeFirst(recentLines.count - tailLineCount)
                     }
                     didAppend = true
+                    appendedCount += 1
+                    maxArrivalLatency = max(maxArrivalLatency, wallNow.timeIntervalSince(line.timestamp))
 
                 case .evicted(let id):
                     guard let head = lineLengths.popFirst() else { break }
@@ -236,7 +262,11 @@
             }
             if didAppend { refreshTail() }
 
-            onFrameFlush?(ContinuousClock.now - start)
+            onFrameFlush?(RenderFrameStats(
+                flushDuration: ContinuousClock.now - start,
+                appendedLines: appendedCount,
+                maxArrivalLatency: maxArrivalLatency
+            ))
         }
 
         /// Pin the view to the bottom. We scroll immediately *and* again on the
