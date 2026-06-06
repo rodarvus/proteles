@@ -58,6 +58,11 @@ extension SessionController {
             logTranscript(.recv, line.text)
             await appendLineThroughScripts(line)
         }
+        // A group join/leave/disband/leader change → re-pull the group snapshot
+        // (Aardwolf only sends `group` GMCP on request). Once per chunk.
+        if output.lines.contains(where: { Self.isGroupChangeLine($0.text) }) {
+            await refreshGroupSnapshot()
+        }
 
         await advanceAutologin(newLines: output.lines)
         await persistVariablesIfDirty()
@@ -97,14 +102,15 @@ extension SessionController {
             // portal, walks from the wrong room, and aborts).
             await applyScriptEffects(mapper.advanceWalk())
         }
-        // On each room.info (post-login), refresh Rich Exits and one-shot enable
+        // Each tick, refresh the group snapshot so member vitals stay current
+        // (Aardwolf won't push `group` GMCP on its own).
+        if message.package.lowercased() == "comm.tick" {
+            await refreshGroupSnapshot()
+        }
+        // On each room.info (post-login), refresh Rich Exits + one-shot enable
         // any tag options whose features are on.
         if message.package.lowercased() == "room.info" {
-            if richExitsEnabled { await refreshRichExits() }
-            if helpCaptureEnabled, !sentHelpsTagOption {
-                sentHelpsTagOption = true
-                await setAardwolfTagOption(3, on: true) // TELOPT_HELPS
-            }
+            await handleRoomInfoSideEffects()
         }
         // Hold `char.status` plugin delivery until the character is in-game
         // (state ≥ 3), matching MUSHclient: a transitional mid-login char.status
@@ -138,6 +144,16 @@ extension SessionController {
         // Load the armed dinv once the character is active (its init keys off the
         // first char.base broadcast it sees while active — see D-32).
         if armedDinvShouldLoad(for: message) { await loadPendingDinv() }
+    }
+
+    /// Per-`room.info` side effects, extracted to keep `dispatchGMCP` within the
+    /// complexity budget: refresh Rich Exits + one-shot enable the Helps tag.
+    private func handleRoomInfoSideEffects() async {
+        if richExitsEnabled { await refreshRichExits() }
+        if helpCaptureEnabled, !sentHelpsTagOption {
+            sentHelpsTagOption = true
+            await setAardwolfTagOption(3, on: true) // TELOPT_HELPS
+        }
     }
 
     /// Refresh the cached Rich Exits data from the current GMCP room (cardinals)
@@ -227,9 +243,34 @@ extension SessionController {
     /// copyover, so the status/HUD modules resume. The handshake is idempotent,
     /// so re-sending is safe.
     func sendGMCPHandshake() async {
-        for packet in GMCPMessage.aardwolfHandshake(clientVersion: MudCore.version) {
-            try? await connection?.send(packet)
+        for payload in GMCPMessage.aardwolfHandshakePayloads(clientVersion: MudCore.version) {
+            await sendGMCP(payload)
         }
+    }
+
+    /// Send one client→server GMCP packet, logging it to the transcript so the
+    /// outgoing GMCP is visible for debugging (the binary recording captures only
+    /// the received stream).
+    func sendGMCP(_ payload: String) async {
+        logTranscript(.send, "GMCP \(payload)")
+        try? await connection?.send(GMCPMessage.encode(payload: payload))
+    }
+
+    /// Re-request the group snapshot. Aardwolf only pushes `group` GMCP in
+    /// response to `request group`, so we refresh after any group-change line and
+    /// on each tick to keep the Group panel current.
+    func refreshGroupSnapshot() async {
+        await sendGMCP("request group")
+    }
+
+    /// True for the Aardwolf lines that signal the group composition/leadership
+    /// changed (join/leave/disband/leader), so we re-pull the snapshot.
+    nonisolated static func isGroupChangeLine(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        guard lower.contains("group") else { return false }
+        return lower.contains("join") || lower.contains("left the group")
+            || lower.contains("disband") || lower.contains("removed")
+            || lower.contains("group leader") || lower.contains("leaves the group")
     }
 
     func flushOnDisconnect() async {
