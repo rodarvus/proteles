@@ -164,7 +164,8 @@ struct ProtelesApp: App {
                 levels: levels,
                 pluginDBs: pluginDBs,
                 resumeStore: resumeStore,
-                resumeToken: resumeToken
+                resumeToken: resumeToken,
+                updater: updater
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")

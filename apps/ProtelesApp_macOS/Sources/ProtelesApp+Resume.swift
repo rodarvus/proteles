@@ -21,12 +21,13 @@ extension ProtelesApp {
         guard let persistence else { return (resumeStore, token) }
         let resuming = token != nil
         Task {
-            if resuming,
-               let tail = try? await persistence.loadTail(limit: 400), !tail.isEmpty
-            {
-                for line in tail {
-                    await store.append(text: line.text, runs: line.runs)
-                }
+            // Seed the restored tail BEFORE attaching persistence so it isn't
+            // written to the DB again (it's already there).
+            let tail = await resuming ? ((try? persistence.loadTail(limit: 400)) ?? []) : []
+            for line in tail {
+                await store.append(text: line.text, runs: line.runs)
+            }
+            if !tail.isEmpty {
                 await store.append(text: "") // blank divider before the fresh session
             }
             await persistence.attach(to: store)

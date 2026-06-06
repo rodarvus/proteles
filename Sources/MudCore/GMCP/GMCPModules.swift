@@ -64,19 +64,26 @@ public struct CharStatus: Codable, Sendable, Equatable {
     public let align: Int?
     public let enemy: String?
     public let enemypct: Int?
+    /// Aardwolf's player-state enum (verified against the live `char.status` +
+    /// the reference mapper): `8` = fighting, `12` = running/speedwalking, `5` =
+    /// note-mode (writing), `3`/`11` = active/standing. Optional (older fixtures
+    /// omit it). Backs the auto-update mid-combat guard (#42 / D-100).
+    public let state: Int?
 
     public init(
         level: Int,
         tnl: Int? = nil,
         align: Int? = nil,
         enemy: String? = nil,
-        enemypct: Int? = nil
+        enemypct: Int? = nil,
+        state: Int? = nil
     ) {
         self.level = level
         self.tnl = tnl
         self.align = align
         self.enemy = enemy
         self.enemypct = enemypct
+        self.state = state
     }
 
     /// The current combat opponent and its remaining health percentage, or
@@ -86,6 +93,14 @@ public struct CharStatus: Codable, Sendable, Equatable {
     public var combatTarget: (name: String, percent: Int)? {
         guard let enemy, !enemy.isEmpty, let enemypct else { return nil }
         return (enemy, enemypct)
+    }
+
+    /// Whether it's a safe moment to interrupt with an update prompt (#42): not
+    /// fighting (`8`) / running (`12`) / note-mode (`5`), and not engaged with a
+    /// combat target. An unknown `state` falls back to the combat-target check.
+    public var isSafeToInterrupt: Bool {
+        if let state, state == 8 || state == 12 || state == 5 { return false }
+        return combatTarget == nil
     }
 }
 

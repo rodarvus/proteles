@@ -24,6 +24,9 @@ struct ContentView: View {
     /// launch) and the fresh token from the launch that just restarted, if any.
     let resumeStore: ResumeTokenStore?
     let resumeToken: ResumeToken?
+    /// Auto-updater — we push the live "safe to interrupt" state to it so a
+    /// background update check never pops mid-combat (#42, Phase 2b).
+    let updater: Updater
     /// Posts session notifications (tells/mentions) as macOS notifications.
     @State private var notifications = NotificationController()
     @Environment(\.openWindow) var openWindow
@@ -154,6 +157,8 @@ struct ContentView: View {
         .task {
             for await snapshot in await session.gmcpState.subscribe() {
                 gmcp = snapshot
+                // Feed the mid-combat guard for background update checks (#42).
+                updater.safeToInterrupt = snapshot.status?.isSafeToInterrupt ?? true
             }
         }
         // Feed recent output lines to the Tab-completion word source.
