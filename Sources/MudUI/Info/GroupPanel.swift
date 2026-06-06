@@ -48,8 +48,9 @@ public struct GroupPanel: View {
         HStack(spacing: 6) {
             let group = state.group
             VStack(alignment: .leading, spacing: 1) {
-                Text(group?.groupname?.isEmpty == false ? "Group: \(group!.groupname!)" : "Group")
+                groupTitle(group?.groupname)
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
                 if let leader = group?.leader, !leader.isEmpty {
                     Text("Leader: \(leader)").font(.caption2).foregroundStyle(.secondary)
                 }
@@ -59,6 +60,12 @@ public struct GroupPanel: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
+    }
+
+    /// "Group: <name>" with the name's Aardwolf `@`-colours parsed + rendered.
+    private func groupTitle(_ name: String?) -> Text {
+        guard let name, !name.isEmpty else { return Text("Group") }
+        return Text("Group: ") + Text(AardwolfColor.styledLine(from: name).attributedText())
     }
 
     private var optionsMenu: some View {
@@ -109,9 +116,9 @@ public struct GroupPanel: View {
         HStack(spacing: 4) {
             Text(label).font(.system(size: 8, weight: .semibold).monospaced())
                 .foregroundStyle(.secondary).frame(width: 16, alignment: .leading)
-            Capsule().fill(.quaternary).frame(width: 90, height: 5)
+            Capsule().fill(.quaternary).frame(width: 72, height: 5)
                 .overlay(alignment: .leading) {
-                    Capsule().fill(tint).frame(width: 90 * Self.fraction(current, maximum), height: 5)
+                    Capsule().fill(tint).frame(width: 72 * Self.fraction(current, maximum), height: 5)
                 }
             if let cur = current, let max = maximum {
                 Text("\(cur)/\(max)").font(.system(size: 8).monospacedDigit())

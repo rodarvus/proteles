@@ -11,6 +11,12 @@ extension SessionController {
         transcript?.log(category, text)
     }
 
+    /// Record a free-form diagnostic NOTE in the session transcript (e.g. the
+    /// UI-thread stall monitor), so perf issues surface in the recording.
+    public func recordNote(_ text: String) {
+        logTranscript(.note, text)
+    }
+
     func processChunk(_ wireBytes: [UInt8]) async {
         // Tee to the recorder before doing any parser work — we want
         // the *wire* bytes on disk so a replay re-runs the full

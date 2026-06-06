@@ -139,6 +139,9 @@ struct ContentView: View {
                 connectionState = Self.map(networkState)
             }
         }
+        // Main-thread stall monitor (perf diagnostics) — logs UI-thread hitches
+        // to the session transcript. Body lives in the extension (type budget).
+        .task { await monitorMainThreadStalls() }
         .task {
             for await snapshot in await session.gmcpState.subscribe() {
                 gmcp = snapshot
@@ -504,6 +507,22 @@ extension ContentView {
     }
 
     /// Map a panel kind to its live view (the layout engine supplies chrome).
+    /// A ~500ms MainActor heartbeat; a late wake means the UI thread was blocked
+    /// that long, logged to the transcript so perf hitches are visible in a
+    /// recording. Cheap (one wake/500ms; logs only on a real stall).
+    func monitorMainThreadStalls() async {
+        var last = Date()
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(500))
+            let now = Date()
+            let stall = now.timeIntervalSince(last) - 0.5
+            last = now
+            if stall > 0.4 {
+                await session.recordNote("UI stall: main thread blocked ~\(Int(stall * 1000))ms")
+            }
+        }
+    }
+
     func panelContent(_ kind: PanelKind) -> AnyView {
         switch kind {
         case .output: AnyView(gameColumn)
