@@ -107,6 +107,30 @@ struct ScrollbackPersistenceTests {
         await persistence.detach()
         try cleanup(url: url)
     }
+
+    @Test("loadTail returns the most recent lines oldest-first, read-only (#42)")
+    func loadTailRestoresRecentLines() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ScrollbackDatabase(url: url)
+        let store = ScrollbackStore()
+        let persistence = ScrollbackPersistence(database: database, flushInterval: .milliseconds(20))
+        await persistence.attach(to: store)
+        for text in ["one", "two", "three"] {
+            await store.append(text: text)
+        }
+        try await Task.sleep(for: .milliseconds(80))
+        await persistence.flushNow()
+
+        let restored = try await persistence.loadTail(limit: 2)
+        #expect(restored.map(\.text) == ["two", "three"]) // last two, oldest-first
+
+        // Read-only: the DB still holds exactly the three originals (restoring
+        // must not re-persist).
+        #expect(try database.count() == 3)
+
+        await persistence.detach()
+        try cleanup(url: url)
+    }
 }
 
 // MARK: - Helpers
