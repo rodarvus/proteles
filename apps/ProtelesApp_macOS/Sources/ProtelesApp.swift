@@ -173,7 +173,8 @@ struct ProtelesApp: App {
                         options: [
                             .applicationVersion: MudCore.version,
                             .credits: NSAttributedString(
-                                string: "A native Aardwolf MUD client for macOS.",
+                                string: "A native Aardwolf MUD client for macOS.\n"
+                                    + "Faithful colours, native mapper, built-in scripting.",
                                 attributes: [.font: NSFont.systemFont(ofSize: 11)]
                             )
                         ]
