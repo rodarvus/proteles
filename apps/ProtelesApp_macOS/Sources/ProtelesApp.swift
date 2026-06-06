@@ -24,6 +24,12 @@ struct ProtelesApp: App {
     /// `~/Library/Application Support/com.proteles.ProtelesApp/`.
     private let persistence: ScrollbackPersistence?
 
+    /// Session-resume (#42): the breadcrumb store, and the fresh token consumed
+    /// at launch (non-nil only when the last run was connected and the process
+    /// just restarted — Sparkle update, crash, or quick relaunch).
+    private let resumeStore: ResumeTokenStore?
+    private let resumeToken: ResumeToken?
+
     /// Sparkle auto-updater (#23). Started at launch; drives the "Check for
     /// Updates…" menu item and background checks.
     @StateObject private var updater = Updater()
@@ -120,10 +126,15 @@ struct ProtelesApp: App {
         _map = State(initialValue: MapPanelModel(session: session))
         _asciiMap = State(initialValue: MapModel(store: session.mapStore))
 
-        if let persistence {
-            let store = session.scrollbackStore
-            Task { await persistence.attach(to: store) }
-        }
+        // Session resume (#42): consume the breadcrumb and, when resuming,
+        // restore scrollback before persistence attaches (see
+        // ProtelesApp+Resume.swift), then attach persistence for the new session.
+        let resumed = ProtelesApp.resumeOnLaunch(
+            persistence: persistence,
+            store: session.scrollbackStore
+        )
+        resumeStore = resumed.store
+        resumeToken = resumed.token
 
         // Single-session client: no window tabbing, so the "Show Tab Bar" /
         // "Show All Tabs" menu items don't clutter the menu bar.
@@ -151,7 +162,9 @@ struct ProtelesApp: App {
                 snd: snd,
                 help: help,
                 levels: levels,
-                pluginDBs: pluginDBs
+                pluginDBs: pluginDBs,
+                resumeStore: resumeStore,
+                resumeToken: resumeToken
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")
@@ -184,7 +197,13 @@ struct ProtelesApp: App {
                 Button("Check for Updates…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheck)
             }
-            ProtelesCommands(session: session, worlds: worlds, scripts: scripts, layout: layout)
+            ProtelesCommands(
+                session: session,
+                worlds: worlds,
+                scripts: scripts,
+                layout: layout,
+                resumeStore: resumeStore
+            )
             CommandGroup(after: .pasteboard) {
                 Button("Copy as ANSI Colour Codes") {
                     NSApp.sendAction(#selector(MudTextView.copyWithCodes(_:)), to: nil, from: nil)
@@ -442,6 +461,9 @@ private struct ProtelesCommands: Commands {
     let worlds: WorldsModel
     let scripts: ScriptsModel
     @Bindable var layout: LayoutStore
+    /// Resume breadcrumb store (#42) — cleared on an explicit Disconnect so an
+    /// intentional disconnect doesn't auto-reconnect on a later relaunch.
+    var resumeStore: ResumeTokenStore?
     @Environment(\.openWindow) private var openWindow
     /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
     /// the same key and pushes it to the session.
@@ -476,6 +498,9 @@ private struct ProtelesCommands: Commands {
 
             Button("Disconnect") {
                 let session = session
+                // An explicit disconnect is intentional — drop the resume
+                // breadcrumb so a later relaunch doesn't auto-reconnect (#42).
+                resumeStore?.clear()
                 Task { await session.disconnect() }
             }
             .keyboardShortcut("D", modifiers: [.command, .shift])

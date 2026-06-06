@@ -15,7 +15,7 @@ struct ResumeTokenTests {
         let store = ResumeTokenStore(url: url)
         let id = UUID()
         let stamp = Date(timeIntervalSince1970: 1_780_000_000)
-        let token = ResumeToken(worldID: id, fromVersion: "0.4.8", toVersion: "0.4.9", stamp: stamp)
+        let token = ResumeToken(worldID: id, appVersion: "0.4.9", stamp: stamp)
 
         try store.write(token)
         #expect(store.peek() == token) // peek doesn't consume
@@ -29,12 +29,21 @@ struct ResumeTokenTests {
     func freshness() {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let token = { (offset: TimeInterval) in
-            ResumeToken(worldID: UUID(), stamp: now.addingTimeInterval(offset))
+            ResumeToken(worldID: UUID(), appVersion: "0.4.9", stamp: now.addingTimeInterval(offset))
         }
         #expect(token(-5).isFresh(now: now)) // 5s old → fresh
         #expect(token(-119).isFresh(now: now)) // just under 2 min → fresh
         #expect(!token(-3600).isFresh(now: now)) // an hour old → stale (cold start)
         #expect(!token(+30).isFresh(now: now)) // future stamp → reject
+    }
+
+    @Test("wasUpdated: numeric-aware version compare (0.4.10 > 0.4.9)")
+    func wasUpdated() {
+        let token = ResumeToken(worldID: UUID(), appVersion: "0.4.9", stamp: Date())
+        #expect(token.wasUpdated(runningVersion: "0.4.10")) // newer (numeric, not lexical)
+        #expect(token.wasUpdated(runningVersion: "0.5.0"))
+        #expect(!token.wasUpdated(runningVersion: "0.4.9")) // same → quick restart
+        #expect(!token.wasUpdated(runningVersion: "0.4.8")) // older → not an update
     }
 
     @Test("missing / corrupt file reads as nil, never throws on read")
