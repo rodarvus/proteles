@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.6` (notarized).
+**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.9` (notarized).
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
@@ -15,8 +15,11 @@ natively, the tiled panel dock, the Plugin Library, leveling analytics, and a
 six-bar status display all ship. **We are now in polish + debugging**, driven by
 live play. Release engineering is largely done — **notarization** (the first
 notarized Developer-ID build shipped in `v0.4.5`) and **opt-in crash reporting**
-are landed; the **Sparkle auto-updater** (#23) is the last release-engineering
-item. The remaining gate to a **1.0** is now mostly **UI/UX polish** — see
+are landed; the **Sparkle auto-updater** (#23) shipped its **Phase 1** in
+`v0.4.8`/`v0.4.9` (proven end-to-end: notarized signing, EdDSA appcast, in-app
+Check-for-Updates) — remaining for 1.0 is moving the feed to `proteles.net` and
+the seamless "update now" copyover (#42). The remaining gate to a **1.0** is now
+mostly **UI/UX polish** — see
 **[docs/DESIGN.md](docs/DESIGN.md)**, the design north-star, with the polish
 backlog tracked under the GitHub `ux` label.
 
@@ -511,6 +514,8 @@ superseded decisions are marked, not deleted.
 | D-96 | 2026-06-03 | As-you-type ghost hint for the command input (GH #13). A greyed, non-interactive trailing hint of the best current-word completion (pure `CompletionVocabulary.ghostSuffix`). Rendered as an **overlay label never in the editable text** (a sibling view positioned at the field-editor caret rect) rather than rewriting the input as a custom `NSTextView` — so it can't be sent / eat the spacebar, and the existing Tab-cycle / history / Enter-safety are untouched. →/Tab accept (proper casing), Esc dismiss, Enter sends typed-only, any caret move drops it. Toggle "Suggest completions as you type" (default on). A modern (fish/Warp) pattern — Mudlet has no equivalent; its "autocompletion" is the selected-suffix history model Proteles deliberately removed. Deferred + iterate: overlay-vs-custom-NSTextView long-term; a whole-line history ghost (v3) | adopted |
 | D-97 | 2026-06-03 | Command-button bar (GH #15), v1–v3. Per-world `ButtonBar` (groups → `CommandButton`, reusing `MacroAction`) in `ScriptDocument`; a dockable/floating `PanelKind.commandBar` whose **adaptive grid follows placement** (horizontal bar docked top/bottom, column/grid docked side/floating) — no manual orientation; group tabs; momentary + toggle buttons with tint/icon + a hotkey-echo badge. Buttons fire through the command pipeline via `session.fire`. A dedicated **Scripts ▸ Buttons** editor (chosen over inline). **Scripting API** (`Button.add/toggle/state/remove` → `proteles.button` → a `.button` effect the session streams to the app, which applies + persists) lets plugins/triggers create/update/toggle buttons — a Proteles edge over Mudlet (whose Lua can only toggle pre-made buttons; the bar is GUI-authored). Pure model/apply in MudCore (tolerant Codable preserves older docs) | adopted |
 | D-98 | 2026-06-05 | **UI/UX is the primary remaining gate to 1.0**, so adopt **`docs/DESIGN.md`** as the design north-star (separate from PLAN's architecture/decisions and from the GitHub-Issues backlog, now with a `ux` label). Founding UX calls, settled with the maintainer: calm-but-extensible *density* (single-panel default, easy 2–3 panels); the **default theme matches the MUSHclient default**, derived faithfully from the references (current "Aardwolf" theme is approximate — several colours off, darker ones unreadable on black: GH #34); a **pop-out / anchor-to-edge / free-float panel model** (today's floating-window story is weak — priority rework, GH #33); sane discoverable defaults, no nanny; **stay Mac-pure** (an iPad port gets its own approach, no cross-platform lowest-common-denominator); neutral-native with a light, consistent identity. First polish-pass papercuts: the panel/float story (#33) and window polish across Scripts/Commands/Plugins/Settings (#35). Also fixed post-`v0.4.5`: button-bar persistence (the `ScriptStore` never stored `buttonBar`, so "Add Group" no-op'd — GH #15) and the Diagnostics tab collapsing a non-resizable Settings window (GH #24) | adopted |
+| D-99 | 2026-06-06 | **Bold ANSI = bright colour** (GH #34). `\e[1;3Xm` parsed as `.named` + a bold flag, but the renderer ignored bold — bold colours rendered as their dim *normal* variants (bold-black invisible on black, bold-blue dark navy), unlike MUSHclient's `<bold>` ANSI table. `ColorPalette.resolveForeground(_:bold:)` upgrades `.named`→`.brightNamed` when bold (xterm-256/24-bit/already-bright pass through; the light-theme contrast clamp still applies), wired into all four render surfaces (main output, S&D panel, session HTML log, copy-as-HTML). Verified the ANSI-16 palette already matches the community MUSHclient default exactly; also brightens the darkest xterm codes per Aardwolf's `x_not_too_dark`. Fix made the main window match the Channels window + MUSHclient | adopted |
+| D-100 | 2026-06-06 | **Sparkle auto-updater, Phase 1** (GH #23), shipped `v0.4.8`/`v0.4.9` and proven end-to-end. SwiftPM dependency on the app target only (MudCore stays dependency-light); EdDSA-signed appcast; **interim** feed on GitHub Pages (`rodarvus.github.io/proteles/appcast.xml`) until `proteles.net` is registered (the feed URL + EdDSA key are "decide-once" — baked into every build); `release.sh` signs Sparkle's helpers **inside-out** (not `--deep`, which Sparkle warns mis-signs them) **with `--preserve-metadata=entitlements`** (a re-sign without it strips entitlements and passes notarisation but crashes at launch). The hardened runtime needs `com.apple.security.cs.disable-library-validation` to load the embedded Sparkle.framework (self-signed dev builds have no Team ID to match). Client-side "copyover" = seamless reconnect, **not** socket/FD preservation (Phase 2, #42; plan in `docs/plans/AUTOUPDATE_AND_COPYOVER.md`) | adopted |
 
 ---
 
