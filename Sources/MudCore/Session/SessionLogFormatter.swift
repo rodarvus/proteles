@@ -67,7 +67,7 @@ public enum SessionLogFormatter {
         guard let style, !style.isDefault else { return text }
         var css: [String] = []
         if let foreground = style.foreground {
-            css.append("color:#\(hex(palette.resolveForeground(foreground)))")
+            css.append("color:#\(hex(palette.resolveForeground(foreground, bold: style.bold)))")
         }
         if style.bold { css.append("font-weight:bold") }
         if style.italic { css.append("font-style:italic") }

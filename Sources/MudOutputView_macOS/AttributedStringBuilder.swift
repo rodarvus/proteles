@@ -82,7 +82,7 @@
             }
             attributed.addAttribute(.font, value: effectiveFont, range: range)
 
-            let fg = palette.resolveForeground(style.foreground)
+            let fg = palette.resolveForeground(style.foreground, bold: style.bold)
             let bg = palette.resolveBackground(style.background)
             let (renderedFg, renderedBg) = style.reverse ? (bg, fg) : (fg, bg)
 

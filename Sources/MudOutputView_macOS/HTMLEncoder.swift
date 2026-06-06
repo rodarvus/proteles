@@ -77,7 +77,7 @@
             let escaped = Self.escape(text)
             var rules: [String] = []
             if let foreground = style.foreground {
-                rules.append("color:#" + Self.hex(palette.resolveForeground(foreground)))
+                rules.append("color:#" + Self.hex(palette.resolveForeground(foreground, bold: style.bold)))
             }
             if style.bold { rules.append("font-weight:bold") }
             if style.underline { rules.append("text-decoration:underline") }

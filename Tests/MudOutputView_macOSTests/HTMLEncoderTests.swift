@@ -40,7 +40,10 @@
         func boldUnderline() {
             let style = StyleAttributes(foreground: .named(.cyan), bold: true, underline: true)
             let result = encoder.encode(line("x", [StyledRun(utf16Range: 0..<1, style: style)]))
-            let expected = "<pre><span style=\"color:#\(hex(.named(.cyan)));"
+            // Bold upgrades the basic named colour to its bright variant
+            // (MUSHclient's <bold> ANSI table) — bold cyan is bright aqua, not
+            // dim cyan.
+            let expected = "<pre><span style=\"color:#\(hex(.brightNamed(.cyan)));"
                 + "font-weight:bold;text-decoration:underline\">x</span></pre>"
             #expect(result == expected)
         }
