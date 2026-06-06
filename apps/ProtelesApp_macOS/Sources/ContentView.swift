@@ -20,12 +20,19 @@ struct ContentView: View {
     let levels: LevelDBPanelModel
     /// Import/reset hooks for the plugin-owned DBs (dinv, leveldb).
     let pluginDBs: PluginDatabasesModel
+    /// Session-resume (#42): breadcrumb store (refreshed on connect, consumed at
+    /// launch) and the fresh token from the launch that just restarted, if any.
+    let resumeStore: ResumeTokenStore?
+    let resumeToken: ResumeToken?
     /// Posts session notifications (tells/mentions) as macOS notifications.
     @State private var notifications = NotificationController()
-    @Environment(\.openWindow) private var openWindow
-    // Not `private` so the `ContentView+PluginDatabases` extension (separate
-    // file) can gate import/reset on the live connection state.
+    @Environment(\.openWindow) var openWindow
+    /// Not `private` so the `ContentView+PluginDatabases` extension (separate
+    /// file) can gate import/reset on the live connection state.
     @State var connectionState: StatusBarView.ConnectionState = .disconnected
+    /// Non-nil while a post-restart reconnect is in flight (#42): the banner text
+    /// ("Updated to vX — reconnecting…" / "Reconnecting…"), cleared on connect.
+    @State var resumeBanner: String?
     @State private var gmcp = GMCPState()
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
@@ -118,7 +125,7 @@ struct ContentView: View {
 
     /// UserDefaults flag marking that the app has completed first-run
     /// setup (so we only auto-open the Worlds window once, ever).
-    private static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
+    static let hasLaunchedKey = "com.proteles.hasLaunchedBefore"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,12 +138,14 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 460)
+        .overlay(alignment: .top) { resumeBannerView }
+        .animation(.easeInOut(duration: 0.2), value: resumeBanner)
         .toolbar {
             ToolbarItem(placement: .primaryAction) { panelsMenu }
         }
         .task {
             for await networkState in session.connectionStates {
-                connectionState = Self.map(networkState)
+                noteConnection(networkState)
             }
         }
         // Main-thread stall monitor (perf diagnostics) — logs UI-thread hitches
@@ -474,27 +483,7 @@ struct ContentView: View {
     /// Load profiles, then either guide a first-time user to the Worlds
     /// window (so they can connect or enter credentials) or auto-connect
     /// the active profile on subsequent launches.
-    private func launch() async {
-        await worlds.load()
-
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: Self.hasLaunchedKey) {
-            defaults.set(true, forKey: Self.hasLaunchedKey)
-            openWindow(id: ProtelesApp.worldsWindowID)
-            return
-        }
-
-        if let active = worlds.activeProfile, active.autoconnect {
-            ProtelesApp.logContext.worldName = active.name
-            await scripts.load(forProfile: active.id)
-            try? await session.connect(
-                to: active.endpoint,
-                autologin: worlds.autologinPlan(for: active)
-            )
-        }
-    }
-
-    private static func map(
+    static func map(
         _ state: NetworkConnection.State
     ) -> StatusBarView.ConnectionState {
         switch state {
