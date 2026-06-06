@@ -43,6 +43,29 @@ struct CompletionVocabularyTests {
         #expect(vocab.completions(forWord: "  ", isFirstWord: false).isEmpty)
     }
 
+    @Test("Recent words are gated for very short prefixes; curated sources aren't (#31)")
+    func shortPrefixGatesRecent() {
+        // The live bug: `say hello :D` breaks on `:`, leaving a 1-char `D` that
+        // completed to an arbitrary recent word.
+        let noisy = CompletionVocabulary(recentWords: ["Dirt", "Dagger"])
+        #expect(noisy.completions(forWord: "D", isFirstWord: false).isEmpty) // 1 char → gated
+        #expect(noisy.ghostSuffix(forWord: "D", isFirstWord: false) == nil) // no stray ghost
+        // Two chars is enough — recent words contribute again.
+        #expect(noisy.completions(forWord: "Di", isFirstWord: false) == ["Dirt"])
+
+        // Curated sources (context, verbs) still complete a 1-char prefix.
+        let curated = CompletionVocabulary(contextWords: ["Galadon"], verbs: ["north"])
+        #expect(curated.completions(forWord: "G", isFirstWord: false) == ["Galadon"])
+        #expect(curated.completions(forWord: "n", isFirstWord: true).contains("north"))
+        #expect(curated.ghostSuffix(forWord: "n", isFirstWord: true) == "orth")
+    }
+
+    @Test("Verbs rank ahead of recent words (curated before noisy) (#31)")
+    func verbsBeforeRecent() {
+        let vocab = CompletionVocabulary(recentWords: ["getaway"], verbs: ["get"])
+        #expect(vocab.completions(forWord: "ge", isFirstWord: true) == ["get", "getaway"])
+    }
+
     @Test("ghostSuffix is the top completion's tail in its own casing, nil when none")
     func ghostSuffix() {
         let vocab = CompletionVocabulary(contextWords: ["Galadon"], recentWords: ["sword"])

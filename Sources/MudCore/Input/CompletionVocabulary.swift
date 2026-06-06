@@ -28,16 +28,25 @@ public struct CompletionVocabulary: Sendable, Equatable {
     /// Shortest token worth completing (a 1-char word completes to noise).
     public let minimumWordLength: Int
 
+    /// Recent-output words are the noisiest source: for a very short prefix they
+    /// surface arbitrary words (e.g. `say hello :D` breaks on `:`, leaving a
+    /// 1-char `D` that "completed" to *Dirt*). So they only contribute once the
+    /// prefix is at least this long. Curated sources (context, verbs) still
+    /// complete short prefixes — `n` → `north` stays useful (#31).
+    public let recentWordMinPrefix: Int
+
     public init(
         contextWords: [String] = [],
         recentWords: [String] = [],
         verbs: [String] = [],
-        minimumWordLength: Int = 2
+        minimumWordLength: Int = 2,
+        recentWordMinPrefix: Int = 2
     ) {
         self.contextWords = contextWords
         self.recentWords = recentWords
         self.verbs = verbs
         self.minimumWordLength = max(minimumWordLength, 1)
+        self.recentWordMinPrefix = max(recentWordMinPrefix, 1)
     }
 
     /// Ranked, deduped completions for `prefix` (the current word). A candidate
@@ -53,8 +62,12 @@ public struct CompletionVocabulary: Sendable, Equatable {
 
         var seen: Set<String> = []
         var result: [String] = []
-        var sources = [contextWords, recentWords]
+        // Curated sources first — context nouns, then (first word only) verbs;
+        // the noisy recent-output source ranks last and is gated to longer
+        // prefixes (#31).
+        var sources = [contextWords]
         if isFirstWord { sources.append(verbs) }
+        if prefix.count >= recentWordMinPrefix { sources.append(recentWords) }
         for source in sources {
             for word in source {
                 guard word.count >= minimumWordLength, word.count > prefix.count else { continue }
