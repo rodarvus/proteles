@@ -27,13 +27,11 @@ extension ContentView {
             resumeBanner = updated
                 ? "Updated to \(MudCore.version) — reconnecting…"
                 : "Reconnecting…"
-            // Record it so a resume is visible in the session transcript (the
-            // banner + scrollback restore are otherwise UI-only — invisible to
-            // the wire recording). Makes resume self-verifying in tests (#42).
-            await session.recordNote(
-                "session resumed (was v\(resumeToken.appVersion), now v\(MudCore.version)"
-                    + ", \(updated ? "post-update" : "restart") — restoring scrollback + reconnecting)"
-            )
+            // Defer the transcript note until the connection (and its recorder)
+            // is up — emitting it here, pre-connect, is lost. noteConnection
+            // flushes it on the first .connected, making resume auditable (#42).
+            pendingResumeNote = "session resumed (was v\(resumeToken.appVersion), "
+                + "now v\(MudCore.version), \(updated ? "post-update" : "restart"))"
         }
         if let active = worlds.activeProfile, active.autoconnect || resumeToken != nil {
             ProtelesApp.logContext.worldName = active.name
@@ -53,6 +51,11 @@ extension ContentView {
         guard case .connected = networkState else { return }
         resumeBanner = nil
         writeResumeToken()
+        // Flush the deferred resume note now the recorder is up (see launch()).
+        if let note = pendingResumeNote {
+            pendingResumeNote = nil
+            Task { await session.recordNote(note) }
+        }
     }
 
     /// (Re)write the resume breadcrumb for the active world while connected (#42).
