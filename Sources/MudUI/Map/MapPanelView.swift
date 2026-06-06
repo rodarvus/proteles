@@ -336,10 +336,11 @@ struct MapGeometry {
     }
 }
 
-/// A softly pulsing ring marking the current room (Mudlet-inspired, restrained).
+/// A soft glow marking the current room (Mudlet-inspired, restrained). Static by
+/// design: a `repeatForever` pulse here kept the whole map redrawing at 60fps
+/// while the Map panel was open — a constant, traffic-independent CPU/GPU drain.
 private struct PulseRing: View {
     let diameter: CGFloat
-    @State private var on = false
 
     var body: some View {
         Circle()
@@ -352,10 +353,7 @@ private struct PulseRing: View {
                 )
             )
             .frame(width: diameter, height: diameter)
-            .scaleEffect(on ? 1.0 : 0.7)
-            .opacity(on ? 0.25 : 0.7)
-            .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: on)
-            .onAppear { on = true }
+            .opacity(0.6)
     }
 }
 
