@@ -69,8 +69,8 @@
 
             // Box the frame-times so the @Sendable callback can append.
             let collector = FrameTimeCollector()
-            coordinator.onFrameFlush = { duration in
-                collector.record(duration)
+            coordinator.onFrameFlush = { stats in
+                collector.record(stats.flushDuration)
             }
             await coordinator.attach(to: store)
             defer { coordinator.detach() }
@@ -197,8 +197,8 @@
             )
 
             let collector = FrameTimeCollector()
-            coordinator.onFrameFlush = { duration in
-                collector.record(duration)
+            coordinator.onFrameFlush = { stats in
+                collector.record(stats.flushDuration)
             }
             await coordinator.attach(to: store)
             defer { coordinator.detach() }

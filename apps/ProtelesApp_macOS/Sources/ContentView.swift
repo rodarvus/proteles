@@ -257,7 +257,8 @@ struct ContentView: View {
                 palette: theme.palette,
                 fontSize: CGFloat(outputFontSize),
                 fontName: outputFontName,
-                onCommand: { command in Task { try? await session.send(command) } }
+                onCommand: { command in Task { try? await session.send(command) } },
+                onFrameFlush: { stats in logSlowFrame(stats) }
             )
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
@@ -511,16 +512,37 @@ extension ContentView {
     /// that long, logged to the transcript so perf hitches are visible in a
     /// recording. Cheap (one wake/500ms; logs only on a real stall).
     func monitorMainThreadStalls() async {
+        // A 50 ms heartbeat resolves the sub-second hitches that make movement
+        // feel "jagged" (a 500 ms beat can't even see a 150 ms block). Log when
+        // a wake overruns its budget by >80 ms — i.e. the main thread was busy
+        // that long — so a recording timestamps each hitch. (Perf diagnosis.)
+        let beat = Duration.milliseconds(50)
+        let budget = beat / .milliseconds(1) / 1000 // seconds
         var last = Date()
         while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: beat)
             let now = Date()
-            let stall = now.timeIntervalSince(last) - 0.5
+            let overrun = now.timeIntervalSince(last) - budget
             last = now
-            if stall > 0.4 {
-                await session.recordNote("UI stall: main thread blocked ~\(Int(stall * 1000))ms")
+            if overrun > 0.08 {
+                await session.recordNote("UI stall: main thread blocked ~\(Int(overrun * 1000))ms")
             }
         }
+    }
+
+    /// Perf probe: log only frames that overran a 60 fps paint budget *or*
+    /// showed a high arrival→paint latency, so the transcript reveals jagged
+    /// hitches without noise. The flush runs on the main actor, so a slow one
+    /// directly stutters the scroll; a high arrival→paint latency with a *low*
+    /// flush time means the stall is upstream (GMCP dispatch / queueing), not the
+    /// paint. (Diagnosis — perf arc.)
+    func logSlowFrame(_ stats: RenderFrameStats) {
+        let flushMS = stats.flushDuration / .milliseconds(1)
+        let latencyMS = stats.maxArrivalLatency * 1000
+        guard flushMS > 12 || latencyMS > 120 else { return }
+        let note = "render: \(stats.appendedLines) line(s) "
+            + "flush \(Int(flushMS))ms arrival→paint \(Int(latencyMS))ms"
+        Task { await session.recordNote(note) }
     }
 
     func panelContent(_ kind: PanelKind) -> AnyView {
