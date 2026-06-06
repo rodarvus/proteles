@@ -5,7 +5,7 @@ import SwiftUI
     import AppKit
 #endif
 
-/// Single-line command input field.
+/// Command input field (auto-growing, multi-line capable).
 ///
 /// On macOS this is an `NSTextField`-backed field (``CommandField``) so it
 /// can intercept the keys SwiftUI's `TextField` swallows:
@@ -22,7 +22,15 @@ import SwiftUI
 ///   - **Esc** cancels an in-progress completion cycle.
 ///   - **Enter** submits **exactly what's in the box** — nothing is ever
 ///     auto-completed or auto-accepted behind your back (a bare Enter sends an
-///     empty line; MUDs use it to refresh prompts / page output).
+///     empty line; MUDs use it to refresh prompts / page output). A multi-line
+///     buffer sends **one command per line**.
+///   - **Shift-Enter** inserts a newline instead of sending, and a pasted
+///     multi-line string keeps its newlines — so you can compose or paste a
+///     block of commands and send them in one Enter (#39). The field grows to
+///     fit (up to a few lines) and shrinks back after sending.
+///
+/// The as-you-type ghost hint (#13) shows only on a single-line buffer (its
+/// geometry tracks the caret on one row); a multi-line buffer hides it.
 ///
 /// Focus: the field grabs first-responder on appear and whenever its
 /// window becomes key (⌘-tabbing back, closing the Worlds window), matching
@@ -63,15 +71,22 @@ public struct CommandInputView: View {
         self.ghostHint = ghostHint
     }
 
+    /// Live editor height (one line by default; grows as lines are added, up to
+    /// ``CommandField/maxHeight``). Driven by the field editor's layout via the
+    /// `onHeightChange` callback.
+    @State private var fieldHeight: CGFloat = 20
+
     public var body: some View {
         CommandField(
             onSubmit: onSubmit,
             onMacroKey: onMacroKey,
             vocabulary: vocabulary,
             spellChecking: spellChecking,
-            ghostHint: ghostHint
+            ghostHint: ghostHint,
+            onHeightChange: { fieldHeight = $0 }
         )
-        .frame(height: 20)
+        .frame(height: fieldHeight)
+        .animation(.easeOut(duration: 0.1), value: fieldHeight)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.background)
@@ -92,6 +107,12 @@ public struct CommandInputView: View {
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
         let spellChecking: Bool
         let ghostHint: Bool
+        let onHeightChange: (CGFloat) -> Void
+
+        /// One text line's height (set from the field's font in `makeNSView`).
+        static let lineHeight: CGFloat = 20
+        /// The tallest the input grows before it scrolls internally (~6 lines).
+        static let maxHeight: CGFloat = 120
 
         func makeCoordinator() -> Coordinator {
             Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
@@ -113,10 +134,16 @@ public struct CommandInputView: View {
             field.isBordered = false
             field.drawsBackground = false
             field.focusRingType = .none
-            field.lineBreakMode = .byClipping
-            field.usesSingleLineMode = true
-            field.cell?.wraps = false
-            field.cell?.isScrollable = true
+            // Multi-line capable (#39): wrap long lines and keep newlines (single-
+            // line mode strips them on paste and makes Enter end editing). Enter
+            // still *submits* — our `doCommandBy` intercepts `insertNewline:` and
+            // only inserts a literal newline when Shift is held.
+            field.lineBreakMode = .byWordWrapping
+            field.usesSingleLineMode = false
+            field.cell?.wraps = true
+            field.cell?.isScrollable = false
+            field.preferredMaxLayoutWidth = 0 // set from the live width by AppKit
+            field.maximumNumberOfLines = 0
 
             let ghost = NSTextField(labelWithString: "")
             ghost.font = field.font
@@ -138,6 +165,9 @@ public struct CommandInputView: View {
             context.coordinator.field = field
             context.coordinator.ghost = ghost
             context.coordinator.ghostHintEnabled = ghostHint
+            context.coordinator.onHeightChange = onHeightChange
+            context.coordinator.maxHeight = Self.maxHeight
+            context.coordinator.minHeight = Self.lineHeight
             return container
         }
 
@@ -145,6 +175,7 @@ public struct CommandInputView: View {
             context.coordinator.onSubmit = onSubmit
             context.coordinator.vocabulary = vocabulary
             context.coordinator.ghostHintEnabled = ghostHint
+            context.coordinator.onHeightChange = onHeightChange
             if let field = context.coordinator.field as? AutoFocusTextField {
                 field.onMacroKey = onMacroKey
                 field.spellChecking = spellChecking
@@ -161,6 +192,11 @@ public struct CommandInputView: View {
             weak var ghost: NSTextField?
             /// As-you-type ghost hint on/off (the Settings toggle).
             var ghostHintEnabled = true
+            /// Report the editor's desired height (#39 auto-grow).
+            var onHeightChange: ((CGFloat) -> Void)?
+            var minHeight: CGFloat = 20
+            var maxHeight: CGFloat = 120
+            private var lastReportedHeight: CGFloat = 20
 
             private var history = CommandHistory()
 
@@ -190,6 +226,7 @@ public struct CommandInputView: View {
                 cycling = false
                 candidates = []
                 updateGhost() // refresh the as-you-type hint for the new text
+                updateHeight() // grow/shrink to fit the (possibly multi-line) text
             }
 
             func control(
@@ -198,9 +235,9 @@ public struct CommandInputView: View {
                 doCommandBy commandSelector: Selector
             ) -> Bool {
                 switch commandSelector {
-                case #selector(NSResponder.insertNewline(_:)):
-                    submit()
-                    return true
+                case #selector(NSResponder.insertNewline(_:)),
+                     #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+                    return handleNewline(for: commandSelector)
                 case #selector(NSResponder.moveUp(_:)):
                     endCycle()
                     if let text = history.recallPrevious(currentText: currentText) {
@@ -238,13 +275,47 @@ public struct CommandInputView: View {
 
             // MARK: - Actions
 
+            /// Enter handling (#39): plain Enter submits the whole buffer;
+            /// Shift-Enter (or `insertNewlineIgnoringFieldEditor:`, e.g.
+            /// Option-Enter) inserts a literal newline instead.
+            private func handleNewline(for selector: Selector) -> Bool {
+                let shiftHeld = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+                let ignoresFieldEditor =
+                    selector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:))
+                if shiftHeld || ignoresFieldEditor {
+                    insertNewlineIntoField()
+                } else {
+                    submit()
+                }
+                return true
+            }
+
             private func submit() {
                 let text = currentText
-                onSubmit(text)
+                // A multi-line buffer sends one command per line (#39); a plain
+                // single line (incl. an empty one — MUDs use a bare Enter to
+                // refresh the prompt) sends exactly itself.
+                if text.contains("\n") {
+                    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+                        onSubmit(String(line))
+                    }
+                } else {
+                    onSubmit(text)
+                }
                 history.record(text)
                 cycling = false
                 candidates = []
                 setText("")
+            }
+
+            /// Insert a literal newline at the caret (Shift-Enter), then refresh
+            /// the auto-grow height. Goes through the field editor so undo and
+            /// the caret position behave normally.
+            private func insertNewlineIntoField() {
+                guard let editor = field?.currentEditor() as? NSTextView else { return }
+                editor.insertText("\n", replacementRange: editor.selectedRange)
+                hideGhost()
+                updateHeight()
             }
 
             /// Tab / Shift-Tab: complete the **current word** (the token ending
@@ -322,6 +393,31 @@ public struct CommandInputView: View {
                 } else {
                     field?.stringValue = text
                 }
+                updateHeight() // history recall / completion may add or drop lines
+            }
+
+            // MARK: - Auto-grow height (#39)
+
+            /// Report the editor's content height (clamped to one line … `maxHeight`)
+            /// so the SwiftUI wrapper can grow/shrink the input bar. Uses the field
+            /// editor's layout when present (accounts for soft-wrapped long lines),
+            /// else falls back to one line. Only fires when the height changed.
+            private func updateHeight() {
+                let clamped = Swift.max(minHeight, Swift.min(measuredContentHeight(), maxHeight))
+                guard abs(clamped - lastReportedHeight) > 0.5 else { return }
+                lastReportedHeight = clamped
+                onHeightChange?(clamped)
+            }
+
+            /// The field editor's laid-out text height (accounts for soft-wrapped
+            /// long lines), or one line when there's no active editor.
+            private func measuredContentHeight() -> CGFloat {
+                guard let textView = field?.currentEditor() as? NSTextView,
+                      let layoutManager = textView.layoutManager,
+                      let container = textView.textContainer
+                else { return minHeight }
+                layoutManager.ensureLayout(for: container)
+                return layoutManager.usedRect(for: container).height
             }
 
             // MARK: - As-you-type ghost hint (#13)
@@ -356,6 +452,9 @@ public struct CommandInputView: View {
                     hideGhost(); return
                 }
                 let line = currentText
+                // The ghost's geometry tracks the caret on a single row; skip it
+                // entirely for a multi-line buffer (#39).
+                guard !line.contains("\n") else { hideGhost(); return }
                 guard !line.isEmpty,
                       let (word, _) = InputCompletion.currentWord(in: line, caret: line.count),
                       !word.isEmpty,
@@ -388,129 +487,8 @@ public struct CommandInputView: View {
         }
     }
 
-    /// `NSTextField` that keeps the command line "always ready": it grabs
-    /// first-responder on appear and whenever its window becomes key, and a
-    /// window-scoped key monitor redirects stray typing back to it. So after
-    /// selecting output text, clicking the map / target list / channels, etc.,
-    /// the next printable key snaps focus here and is typed — no mouse needed.
-    private final class AutoFocusTextField: NSTextField {
-        /// Local keyDown monitor that redirects typing to this field. Held so we
-        /// can remove it when the field leaves its window.
-        private var keyMonitor: Any?
-
-        /// Macro pre-filter: returns `true` if a bound macro consumed the key
-        /// (so it's swallowed, not typed). See ``CommandInputView``.
-        var onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
-
-        /// Show spell-check squiggles as you type (visual only). Auto-correct
-        /// and smart substitutions are always off (see ``applyTextEditingPolicy``).
-        var spellChecking = false
-
-        /// Configure the (shared) field editor for a *command* line: never
-        /// auto-correct or smart-substitute (those silently rewrite commands —
-        /// e.g. smart quotes turn `cast 'armor'` into curly quotes the MUD
-        /// won't parse), and toggle continuous spell-checking per the setting.
-        /// Re-applied whenever we take focus or the setting changes, because the
-        /// window's field editor is shared and reused across fields.
-        func applyTextEditingPolicy() {
-            guard let editor = currentEditor() as? NSTextView else { return }
-            editor.isAutomaticQuoteSubstitutionEnabled = false
-            editor.isAutomaticDashSubstitutionEnabled = false
-            editor.isAutomaticTextReplacementEnabled = false
-            editor.isAutomaticSpellingCorrectionEnabled = false
-            editor.isGrammarCheckingEnabled = false
-            editor.isContinuousSpellCheckingEnabled = spellChecking
-        }
-
-        override func becomeFirstResponder() -> Bool {
-            let became = super.becomeFirstResponder()
-            if became { applyTextEditingPolicy() }
-            return became
-        }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            NotificationCenter.default.removeObserver(
-                self,
-                name: NSWindow.didBecomeKeyNotification,
-                object: nil
-            )
-            removeKeyMonitor()
-            guard let window else { return }
-            focusSoon()
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(focusSoon),
-                name: NSWindow.didBecomeKeyNotification,
-                object: window
-            )
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self else { return event }
-                // A bound macro (keypad/modifier/function chord, or a bare key
-                // in Navigation mode) consumes the key before it's typed.
-                if fireMacroIfMatch(event) { return nil }
-                return redirect(event)
-            }
-        }
-
-        /// Offer `event` to the macro engine. Only keypresses aimed at our key
-        /// window count (so key-capture in the Scripts editor is unaffected).
-        /// The engine decides whether the chord fires given the input state.
-        private func fireMacroIfMatch(_ event: NSEvent) -> Bool {
-            guard let onMacroKey, let window, window.isKeyWindow, event.window === window
-            else { return false }
-            return onMacroKey(makeKeyChord(from: event), currentInputText.isEmpty)
-        }
-
-        /// The live text in the command line (the field editor's contents while
-        /// editing, else the field value).
-        private var currentInputText: String {
-            currentEditor()?.string ?? stringValue
-        }
-
-        @objc private func focusSoon() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, let window, window.isKeyWindow else { return }
-                window.makeFirstResponder(self)
-            }
-        }
-
-        /// If `event` is plain typing aimed at a non-text view in our (key)
-        /// window, take focus and re-deliver it here; returns nil to swallow the
-        /// original. Otherwise returns the event untouched so it flows normally
-        /// (typing in this field, any other text field, ⌘-shortcuts, nav keys).
-        private func redirect(_ event: NSEvent) -> NSEvent? {
-            guard let window, window.isKeyWindow, event.window === window,
-                  window.firstResponder !== self,
-                  window.firstResponder !== currentEditor(),
-                  !isTextEntry(window.firstResponder),
-                  event.modifierFlags.isDisjoint(with: [.command, .control, .option, .function]),
-                  let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first,
-                  scalar.value >= 0x20, scalar.value != 0x7F // not a control/delete char
-            else { return event }
-            window.makeFirstResponder(self)
-            NSApp.postEvent(event, atStart: true)
-            return nil
-        }
-
-        /// Whether `responder` is somewhere the user is legitimately typing — a
-        /// field editor or an editable text view — which we must not disturb.
-        private func isTextEntry(_ responder: NSResponder?) -> Bool {
-            guard let textView = responder as? NSTextView else { return false }
-            return textView.isFieldEditor || textView.isEditable
-        }
-
-        private func removeKeyMonitor() {
-            if let keyMonitor {
-                NSEvent.removeMonitor(keyMonitor)
-                self.keyMonitor = nil
-            }
-        }
-
-        deinit {
-            NotificationCenter.default.removeObserver(self)
-        }
-    }
+    // `AutoFocusTextField` (the always-focused NSTextField subclass) lives in
+    // CommandInputView+AutoFocusTextField.swift to keep this file under budget.
 
 #else
 
@@ -520,6 +498,11 @@ public struct CommandInputView: View {
     private struct CommandField: View {
         let onSubmit: (String) -> Void
         let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+        var vocabulary: (@MainActor () -> CompletionVocabulary)?
+        var spellChecking = false
+        var ghostHint = true
+        /// Accepted for API parity with the macOS field; the fallback is fixed-height.
+        var onHeightChange: (CGFloat) -> Void = { _ in }
         @State private var command = ""
         @FocusState private var focused: Bool
 
