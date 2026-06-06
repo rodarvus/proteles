@@ -82,10 +82,29 @@ xcodebuild -project "$XCODEPROJ" -scheme "$SCHEME" -configuration Release \
 APP="$BUILD_DIR/Build/Products/Release/Proteles.app"
 [[ -d "$APP" ]] || die "build did not produce $APP"
 
-# --- 3. deep re-sign with the hardened runtime + timestamp (belt + braces) ----
-step "codesign --deep --options runtime --timestamp"
-codesign --force --options runtime --timestamp --deep \
-    --sign "$PROTELES_SIGN_IDENTITY" "$APP"
+# --- 3. re-sign with the hardened runtime + timestamp ------------------------
+# Sparkle ships helper executables (XPC services, the Autoupdate helper, and
+# Updater.app) inside its framework. `codesign --deep` mis-signs those — Sparkle
+# explicitly warns against it — so sign **inside-out**: the nested helpers first
+# (deepest), then the framework binary + bundle, then the outer app. Each gets the
+# hardened runtime + a secure timestamp. (Was a single `--deep` pass through
+# v0.4.7, before Sparkle was embedded.)
+step "codesign (Sparkle inside-out, hardened runtime, --timestamp)"
+sign() { codesign --force --options runtime --timestamp --sign "$PROTELES_SIGN_IDENTITY" "$@"; }
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+if [[ -d "$SPARKLE" ]]; then
+    V="$SPARKLE/Versions/Current"
+    for helper in \
+        "$V/XPCServices/Downloader.xpc" \
+        "$V/XPCServices/Installer.xpc" \
+        "$V/Updater.app" \
+        "$V/Autoupdate" \
+        "$V/Sparkle"; do
+        [[ -e "$helper" ]] && sign "$helper"
+    done
+    sign "$SPARKLE"
+fi
+sign "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP" \
     || die "codesign verification failed"
 

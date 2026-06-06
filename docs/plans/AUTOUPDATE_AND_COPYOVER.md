@@ -173,7 +173,20 @@ polish that delivers the "copyover feel."
      `.zip` can stay on GitHub Releases (free CDN bandwidth) and migrate to
      proteles.net independently, whenever.
 
-   **New prerequisite for Phase 1:** own `proteles.net` first.
+   **Interim (now → pre-1.0):** `proteles.net` isn't registered yet and there is
+   currently a **single user** (the author), so the "immutable URL" risk is moot —
+   there's no installed base to strand. Ship Phase 1 now against a **GitHub feed
+   URL** (`https://rodarvus.github.io/proteles/appcast.xml` via GitHub Pages), with
+   a **disclaimer in the release notes** that auto-update is interim/GitHub-hosted
+   and will move to `proteles.net`. **Before 1.0:** register `proteles.net`, repoint
+   `SUFeedURL` (the author re-downloads once — the only client), confirm end-to-end,
+   and only then widen distribution. Migration checklist lives in §"Before 1.0".
+
+   The **EdDSA signing key is the same "decide once" forever decision** — its
+   public key is baked into the app and every future update must be signed with the
+   matching private key. Generate the keypair once, back it up alongside the notary
+   credentials, **never rotate it, never commit it**. Independent of the feed URL,
+   so the interim→proteles.net move does not touch it.
 2. **Cadence → both.** Background auto-check (opt-in prompt on first launch) **and**
    a manual "Check for Updates…" menu item.
 3. **Phasing → prove Phase 1, then Phase 2 fast-follow.** Ship Sparkle with

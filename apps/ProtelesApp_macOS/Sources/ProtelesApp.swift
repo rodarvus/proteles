@@ -24,6 +24,10 @@ struct ProtelesApp: App {
     /// `~/Library/Application Support/com.proteles.ProtelesApp/`.
     private let persistence: ScrollbackPersistence?
 
+    /// Sparkle auto-updater (#23). Started at launch; drives the "Check for
+    /// Updates…" menu item and background checks.
+    @StateObject private var updater = Updater()
+
     /// Profile collection + active-world selection, bridged to SwiftUI.
     @State private var worlds: WorldsModel
 
@@ -175,6 +179,9 @@ struct ProtelesApp: App {
                         ]
                     )
                 }
+                Divider()
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheck)
             }
             ProtelesCommands(session: session, worlds: worlds, scripts: scripts, layout: layout)
             CommandGroup(after: .pasteboard) {
