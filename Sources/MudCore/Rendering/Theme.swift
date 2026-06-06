@@ -208,7 +208,11 @@ public extension Theme {
             brightNamed: brightNamed,
             defaultForeground: rgb(fg),
             defaultBackground: rgb(bg),
-            minForegroundContrast: clamp
+            minForegroundContrast: clamp,
+            // Dark themes (no light-bg clamp) get Aardwolf's dark-xterm remap so
+            // near-black / dark-navy codes stay readable on a dark background;
+            // light themes use the contrast clamp instead.
+            remapsDarkXterm: clamp == nil
         )
     }
 

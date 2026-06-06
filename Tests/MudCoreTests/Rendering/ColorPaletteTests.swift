@@ -122,3 +122,51 @@ struct ColorPaletteDefaultsTests {
         #expect(palette.resolveBackground(nil) == palette.defaultBackground)
     }
 }
+
+@Suite("ColorPalette — dark-xterm remap (Aardwolf x_not_too_dark)")
+struct ColorPaletteDarkRemapTests {
+    /// The dark default theme bumps the very-darkest xterm indices to the
+    /// reference's readable substitutes (`aardwolf_colors.lua`).
+    @Test("Dark theme remaps near-black / dark-navy / darkest-gray indices")
+    func darkThemeRemapsDarkIndices() {
+        let palette = Theme.aardwolf.palette
+        // 0 and 16 → 7 (silver / named white).
+        #expect(palette.resolve(.palette(0)) == palette.resolve(.palette(7)))
+        #expect(palette.resolve(.palette(16)) == palette.resolve(.palette(7)))
+        // 17 and 18 → 19 (dark navy → readable blue).
+        #expect(palette.resolve(.palette(17)) == palette.resolve(.palette(19)))
+        #expect(palette.resolve(.palette(18)) == palette.resolve(.palette(19)))
+        // 232…237 → 238 (darkest grays → a readable gray).
+        for index in 232...237 {
+            #expect(palette.resolve(.palette(UInt8(index))) == palette.resolve(.palette(238)))
+        }
+    }
+
+    @Test("Dark remap leaves ordinary cube + bright indices untouched")
+    func darkRemapLeavesOthersAlone() {
+        let palette = Theme.aardwolf.palette
+        #expect(palette.resolve(.palette(196)) == RGB(255, 0, 0)) // cube red
+        #expect(palette.resolve(.palette(19)) == RGB(0, 0, 175)) // the target itself
+        #expect(palette.resolve(.palette(238)) == RGB(68, 68, 68)) // target gray
+    }
+
+    /// Light themes use the contrast clamp, not the dark remap — black must stay
+    /// black (remapping it to silver would be wrong on a light background).
+    @Test("Light theme does not apply the dark remap")
+    func lightThemeSkipsRemap() {
+        let palette = Theme.catppuccinLatte.palette
+        #expect(!palette.remapsDarkXterm)
+        // Index 16 is the cube origin (0,0,0) — unchanged on a light theme.
+        #expect(palette.resolve(.palette(16)) == RGB(0, 0, 0))
+    }
+
+    @Test("remappedDarkIndex matches the reference table verbatim")
+    func helperMatchesReference() {
+        #expect(ColorPalette.remappedDarkIndex(0) == 7)
+        #expect(ColorPalette.remappedDarkIndex(16) == 7)
+        #expect(ColorPalette.remappedDarkIndex(17) == 19)
+        #expect(ColorPalette.remappedDarkIndex(18) == 19)
+        #expect(ColorPalette.remappedDarkIndex(235) == 238)
+        #expect(ColorPalette.remappedDarkIndex(100) == 100) // identity elsewhere
+    }
+}
