@@ -2,6 +2,26 @@ import Foundation
 
 /// Remote-close handling + the autoreconnect loop (ReconnectPolicy, D-18/D-19).
 extension SessionController {
+    /// Close the connection. Idempotent. A user-initiated disconnect — it
+    /// suppresses autoreconnect and fires the clean-session-end handler (so the
+    /// resume breadcrumb is dropped, #42).
+    public func disconnect() async {
+        userInitiatedDisconnect = true
+        cleanSessionEndHandler?() // intentional end → drop the resume breadcrumb (#42)
+        isReconnecting = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        timerTask?.cancel()
+        timerTask = nil
+
+        if let conn = connection {
+            teardownSession()
+            await conn.disconnect()
+            await flushOnDisconnect()
+        }
+        updateState(.disconnected)
+    }
+
     /// React to the inbound byte stream ending on its own (remote close):
     /// flush any trailing line, tear the session down, then autoreconnect (if
     /// the policy allows and it wasn't a user disconnect/clean quit) or surface
