@@ -221,6 +221,12 @@ public struct RoomInfo: Codable, Sendable, Equatable {
 /// Aardwolf sends each member's stats as **strings** inside `info` (the
 /// reference plugin runs `tonumber()` on them), so ``Member/Info`` stores
 /// strings and exposes parsed accessors.
+/// Coding keys for ``GroupInfo/Member/Info`` (file-scoped so its custom decoder
+/// — which accepts number-or-string member fields — doesn't nest a type too deep).
+private enum GroupMemberInfoKey: String, CodingKey {
+    case lvl, hp, mhp, mn, mmn, mv, mmv, tnl, align, here, qt, qs
+}
+
 public struct GroupInfo: Codable, Sendable, Equatable {
     public let groupname: String?
     public let leader: String?
@@ -282,6 +288,31 @@ public struct GroupInfo: Codable, Sendable, Equatable {
                 self.here = here
                 self.qt = qt
                 self.qs = qs
+            }
+
+            /// Aardwolf's `group` GMCP sends these as **numbers** (`"hp": 85117`),
+            /// but older fixtures used strings — decode either, normalised to
+            /// `String?`, so live group data isn't silently dropped on a type
+            /// mismatch (the bug that left the Group window empty).
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: GroupMemberInfoKey.self)
+                func value(_ key: GroupMemberInfoKey) -> String? {
+                    if let number = try? container.decode(Int.self, forKey: key) { return String(number) }
+                    if let string = try? container.decode(String.self, forKey: key) { return string }
+                    return nil
+                }
+                lvl = value(.lvl)
+                hp = value(.hp)
+                mhp = value(.mhp)
+                mn = value(.mn)
+                mmn = value(.mmn)
+                mv = value(.mv)
+                mmv = value(.mmv)
+                tnl = value(.tnl)
+                align = value(.align)
+                here = value(.here)
+                qt = value(.qt)
+                qs = value(.qs)
             }
 
             public var level: Int? {

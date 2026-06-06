@@ -123,6 +123,27 @@ struct GMCPStateStoreApplyTests {
         #expect(murdock?.info?.isHere == false)
     }
 
+    @Test("group with NUMERIC member info decodes (the real Aardwolf format)")
+    func appliesGroupWithNumericInfo() async {
+        let store = GMCPStateStore()
+        // Live Aardwolf sends member info fields as numbers, not strings.
+        let json = #"""
+        { "groupname": "@GPup", "leader": "Tiana", "status": "Private", "count": 16, "members": [
+            { "name": "Kerith", "info": { "hp": 85117, "mhp": 85117, "mn": 52222, "mmn": 52222,
+              "mv": 23997, "mmv": 23997, "align": 2384, "tnl": 221, "qt": 0, "qs": 0,
+              "lvl": 201, "here": 0 } }
+        ] }
+        """#
+        #expect(await store.apply(GMCPMessage(package: "group", json: json)))
+        let group = await store.state.group
+        #expect(group?.isGrouped == true)
+        let kerith = group?.members?.first { $0.name == "Kerith" }
+        #expect(kerith?.info?.level == 201)
+        #expect(kerith?.info?.hpCurrent == 85117)
+        #expect(kerith?.info?.hpMax == 85117)
+        #expect(kerith?.info?.isHere == false)
+    }
+
     @Test("group with no members is not grouped")
     func appliesGroupEmpty() async {
         let store = GMCPStateStore()
