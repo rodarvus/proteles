@@ -36,6 +36,9 @@ struct ContentView: View {
     /// Non-nil while a post-restart reconnect is in flight (#42): the banner text
     /// ("Updated to vX — reconnecting…" / "Reconnecting…"), cleared on connect.
     @State var resumeBanner: String?
+    /// A resume note set at launch and flushed to the transcript on the first
+    /// `.connected` (when the recorder is open), so resume is auditable (#42).
+    @State var pendingResumeNote: String?
     @State private var gmcp = GMCPState()
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
