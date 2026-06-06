@@ -55,6 +55,13 @@ targets:
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
+        # Allow the hardened runtime to load our embedded Sparkle.framework.
+        # Library Validation otherwise requires every loaded framework to share
+        # the app's Team ID; a self-signed dev build has *no* team, so dyld
+        # refuses Sparkle ("different Team ID") and the app fails to launch.
+        # This is the standard, notarization-safe Sparkle entitlement (we only
+        # load frameworks we embed + sign ourselves). (#23)
+        com.apple.security.cs.disable-library-validation: true
     dependencies:
       - package: Proteles
         product: MudCore
