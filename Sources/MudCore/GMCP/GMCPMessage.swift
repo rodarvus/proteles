@@ -82,7 +82,13 @@ public extension GMCPMessage {
     /// current character / room / area state and set a few display
     /// configs. Each element is a fully framed subnegotiation.
     static func aardwolfHandshake(clientVersion: String) -> [[UInt8]] {
-        let payloads = [
+        aardwolfHandshakePayloads(clientVersion: clientVersion).map { encode(payload: $0) }
+    }
+
+    /// The handshake as raw payload strings (so the sender can log them to the
+    /// session transcript — outgoing GMCP is otherwise invisible for debugging).
+    static func aardwolfHandshakePayloads(clientVersion: String) -> [String] {
+        [
             #"Core.Hello { "client": "Proteles", "version": "\#(clientVersion)" }"#,
             #"Core.Supports.Set [ "Char 1", "Comm 1", "Room 1" ]"#,
             "config compact",
@@ -97,13 +103,12 @@ public extension GMCPMessage {
             // environments table — see Mapper.seedTerrainPaletteFromStore).
             "request sectors",
             "request quest",
-            // `group on` *subscribes* to live group pushes (joins/leaves/vitals);
-            // `request group` alone is only a one-time snapshot, so without this
-            // the group panel never updates after you join (matches the reference
-            // group monitor's `Send_GMCP_Packet("group on")`).
-            "group on",
+            // Snapshot of the current group. Live updates are kept current by
+            // re-requesting on group-change events + ticks (see
+            // SessionController.refreshGroupSnapshot) — Aardwolf does not push
+            // group GMCP on its own without `group on`, which (sent inline here)
+            // suppressed even this snapshot, so it's driven from the session.
             "request group"
         ]
-        return payloads.map { encode(payload: $0) }
     }
 }
