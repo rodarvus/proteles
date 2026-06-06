@@ -67,6 +67,16 @@ public actor ScrollbackPersistence {
         try database.search(query, limit: limit)
     }
 
+    /// The most recent `limit` persisted lines, oldest-first, as ``Line``s —
+    /// for restoring the on-screen scrollback after an update relaunch (#42,
+    /// Phase 2a "session resume"). Read-only: it neither touches the live buffer
+    /// nor re-persists anything (the caller must seed these into the view
+    /// *without* re-appending them to a persistence-attached store, or they'd be
+    /// written to the DB a second time). A line that fails to decode is skipped.
+    public func loadTail(limit: Int) throws -> [Line] {
+        try database.mostRecent(limit: limit).compactMap { try? $0.toLine() }
+    }
+
     /// Force a flush now. Useful in tests and on user-driven save
     /// actions; the periodic ticker calls this every ``flushInterval``.
     public func flushNow() {
