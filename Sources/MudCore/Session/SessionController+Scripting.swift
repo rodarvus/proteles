@@ -368,34 +368,6 @@ public extension SessionController {
         return true
     }
 
-    /// Load dinv now that the character is active (called from the GMCP path).
-    /// After install, replay a `char.base` broadcast so dinv — freshly loaded
-    /// with its init flag clear — catches it while active and initializes.
-    func loadPendingDinv() async {
-        guard !dinvLoaded, let stateDirectory = pendingDinvStateDirectory,
-              let scriptEngine, let xml = DinvAssets.pluginXML,
-              let plugin = try? MUSHclientPluginLoader.parse(xml: xml)
-        else { return }
-        dinvLoaded = true
-        await scriptEngine.registerModules(DinvAssets.modules)
-        let suffixed = stateDirectory.hasSuffix("/") ? stateDirectory : stateDirectory + "/"
-        let context = PluginContext(
-            pluginID: DinvAssets.pluginID,
-            pluginName: "dinv",
-            version: "3.0102",
-            pluginDirectory: suffixed,
-            worldDirectory: suffixed,
-            appDirectory: suffixed,
-            stateDirectory: suffixed
-        )
-        await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-        // Replay char.base so dinv — freshly loaded with its init flag clear —
-        // catches it while active and runs its init chain.
-        await applyScriptEffects(scriptEngine.deliverGMCPBroadcast(package: "char.base"))
-        await persistVariablesIfDirty()
-        restartTimerLoop()
-    }
-
     // MARK: - Script set
 
     /// Replace the live script set (triggers/aliases/timers) with

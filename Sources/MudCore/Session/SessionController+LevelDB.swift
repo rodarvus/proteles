@@ -12,6 +12,10 @@ public extension SessionController {
         guard let scriptEngine, let xml = LevelDBAssets.pluginXML,
               let plugin = try? MUSHclientPluginLoader.parse(xml: xml)
         else { return }
+        // Flat per-character Databases/<character>/ for proteles.databaseDir() (#44).
+        if let dbPath = databasesDirectoryPath(forCharacter: pendingInitialPluginCharacter) {
+            await scriptEngine.setDatabasesDirectory(dbPath)
+        }
         let suffixed = dataDirectory.hasSuffix("/") ? dataDirectory : dataDirectory + "/"
         let context = PluginContext(
             pluginID: LevelDBAssets.pluginID,
