@@ -82,6 +82,12 @@ public enum ProtelesPaths {
         try settingsDirectory(fileManager: fileManager).appendingPathComponent("plugin-library.json")
     }
 
+    /// `Settings/notification-rules.json` — the hand-editable notification rules
+    /// (mirrored from the `notificationRulesData` preference, #43/#45).
+    public static func notificationRulesFile(fileManager: FileManager = .default) throws -> URL {
+        try settingsDirectory(fileManager: fileManager).appendingPathComponent("notification-rules.json")
+    }
+
     // MARK: - State (mutable runtime state — issue #43)
 
     /// `~/Documents/Proteles/State/` — mutable runtime state: the resume
