@@ -107,6 +107,11 @@ public extension SessionController {
         else { return }
         let dataDir = Self.pluginDataDirectory(for: directory, character: character)
         let dataPath = Self.directoryPath(dataDir)
+        // Surface the per-character Databases/<character>/ dir for proteles.databaseDir()
+        // so a plugin can keep its SQLite DB flat in the shared tree (#43/#44).
+        if let dbDir = try? ProtelesPaths.pluginDatabasesDirectory(character: character) {
+            await scriptEngine.setDatabasesDirectory(Self.directoryPath(dbDir))
+        }
         loadedPluginPaths[plugin.id] = (code: directory, data: dataDir)
         await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map { Self.directoryPath($0.code) })
         let context = PluginContext(
