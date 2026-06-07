@@ -25,3 +25,25 @@ struct GetInfoGeometryTests {
             == [.note(text: "lua: = 600", foreground: "cyan", background: nil)])
     }
 }
+
+@Suite("proteles.databaseDir() — per-character DB dir for plugins (#43/#44)")
+struct DatabaseDirTests {
+    @Test("returns the directory the session set")
+    func returnsSetDir() async throws {
+        let engine = try ScriptEngine()
+        await engine.setDatabasesDirectory("/Users/x/Documents/Proteles/Databases/Rodarvus/")
+        #expect(await engine.evaluateConsole("proteles.databaseDir()")
+            == [.note(
+                text: "lua: = /Users/x/Documents/Proteles/Databases/Rodarvus/",
+                foreground: "cyan",
+                background: nil
+            )])
+    }
+
+    @Test("empty before the session sets it")
+    func emptyByDefault() async throws {
+        let engine = try ScriptEngine()
+        #expect(await engine.evaluateConsole("proteles.databaseDir()")
+            == [.note(text: "lua: = ", foreground: "cyan", background: nil)])
+    }
+}

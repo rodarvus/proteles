@@ -170,20 +170,29 @@ public enum ProtelesPaths {
         )
     }
 
-    /// `Databases/<character>/<fileName>` — a per-character plugin DB (dinv,
-    /// leveldb, …), flattened (no plugin-chosen subdirs). Mapper + S&D
-    /// stay at the `Databases/` root (global, shared).
+    /// `Databases/<character>/` — the per-character directory for plugin DBs
+    /// (each plugin drops `<plugin>.db` here, flat — no plugin-chosen subdirs).
+    /// Mapper + S&D stay at the `Databases/` root (global, shared). Surfaced to
+    /// plugins as `proteles.databaseDir()`.
+    public static func pluginDatabasesDirectory(
+        character: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        try ensure(
+            databasesDirectory(fileManager: fileManager)
+                .appendingPathComponent(character, isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// `Databases/<character>/<fileName>` — a specific per-character plugin DB.
     public static func pluginDatabaseURL(
         character: String,
         fileName: String,
         fileManager: FileManager = .default
     ) throws -> URL {
-        let dir = try ensure(
-            databasesDirectory(fileManager: fileManager)
-                .appendingPathComponent(character, isDirectory: true),
-            fileManager
-        )
-        return dir.appendingPathComponent(fileName)
+        try pluginDatabasesDirectory(character: character, fileManager: fileManager)
+            .appendingPathComponent(fileName)
     }
 
     /// The directory for one plugin, `Plugins/<dirName>/`. Created if missing.

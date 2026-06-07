@@ -43,5 +43,6 @@ extension LuaRuntime {
         case readFile, writeFile
         case dialog, accelerator, http
         case clipboardGet, clipboardSet
+        case databaseDir
     }
 }

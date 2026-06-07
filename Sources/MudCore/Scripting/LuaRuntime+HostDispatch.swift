@@ -17,6 +17,7 @@ extension LuaRuntime {
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
+        case .databaseDir: [.string(databasesDirectory)]
         default: []
         }
     }

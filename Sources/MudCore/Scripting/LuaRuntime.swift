@@ -148,6 +148,18 @@ public actor LuaRuntime {
     nonisolated(unsafe) var outputPixelWidth = 800
     nonisolated(unsafe) var outputPixelHeight = 600
 
+    /// Per-character `~/Documents/Proteles/Databases/<character>/` (trailing
+    /// slash), surfaced to plugins as `proteles.databaseDir()` so a plugin can
+    /// keep its DB flat in the shared Databases tree (#43/#44). Empty until the
+    /// session knows the character. Set via ``setDatabasesDirectory(_:)``.
+    nonisolated(unsafe) var databasesDirectory = ""
+
+    /// Set the per-character Databases directory surfaced by
+    /// `proteles.databaseDir()`. Called by the session once the character is known.
+    func setDatabasesDirectory(_ path: String) {
+        databasesDirectory = path
+    }
+
     /// Per-plugin sandbox environments (plugin id → registry ref of an env table
     /// whose `__index` falls back to `_G`), so plugins can't clobber each other's
     /// globals. See `LuaRuntime+PluginEnvironments`.
@@ -365,6 +377,13 @@ public actor LuaRuntime {
         setHostFunction("chatCapture", .chatCapture)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
         setHostFunction("publish", .publish)
+        installProtelesAPIAutomation()
+    }
+
+    /// Second half of ``installProtelesAPI`` (split to stay within the
+    /// function-length budget). The `proteles` table is still on the Lua stack
+    /// top, so registration continues against it.
+    private nonisolated func installProtelesAPIAutomation() {
         setHostFunction("enableTrigger", .enableTrigger)
         setHostFunction("enableTimer", .enableTimer)
         setHostFunction("enableGroup", .enableGroup)
@@ -383,6 +402,7 @@ public actor LuaRuntime {
         setHostFunction("reloadPlugin", .reloadPlugin)
         setHostFunction("clipboardGet", .clipboardGet)
         setHostFunction("clipboardSet", .clipboardSet)
+        setHostFunction("databaseDir", .databaseDir)
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
@@ -420,7 +440,7 @@ public actor LuaRuntime {
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
-             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet:
+             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet, .databaseDir:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)
