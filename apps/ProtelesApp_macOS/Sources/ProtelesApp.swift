@@ -69,6 +69,11 @@ struct ProtelesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // Import hand-editable preferences (Settings/preferences.json) into
+        // UserDefaults before any @AppStorage view reads them, then mirror
+        // changes back (#43).
+        PreferencesFile.shared.start()
+
         // Scrollback persistence.
         let persistence: ScrollbackPersistence?
         do {
