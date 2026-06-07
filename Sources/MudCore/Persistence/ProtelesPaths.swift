@@ -130,6 +130,20 @@ public enum ProtelesPaths {
         return dir.appendingPathComponent("\(plugin)-\(character).json")
     }
 
+    /// `State/modules/<key>.json` — built-in module ("native plugin") state +
+    /// enablement for one world (keyed by the stable world id; `worlds.json`
+    /// maps id↔name).
+    public static func moduleStateFile(
+        key: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let dir = try ensure(
+            stateDirectory(fileManager: fileManager).appendingPathComponent("modules", isDirectory: true),
+            fileManager
+        )
+        return dir.appendingPathComponent("\(key).json")
+    }
+
     /// `State/diagnostics/` — MetricKit crash/hang payloads (opt-in).
     public static func diagnosticsDirectory(fileManager: FileManager = .default) throws -> URL {
         try ensure(

@@ -114,24 +114,10 @@ public final class SessionRecorder: @unchecked Sendable {
         now: Date = Date(),
         fileManager: FileManager = .default
     ) throws -> URL {
-        guard
-            let support = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            throw RecorderError.openFailed(
-                "no Application Support directory"
-            )
-        }
-        let folder = support
-            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-            .appendingPathComponent("recordings", isDirectory: true)
+        // `~/Documents/Proteles/Recordings/` (#43).
+        let folder: URL
         do {
-            try fileManager.createDirectory(
-                at: folder,
-                withIntermediateDirectories: true
-            )
+            folder = try ProtelesPaths.recordingsDirectory(fileManager: fileManager)
         } catch {
             throw RecorderError.openFailed(error.localizedDescription)
         }

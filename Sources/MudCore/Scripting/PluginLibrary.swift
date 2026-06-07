@@ -173,14 +173,10 @@ public actor PluginLibraryStore {
 
     /// The global registry location:
     /// `~/Library/Application Support/com.proteles.ProtelesApp/plugin-library.json`.
-    /// Internal bookkeeping — kept out of the user-visible `~/Documents/Proteles`
-    /// tree (which holds only plugin content).
+    /// `~/Documents/Proteles/Settings/plugin-library.json` (#43) — the installed-
+    /// plugin registry + per-world enablement, alongside the rest of the config.
     public static func defaultStoreURL(fileManager: FileManager = .default) throws -> URL {
-        guard let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        else { throw StoreError.loadFailed("no Application Support directory") }
-        let folder = support.appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent("plugin-library.json")
+        try ProtelesPaths.pluginLibraryFile(fileManager: fileManager)
     }
 
     private func persist() throws {

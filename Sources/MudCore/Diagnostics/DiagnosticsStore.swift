@@ -26,11 +26,10 @@ public struct DiagnosticsStore: Sendable {
         if let directory {
             self.directory = directory
         } else {
-            guard let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            // `~/Documents/Proteles/State/diagnostics/` (#43).
+            guard let dir = try? ProtelesPaths.diagnosticsDirectory(fileManager: fileManager)
             else { throw StoreError.noApplicationSupport }
-            self.directory = support
-                .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-                .appendingPathComponent("diagnostics", isDirectory: true)
+            self.directory = dir
         }
         try? fileManager.createDirectory(at: self.directory, withIntermediateDirectories: true)
     }
