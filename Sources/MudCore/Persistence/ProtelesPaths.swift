@@ -53,6 +53,125 @@ public enum ProtelesPaths {
         )
     }
 
+    // MARK: - Settings (config — issue #43)
+
+    /// `~/Documents/Proteles/Settings/` — app preferences + world profiles +
+    /// the installed-plugin registry. Hand-editable config (not transient UI
+    /// state, which stays in `UserDefaults`).
+    public static func settingsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("Settings", isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// `Settings/worlds.json` — the world-profile collection (was the opaque
+    /// App-Support `profiles.json`).
+    public static func worldsFile(fileManager: FileManager = .default) throws -> URL {
+        try settingsDirectory(fileManager: fileManager).appendingPathComponent("worlds.json")
+    }
+
+    /// `Settings/preferences.json` — the meaningful app preferences (Phase 2).
+    public static func preferencesFile(fileManager: FileManager = .default) throws -> URL {
+        try settingsDirectory(fileManager: fileManager).appendingPathComponent("preferences.json")
+    }
+
+    /// `Settings/plugin-library.json` — the installed-plugin registry + per-world
+    /// enablement.
+    public static func pluginLibraryFile(fileManager: FileManager = .default) throws -> URL {
+        try settingsDirectory(fileManager: fileManager).appendingPathComponent("plugin-library.json")
+    }
+
+    // MARK: - State (mutable runtime state — issue #43)
+
+    /// `~/Documents/Proteles/State/` — mutable runtime state: the resume
+    /// breadcrumb, scrollback DB, plugin SaveState, per-world variables,
+    /// diagnostics. Visible but not really hand-edited.
+    public static func stateDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("State", isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// `State/resume.json` — the session-resume breadcrumb (#42).
+    public static func resumeFile(fileManager: FileManager = .default) throws -> URL {
+        try stateDirectory(fileManager: fileManager).appendingPathComponent("resume.json")
+    }
+
+    /// `State/scrollback.sqlite` — the rendered-output history DB.
+    public static func scrollbackFile(fileManager: FileManager = .default) throws -> URL {
+        try stateDirectory(fileManager: fileManager).appendingPathComponent("scrollback.sqlite")
+    }
+
+    /// `State/variables/<world>.json` — per-world script variables.
+    public static func variablesFile(
+        world: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let dir = try ensure(
+            stateDirectory(fileManager: fileManager).appendingPathComponent("variables", isDirectory: true),
+            fileManager
+        )
+        return dir.appendingPathComponent("\(world).json")
+    }
+
+    /// `State/plugins/<plugin>-<character>.json` — a plugin's non-DB SaveState,
+    /// labelled by plugin + character so it's obvious whose state it is.
+    public static func pluginStateFile(
+        plugin: String,
+        character: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let dir = try ensure(
+            stateDirectory(fileManager: fileManager).appendingPathComponent("plugins", isDirectory: true),
+            fileManager
+        )
+        return dir.appendingPathComponent("\(plugin)-\(character).json")
+    }
+
+    /// `State/diagnostics/` — MetricKit crash/hang payloads (opt-in).
+    public static func diagnosticsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            stateDirectory(fileManager: fileManager).appendingPathComponent("diagnostics", isDirectory: true),
+            fileManager
+        )
+    }
+
+    // MARK: - Recordings + logs (issue #43)
+
+    /// `~/Documents/Proteles/Recordings/` — auto debug capture (`.jsonl` + `.log`).
+    public static func recordingsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("Recordings", isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// `~/Documents/Proteles/Logs/` — user-facing session logs (Logging pref).
+    public static func logsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("Logs", isDirectory: true),
+            fileManager
+        )
+    }
+
+    /// `Databases/<character>/<fileName>` — a per-character plugin DB (dinv,
+    /// leveldb, …), flattened (no plugin-chosen subdirs). Mapper + S&D
+    /// stay at the `Databases/` root (global, shared).
+    public static func pluginDatabaseURL(
+        character: String,
+        fileName: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let dir = try ensure(
+            databasesDirectory(fileManager: fileManager)
+                .appendingPathComponent(character, isDirectory: true),
+            fileManager
+        )
+        return dir.appendingPathComponent(fileName)
+    }
+
     /// The directory for one plugin, `Plugins/<dirName>/`. Created if missing.
     public static func pluginDirectory(
         named dirName: String,
