@@ -66,7 +66,7 @@ public struct PluginsView: View {
                 }
             }
             if !model.nativePlugins.isEmpty {
-                Section("Native plugins") {
+                Section("Proteles modules") {
                     ForEach(model.nativePlugins) { plugin in
                         NativePluginRowView(plugin: plugin) { enabled in
                             Task { await model.setNativeEnabled(enabled, id: plugin.id) }
