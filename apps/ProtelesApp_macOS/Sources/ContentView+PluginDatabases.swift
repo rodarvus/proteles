@@ -31,7 +31,9 @@ extension ContentView {
     func pluginDatabaseTarget(_ kind: PluginDatabase) async -> URL? {
         switch kind {
         case .levelDB:
-            return try? PluginDatabaseImporter.levelDBTarget()
+            guard let id = worlds.activeProfileID else { return nil }
+            let character = await ScriptsModel.characterKey(forProfile: id)
+            return try? PluginDatabaseImporter.levelDBTarget(character: character)
         case .dinv:
             guard let id = worlds.activeProfileID else { return nil }
             let character = await ScriptsModel.characterKey(forProfile: id)

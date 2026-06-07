@@ -107,10 +107,9 @@ public extension SessionController {
         else { return }
         let dataDir = Self.pluginDataDirectory(for: directory, character: character)
         let dataPath = Self.directoryPath(dataDir)
-        // Surface the per-character Databases/<character>/ dir for proteles.databaseDir()
-        // so a plugin can keep its SQLite DB flat in the shared tree (#43/#44).
-        if let dbDir = try? ProtelesPaths.pluginDatabasesDirectory(character: character) {
-            await scriptEngine.setDatabasesDirectory(Self.directoryPath(dbDir))
+        // Surface the flat per-character Databases dir for proteles.databaseDir() (#44).
+        if let dbPath = databasesDirectoryPath(forCharacter: character) {
+            await scriptEngine.setDatabasesDirectory(dbPath)
         }
         loadedPluginPaths[plugin.id] = (code: directory, data: dataDir)
         await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map { Self.directoryPath($0.code) })
@@ -124,6 +123,16 @@ public extension SessionController {
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         if fireConnect { await applyScriptEffects(scriptEngine.connectPlugin(plugin.id)) }
+    }
+
+    /// The flat per-character `Databases/<character>/` path (trailing slash)
+    /// surfaced to plugins via `proteles.databaseDir()` (#44), or `nil` for an
+    /// empty/unknown character.
+    func databasesDirectoryPath(forCharacter character: String?) -> String? {
+        guard let character, !character.isEmpty,
+              let dir = try? ProtelesPaths.pluginDatabasesDirectory(character: character)
+        else { return nil }
+        return Self.directoryPath(dir)
     }
 
     /// A plugin's per-character data dir, `<plugin>/data/<character>/` (created),

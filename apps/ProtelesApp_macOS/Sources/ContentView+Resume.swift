@@ -51,6 +51,10 @@ extension ContentView {
         guard case .connected = networkState else { return }
         resumeBanner = nil
         writeResumeToken()
+        // Point the Levels panel at this character's Databases/<character>/leveldb.db (#44).
+        if let id = worlds.activeProfile?.id {
+            Task { levels.character = await ScriptsModel.characterKey(forProfile: id) }
+        }
         // Flush the deferred resume note now the recorder is up (see launch()).
         if let note = pendingResumeNote {
             pendingResumeNote = nil

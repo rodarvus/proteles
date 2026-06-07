@@ -89,9 +89,15 @@ public final class LevelDBPanelModel {
         didSet { if oldValue != band { reload() } }
     }
 
-    /// Override the DB location (tests/previews). `nil` uses the bundled
-    /// plugin's well-known path.
+    /// Override the DB location (tests/previews). `nil` derives the path from
+    /// ``character``.
     @ObservationIgnored public var databaseURLOverride: URL?
+    /// The connected character, set by the app so the panel reads its
+    /// per-character `Databases/<character>/leveldb.db` (#44). Changing it reloads.
+    @ObservationIgnored public var character: String? {
+        didSet { if oldValue != character { reload() } }
+    }
+
     /// Injectable clock for the live/daily windows (tests).
     @ObservationIgnored public var now: () -> Date = Date.init
     @ObservationIgnored private var hasAutoSelectedBand = false
@@ -108,7 +114,7 @@ public final class LevelDBPanelModel {
     /// main actor. On the very first successful load, snap the filter to the
     /// character's current band so the panel opens on "where am I now?".
     public func reload() {
-        let url = databaseURLOverride ?? (try? LevelDBStore.defaultURL())
+        let url = databaseURLOverride ?? character.flatMap { try? LevelDBStore.defaultURL(character: $0) }
         guard let url else { databaseMissing = true; return }
         guard FileManager.default.fileExists(atPath: url.path) else {
             databaseMissing = true

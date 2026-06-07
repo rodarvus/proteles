@@ -530,6 +530,13 @@ end
 -- Returns the directory for the database file.
 -- Uses the existing pluginStatePath and character name from GMCP.
 function dinv_db.getDir()
+   -- On Proteles the host returns a flat per-character Databases/<char>/ dir, so
+   -- the DB lives in the shared Databases tree instead of nested under the plugin
+   -- state dir. On MUSHclient `proteles` is nil, so the original path runs.
+   if proteles and proteles.databaseDir then
+      local host_dir = proteles.databaseDir()
+      if host_dir and host_dir ~= "" then return host_dir end
+   end
    local charName = dbot.gmcp.getName() or "unknown"
    return pluginStatePath .. "\\" .. charName .. "\\"
 end

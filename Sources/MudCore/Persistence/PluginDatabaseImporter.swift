@@ -57,24 +57,22 @@ public enum PluginDatabaseImporter {
 
     // MARK: - Targets
 
-    /// leveldb's single global database, `Plugins/leveldb/state/leveldb/leveldb.db`.
-    public static func levelDBTarget(fileManager: FileManager = .default) throws -> URL {
-        try LevelDBStore.defaultURL(fileManager: fileManager)
+    /// leveldb's per-character database, `Databases/<character>/leveldb.db`
+    /// (flat, via `proteles.databaseDir()`, #44).
+    public static func levelDBTarget(
+        character: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        try LevelDBStore.defaultURL(character: character, fileManager: fileManager)
     }
 
-    /// The active character's dinv database. dinv nests it at
-    /// `Plugins/dinv/data/<character>/dinv-<id>/<GMCPName>/dinv.db`, where the
-    /// `<GMCPName>` subfolder is dinv-internal (its capitalised GMCP char name),
-    /// so rather than reconstruct that we **locate the existing `dinv.db`** under
-    /// the character's data dir. Returns `nil` if dinv hasn't created it yet
-    /// (the caller asks the user to connect + `dinv build` once first).
+    /// The active character's dinv database, `Databases/<character>/dinv.db`
+    /// (flat, via `proteles.databaseDir()`, #44). Returns `nil` if dinv hasn't
+    /// created it yet (the caller asks the user to connect + `dinv build` once).
     public static func dinvTarget(character: String, fileManager: FileManager = .default) -> URL? {
-        guard let root = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character),
-              let walker = fileManager.enumerator(at: root, includingPropertiesForKeys: nil)
-        else { return nil }
-        for case let url as URL in walker where url.lastPathComponent == "dinv.db" {
-            return url
-        }
-        return nil
+        guard let url = try? ProtelesPaths.pluginDatabaseURL(
+            character: character, fileName: "dinv.db", fileManager: fileManager
+        ) else { return nil }
+        return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 }

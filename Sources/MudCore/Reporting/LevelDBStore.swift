@@ -50,17 +50,18 @@ public final class LevelDBStore: Sendable {
         }
     }
 
-    /// The bundled leveldb plugin writes `state/leveldb/leveldb.db` under its
-    /// plugin home (`~/Documents/Proteles/Plugins/leveldb/`). Returns that URL
-    /// (whether or not the file exists yet).
-    public static func defaultURL(fileManager: FileManager = .default) throws -> URL {
-        try ProtelesPaths.pluginDirectory(named: "leveldb", fileManager: fileManager)
-            .appendingPathComponent("state/leveldb/leveldb.db")
+    /// The leveldb plugin writes `Databases/<character>/leveldb.db` (flat, via
+    /// `proteles.databaseDir()`, #43/#44). Returns that URL (whether or not the
+    /// file exists yet).
+    public static func defaultURL(character: String, fileManager: FileManager = .default) throws -> URL {
+        try ProtelesPaths.pluginDatabaseURL(
+            character: character, fileName: "leveldb.db", fileManager: fileManager
+        )
     }
 
     /// `true` when the DB file exists (the plugin has been run at least once).
-    public static func databaseExists(fileManager: FileManager = .default) -> Bool {
-        guard let url = try? defaultURL(fileManager: fileManager) else { return false }
+    public static func databaseExists(character: String, fileManager: FileManager = .default) -> Bool {
+        guard let url = try? defaultURL(character: character, fileManager: fileManager) else { return false }
         return fileManager.fileExists(atPath: url.path)
     }
 
