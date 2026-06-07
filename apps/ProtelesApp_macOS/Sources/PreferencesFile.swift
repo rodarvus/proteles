@@ -47,7 +47,9 @@ final class PreferencesFile {
     /// with subsequent changes. Call once, early in app launch.
     func start() {
         importFromFile()
-        export() // canonicalise the file on disk (and create it on first run)
+        importRules()
+        export() // canonicalise the files on disk (and create them on first run)
+        exportRules()
         observer = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -88,5 +90,32 @@ final class PreferencesFile {
             withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]
         ) else { return }
         try? data.write(to: url, options: .atomic)
+        exportRules()
+    }
+
+    // MARK: - Notification rules (their own readable file, #45)
+
+    /// Import `Settings/notification-rules.json` (file wins) into the
+    /// `notificationRulesData` preference. A malformed file is ignored (the
+    /// existing rules are kept) rather than wiping the user's rules.
+    private func importRules() {
+        guard let url = try? ProtelesPaths.notificationRulesFile(),
+              let data = try? Data(contentsOf: url),
+              let rules = try? JSONDecoder().decode([NotificationRule].self, from: data)
+        else { return }
+        UserDefaults.standard.set(rules.encoded, forKey: NotificationRulesStorage.key)
+    }
+
+    /// Write the current rules to `Settings/notification-rules.json` as
+    /// pretty-printed JSON (the opaque `notificationRulesData` is otherwise not
+    /// hand-editable).
+    private func exportRules() {
+        guard let url = try? ProtelesPaths.notificationRulesFile() else { return }
+        let data = UserDefaults.standard.data(forKey: NotificationRulesStorage.key) ?? Data()
+        let rules = [NotificationRule].decoded(from: data)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let pretty = try? encoder.encode(rules) else { return }
+        try? pretty.write(to: url, options: .atomic)
     }
 }
