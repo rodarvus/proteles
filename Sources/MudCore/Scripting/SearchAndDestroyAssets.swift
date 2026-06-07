@@ -12,12 +12,12 @@ public enum SearchAndDestroyAssets {
     /// (or by tests), so the unchecked global is acceptable.
     public nonisolated(unsafe) static var installDirectory: URL? = defaultInstallDirectory
 
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/plugins/search-and-destroy`.
+    /// `~/Documents/Proteles/Plugins/search-and-destroy` (#43) — S&D is a
+    /// user-installed download, so it lives in the visible Plugins/ tree with
+    /// every other plugin.
     public static var defaultInstallDirectory: URL? {
-        try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-        )
-        .appendingPathComponent("com.proteles.ProtelesApp/plugins/search-and-destroy", isDirectory: true)
+        try? ProtelesPaths.pluginsDirectory()
+            .appendingPathComponent("search-and-destroy", isDirectory: true)
     }
 
     /// Whether S&D is installed (its `core.lua` is present in the install dir).
