@@ -349,10 +349,8 @@ struct ProtelesApp: App {
     /// user session logs are written (used by the log-file builder + the
     /// "Open Log Folder" menu item).
     nonisolated static func logsDirectory() -> URL? {
-        guard let base = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        ) else { return nil }
-        return base.appendingPathComponent("com.proteles.ProtelesApp/logs", isDirectory: true)
+        // `~/Documents/Proteles/Logs/` (#43).
+        try? ProtelesPaths.logsDirectory()
     }
 
     /// The current world name, set on connect so the (Sendable, off-main) log

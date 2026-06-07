@@ -133,7 +133,7 @@ struct SessionRecorderDefaultLocationTests {
             .dropFirst("session-".count)
             .dropLast(".jsonl".count)
         #expect(stamp.count == 15)
-        #expect(url.deletingLastPathComponent().lastPathComponent == "recordings")
+        #expect(url.deletingLastPathComponent().lastPathComponent == "Recordings")
     }
 }
 

@@ -65,25 +65,12 @@ public actor VariableStore {
 
     // MARK: - Disk
 
-    /// Recommended per-profile location:
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/variables/<id>.json`.
+    /// `~/Documents/Proteles/State/variables/<world-id>.json` (#43).
     public static func defaultStoreURL(
         forProfile id: UUID,
         fileManager: FileManager = .default
     ) throws -> URL {
-        guard
-            let support = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            throw StoreError.loadFailed("no Application Support directory")
-        }
-        let folder = support
-            .appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-            .appendingPathComponent("variables", isDirectory: true)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent("\(id.uuidString).json")
+        try ProtelesPaths.variablesFile(world: id.uuidString, fileManager: fileManager)
     }
 
     // MARK: - Private
