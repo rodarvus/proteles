@@ -137,29 +137,14 @@ public actor ProfileStore {
 
     // MARK: - Disk
 
-    /// Recommended location:
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/profiles.json`.
-    /// Creates the parent directory if needed.
+    /// `~/Documents/Proteles/Settings/worlds.json` (#43). Creates the parent
+    /// directory if needed.
     public static func defaultStoreURL(
         fileManager: FileManager = .default
     ) throws -> URL {
-        guard
-            let support = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            throw StoreError.loadFailed("no Application Support directory")
-        }
-        let folder = support.appendingPathComponent(
-            "com.proteles.ProtelesApp",
-            isDirectory: true
-        )
-        try fileManager.createDirectory(
-            at: folder,
-            withIntermediateDirectories: true
-        )
-        return folder.appendingPathComponent("profiles.json")
+        // `~/Documents/Proteles/Settings/worlds.json` (#43) — visible + editable
+        // alongside the rest of the user's config.
+        try ProtelesPaths.worldsFile(fileManager: fileManager)
     }
 
     // MARK: - Private

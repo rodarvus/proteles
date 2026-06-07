@@ -60,16 +60,9 @@ public struct ResumeTokenStore: Sendable {
         self.url = url
     }
 
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/resume.json`.
+    /// `~/Documents/Proteles/State/resume.json` (#43).
     public static func defaultURL(fileManager: FileManager = .default) throws -> URL {
-        guard let support = fileManager.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first else {
-            throw CocoaError(.fileNoSuchFile)
-        }
-        let folder = support.appendingPathComponent("com.proteles.ProtelesApp", isDirectory: true)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent("resume.json")
+        try ProtelesPaths.resumeFile(fileManager: fileManager)
     }
 
     public func write(_ token: ResumeToken) throws {

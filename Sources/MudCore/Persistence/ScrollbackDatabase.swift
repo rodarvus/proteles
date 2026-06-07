@@ -46,29 +46,12 @@ public final class ScrollbackDatabase: Sendable {
         }
     }
 
-    /// Convenience: open a database living under
-    /// `~/Library/Application Support/com.proteles.ProtelesApp/`.
-    /// Creates the containing directory if needed.
+    /// `~/Documents/Proteles/State/scrollback.sqlite` (#43). Creates the
+    /// containing directory if needed.
     public static func defaultLocation(
         fileManager: FileManager = .default
     ) throws -> URL {
-        guard
-            let support = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            throw DatabaseError.openFailed("no Application Support directory")
-        }
-        let folder = support.appendingPathComponent(
-            "com.proteles.ProtelesApp",
-            isDirectory: true
-        )
-        try fileManager.createDirectory(
-            at: folder,
-            withIntermediateDirectories: true
-        )
-        return folder.appendingPathComponent("scrollback.sqlite")
+        try ProtelesPaths.scrollbackFile(fileManager: fileManager)
     }
 
     // MARK: - Writes
