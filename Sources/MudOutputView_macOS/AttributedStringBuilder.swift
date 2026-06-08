@@ -1,5 +1,6 @@
 #if os(macOS)
     import AppKit
+    import CoreText
     import MudCore
 
     /// Renders a ``Line`` into an `NSAttributedString` suitable for appending
@@ -22,10 +23,33 @@
 
         public init(palette: ColorPalette, font: NSFont) {
             self.palette = palette
-            self.font = font
-            boldFont = Self.font(font, withTraits: .bold)
-            italicFont = Self.font(font, withTraits: .italic)
-            boldItalicFont = Self.font(font, withTraits: [.bold, .italic])
+            // Strip ligatures at the font level so programming fonts (Fira Code,
+            // Cascadia, Monaspace, JetBrains Mono) never fuse a MUD's `==`/`->`/
+            // `<=`/`=====` into glyphs. The `.ligature = 0` run attribute only
+            // covers `liga`/`clig`; code ligatures live under `calt`, so we must
+            // disable the features on the font itself. The bold/italic variants
+            // derive from this base and inherit the setting.
+            let base = Self.disablingLigatures(font)
+            self.font = base
+            boldFont = Self.font(base, withTraits: .bold)
+            italicFont = Self.font(base, withTraits: .italic)
+            boldItalicFont = Self.font(base, withTraits: [.bold, .italic])
+        }
+
+        /// A copy of `font` with common + contextual ligatures and contextual
+        /// alternates (`liga`/`clig`/`calt`) turned off — the terminal-correct
+        /// rendering for any monospaced font.
+        private static func disablingLigatures(_ font: NSFont) -> NSFont {
+            let off: [[NSFontDescriptor.FeatureKey: Int]] = [
+                [.typeIdentifier: kLigaturesType, .selectorIdentifier: kCommonLigaturesOffSelector],
+                [.typeIdentifier: kLigaturesType, .selectorIdentifier: kContextualLigaturesOffSelector],
+                [
+                    .typeIdentifier: kContextualAlternatesType,
+                    .selectorIdentifier: kContextualAlternatesOffSelector
+                ]
+            ]
+            let descriptor = font.fontDescriptor.addingAttributes([.featureSettings: off])
+            return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
         }
 
         /// Build an attributed string for `line`, ending with a single
