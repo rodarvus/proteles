@@ -37,6 +37,10 @@ public struct CompletionVocabulary: Sendable, Equatable {
     /// Directed channel verbs (tell/whisper/page/…): the first argument is a
     /// recipient (complete from ``playerWords``); the rest is a message (no ghost).
     public var directedChannels: Set<String>
+    /// Installed plugins' subcommands (#31), keyed by verb: `dinv` →
+    /// `[build, put, refresh, …]`. Completes the **first argument** of a plugin
+    /// verb. Harvested from the plugins' alias grammar.
+    public var pluginSubcommands: [String: [String]]
 
     /// Shortest token worth completing (a 1-char word completes to noise).
     public let minimumWordLength: Int
@@ -56,6 +60,7 @@ public struct CompletionVocabulary: Sendable, Equatable {
         argumentSources: [CommandArgumentKind: [String]] = [:],
         broadcastChannels: Set<String> = [],
         directedChannels: Set<String> = [],
+        pluginSubcommands: [String: [String]] = [:],
         minimumWordLength: Int = 2,
         recentWordMinPrefix: Int = 2
     ) {
@@ -63,6 +68,7 @@ public struct CompletionVocabulary: Sendable, Equatable {
         self.recentWords = recentWords
         self.verbs = verbs
         self.playerWords = playerWords
+        self.pluginSubcommands = pluginSubcommands
         self.argumentSources = argumentSources
         self.broadcastChannels = Set(broadcastChannels.map { $0.lowercased() })
         self.directedChannels = Set(directedChannels.map { $0.lowercased() })
@@ -122,6 +128,12 @@ public struct CompletionVocabulary: Sendable, Equatable {
             return index == 1 ? rank(word, sources: [playerWords]) : []
         }
         if broadcastChannels.contains(verb) { return [] }
+        // Plugin subcommands (#31): the first argument of a plugin verb completes
+        // from the subcommands harvested from that plugin's aliases — `dinv b`→
+        // `build`, `ldb le`→`level`.
+        if index == 1, let subs = pluginSubcommands[verb], !subs.isEmpty {
+            return rank(word, sources: [subs])
+        }
         // Per-verb argument source (#32): get→item, goto→room, cast→spell,
         // open→exit, …. Players come from the channel paths above. When the
         // curated source has data we use it; when it's empty (the pipeline isn't

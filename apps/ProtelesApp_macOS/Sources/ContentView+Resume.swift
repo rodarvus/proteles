@@ -59,6 +59,7 @@ extension ContentView {
                 levels.character = character
                 itemCompletions.refresh(character: character)
             }
+            pluginCommands.refresh(forProfile: id) // plugin verbs + subcommands (#31)
         }
         // Flush the deferred resume note now the recorder is up (see launch()).
         if let note = pendingResumeNote {
