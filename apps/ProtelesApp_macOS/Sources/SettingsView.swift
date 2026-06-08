@@ -99,11 +99,19 @@ private struct AppearanceSettingsView: View {
         Theme.with(id: themeID)
     }
 
-    /// The bundled font (no-ligature JetBrains Mono, registered at launch),
+    /// Bundled fonts (registered at launch from Resources/Fonts; OFL except Hack
+    /// which is its own permissive license — ligatures disabled in the renderer),
     /// the system default (""), and the monospaced families macOS ships.
     private static let fontChoices: [(label: String, name: String)] = [
         ("System Monospaced", ""),
-        ("JetBrains Mono", "JetBrains Mono NL"), // bundled (OFL); ligatures off
+        // Bundled, for evaluation:
+        ("JetBrains Mono", "JetBrains Mono NL"),
+        ("Source Code Pro", "Source Code Pro"),
+        ("Fira Code", "Fira Code"),
+        ("Monaspace Neon", "Monaspace Neon Frozen"),
+        ("Cascadia Code", "Cascadia Code"),
+        ("Hack", "Hack"),
+        // Installed with macOS:
         ("Menlo", "Menlo"),
         ("Monaco", "Monaco"),
         ("Courier New", "Courier New"),
