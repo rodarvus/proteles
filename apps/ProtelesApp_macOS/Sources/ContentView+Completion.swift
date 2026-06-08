@@ -45,7 +45,22 @@ extension ContentView {
             sources[.exit] = exits.keys.map { Self.directionNames[$0.lowercased()] ?? $0 }
         }
         sources[.spell] = AardwolfSpells.all // `cast <spell>` (#32)
+        sources[.area] = snd.areaKeys // `runto`/`xrt <area>` (#32 A)
         return sources
+    }
+
+    /// Cache S&D's area keys (off-main, one read) for `runto`/`xrt` completion
+    /// (#32 A). No-op when S&D isn't installed; area data is world-wide + static,
+    /// so this runs once at setup.
+    func loadAreaCompletions() {
+        guard snd.isInstalled else { return }
+        let model = snd
+        Task.detached {
+            let keys = (try? SearchAndDestroyStore(
+                url: SearchAndDestroyStore.defaultStoreURL()
+            ).areaCompletions()) ?? []
+            await MainActor.run { model.areaKeys = keys }
+        }
     }
 
     /// Exit abbreviation → full direction name, so `open nor`→`north` (#32).

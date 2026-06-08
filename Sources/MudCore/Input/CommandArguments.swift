@@ -3,14 +3,14 @@ import Foundation
 /// What kind of value a command's argument expects, so completion can draw from
 /// the right source (#32). Maps to a list on ``CompletionVocabulary``.
 public enum CommandArgumentKind: String, Sendable, Equatable, CaseIterable {
-    /// An object in inventory / the room (get, wear, quaff, …).
+    /// An owned item — inventory/equipment (wear, wield, quaff, sell, …). #32 B.
     case item
-    /// A mapper room (goto, run, runto).
-    case room
-    /// A spell name (cast).
+    /// A spell name (cast). #32.
     case spell
-    /// A room exit / direction (open, close, unlock, …).
+    /// A room exit / direction (open, close, unlock, …). #32.
     case exit
+    /// An S&D area key (runto, xrt). #32 A.
+    case area
     /// A player/mob name (handled mostly via directed channels in #31).
     case player
 }
@@ -32,8 +32,8 @@ public enum CommandArguments {
         ] {
             map[verb] = .item
         }
-        for verb in ["goto", "run", "runto", "speedwalk", "maprun"] {
-            map[verb] = .room
+        for verb in ["runto", "xrt"] {
+            map[verb] = .area
         }
         for verb in ["cast"] {
             map[verb] = .spell

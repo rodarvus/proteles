@@ -6,10 +6,10 @@ struct CompletionArgumentTests {
     private func vocab() -> CompletionVocabulary {
         CompletionVocabulary(
             recentWords: ["wandering"],
-            verbs: ["get", "goto", "cast", "open", "look"],
+            verbs: ["get", "runto", "cast", "open", "look"],
             argumentSources: [
                 .item: ["longsword", "lantern"],
-                .room: ["recall", "market square"],
+                .area: ["lowlands", "farm"],
                 .spell: ["fireball", "frostbolt"],
                 .exit: ["north", "south"]
             ]
@@ -31,6 +31,11 @@ struct CompletionArgumentTests {
         #expect(vocab().ghostSuffix(inLine: "open nor", caret: 8) == "th")
     }
 
+    @Test("runto completes from the area source")
+    func areaArgument() {
+        #expect(vocab().ghostSuffix(inLine: "runto low", caret: 9) == "lands")
+    }
+
     @Test("an unclassified verb's argument falls back to context/recent")
     func fallback() {
         #expect(vocab().ghostSuffix(inLine: "look wan", caret: 8) == "dering")
@@ -39,7 +44,8 @@ struct CompletionArgumentTests {
     @Test("argument-kind table")
     func kindTable() {
         #expect(CommandArguments.argumentKind(verb: "get", argumentIndex: 0) == .item)
-        #expect(CommandArguments.argumentKind(verb: "GOTO", argumentIndex: 0) == .room)
+        #expect(CommandArguments.argumentKind(verb: "RUNTO", argumentIndex: 0) == .area)
+        #expect(CommandArguments.argumentKind(verb: "xrt", argumentIndex: 0) == .area)
         #expect(CommandArguments.argumentKind(verb: "cast", argumentIndex: 0) == .spell)
         #expect(CommandArguments.argumentKind(verb: "get", argumentIndex: 1) == nil)
         #expect(CommandArguments.argumentKind(verb: "score", argumentIndex: 0) == nil)

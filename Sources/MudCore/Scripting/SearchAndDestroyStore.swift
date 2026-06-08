@@ -59,6 +59,24 @@ public final class SearchAndDestroyStore: Sendable {
         try ProtelesPaths.searchAndDestroyDatabaseURL(fileManager: fileManager)
     }
 
+    /// Area keys for `runto <area>` argument completion (#32) — the short
+    /// identifiers S&D navigates by (`key` + the user's `userKey`), deduped +
+    /// sorted. Read-only; safe to call alongside S&D's own connection.
+    public func areaCompletions() throws -> [String] {
+        try dbQueue.read { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT key, userKey FROM area")
+            var seen = Set<String>()
+            var result: [String] = []
+            for row in rows {
+                for value: String? in [row["key"], row["userKey"]] {
+                    let key = value?.trimmingCharacters(in: .whitespaces) ?? ""
+                    if !key.isEmpty, seen.insert(key.lowercased()).inserted { result.append(key) }
+                }
+            }
+            return result.sorted()
+        }
+    }
+
     // MARK: - Schema
 
     /// Create S&D's v6 schema on a fresh file and stamp `user_version = 6`.
