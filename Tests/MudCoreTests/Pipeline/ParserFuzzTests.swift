@@ -85,10 +85,16 @@ struct ParserFuzzTests {
         // The same bytes split one-per-consume must be just as safe (state
         // carried across calls is where boundary bugs hide).
         var split = LinePipeline()
-        let stream = [0x1B, 0x5B, 0x33, 0x31, 0x6D] + Array("hello".utf8)
-            + [0xFF, 0xFA, 0xC9] + Array("X".utf8) + [0xFF, 0xF0, 0x0A]
+        // Built as explicit [UInt8] statements rather than one `+` chain: mixing
+        // integer-literal arrays with `Array(_.utf8)` ([UInt8]) in a single
+        // expression makes Swift's type-checker time out on CI (#26).
+        var stream: [UInt8] = [0x1B, 0x5B, 0x33, 0x31, 0x6D]
+        stream += Array("hello".utf8)
+        stream += [0xFF, 0xFA, 0xC9]
+        stream += Array("X".utf8)
+        stream += [0xFF, 0xF0, 0x0A]
         for byte in stream {
-            _ = try? split.consume([UInt8(byte)])
+            _ = try? split.consume([byte])
         }
     }
 }
