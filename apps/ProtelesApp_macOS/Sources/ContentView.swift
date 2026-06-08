@@ -43,6 +43,8 @@ struct ContentView: View {
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
     @State var recentLines = RecentLineBuffer()
+    /// dinv item-keyword cache for `wear`/`wield`/… completion (#32 B).
+    @State var itemCompletions = ItemCompletionCache()
     /// Drives the "Save Layout…" name prompt.
     @State private var showingSavePreset = false
     @State private var newPresetName = ""

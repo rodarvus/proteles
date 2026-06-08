@@ -6,7 +6,7 @@ struct CompletionArgumentTests {
     private func vocab() -> CompletionVocabulary {
         CompletionVocabulary(
             recentWords: ["wandering"],
-            verbs: ["get", "runto", "cast", "open", "look"],
+            verbs: ["wear", "runto", "cast", "open", "look"],
             argumentSources: [
                 .item: ["longsword", "lantern"],
                 .area: ["lowlands", "farm"],
@@ -16,9 +16,9 @@ struct CompletionArgumentTests {
         )
     }
 
-    @Test("get completes from the item source")
+    @Test("wear completes from the item source")
     func itemArgument() {
-        #expect(vocab().ghostSuffix(inLine: "get lan", caret: 7) == "tern")
+        #expect(vocab().ghostSuffix(inLine: "wear lan", caret: 8) == "tern")
     }
 
     @Test("cast completes from the spell source")
@@ -43,11 +43,13 @@ struct CompletionArgumentTests {
 
     @Test("argument-kind table")
     func kindTable() {
-        #expect(CommandArguments.argumentKind(verb: "get", argumentIndex: 0) == .item)
+        #expect(CommandArguments.argumentKind(verb: "wear", argumentIndex: 0) == .item)
         #expect(CommandArguments.argumentKind(verb: "RUNTO", argumentIndex: 0) == .area)
         #expect(CommandArguments.argumentKind(verb: "xrt", argumentIndex: 0) == .area)
         #expect(CommandArguments.argumentKind(verb: "cast", argumentIndex: 0) == .spell)
-        #expect(CommandArguments.argumentKind(verb: "get", argumentIndex: 1) == nil)
+        #expect(CommandArguments.argumentKind(verb: "wear", argumentIndex: 1) == nil)
+        // `get` is a floor item (→ #32 C tags), not an owned/dinv item.
+        #expect(CommandArguments.argumentKind(verb: "get", argumentIndex: 0) == nil)
         #expect(CommandArguments.argumentKind(verb: "score", argumentIndex: 0) == nil)
     }
 }
