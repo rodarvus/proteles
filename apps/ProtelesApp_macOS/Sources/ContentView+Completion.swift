@@ -46,6 +46,7 @@ extension ContentView {
         }
         sources[.spell] = AardwolfSpells.all // `cast <spell>` (#32)
         sources[.area] = snd.areaKeys // `runto`/`xrt <area>` (#32 A)
+        sources[.item] = itemCompletions.keywords // `wear`/`wield`/… (#32 B)
         return sources
     }
 

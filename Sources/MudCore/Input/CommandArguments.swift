@@ -24,8 +24,10 @@ public enum CommandArguments {
     /// verb → kind of its **first** argument.
     static let firstArgumentKind: [String: CommandArgumentKind] = {
         var map: [String: CommandArgumentKind] = [:]
+        // Owned-item verbs (inventory/equipment). `get`/`take` are floor items —
+        // those come from room tags in #32 C, not dinv.
         for verb in [
-            "get", "take", "drop", "put", "give", "wear", "wield", "hold", "remove",
+            "drop", "put", "give", "wear", "wield", "hold", "remove",
             "quaff", "eat", "drink", "recite", "use", "junk", "donate", "sell",
             "value", "appraise", "identify", "fill", "empty", "keep", "unkeep",
             "compare", "examine", "sacrifice", "brandish", "zap", "enrune"
