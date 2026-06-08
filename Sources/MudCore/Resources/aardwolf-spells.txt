@@ -1,0 +1,555 @@
+abomination
+absorb
+accelerate
+acid blast
+acid stream
+acid wave
+acidic touch
+acidproof
+adrenaline control
+agitation
+aid
+aim
+air dart
+air skewer
+ambush
+amnesia
+angel breath
+angelfire
+animal friendship
+animate object
+antimagic shell
+apocalypse
+archery
+armor
+assassinate
+assault
+augmented healing
+aura sight
+avoidance
+awakening
+awareness
+awe
+axe
+backstab
+balefire
+ballistic attack
+balor spittle
+banishment
+banshee wail
+barkskin
+bash
+bashdoor
+battle training
+beacon of homecoming
+beacon of light
+berserk
+biofeedback
+black root
+blades of light
+blast undead
+blazing fury
+bless
+bless weapon
+blight
+blindfighting
+blindness
+blink
+blockexit
+blur
+bodycheck
+bow
+brew
+burning hands
+burnt marbu
+butcher
+bypass
+calculation
+call lightning
+call upon faith
+camouflage
+camp
+cancellation
+cannibalize
+cause critical
+cause decay
+cause light
+cause serious
+caustic rain
+cell adjustment
+cell potential
+chameleon power
+champions strength
+channel energy
+chaos portal
+charge
+chariot of sustarre
+charm person
+chill touch
+circle
+cleansing
+cleave
+cobra bane
+colour spray
+combat empathy
+combat mind
+command
+compression
+conceal
+condemn
+cone of cold
+conjure elemental
+continual light
+control flames
+counter strike
+create food
+create holy symbol
+create poultice
+create sound
+create water
+cure blindness
+cure critical
+cure disease
+cure epidemic
+cure light
+cure poison
+cure serious
+cure weakness
+curse
+curse item
+curse of sloth
+cyclone
+dagger
+damnation
+dampening field
+darkness
+death blow
+death field
+demonfire
+demoralize
+desecration
+desolation
+detect evil
+detect good
+detect hidden
+detect invis
+detect magic
+detect poison
+detect undead
+detonate
+dirt kicking
+disarm
+disease
+disintegrate
+dispel evil
+dispel good
+dispel magic
+displacement
+disrupt
+dissolve
+divination
+divine faith
+divine swiftness
+divining
+dodge
+domination
+doorway
+dual wield
+dust devil
+earth maw
+earth shroud
+earthen hammer
+earthquake
+ectoplasmic form
+ego boost
+ego whip
+elemental focus
+elemental ward
+enchant armor
+enchant weapon
+enchanters focus
+energy ball
+energy containment
+energy shield
+engulf
+enhanced backstab
+enhanced damage
+enhanced strength
+enlightenment
+enrage
+entrap
+envenom
+eruption
+exorcise
+exotic
+extinguish
+eye of discovery
+eye of passage
+eye of vigilance
+eye of warning
+fast healing
+fence
+fifth attack
+finger of death
+fire
+fire blast
+fire breath
+fire rain
+fire storm
+fireball
+fireproof
+flail
+flame arrow
+flame blade
+flamestrike
+flaming sphere
+flank
+flay
+flesh armor
+fly
+focused vision
+forage
+force bolt
+foresight
+forestfire
+fortitude
+fourth attack
+frenzy
+gaias focus
+gaias fury
+gaias revenge
+gaias totem
+gate
+giant strength
+glare
+globe of invulnerability
+godly embrace
+goodberry
+gouge
+grab
+green death
+grey aura
+ground strike
+haggle
+hallowed light
+hammer
+hammerforge
+hammering blow
+hammerswing
+hand of justice
+hand to hand
+harden body
+harm
+haste
+haven
+headbutt
+heal
+healing touch
+heat shield
+heavenly balance
+heavenly smiting
+heighten senses
+herbal remedy
+hex of entropy
+hex of misfortune
+hide
+holy arrow
+holy aura
+holy fury
+holy intervention
+holy mirror
+holy preference
+holy rain
+holy reprisal
+holy rift
+holy shield
+holy strike
+holy word
+homecoming
+humility
+hunt
+huntmaster
+hydra blood
+hydroblast
+ice bolt
+ice cloud
+ice daggers
+ice storm
+identify
+illuminate
+immolate
+incomplete healing
+indestructible aura
+inertial barrier
+infernal voice
+inflict pain
+insanity
+intellect fortress
+interrogate
+intimidate
+invis
+ironfist
+kick
+knife fighting
+knock
+know alignment
+kobold spray
+kobold stench
+lash
+lay hands
+lend health
+levitation
+light arrow
+lightning bolt
+lightning strike
+lightspeed
+line of protection
+locate animal
+locate corpse
+locate object
+lore
+mace
+magic circle
+magic missile
+magical rush
+major creation
+major swarm
+marbu jet
+meditation
+megablast
+mental balance
+mental barrier
+merge chaos
+miasma
+mind freeze
+mind over body
+mind thrust
+mindflay
+minor creation
+minor swarm
+miracle
+misdirection
+mist form
+moonbeam
+mystic might
+natures touch
+navigate
+necrocide
+necrotic touch
+negation
+nerve shock
+neural burn
+neural overload
+nexus
+night vision
+nightmare touch
+nimble cunning
+nova
+object read
+pacify
+panic
+parry
+party harmony
+party heal
+party sanctuary
+party shield
+pass door
+pass without trace
+pathfinding
+peek
+perception
+petrify
+pick lock
+pilferage
+pillar of fire
+poison
+polearm
+portal
+poultice
+power grip
+power of faith
+power projection
+pray for absolution
+pray for damnation
+prayer of fortune
+precision
+premonition
+preserve
+prismatic spray
+probability travel
+project force
+prophecy
+protection evil
+protection good
+psionic blast
+psychic crush
+psychic drain
+psychic healing
+psychosis
+pure faith
+purgatory
+purge
+purify
+push
+pyromania
+quickstab
+rainbow
+rally
+raven scourge
+raw flesh
+recall
+recharge
+recon
+refresh
+regeneration
+rehallow
+reinforce
+rejuvenate
+remove curse
+renew
+repentance
+rescue
+reskin
+resonate
+restore life
+resurrection
+retreat
+reveal
+revelation
+reverse align
+righteous anger
+rune of ix
+sacrifice life
+safeguard
+sanctuary
+sap
+scalp
+scorch
+scorpion strike
+scourge
+scout
+scribe
+scrolls
+scry
+second attack
+second attack dual
+self harmony
+sense age
+sense anger
+sense danger
+sense life
+serenity
+shadow form
+shard of ice
+share intellect
+share strength
+share wisdom
+sharpen
+shield
+shield block
+shock aura
+shocking grasp
+shockproof
+shoplifting
+sixth attack
+skin
+sleep
+slit
+slow
+sneak
+soften
+solar flare
+solidify
+soul rip
+soulburn
+spasm
+spear
+spear of odin
+spiral
+spirit bolt
+spirit shield
+spirit strike
+spiritual armor
+spiritual disruption
+spook
+spunch
+spy
+stalk
+starburst
+staves
+steal
+stealth
+stomp
+stone skin
+strangle
+strike undead
+stun
+summon
+summon death
+summon life
+suppressed healing
+survey
+sustenance
+sweep
+sword
+sword of righteousness
+talon
+tame
+telekinesis
+teleport
+teleport behind
+tempering
+tempest
+terminate
+test of faith
+third attack
+third attack dual
+thought shield
+time shift
+timeshifting
+torment
+tornado
+tortured vision
+totem force
+totem guidance
+toxic cloud
+toxic resistance
+translocate
+transport via plants
+trauma
+treat wounds
+trip
+trophy
+true seeing
+ultrablast
+underwater breathing
+unholy preference
+unlawful entry
+uppercut
+vaccinate
+vampiric touch
+veil
+vengeance
+ventriloquate
+vitality
+voice of god
+void sermon
+volley
+wands
+warcry
+warhorse
+warmth
+wayfind
+weaken
+web
+whip
+whirlwind
+willpower
+winds of reckoning
+wither
+wolf spirits
+word of recall
+wraith form
+wrath of god
+wrench
+zombify

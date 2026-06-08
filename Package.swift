@@ -65,7 +65,10 @@ let package = Package(
                 .copy("Resources/leveldb"),
                 // Aardwolf's command list (from `help commands`) — the base
                 // first-word completion vocabulary (#31).
-                .copy("Resources/aardwolf-commands.txt")
+                .copy("Resources/aardwolf-commands.txt"),
+                // Aardwolf's skill/spell list (from `allspells all`) — the
+                // `cast <spell>` argument source (#32).
+                .copy("Resources/aardwolf-spells.txt")
             ]
         ),
         .target(

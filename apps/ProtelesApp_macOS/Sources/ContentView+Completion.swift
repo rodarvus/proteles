@@ -44,6 +44,7 @@ extension ContentView {
         if let exits = gmcp.room?.exits, !exits.isEmpty {
             sources[.exit] = exits.keys.map { Self.directionNames[$0.lowercased()] ?? $0 }
         }
+        sources[.spell] = AardwolfSpells.all // `cast <spell>` (#32)
         return sources
     }
 
