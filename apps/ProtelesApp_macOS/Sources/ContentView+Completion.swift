@@ -1,0 +1,46 @@
+import MudCore
+import SwiftUI
+
+/// Command-line completion vocabulary assembly. Split out of `ContentView` to
+/// keep that file within the size budget; the input view calls
+/// ``makeCompletionVocabulary()`` on Tab / as-you-type.
+extension ContentView {
+    /// Build the current completion vocabulary: live GMCP nouns (group member
+    /// names + room-name words) as context, recent output words, the verb set
+    /// (bundled Aardwolf commands + the user's alias verbs), and the channel
+    /// classification for kind-aware ghosting (#31). Called on Tab, so harvesting
+    /// recent lines here is cheap.
+    func makeCompletionVocabulary() -> CompletionVocabulary {
+        var context: [String] = []
+        // Player/people names — used both as context nouns and as the recipient
+        // source for directed channels (`tell <who>`, #31).
+        var players: [String] = []
+        if let members = gmcp.group?.members { players += members.map(\.name) }
+        context += players
+        if let roomName = gmcp.room?.name {
+            context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
+        }
+        // Union the user's own aliases' leading verbs onto the bundled list (#31).
+        let aliasVerbs = scripts.aliases.compactMap(\.pattern.leadingVerb)
+        var seenVerb = Set<String>()
+        let verbs = (Self.completionVerbs + aliasVerbs)
+            .filter { seenVerb.insert($0.lowercased()).inserted }
+        return CompletionVocabulary(
+            contextWords: context,
+            recentWords: InputCompletion.harvestWords(from: recentLines.snapshot),
+            verbs: verbs,
+            playerWords: players,
+            broadcastChannels: CommandHistory.broadcastChannels,
+            directedChannels: CommandHistory.directedChannels
+        )
+    }
+
+    /// First-word completion verbs: the full bundled Aardwolf command list (#31)
+    /// + channel names (so `gos`→`gossip`), deduped. The user's aliases + loaded
+    /// plugins' command words union in via ``makeCompletionVocabulary()``.
+    static let completionVerbs: [String] = {
+        var seen = Set<String>()
+        return (AardwolfCommands.all + Array(CommandHistory.communicationCommands))
+            .filter { seen.insert($0.lowercased()).inserted }
+    }()
+}

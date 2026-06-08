@@ -20,6 +20,26 @@ public enum TriggerPattern: Sendable, Equatable, Codable {
     /// unanchored. Numbered and `(?<name>…)` captures are supported.
     case regex(String)
 
+    /// The leading literal command word (verb) this pattern fires on, for verb
+    /// completion (#31) — e.g. an alias `kk *` → `kk`. `nil` for patterns with no
+    /// clean leading literal (substring/regex, or a non-word leading token).
+    public var leadingVerb: String? {
+        let literal: String
+        switch self {
+        case .exact(let text), .beginsWith(let text):
+            literal = text
+        case .wildcard(let text):
+            literal = String(text.prefix { $0 != "*" && $0 != "?" })
+        case .substring, .regex:
+            return nil
+        }
+        guard let word = literal.split(whereSeparator: { $0 == " " || $0 == "\t" }).first,
+              !word.isEmpty,
+              word.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "'" })
+        else { return nil }
+        return word.lowercased()
+    }
+
     /// The regex source this pattern compiles to.
     func regexSource() -> String {
         switch self {

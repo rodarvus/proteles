@@ -39,10 +39,10 @@ struct ContentView: View {
     /// A resume note set at launch and flushed to the transcript on the first
     /// `.connected` (when the recorder is open), so resume is auditable (#42).
     @State var pendingResumeNote: String?
-    @State private var gmcp = GMCPState()
+    @State var gmcp = GMCPState()
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
-    @State private var recentLines = RecentLineBuffer()
+    @State var recentLines = RecentLineBuffer()
     /// Drives the "Save Layout…" name prompt.
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
@@ -328,39 +328,6 @@ struct ContentView: View {
             }
         }
     }
-
-    /// Build the current Tab-completion vocabulary: live GMCP nouns (room name
-    /// words + group member names) as context, recent output words, and a
-    /// verb set (movement/common commands + channel names) for the first word.
-    /// Called on Tab, so harvesting recent lines here is cheap.
-    private func makeCompletionVocabulary() -> CompletionVocabulary {
-        var context: [String] = []
-        // Player/people names — used both as context nouns and as the recipient
-        // source for directed channels (`tell <who>`, #31).
-        var players: [String] = []
-        if let members = gmcp.group?.members { players += members.map(\.name) }
-        context += players
-        if let roomName = gmcp.room?.name {
-            context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
-        }
-        return CompletionVocabulary(
-            contextWords: context,
-            recentWords: InputCompletion.harvestWords(from: recentLines.snapshot),
-            verbs: Self.completionVerbs,
-            playerWords: players,
-            broadcastChannels: CommandHistory.broadcastChannels,
-            directedChannels: CommandHistory.directedChannels
-        )
-    }
-
-    /// First-word completion verbs: the full bundled Aardwolf command list (#31)
-    /// + channel names (so `gos`→`gossip`), deduped. The user's aliases + loaded
-    /// plugins' command words union in via `makeCompletionVocabulary`.
-    private static let completionVerbs: [String] = {
-        var seen = Set<String>()
-        return (AardwolfCommands.all + Array(CommandHistory.communicationCommands))
-            .filter { seen.insert($0.lowercased()).inserted }
-    }()
 
     /// Toolbar menu to show/hide each panel + reset the layout.
     private var panelsMenu: some View {
