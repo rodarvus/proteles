@@ -24,6 +24,15 @@ public struct CompletionVocabulary: Sendable, Equatable {
     public var recentWords: [String]
     /// Command verbs + user aliases, offered only for the first word.
     public var verbs: [String]
+    /// Player/people names (group members, recent speakers) — offered for the
+    /// **recipient** argument of a directed channel (`tell <who>`). Order preserved.
+    public var playerWords: [String]
+    /// Broadcast channel verbs (gossip/chat/say/…): once the line's verb is one
+    /// of these, the argument is a free-text message — no ghosting (#31).
+    public var broadcastChannels: Set<String>
+    /// Directed channel verbs (tell/whisper/page/…): the first argument is a
+    /// recipient (complete from ``playerWords``); the rest is a message (no ghost).
+    public var directedChannels: Set<String>
 
     /// Shortest token worth completing (a 1-char word completes to noise).
     public let minimumWordLength: Int
@@ -39,12 +48,18 @@ public struct CompletionVocabulary: Sendable, Equatable {
         contextWords: [String] = [],
         recentWords: [String] = [],
         verbs: [String] = [],
+        playerWords: [String] = [],
+        broadcastChannels: Set<String> = [],
+        directedChannels: Set<String> = [],
         minimumWordLength: Int = 2,
         recentWordMinPrefix: Int = 2
     ) {
         self.contextWords = contextWords
         self.recentWords = recentWords
         self.verbs = verbs
+        self.playerWords = playerWords
+        self.broadcastChannels = Set(broadcastChannels.map { $0.lowercased() })
+        self.directedChannels = Set(directedChannels.map { $0.lowercased() })
         self.minimumWordLength = max(minimumWordLength, 1)
         self.recentWordMinPrefix = max(recentWordMinPrefix, 1)
     }
@@ -58,16 +73,21 @@ public struct CompletionVocabulary: Sendable, Equatable {
     public func completions(forWord prefix: String, isFirstWord: Bool) -> [String] {
         let trimmed = prefix.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return [] }
-        let needle = prefix.lowercased()
-
-        var seen: Set<String> = []
-        var result: [String] = []
         // Curated sources first — context nouns, then (first word only) verbs;
         // the noisy recent-output source ranks last and is gated to longer
         // prefixes (#31).
         var sources = [contextWords]
         if isFirstWord { sources.append(verbs) }
         if prefix.count >= recentWordMinPrefix { sources.append(recentWords) }
+        return rank(prefix, sources: sources)
+    }
+
+    /// Ranked, deduped matches for `prefix` across `sources` (in order). A
+    /// candidate begins with `prefix` (case-insensitive) and is strictly longer.
+    private func rank(_ prefix: String, sources: [[String]]) -> [String] {
+        let needle = prefix.lowercased()
+        var seen: Set<String> = []
+        var result: [String] = []
         for source in sources {
             for word in source {
                 guard word.count >= minimumWordLength, word.count > prefix.count else { continue }
@@ -77,6 +97,36 @@ public struct CompletionVocabulary: Sendable, Equatable {
             }
         }
         return result
+    }
+
+    /// Line- and position-aware completions for the word ending at `caret` (#31).
+    /// Word 0 (the verb) completes from verbs + context. For an **argument**,
+    /// behaviour is verb-kind-aware:
+    ///   - broadcast channel (gossip/say/…) → none (it's a free-text message);
+    ///   - directed channel (tell/page/…) → player names for the recipient
+    ///     (word 1), then none for the message body;
+    ///   - any other command → context + recent (the regular argument path;
+    ///     #32 will refine this per-verb).
+    public func completions(inLine line: String, caret: Int) -> [String] {
+        guard let (word, _) = InputCompletion.currentWord(in: line, caret: caret) else { return [] }
+        let index = InputCompletion.wordIndex(in: line, caret: caret)
+        if index == 0 { return completions(forWord: word, isFirstWord: true) }
+        let verb = (InputCompletion.firstWord(in: line) ?? "").lowercased()
+        if directedChannels.contains(verb) {
+            return index == 1 ? rank(word, sources: [playerWords]) : []
+        }
+        if broadcastChannels.contains(verb) { return [] }
+        return completions(forWord: word, isFirstWord: false)
+    }
+
+    /// The as-you-type ghost suffix for the word ending at `caret`, applying the
+    /// same line/position/kind rules as ``completions(inLine:caret:)``.
+    public func ghostSuffix(inLine line: String, caret: Int) -> String? {
+        guard let (word, _) = InputCompletion.currentWord(in: line, caret: caret),
+              let best = completions(inLine: line, caret: caret).first
+        else { return nil }
+        let suffix = String(best.dropFirst(word.count))
+        return suffix.isEmpty ? nil : suffix
     }
 
     /// The trailing text to show as the as-you-type ghost hint (#13): the best
@@ -128,6 +178,23 @@ public enum InputCompletion {
                 .allSatisfy(\.isWhitespace)
         }
         return text[..<range.lowerBound].allSatisfy(\.isWhitespace)
+    }
+
+    /// The 0-based index of the word ending at `caret` among the line's words
+    /// (0 = the verb, 1 = its first argument, …). Counts word-runs before the
+    /// current word; `0` when there's no current word.
+    public static func wordIndex(in text: String, caret: Int) -> Int {
+        guard let (_, range) = currentWord(in: text, caret: caret) else { return 0 }
+        return text[..<range.lowerBound]
+            .split(whereSeparator: { !isWordCharacter($0.unicodeScalars.first ?? " ") })
+            .count
+    }
+
+    /// The line's first word (the verb), or `nil` if the line has none yet.
+    public static func firstWord(in text: String) -> String? {
+        text.split(whereSeparator: { !isWordCharacter($0.unicodeScalars.first ?? " ") })
+            .first
+            .map(String.init)
     }
 
     /// Harvest candidate words from recent output `lines` (most-recent line

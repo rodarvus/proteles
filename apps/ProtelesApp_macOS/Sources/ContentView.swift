@@ -335,14 +335,21 @@ struct ContentView: View {
     /// Called on Tab, so harvesting recent lines here is cheap.
     private func makeCompletionVocabulary() -> CompletionVocabulary {
         var context: [String] = []
-        if let members = gmcp.group?.members { context += members.map(\.name) }
+        // Player/people names — used both as context nouns and as the recipient
+        // source for directed channels (`tell <who>`, #31).
+        var players: [String] = []
+        if let members = gmcp.group?.members { players += members.map(\.name) }
+        context += players
         if let roomName = gmcp.room?.name {
             context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
         }
         return CompletionVocabulary(
             contextWords: context,
             recentWords: InputCompletion.harvestWords(from: recentLines.snapshot),
-            verbs: Self.completionVerbs
+            verbs: Self.completionVerbs,
+            playerWords: players,
+            broadcastChannels: CommandHistory.broadcastChannels,
+            directedChannels: CommandHistory.directedChannels
         )
     }
 
