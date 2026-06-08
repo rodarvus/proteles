@@ -149,42 +149,56 @@ struct DinvWishGagTests {
     /// Drive the real timer loop ~18s, answering dinv's `pagesize`/`wish list`
     /// probes + fence echoes as the fake MUD would (split out of ``runWishFlow``
     /// to keep it within the function-length budget).
+    /// Reply to a command dinv sent, the way the fake MUD would: echo its
+    /// safe-exec fences, replay the `wish list` body + wish fence + a non-vacuity
+    /// sentinel, and answer the `pagesize` probes. A command can be glued to a
+    /// preceding GMCP subnegotiation in one flush, so match the *trailing* command.
+    private static func answerProbe(_ line: String, conn: InMemoryConnection, wishLines: [String]) {
+        if let range = line.range(of: "echo { DINV fence") {
+            conn.injectLine(String(line[range.lowerBound...].dropFirst("echo ".count)))
+        } else if line.hasSuffix("wish list") {
+            wishLines.forEach { conn.injectLine($0) }
+            conn.injectLine("DINV wish list fence")
+            conn.injectLine("PROTELES_SENTINEL_AFTER_FENCE")
+        } else if line.hasSuffix("pagesize 0") {
+            conn.injectLine("Paging disabled.")
+        } else if line.hasSuffix("pagesize 20") {
+            conn.injectLine("Page size set to 20 lines.")
+        } else if line.hasSuffix("pagesize") {
+            conn.injectLine("You currently display 20 lines per page.")
+        }
+    }
+
+    /// Whether the post-fence sentinel has reached scrollback — i.e. the wish
+    /// flow finished, so the drive loop can stop early.
+    private static func flowCompleted(_ controller: SessionController) async -> Bool {
+        await controller.scrollbackStore.snapshot()
+            .contains { $0.text.contains("PROTELES_SENTINEL_AFTER_FENCE") }
+    }
+
     private func driveDinvWishExchange(
         controller: SessionController,
         conn: InMemoryConnection,
         wishLines: [String]
     ) async {
         var answered = Set<String>()
-        let deadline = ContinuousClock.now.advanced(by: .seconds(18))
+        // A generous safety cap, not a fixed run-time: we exit as soon as the
+        // wish flow has completed (the post-fence sentinel reaches scrollback).
+        // A fixed window flaked on CI, where parallel-test contention delays
+        // dinv's timer-driven init past the deadline before the wish step runs.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(45))
         var tick = 0
         while ContinuousClock.now < deadline {
             tick += 1
+            // Done the moment the flow completes — fast locally, patient on CI.
+            if await Self.flowCompleted(controller) { break }
             if tick % 25 == 0 {
                 await controller.dispatchGMCP(GMCPMessage(
                     package: "char.status", json: #"{"level":150,"state":3,"pos":"Standing"}"#
                 ))
             }
-            for line in conn.sentLines {
-                guard answered.insert(line).inserted else { continue }
-                // A command can be glued to a preceding GMCP subnegotiation in one
-                // TCP flush (`<IAC…config prompt off…IAC SE>pagesize`), so match the
-                // *trailing* command, not the whole line.
-                if let r = line.range(of: "echo { DINV fence") {
-                    conn.injectLine(String(line[r.lowerBound...].dropFirst("echo ".count)))
-                } else if line.hasSuffix("wish list") {
-                    for body in wishLines {
-                        conn.injectLine(body)
-                    }
-                    conn.injectLine("DINV wish list fence")
-                    // Non-vacuity sentinel: a normal line after the fence MUST show.
-                    conn.injectLine("PROTELES_SENTINEL_AFTER_FENCE")
-                } else if line.hasSuffix("pagesize 0") {
-                    conn.injectLine("Paging disabled.")
-                } else if line.hasSuffix("pagesize 20") {
-                    conn.injectLine("Page size set to 20 lines.")
-                } else if line.hasSuffix("pagesize") {
-                    conn.injectLine("You currently display 20 lines per page.")
-                }
+            for line in conn.sentLines where answered.insert(line).inserted {
+                Self.answerProbe(line, conn: conn, wishLines: wishLines)
             }
             try? await Task.sleep(for: .milliseconds(20))
         }
