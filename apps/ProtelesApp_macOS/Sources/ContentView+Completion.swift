@@ -20,10 +20,11 @@ extension ContentView {
         if let roomName = gmcp.room?.name {
             context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
         }
-        // Union the user's own aliases' leading verbs onto the bundled list (#31).
+        // Union the bundled list with the user's alias verbs + installed plugins'
+        // command verbs (#31), deduped.
         let aliasVerbs = scripts.aliases.compactMap(\.pattern.leadingVerb)
         var seenVerb = Set<String>()
-        let verbs = (Self.completionVerbs + aliasVerbs)
+        let verbs = (Self.completionVerbs + aliasVerbs + pluginCommands.index.verbs)
             .filter { seenVerb.insert($0.lowercased()).inserted }
         return CompletionVocabulary(
             contextWords: context,
@@ -32,7 +33,8 @@ extension ContentView {
             playerWords: players,
             argumentSources: argumentSources(),
             broadcastChannels: CommandHistory.broadcastChannels,
-            directedChannels: CommandHistory.directedChannels
+            directedChannels: CommandHistory.directedChannels,
+            pluginSubcommands: pluginCommands.index.subcommands
         )
     }
 

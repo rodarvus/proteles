@@ -45,6 +45,8 @@ struct ContentView: View {
     @State var recentLines = RecentLineBuffer()
     /// dinv item-keyword cache for `wear`/`wield`/… completion (#32 B).
     @State var itemCompletions = ItemCompletionCache()
+    /// Installed plugins' verb + subcommand grammar for completion (#31).
+    @State var pluginCommands = PluginCommandCache()
     /// Drives the "Save Layout…" name prompt.
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
