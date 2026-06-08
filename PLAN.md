@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-02 · **Latest release:** `v0.4.9` (notarized).
+**Last rewritten:** 2026-06-02 · **Latest release:** `v0.5.0` (notarized).
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
@@ -15,11 +15,13 @@ natively, the tiled panel dock, the Plugin Library, leveling analytics, and a
 six-bar status display all ship. **We are now in polish + debugging**, driven by
 live play. Release engineering is largely done — **notarization** (the first
 notarized Developer-ID build shipped in `v0.4.5`) and **opt-in crash reporting**
-are landed; the **Sparkle auto-updater** (#23) shipped its **Phase 1** in
-`v0.4.8`/`v0.4.9` (proven end-to-end: notarized signing, EdDSA appcast, in-app
-Check-for-Updates) — remaining for 1.0 is moving the feed to `proteles.net` and
-the seamless "update now" copyover (#42). The remaining gate to a **1.0** is now
-mostly **UI/UX polish** — see
+are landed; the **Sparkle auto-updater** (#23) shipped **Phase 1 + Phase 2**
+(in-app Check-for-Updates + seamless resume after update), proven across
+`v0.4.8`–`v0.4.12`. Since then, `v0.5.0` landed a **storage reshape** (all user
+data under `~/Documents/Proteles/`, hand-editable `Settings/*.json`, flat
+per-character plugin DBs) and a **command-completion overhaul** (519-command verb
+base + aliases, kind-aware channels, per-verb argument completion). The remaining
+gate to a **1.0** is now mostly **UI/UX polish** — see
 **[docs/DESIGN.md](docs/DESIGN.md)**, the design north-star, with the polish
 backlog tracked under the GitHub `ux` label.
 
@@ -75,7 +77,7 @@ download. Ongoing: live-play polish + debugging. **All pending work is tracked i
 [GitHub Issues](https://github.com/rodarvus/proteles/issues)** (`gh issue list`) —
 the backlog source of truth (see §9a).
 
-~1238 tests across ~249 suites; four gates green (`swift build`,
+~1300 tests across ~266 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---
