@@ -44,24 +44,30 @@ Companion to `docs/plans/AUTOUPDATE_AND_COPYOVER.md` (the *why*). This is the
    `sign_update`) — from the Sparkle distribution tarball or `brew install --cask
    sparkle`. Used per-release below.
 
-## Per-release publishing (after `scripts/release.sh` produces the notarized zip)
+## Per-release publishing — **the appcast step is mandatory**
 
-`release.sh` builds → signs (Sparkle inside-out) → notarizes → staples → verifies
-→ emits `/tmp/Proteles-<ver>.zip`. Then, to make that release auto-updatable:
+A release is **not done** until the appcast is published: without it, installed
+copies are never offered the update. Two hard rules learned the hard way:
+
+1. **Bump `CFBundleVersion` (the build number), not just `CFBundleShortVersionString`.**
+   Sparkle compares the *build number*. `release.sh` now **fails fast** if the
+   build isn't greater than the latest published (it checks the live appcast).
+2. **Run `publish-appcast.sh`** — it's listed in `release.sh`'s "Next" output.
 
 ```sh
-# 1. Collect releases in a folder Sparkle reads (keep prior zips for deltas):
-mkdir -p ~/proteles-appcast && cp /tmp/Proteles-<ver>.zip ~/proteles-appcast/
-
-# 2. Generate + EdDSA-sign the appcast from that folder (uses the keychain key):
-generate_appcast ~/proteles-appcast/
-#   → writes ~/proteles-appcast/appcast.xml with signed enclosures.
-
-# 3. Point the enclosure at the GitHub Release download (free CDN), or host the
-#    zip on Pages too. Then publish appcast.xml to the gh-pages branch:
-#      cp ~/proteles-appcast/appcast.xml <gh-pages working copy>/appcast.xml
-#      git -C <gh-pages> commit -am "appcast <ver>" && git -C <gh-pages> push
+# 0. In project.yml bump BOTH CFBundleShortVersionString (marketing) AND
+#    CFBundleVersion + CURRENT_PROJECT_VERSION (build number, must increase).
+# 1. ./scripts/release.sh                      # builds → notarizes → emits the zip
+#                                                (aborts if the build number didn't bump)
+# 2. git tag -a vX.Y.Z … && gh release create … # tag + GitHub release
+# 3. ./scripts/publish-appcast.sh "/tmp/Proteles-X.Y.Z.zip"
+#      → stages the zip, runs generate_appcast (EdDSA-signs from the keychain key),
+#        and publishes appcast.xml + zips + deltas to the gh-pages branch.
+#        Enclosure URLs are derived from SUFeedURL. Idempotent.
 ```
+
+GitHub Pages redeploys ~1–2 min after the gh-pages push; installed copies then
+see the update on their next check.
 
 > **First Sparkle release — validate the round-trip.** The inside-out signing in
 > `release.sh` is correct in principle but unverified until the first run: confirm
