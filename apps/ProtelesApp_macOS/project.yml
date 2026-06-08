@@ -27,11 +27,18 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      # Bundled fonts (OFL) — copied verbatim to Contents/Resources/Fonts/ and
+      # registered at launch via ATSApplicationFontsPath below, so they're
+      # available app-wide without a system install. See Resources/Fonts/OFL-*.txt.
+      - path: Resources/Fonts
+        type: folder
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: Proteles
         CFBundleName: Proteles
+        # Register the bundled fonts in Contents/Resources/Fonts/ at launch.
+        ATSApplicationFontsPath: Fonts
         CFBundleShortVersionString: "0.5.0"
         CFBundleVersion: "41"
         LSMinimumSystemVersion: "14.0"
