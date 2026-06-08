@@ -93,7 +93,7 @@ private struct GeneralSettingsView: View {
 private struct AppearanceSettingsView: View {
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
-    @AppStorage("outputFontName") private var outputFontName = ""
+    @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
 
     private var theme: Theme {
         Theme.with(id: themeID)

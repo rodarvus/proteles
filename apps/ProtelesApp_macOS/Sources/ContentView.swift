@@ -59,7 +59,7 @@ struct ContentView: View {
     /// output view, which re-renders the scrollback at the new size.
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     /// Output font family ("" = system monospaced). Recreates the output view.
-    @AppStorage("outputFontName") private var outputFontName = ""
+    @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
     /// Connection preferences (pushed to the session like omitBlankLines).
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
