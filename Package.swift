@@ -62,7 +62,10 @@ let package = Package(
                 .copy("Resources/dinv"),
                 // Vendored leveldb leveling database (MIT; run verbatim through
                 // the compat shim — see Resources/leveldb/PROVENANCE.md).
-                .copy("Resources/leveldb")
+                .copy("Resources/leveldb"),
+                // Aardwolf's command list (from `help commands`) — the base
+                // first-word completion vocabulary (#31).
+                .copy("Resources/aardwolf-commands.txt")
             ]
         ),
         .target(
