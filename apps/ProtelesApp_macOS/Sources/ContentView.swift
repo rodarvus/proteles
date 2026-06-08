@@ -346,20 +346,13 @@ struct ContentView: View {
         )
     }
 
-    /// First-word completion verbs: common Aardwolf commands + the channel
-    /// names (so `gos`→`gossip`). Aliases can join this later.
+    /// First-word completion verbs: the full bundled Aardwolf command list (#31)
+    /// + channel names (so `gos`→`gossip`), deduped. The user's aliases + loaded
+    /// plugins' command words union in via `makeCompletionVocabulary`.
     private static let completionVerbs: [String] = {
-        let commands = [
-            "north", "south", "east", "west", "northeast", "northwest",
-            "southeast", "southwest", "look", "examine", "consider", "kill",
-            "cast", "get", "give", "drop", "put", "wear", "wield", "hold",
-            "remove", "quaff", "recite", "eat", "drink", "open", "close",
-            "unlock", "enter", "recall", "rest", "sleep", "wake", "stand",
-            "flee", "scan", "where", "inventory", "equipment", "score",
-            "practice", "train", "buy", "sell", "list", "rent", "campaign",
-            "quest", "gquest", "run", "speedwalk"
-        ]
-        return commands + Array(CommandHistory.communicationCommands)
+        var seen = Set<String>()
+        return (AardwolfCommands.all + Array(CommandHistory.communicationCommands))
+            .filter { seen.insert($0.lowercased()).inserted }
     }()
 
     /// Toolbar menu to show/hide each panel + reset the layout.
