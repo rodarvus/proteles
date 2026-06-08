@@ -373,6 +373,7 @@ struct ContentView: View {
         snd.onReset = { resetSearchAndDestroyDatabase() }
         snd.onInstall = { installSearchAndDestroy() }
         snd.isInstalled = scripts.isSearchAndDestroyInstalled
+        loadAreaCompletions() // #32 A: cache S&D area keys for runto/xrt
         pluginDBs.onImportDinv = { importPluginDatabase(.dinv) }
         pluginDBs.onResetDinv = { resetPluginDatabase(.dinv) }
         pluginDBs.onImportLevelDB = { importPluginDatabase(.levelDB) }

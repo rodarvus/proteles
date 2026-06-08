@@ -42,6 +42,9 @@ public final class SnDPanelModel {
     public var isInstalling = false
     /// The most recent install error, surfaced in the panel; cleared on retry.
     public var installError: String?
+    /// S&D area keys (from its `area` table) for `runto`/`xrt` argument
+    /// completion (#32 A). Loaded once when S&D is installed; static thereafter.
+    @ObservationIgnored public var areaKeys: [String] = []
 
     public init(model: SearchAndDestroyModel? = nil) {
         self.model = model
