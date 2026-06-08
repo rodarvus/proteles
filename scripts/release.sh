@@ -53,6 +53,25 @@ VERSION="$(awk -F'"' '/CFBundleShortVersionString:/ {print $2; exit}' "$PROJECT_
 [[ -n "$VERSION" ]] || die "could not read CFBundleShortVersionString from $PROJECT_YML"
 step "Releasing Proteles v$VERSION"
 
+# --- guard: CFBundleVersion MUST exceed the latest already-published build ----
+# Sparkle compares CFBundleVersion (the build number), NOT the marketing string,
+# so a forgotten bump ships an un-updatable release (this bit us on 0.5.0 build
+# 40 == 0.4.12). Fail fast against the live appcast. Skipped only when the feed
+# is unreachable (offline) — never blocks on a network hiccup, only on a real
+# non-increment.
+BUILD="$(awk -F'"' '/CFBundleVersion:/ {print $2; exit}' "$PROJECT_YML")"
+[[ -n "$BUILD" ]] || die "could not read CFBundleVersion from $PROJECT_YML"
+FEED_URL="$(awk -F': ' '/SUFeedURL:/ {print $2; exit}' "$PROJECT_YML" | tr -d ' \r')"
+if [[ -n "$FEED_URL" ]]; then
+    LATEST_BUILD="$(curl -fsSL "$FEED_URL" 2>/dev/null \
+        | grep -oE '<sparkle:version>[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1)"
+    if [[ -n "$LATEST_BUILD" && "$BUILD" -le "$LATEST_BUILD" ]]; then
+        die "CFBundleVersion ($BUILD) must be > the latest published build ($LATEST_BUILD).
+     Bump CFBundleVersion + CURRENT_PROJECT_VERSION in project.yml, then re-run."
+    fi
+    step "build $BUILD (latest published: ${LATEST_BUILD:-none})"
+fi
+
 # --- check prerequisites ------------------------------------------------------
 : "${PROTELES_SIGN_IDENTITY:?set PROTELES_SIGN_IDENTITY to the Developer ID Application identity (see header)}"
 
@@ -150,7 +169,9 @@ spctl -a -vvv --type execute "$APP" 2>&1 | sed 's/^/    /' \
 printf '\033[32m✓ notarised + stapled:\033[0m %s\n' "$ZIP"
 cat <<EOF
 
-Next (explicit, user-gated — not done by this script):
-  git tag -a v$VERSION -m "Proteles v$VERSION" && git push origin v$VERSION
-  gh release create v$VERSION "$ZIP" --title "Proteles v$VERSION" --notes "…"
+Next (explicit, user-gated — not done by this script). A release is NOT done
+until step 3: without it, installed copies are never offered the update.
+  1. git tag -a v$VERSION -m "Proteles v$VERSION" && git push origin v$VERSION
+  2. gh release create v$VERSION "$ZIP" --title "Proteles v$VERSION" --notes "…"
+  3. ./scripts/publish-appcast.sh "$ZIP"      # generate + sign + publish the appcast
 EOF

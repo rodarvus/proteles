@@ -159,12 +159,22 @@ Before committing, ALL must pass (from repo root):
   (when authorised).
 
 ### Release flow
-Bump `apps/ProtelesApp_macOS/project.yml` (`CFBundleShortVersionString` +
-`MARKETING_VERSION`; `MudCore.version` reads it at runtime) → `xcodegen generate`
-→ run **`scripts/release.sh`** (`PROTELES_SIGN_IDENTITY` + `PROTELES_NOTARY_PROFILE`):
-clean Release build → Developer-ID sign (hardened runtime + secure timestamp) →
-`notarytool submit --wait` → staple → `spctl` verify → zipped artifact → commit +
-tag `v<ver>` → `gh release create`. **Releases now ship a notarized Developer-ID
-build** (since `v0.4.5`); `docs/NOTARIZATION.md` documents the flow. The signing
-cert + `proteles-notary` keychain profile live only on the release machine — never
-commit notary credentials.
+1. Bump `apps/ProtelesApp_macOS/project.yml` — **both** the marketing version
+   (`CFBundleShortVersionString` + `MARKETING_VERSION`) **and the build number**
+   (`CFBundleVersion` + `CURRENT_PROJECT_VERSION`, must strictly increase).
+   Sparkle compares the *build number*, so forgetting it ships an un-updatable
+   release (this bit `v0.5.0` build 40 == `v0.4.12`). `release.sh` now aborts if
+   the build isn't greater than the latest published.
+2. Run **`scripts/release.sh`** (`PROTELES_SIGN_IDENTITY` + `PROTELES_NOTARY_PROFILE`;
+   it runs `xcodegen` itself): clean Release build → Developer-ID sign (hardened
+   runtime + secure timestamp) → `notarytool submit --wait` → staple → `spctl`
+   verify → zipped artifact. It does **not** tag/publish — it prints the next steps.
+3. `git tag -a v<ver>` + push; `gh release create v<ver> <zip>`.
+4. **`./scripts/publish-appcast.sh <zip>`** — generate + EdDSA-sign the appcast and
+   publish it (+ zip + deltas) to `gh-pages`. **A release is not done without this**
+   — it's what makes installed copies auto-update. See `docs/SPARKLE_SETUP.md`.
+
+**Releases ship a notarized Developer-ID build** (since `v0.4.5`);
+`docs/NOTARIZATION.md` + `docs/SPARKLE_SETUP.md` document the flow. The signing
+cert, `proteles-notary` keychain profile, and the Sparkle **EdDSA private key**
+live only on the release machine — never commit them.
