@@ -12,7 +12,7 @@ struct HelpPanelView: View {
     let model: HelpPanelModel
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
-    @AppStorage("outputFontName") private var outputFontName = ""
+    @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
     @State private var query = ""
 
     var body: some View {
