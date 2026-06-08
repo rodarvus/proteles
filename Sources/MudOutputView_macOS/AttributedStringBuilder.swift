@@ -81,6 +81,10 @@
             case (true, true): boldItalicFont
             }
             attributed.addAttribute(.font, value: effectiveFont, range: range)
+            // No ligatures in the output: a MUD's prompts, ASCII map, and framed
+            // tables are full of `==`, `->`, `<=`, `|`, `=====` that a ligature
+            // font would fuse into single glyphs. Keep every glyph one cell.
+            attributed.addAttribute(.ligature, value: 0, range: range)
 
             let fg = palette.resolveForeground(style.foreground, bold: style.bold)
             let bg = palette.resolveBackground(style.background)

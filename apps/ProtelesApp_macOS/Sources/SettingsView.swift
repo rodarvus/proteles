@@ -99,9 +99,11 @@ private struct AppearanceSettingsView: View {
         Theme.with(id: themeID)
     }
 
-    /// Monospaced families that ship with macOS, plus the system default ("").
+    /// The bundled font (no-ligature JetBrains Mono, registered at launch),
+    /// the system default (""), and the monospaced families macOS ships.
     private static let fontChoices: [(label: String, name: String)] = [
         ("System Monospaced", ""),
+        ("JetBrains Mono", "JetBrains Mono NL"), // bundled (OFL); ligatures off
         ("Menlo", "Menlo"),
         ("Monaco", "Monaco"),
         ("Courier New", "Courier New"),
