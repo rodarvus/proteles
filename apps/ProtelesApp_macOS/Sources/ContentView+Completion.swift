@@ -30,10 +30,28 @@ extension ContentView {
             recentWords: InputCompletion.harvestWords(from: recentLines.snapshot),
             verbs: verbs,
             playerWords: players,
+            argumentSources: argumentSources(),
             broadcastChannels: CommandHistory.broadcastChannels,
             directedChannels: CommandHistory.directedChannels
         )
     }
+
+    /// Cached per-verb argument sources (#32). Exits are read live from GMCP
+    /// (cheap); item/room/spell sources will be cached from the inventory DB /
+    /// mapper / skills list as those pipelines land.
+    private func argumentSources() -> [CommandArgumentKind: [String]] {
+        var sources: [CommandArgumentKind: [String]] = [:]
+        if let exits = gmcp.room?.exits, !exits.isEmpty {
+            sources[.exit] = exits.keys.map { Self.directionNames[$0.lowercased()] ?? $0 }
+        }
+        return sources
+    }
+
+    /// Exit abbreviation → full direction name, so `open nor`→`north` (#32).
+    private static let directionNames: [String: String] = [
+        "n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down",
+        "ne": "northeast", "nw": "northwest", "se": "southeast", "sw": "southwest"
+    ]
 
     /// First-word completion verbs: the full bundled Aardwolf command list (#31)
     /// + channel names (so `gos`→`gossip`), deduped. The user's aliases + loaded
