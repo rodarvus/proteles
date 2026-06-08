@@ -123,10 +123,13 @@ public struct CompletionVocabulary: Sendable, Equatable {
         }
         if broadcastChannels.contains(verb) { return [] }
         // Per-verb argument source (#32): get→item, goto→room, cast→spell,
-        // open→exit, …. Players come from the channel paths above.
+        // open→exit, …. Players come from the channel paths above. When the
+        // curated source has data we use it; when it's empty (the pipeline isn't
+        // wired/populated yet) we fall back to generic context/recent rather than
+        // offer nothing.
         if let kind = CommandArguments.argumentKind(verb: verb, argumentIndex: index - 1) {
             let source = kind == .player ? playerWords : (argumentSources[kind] ?? [])
-            return rank(word, sources: [source])
+            if !source.isEmpty { return rank(word, sources: [source]) }
         }
         return completions(forWord: word, isFirstWord: false)
     }
