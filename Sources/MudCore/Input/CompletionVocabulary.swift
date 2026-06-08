@@ -27,6 +27,10 @@ public struct CompletionVocabulary: Sendable, Equatable {
     /// Player/people names (group members, recent speakers) — offered for the
     /// **recipient** argument of a directed channel (`tell <who>`). Order preserved.
     public var playerWords: [String]
+    /// Per-verb argument sources (#32), keyed by ``CommandArgumentKind``: item
+    /// names, mapper room names, spell names, room exits/directions. Cached by the
+    /// app (refreshed on GMCP/DB change), not queried per keystroke.
+    public var argumentSources: [CommandArgumentKind: [String]]
     /// Broadcast channel verbs (gossip/chat/say/…): once the line's verb is one
     /// of these, the argument is a free-text message — no ghosting (#31).
     public var broadcastChannels: Set<String>
@@ -49,6 +53,7 @@ public struct CompletionVocabulary: Sendable, Equatable {
         recentWords: [String] = [],
         verbs: [String] = [],
         playerWords: [String] = [],
+        argumentSources: [CommandArgumentKind: [String]] = [:],
         broadcastChannels: Set<String> = [],
         directedChannels: Set<String> = [],
         minimumWordLength: Int = 2,
@@ -58,6 +63,7 @@ public struct CompletionVocabulary: Sendable, Equatable {
         self.recentWords = recentWords
         self.verbs = verbs
         self.playerWords = playerWords
+        self.argumentSources = argumentSources
         self.broadcastChannels = Set(broadcastChannels.map { $0.lowercased() })
         self.directedChannels = Set(directedChannels.map { $0.lowercased() })
         self.minimumWordLength = max(minimumWordLength, 1)
@@ -116,6 +122,12 @@ public struct CompletionVocabulary: Sendable, Equatable {
             return index == 1 ? rank(word, sources: [playerWords]) : []
         }
         if broadcastChannels.contains(verb) { return [] }
+        // Per-verb argument source (#32): get→item, goto→room, cast→spell,
+        // open→exit, …. Players come from the channel paths above.
+        if let kind = CommandArguments.argumentKind(verb: verb, argumentIndex: index - 1) {
+            let source = kind == .player ? playerWords : (argumentSources[kind] ?? [])
+            return rank(word, sources: [source])
+        }
         return completions(forWord: word, isFirstWord: false)
     }
 
