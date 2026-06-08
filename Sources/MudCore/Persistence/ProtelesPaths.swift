@@ -21,10 +21,33 @@ public enum ProtelesPaths {
     }
 
     /// `~/Documents/Proteles/` — the data home. Created if missing.
+    ///
+    /// Under a test runner this redirects to a temp sandbox so tests never touch
+    /// the user's real `~/Documents` (#45). Detection keys on signals present
+    /// only when testing (the SwiftPM `swiftpm-testing-helper`, an `.xctest`
+    /// bundle, or `XCTestConfigurationFilePath`) — the shipped app exhibits none,
+    /// so it can't misfire in production (a missed detection only re-pollutes a
+    /// test dir, never the reverse). Read-only (no mutable global) ⇒ parallel-safe.
     public static func home(fileManager: FileManager = .default) throws -> URL {
-        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
-        else { throw PathError.noDocumentsDirectory }
-        return try ensure(documents.appendingPathComponent("Proteles", isDirectory: true), fileManager)
+        let base: URL
+        if isRunningUnderTests {
+            base = fileManager.temporaryDirectory.appendingPathComponent("ProtelesTests", isDirectory: true)
+        } else {
+            guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+            else { throw PathError.noDocumentsDirectory }
+            base = documents
+        }
+        return try ensure(base.appendingPathComponent("Proteles", isDirectory: true), fileManager)
+    }
+
+    /// Whether the process is a test runner (never true in the shipped app).
+    private static var isRunningUnderTests: Bool {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        let arg0 = CommandLine.arguments.first ?? ""
+        if arg0.contains("swiftpm-testing-helper") || arg0.hasSuffix(".xctest") || arg0.contains("/xctest") {
+            return true
+        }
+        return Bundle.allBundles.contains { $0.bundlePath.hasSuffix(".xctest") }
     }
 
     /// `~/Documents/Proteles/Plugins/` — one self-contained dir per plugin.
