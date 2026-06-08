@@ -176,4 +176,17 @@ public extension CommandHistory {
         "rp", "sports", "spouse", "tech", "telepathy", "tier", "tiertalk",
         "trivia", "wangrp", "wardrums", "nobletalk", "gsocial"
     ]
+
+    /// Directed channels whose **first** argument is an individual recipient
+    /// (a player/mob name), so completion offers player names there; the rest of
+    /// the line is a private message (no ghosting). `tell <who> <msg>` (#31).
+    static let directedChannels: Set<String> = [
+        "tell", "whisper", "page", "sayto", "ask", "emoteto"
+    ]
+
+    /// Broadcast channels — every communication verb that isn't directed. Once
+    /// the line's verb is one of these the argument is a free-text message, so
+    /// ghosting is suppressed entirely (#31).
+    static let broadcastChannels: Set<String> =
+        communicationCommands.subtracting(directedChannels)
 }

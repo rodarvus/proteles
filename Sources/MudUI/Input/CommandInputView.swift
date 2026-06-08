@@ -346,10 +346,9 @@ public struct CommandInputView: View {
             private func buildCandidates() -> [String]? {
                 guard let vocabulary, caretIsAtEnd else { return nil }
                 let line = currentText
-                guard let (word, range) = InputCompletion.currentWord(in: line, caret: line.count)
+                guard let (_, range) = InputCompletion.currentWord(in: line, caret: line.count)
                 else { return nil }
-                let isFirst = InputCompletion.isFirstWord(in: line, caret: line.count)
-                let words = vocabulary().completions(forWord: word, isFirstWord: isFirst)
+                let words = vocabulary().completions(inLine: line, caret: line.count)
                 guard !words.isEmpty else { return nil }
                 let before = String(line[..<range.lowerBound])
                 return words.map { before + $0 }
@@ -458,10 +457,7 @@ public struct CommandInputView: View {
                 guard !line.isEmpty,
                       let (word, _) = InputCompletion.currentWord(in: line, caret: line.count),
                       !word.isEmpty,
-                      let suffix = vocabulary().ghostSuffix(
-                          forWord: word,
-                          isFirstWord: InputCompletion.isFirstWord(in: line, caret: line.count)
-                      ),
+                      let suffix = vocabulary().ghostSuffix(inLine: line, caret: line.count),
                       let editor = field.currentEditor() as? NSTextView,
                       let container = ghost.superview, let window = container.window
                 else { hideGhost(); return }
