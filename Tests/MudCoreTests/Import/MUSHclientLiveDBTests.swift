@@ -74,3 +74,31 @@ struct MUSHclientLiveDBTests {
         #expect(marked.plugins.first { $0.pluginID == "id-b" }?.classification == .offer)
     }
 }
+
+@Suite("Import — plugin data files travel with the plugin")
+struct MUSHclientPluginDataFileTests {
+    @Test("scanPlugins attaches a plugin's state-dir .db as dataFiles, not a DB entry")
+    func attachesDataFiles() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let plugins = tmp.appendingPathComponent("worlds/plugins")
+        let pid = "abc123abc123abc123abc123"
+        try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        // The plugin .xml directly in plugins/, its db under state/<name>-<id>/.
+        try #"<muclient><plugin name="Cool" id="\#(pid)"></plugin></muclient>"#
+            .write(to: plugins.appendingPathComponent("cool.xml"), atomically: true, encoding: .utf8)
+        let stateDir = plugins.appendingPathComponent("state/cool-\(pid)")
+        try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+        try Data("db".utf8).write(to: stateDir.appendingPathComponent("cool.db"))
+
+        let world = MUSHclientWorldFile(name: "W", host: "h", port: 23, pluginIncludes: ["cool.xml"])
+        let (entries, _) = MUSHclientInstallScanner.scanPlugins(world: world, pluginsDirectory: plugins)
+        let cool = try #require(entries.first { $0.filename == "cool.xml" })
+        #expect(cool.classification == .offer)
+        #expect(cool.dataFiles.map(\.lastPathComponent) == ["cool.db"])
+
+        // …and scanDatabases does NOT list it as a standalone database.
+        let dbs = MUSHclientInstallScanner.scanDatabases(root: tmp)
+        #expect(!dbs.contains { $0.url.lastPathComponent == "cool.db" })
+    }
+}

@@ -40,8 +40,9 @@ struct MUSHclientDataScanTests {
         #expect(kind("/x/worlds/plugins/Search-and-Destroy-V2/Aardwolf.db") == nil)
         #expect(kind("/x/worlds/plugins/WinkleGold_Database.db") == nil)
         #expect(kind("/x/dinv/Hero/backup/pre-build-1.db") == nil)
-        // plugin-owned (in a state subdir, unrecognised name)
-        #expect(kind("/x/worlds/plugins/state/something-id/something.db")?.0 == .pluginOwned)
+        // a plugin's own db in its state subdir is skipped here — it travels with
+        // the plugin (PluginEntry.dataFiles), not as a standalone database choice.
+        #expect(kind("/x/worlds/plugins/state/something-id/something.db") == nil)
     }
 }
 

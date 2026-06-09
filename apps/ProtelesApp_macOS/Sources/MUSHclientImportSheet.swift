@@ -81,7 +81,16 @@ struct MUSHclientImportSheet: View {
         let skipped = scan.manifest.plugins.count - offers.count
         Section("Plugins — \(offers.count) to import, \(skipped) already provided") {
             ForEach(offers) { plugin in
-                Toggle(plugin.name ?? plugin.filename, isOn: membership($selectedPlugins, plugin.include))
+                Toggle(isOn: membership($selectedPlugins, plugin.include)) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(plugin.name ?? plugin.filename)
+                        if !plugin.dataFiles.isEmpty {
+                            Text("includes \(plugin.dataFiles.count) data file"
+                                + (plugin.dataFiles.count == 1 ? "" : "s"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }
@@ -108,9 +117,14 @@ struct MUSHclientImportSheet: View {
     }
 
     private func databaseLabel(_ database: ImportManifest.DatabaseEntry) -> String {
-        let kind = database.kind.rawValue
-        if let character = database.character { return "\(kind) — \(character)" }
-        return kind
+        let file = database.url.lastPathComponent
+        switch database.kind {
+        case .mapper: return "Mapper (\(file))"
+        case .searchAndDestroy: return "Search & Destroy (\(file))"
+        case .dinv: return "Inventory — \(database.character ?? "?") (\(file))"
+        case .leveldb: return "Leveling (\(file))"
+        case .pluginOwned, .unknown: return file // show the filename, not the raw kind
+        }
     }
 
     // MARK: - Done / failure

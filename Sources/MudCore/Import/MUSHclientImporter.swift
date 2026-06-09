@@ -118,6 +118,24 @@ public enum MUSHclientImporter {
             into: pluginEnv
         )
 
+        // 3b. Plugin-owned data files travel with their plugin → the runtime DB
+        // dir (Databases/<character>/), so the plugin finds them after import.
+        for plugin in selectedPlugins where plugin.classification == .offer {
+            for dataFile in plugin.dataFiles {
+                do {
+                    try DatabaseImporter.copy(
+                        .init(url: dataFile, kind: .pluginOwned, byteSize: 0),
+                        character: selection.character,
+                        in: env.databasesDirectory
+                    )
+                } catch {
+                    problems.append(.init(
+                        item: dataFile.lastPathComponent, reason: error.localizedDescription
+                    ))
+                }
+            }
+        }
+
         // 4. Databases.
         for database in manifest.databases where selection.databasePaths.contains(database.id) {
             do {
