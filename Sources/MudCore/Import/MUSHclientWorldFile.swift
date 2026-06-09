@@ -27,8 +27,12 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
     /// never be logged, persisted into the on-disk import manifest, or written to
     /// any tracked file. `nil` when the world has no stored password.
     public var password: String?
-    /// Keypad / named macros (`<macro>`), in document order.
+    /// Function-key / named macro slots (`<macro>`), in document order.
     public var macros: [Macro]
+    /// Numeric-keypad bindings (`<keypad><key name="…"><send>…`), in document
+    /// order — MUSHclient keeps these distinct from macros (separate config
+    /// page), and Proteles surfaces them as a separate keypad grid.
+    public var keypad: [KeypadKey]
     /// `<include name="…" plugin="y">` references, **in load order**, with the
     /// original (possibly Windows `\`-separated, subdir) path preserved — the
     /// scanner resolves these to plugin directories on disk.
@@ -42,6 +46,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         username: String = "",
         password: String? = nil,
         macros: [Macro] = [],
+        keypad: [KeypadKey] = [],
         pluginIncludes: [String] = []
     ) {
         self.worldID = worldID
@@ -51,6 +56,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         self.username = username
         self.password = password
         self.macros = macros
+        self.keypad = keypad
         self.pluginIncludes = pluginIncludes
     }
 
@@ -65,6 +71,18 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
             self.name = name
             self.send = send
             self.type = type
+        }
+    }
+
+    /// One numeric-keypad binding: a key label (`0`–`9`, `/`, `*`, `-`, `+`, `.`)
+    /// and the command it sends.
+    public struct KeypadKey: Sendable, Equatable {
+        public var key: String
+        public var send: String
+
+        public init(key: String, send: String) {
+            self.key = key
+            self.send = send
         }
     }
 }
@@ -84,7 +102,8 @@ public enum MUSHclientWorldParser {
     private final class Delegate: NSObject, XMLParserDelegate {
         var world = MUSHclientWorldFile()
         private var pendingMacro: MUSHclientWorldFile.Macro?
-        private var inMacroSend = false
+        private var pendingKey: MUSHclientWorldFile.KeypadKey?
+        private var inSend = false
         private var sendBuffer = ""
 
         func parser(
@@ -108,8 +127,10 @@ public enum MUSHclientWorldParser {
                 }
             case "macro":
                 pendingMacro = .init(name: attrs["name"] ?? "", send: "", type: attrs["type"] ?? "")
-            case "send" where pendingMacro != nil:
-                inMacroSend = true
+            case "key":
+                pendingKey = .init(key: attrs["name"] ?? "", send: "")
+            case "send" where pendingMacro != nil || pendingKey != nil:
+                inSend = true
                 sendBuffer = ""
             case "include" where attrs["plugin"]?.lowercased() == "y":
                 if let name = attrs["name"], !name.isEmpty { world.pluginIncludes.append(name) }
@@ -119,11 +140,11 @@ public enum MUSHclientWorldParser {
         }
 
         func parser(_: XMLParser, foundCharacters string: String) {
-            if inMacroSend { sendBuffer += string }
+            if inSend { sendBuffer += string }
         }
 
         func parser(_: XMLParser, foundCDATA CDATABlock: Data) {
-            if inMacroSend, let string = String(data: CDATABlock, encoding: .utf8) { sendBuffer += string }
+            if inSend, let string = String(data: CDATABlock, encoding: .utf8) { sendBuffer += string }
         }
 
         /// Decode MUSHclient's stored password (base64 when `password_base64="y"`).
@@ -142,12 +163,19 @@ public enum MUSHclientWorldParser {
             qualifiedName _: String?
         ) {
             switch element {
-            case "send" where inMacroSend:
-                pendingMacro?.send = sendBuffer
-                inMacroSend = false
+            case "send" where inSend:
+                inSend = false
+                if pendingKey != nil {
+                    pendingKey?.send = sendBuffer
+                } else {
+                    pendingMacro?.send = sendBuffer
+                }
             case "macro":
                 if let macro = pendingMacro { world.macros.append(macro) }
                 pendingMacro = nil
+            case "key":
+                if let key = pendingKey { world.keypad.append(key) }
+                pendingKey = nil
             default:
                 break
             }
