@@ -40,7 +40,7 @@ struct ProtelesApp: App {
     @StateObject private var updater = Updater()
 
     /// Profile collection + active-world selection, bridged to SwiftUI.
-    @State private var worlds: WorldsModel
+    @State var worlds: WorldsModel
 
     /// Captured chat (`comm.channel`), bridged to SwiftUI.
     @State private var chat: ChatModel
@@ -67,6 +67,8 @@ struct ProtelesApp: App {
     /// In-game Help panel model (shared by the docked + detached Help views).
     @State private var help = HelpPanelModel()
     @State private var levels = LevelDBPanelModel()
+    /// MUSHclient import flow (File ▸ Import from MUSHclient…).
+    @State var importModel = MUSHclientImportModel()
     @State private var pluginDBs = PluginDatabasesModel()
 
     /// AppKit hooks for menu surgery the SwiftUI command API can't fully do
@@ -184,6 +186,7 @@ struct ProtelesApp: App {
             )
             .frame(minWidth: 940, minHeight: 500)
             .navigationTitle("Proteles")
+            .sheet(isPresented: importSheetBinding) { MUSHclientImportSheet(model: importModel) }
         }
         .windowResizability(.contentSize)
         .commands {
@@ -191,7 +194,9 @@ struct ProtelesApp: App {
             // the Format menu (rich-text styling), File ▸ New (no documents),
             // and the View ▸ Show/Customise Toolbar + sidebar commands.
             CommandGroup(replacing: .textFormatting) {}
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Import from MUSHclient…") { presentMUSHclientImport() }
+            }
             CommandGroup(replacing: .toolbar) {}
             CommandGroup(replacing: .sidebar) {}
             CommandGroup(replacing: .help) {}
@@ -201,11 +206,7 @@ struct ProtelesApp: App {
                     NSApp.orderFrontStandardAboutPanel(
                         options: [
                             .applicationVersion: MudCore.version,
-                            .credits: NSAttributedString(
-                                string: "A native Aardwolf MUD client for macOS.\n"
-                                    + "Faithful colours, native mapper, built-in scripting.",
-                                attributes: [.font: NSFont.systemFont(ofSize: 11)]
-                            )
+                            .credits: Self.aboutCredits
                         ]
                     )
                 }
