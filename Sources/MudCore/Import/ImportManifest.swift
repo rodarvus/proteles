@@ -91,10 +91,15 @@ public struct ImportManifest: Sendable, Equatable {
         public var isMultiFile: Bool
         public var classification: Classification
         /// The plugin's own SQLite database file(s), found in its
-        /// `state/<name>-<id>/` directory. These travel **with** the plugin —
-        /// copied to the runtime DB dir (`Databases/<character>/`) on import — so
-        /// they're not shown as separate "database" choices.
+        /// `state/<name>-<id>/` directory (or referenced via `GetInfo(66)`). These
+        /// travel **with** the plugin — copied to the runtime DB dir
+        /// (`Databases/<character>/`) on import — so they're not separate choices.
         public var dataFiles: [URL]
+        /// Data files the plugin reads relative to `GetInfo(56/60/64)` (e.g. the
+        /// message gagger's `messages_to_gag.txt` at the MUSHclient root). Proteles
+        /// maps `GetInfo(56)` to the plugin's own folder, so these are copied
+        /// **into** `Plugins/<name>/` on install.
+        public var pluginDirSidecars: [URL]
 
         public var id: String {
             include
@@ -109,7 +114,8 @@ public struct ImportManifest: Sendable, Equatable {
             copyRoot: URL?,
             isMultiFile: Bool,
             classification: Classification,
-            dataFiles: [URL] = []
+            dataFiles: [URL] = [],
+            pluginDirSidecars: [URL] = []
         ) {
             self.include = include
             self.filename = filename
@@ -120,6 +126,7 @@ public struct ImportManifest: Sendable, Equatable {
             self.isMultiFile = isMultiFile
             self.classification = classification
             self.dataFiles = dataFiles
+            self.pluginDirSidecars = pluginDirSidecars
         }
     }
 

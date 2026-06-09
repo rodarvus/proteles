@@ -84,9 +84,9 @@ struct MUSHclientImportSheet: View {
                 Toggle(isOn: membership($selectedPlugins, plugin.include)) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(plugin.name ?? plugin.filename)
-                        if !plugin.dataFiles.isEmpty {
-                            Text("includes \(plugin.dataFiles.count) data file"
-                                + (plugin.dataFiles.count == 1 ? "" : "s"))
+                        let sidecars = plugin.dataFiles.count + plugin.pluginDirSidecars.count
+                        if sidecars > 0 {
+                            Text("includes \(sidecars) data file" + (sidecars == 1 ? "" : "s"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

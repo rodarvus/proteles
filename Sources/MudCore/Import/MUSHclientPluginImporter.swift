@@ -51,6 +51,7 @@ public enum MUSHclientPluginImporter {
                     now: env.now
                 )
                 try await env.library.upsert(result.entry)
+                copySidecars(entry.pluginDirSidecars, into: result.directory)
                 if let id = entry.pluginID, let vars = stateByID[id], !vars.isEmpty {
                     try await env.variables.update(scope: id, variables: vars)
                 }
@@ -62,5 +63,17 @@ public enum MUSHclientPluginImporter {
             }
         }
         return problems
+    }
+
+    /// Copy code-referenced sidecar files (e.g. a gag list read via
+    /// `GetInfo(56)`) into the plugin's installed folder, where Proteles' GetInfo
+    /// maps the plugin's app dir. Best-effort: a copy failure is non-fatal.
+    private static func copySidecars(_ files: [URL], into directory: URL) {
+        let fileManager = FileManager.default
+        for file in files {
+            let destination = directory.appendingPathComponent(file.lastPathComponent)
+            guard !fileManager.fileExists(atPath: destination.path) else { continue }
+            try? fileManager.copyItem(at: file, to: destination)
+        }
     }
 }
