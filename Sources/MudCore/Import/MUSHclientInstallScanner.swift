@@ -68,6 +68,13 @@ public enum MUSHclientInstallScanner {
         var dataFiles = dataFiles(forPluginID: parsed?.id, pluginsDirectory: pluginsDirectory)
         dataFiles.append(contentsOf: referenced.perCharacter)
 
+        // Same compatibility due-diligence as the manual "add a plugin" flow:
+        // analyze against the `.lua` files that travel with the plugin (its dir +
+        // code-referenced sidecars); `analyze` already knows Proteles' built-ins.
+        let available = availableLua(copyRoot: copyRoot, isMultiFile: isMultiFile)
+            .union(referenced.pluginDirectory.map { $0.lastPathComponent.lowercased() })
+        let report = parsed.map { PluginImporter.analyze($0, availableFiles: available) }
+
         return .init(
             include: include,
             filename: filename,
@@ -78,8 +85,22 @@ public enum MUSHclientInstallScanner {
             isMultiFile: isMultiFile,
             classification: classify(id: parsed?.id, filename: filename),
             dataFiles: dataFiles,
-            pluginDirSidecars: referenced.pluginDirectory
+            pluginDirSidecars: referenced.pluginDirectory,
+            report: report
         )
+    }
+
+    /// Lowercased `.lua` basenames that travel with the plugin (the files in its
+    /// own multi-file directory), so `analyze` doesn't warn about files it ships.
+    private static func availableLua(copyRoot: URL?, isMultiFile: Bool) -> Set<String> {
+        guard isMultiFile, let dir = copyRoot,
+              let walker = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)
+        else { return [] }
+        var files: Set<String> = []
+        for case let url as URL in walker where url.pathExtension.lowercased() == "lua" {
+            files.insert(url.lastPathComponent.lowercased())
+        }
+        return files
     }
 
     /// Module basenames Proteles already provides (clean-room) for `require`/

@@ -169,3 +169,29 @@ struct MUSHclientSidecarShadowTests {
         #expect(sidecars.contains("messages_to_gag.txt")) // genuine data → still brought
     }
 }
+
+@Suite("Import — plugins carry the compatibility report (#47/#1)")
+struct MUSHclientPluginReportTests {
+    @Test("scanPlugins runs analyze: a plugin needing a missing file is flagged")
+    func attachesReport() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let plugins = root.appendingPathComponent("worlds/plugins")
+        try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A plugin that requires a module it doesn't ship (and isn't built-in) →
+        // analyze warns. The script lives in its own <script> element.
+        let xml = """
+        <muclient>
+        <plugin id="aaaaaaaaaaaaaaaaaaaaaaaa" name="Needy"/>
+        <script><![CDATA[ require "totally_missing_lib" ]]></script>
+        </muclient>
+        """
+        try xml.write(to: plugins.appendingPathComponent("needy.xml"), atomically: true, encoding: .utf8)
+
+        let world = MUSHclientWorldFile(name: "W", host: "h", port: 23, pluginIncludes: ["needy.xml"])
+        let (entries, _) = MUSHclientInstallScanner.scanPlugins(world: world, pluginsDirectory: plugins)
+        let report = try #require(entries.first { $0.filename == "needy.xml" }?.report)
+        #expect(report.verdict == .needsAttention)
+        #expect(report.findings.contains { $0.severity == .warning })
+    }
+}
