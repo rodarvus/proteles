@@ -143,3 +143,29 @@ struct MUSHclientRealSidecarTests {
         #expect(manifest.databases.count(where: { $0.kind == .leveldb }) == 1)
     }
 }
+
+@Suite("Import — code-referenced sidecars don't shadow provided modules")
+struct MUSHclientSidecarShadowTests {
+    @Test("a GetInfo(60) dofile of a Proteles-provided module (aardwolf_colors) is NOT copied")
+    func skipsProvided() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let plugins = root.appendingPathComponent("worlds/plugins")
+        try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Both files sit in worlds/plugins (a search root), like the live install.
+        try Data("-- gpl".utf8).write(to: plugins.appendingPathComponent("aardwolf_colors.lua"))
+        try Data("gag".utf8).write(to: plugins.appendingPathComponent("messages_to_gag.txt"))
+        let body = #"dofile(GetInfo(60).."aardwolf_colors.lua")"#
+            + #"; io.lines(GetInfo(56).."messages_to_gag.txt")"#
+        let xml = #"<muclient><plugin name="P" id="aaaaaaaaaaaaaaaaaaaaaaaa">"#
+            + "<![CDATA[ \(body) ]]></plugin></muclient>"
+        try xml.write(to: plugins.appendingPathComponent("p.xml"), atomically: true, encoding: .utf8)
+
+        let world = MUSHclientWorldFile(name: "W", host: "h", port: 23, pluginIncludes: ["p.xml"])
+        let (entries, _) = MUSHclientInstallScanner.scanPlugins(world: world, pluginsDirectory: plugins)
+        let entry = try #require(entries.first { $0.filename == "p.xml" })
+        let sidecars = (entry.pluginDirSidecars + entry.dataFiles).map(\.lastPathComponent)
+        #expect(!sidecars.contains("aardwolf_colors.lua")) // provided → not shadowed
+        #expect(sidecars.contains("messages_to_gag.txt")) // genuine data → still brought
+    }
+}

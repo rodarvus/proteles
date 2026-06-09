@@ -82,10 +82,21 @@ public enum MUSHclientInstallScanner {
         )
     }
 
+    /// Module basenames Proteles already provides (clean-room) for `require`/
+    /// `dofile`. A plugin's own GPL copy of one of these must **not** be copied
+    /// into its folder: doing so shadows the working built-in and drags in
+    /// package globals we don't supply (e.g. the GPL `aardwolf_colors.lua` needs
+    /// `extended_colours`), aborting the plugin's load. They resolve via the
+    /// shim's bundled modules instead. Mirrors `LuaRuntime.standardHelpers` +
+    /// the shim's extra registrations (`LuaRuntime+CompatShim`).
+    private static let providedModuleBasenames: Set<String> = Set(LuaRuntime.standardHelpers.keys)
+        .union(["wait", "check", "async", "string_split", "checkplugin", "aard_requirements"])
+
     /// Scan a plugin's source for data files it reads relative to `GetInfo(n)`
     /// (e.g. `GetInfo(56) .. "messages_to_gag.txt"`). Resolves the named file
     /// against the install (root / world / plugins dir). `56/60/64` → the plugin's
-    /// own dir; `66/67/85` → the per-character data dir.
+    /// own dir; `66/67/85` → the per-character data dir. Files Proteles already
+    /// provides as modules are skipped (see ``providedModuleBasenames``).
     private static func codeReferencedFiles(
         pluginData: Data?,
         pluginsDirectory: URL
@@ -105,6 +116,9 @@ public enum MUSHclientInstallScanner {
         for match in regex.matches(in: text, range: NSRange(location: 0, length: string.length)) {
             let code = Int(string.substring(with: match.range(at: 1))) ?? 0
             let name = string.substring(with: match.range(at: 2))
+            // Don't bring a plugin's copy of a module we already provide — it
+            // would shadow our clean-room build and pull in package globals.
+            if providedModuleBasenames.contains((name as NSString).deletingPathExtension) { continue }
             guard let file = searchRoots.lazy.map({ $0.appendingPathComponent(name) })
                 .first(where: { FileManager.default.fileExists(atPath: $0.path) }) else { continue }
             switch code {
