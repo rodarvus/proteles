@@ -159,9 +159,11 @@ Scripting/plugins are first-class, but the depth shouldn't be a cliff.
 - **Plain language over jargon at the surface; precise terms in the depth.** The
   Plugin Library says "add a plugin from your Mac or a URL"; the script editor
   can say `omit_from_output` because by then you're in expert territory.
-- **Honor the player's existing investment.** Import their MUSHclient map, S&D,
-  dinv, leveldb databases; run their plugins. Migrating *to* Proteles should feel
-  like coming home, not starting over.
+- **Honor the player's existing investment.** *(Realized in `v0.6.0`.)*
+  **File ▸ Import from MUSHclient…** brings a whole install over — connection +
+  autologin, aliases/triggers/timers/macros/keypad, their third-party plugins, and
+  the map/S&D/dinv/leveldb databases. Migrating *to* Proteles should feel like
+  coming home, not starting over.
 
 ### 3.6 Native, not approximate
 We earn the "native Mac app" claim every screen.
