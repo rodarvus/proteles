@@ -46,24 +46,29 @@ Companion to `docs/plans/AUTOUPDATE_AND_COPYOVER.md` (the *why*). This is the
 
 ## Per-release publishing — **the appcast step is mandatory**
 
-A release is **not done** until the appcast is published: without it, installed
-copies are never offered the update. Two hard rules learned the hard way:
+A release is **not done** until the appcast is published *and* the GitHub release
+is out of draft. Three hard rules learned the hard way:
 
 1. **Bump `CFBundleVersion` (the build number), not just `CFBundleShortVersionString`.**
    Sparkle compares the *build number*. `release.sh` now **fails fast** if the
    build isn't greater than the latest published (it checks the live appcast).
-2. **Run `publish-appcast.sh`** — it's listed in `release.sh`'s "Next" output.
+2. **Run `publish-appcast.sh`** — without it, installed copies never see the update.
+3. **Confirm it's not a draft** with `check-release.sh`. `gh release create` can
+   leave a draft, and — the one that bit v0.5.0 — **deleting/moving the tag a
+   published release points to orphans it into an untagged draft.** So: don't
+   move the tag after release; if you must re-cut, `gh release edit vX.Y.Z
+   --draft=false --latest`.
 
 ```sh
 # 0. In project.yml bump BOTH CFBundleShortVersionString (marketing) AND
 #    CFBundleVersion + CURRENT_PROJECT_VERSION (build number, must increase).
 # 1. ./scripts/release.sh                      # builds → notarizes → emits the zip
 #                                                (aborts if the build number didn't bump)
-# 2. git tag -a vX.Y.Z … && gh release create … # tag + GitHub release
+# 2. git tag -a vX.Y.Z … && gh release create vX.Y.Z <zip> --latest --notes …
 # 3. ./scripts/publish-appcast.sh "/tmp/Proteles-X.Y.Z.zip"
 #      → stages the zip, runs generate_appcast (EdDSA-signs from the keychain key),
 #        and publishes appcast.xml + zips + deltas to the gh-pages branch.
-#        Enclosure URLs are derived from SUFeedURL. Idempotent.
+# 4. ./scripts/check-release.sh                # assert the release is published, not a draft
 ```
 
 GitHub Pages redeploys ~1–2 min after the gh-pages push; installed copies then
