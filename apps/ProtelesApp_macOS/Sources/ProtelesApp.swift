@@ -16,6 +16,11 @@ struct ProtelesApp: App {
     /// Will become opt-in (off by default) ahead of 1.0.
     private let session: SessionController
 
+    /// Picks the connection transport (Direct TCP vs Aardwolf's WebSocket
+    /// gateway) per the active world; kept in sync by ``WorldsModel`` and read by
+    /// the session's `makeConnection` factory (#ws).
+    private let transportSelector = TransportSelector()
+
     /// The shared scripting engine (triggers/aliases/timers/Lua), wired into
     /// the session. `nil` only if the Lua runtime failed to initialise.
     private let scriptEngine: ScriptEngine?
@@ -94,7 +99,8 @@ struct ProtelesApp: App {
             scriptEngine: scriptEngine,
             autoRecord: true,
             reconnectPolicy: .standard,
-            logFileURL: { format in ProtelesApp.makeLogURL(format: format) }
+            logFileURL: { format in ProtelesApp.makeLogURL(format: format) },
+            makeConnection: { [transportSelector] in transportSelector.makeConnection() }
         )
 
         // Register the built-in native plugins (ported from the Aardwolf
@@ -124,7 +130,10 @@ struct ProtelesApp: App {
         let storeURL = (try? ProfileStore.defaultStoreURL())
             ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("proteles-profiles.json")
-        _worlds = State(initialValue: WorldsModel(store: ProfileStore(url: storeURL)))
+        _worlds = State(initialValue: WorldsModel(
+            store: ProfileStore(url: storeURL),
+            transportSelector: transportSelector
+        ))
         _chat = State(initialValue: ChatModel(store: session.chatStore))
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
@@ -583,17 +592,5 @@ private struct ProtelesCommands: Commands {
     /// A binding that reflects a panel's visibility and toggles it on change.
     private func panelBinding(_ kind: PanelKind) -> Binding<Bool> {
         Binding(get: { layout.isVisible(kind) }, set: { _ in layout.toggle(kind) })
-    }
-}
-
-/// Thread-safe holder for the current world name, read by the session-log URL
-/// closure (which runs off the main actor) and written on the main actor when a
-/// world connects. Tiny + lock-guarded so it's safely `Sendable`.
-final class LogContext: @unchecked Sendable {
-    private let lock = NSLock()
-    private var name: String?
-    var worldName: String? {
-        get { lock.withLock { name } }
-        set { lock.withLock { name = newValue } }
     }
 }
