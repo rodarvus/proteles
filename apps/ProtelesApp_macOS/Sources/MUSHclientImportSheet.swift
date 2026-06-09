@@ -83,6 +83,15 @@ struct MUSHclientImportSheet: View {
                             Text("includes \(sidecars) data file" + (sidecars == 1 ? "" : "s"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                        ForEach(plugin.report?.findings ?? [], id: \.message) { finding in
+                            Label(
+                                finding.message,
+                                systemImage: finding.severity == .warning
+                                    ? "exclamationmark.triangle" : "info.circle"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(finding.severity == .warning ? .orange : .secondary)
+                        }
                     }
                 }
             }

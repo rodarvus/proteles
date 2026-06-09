@@ -100,6 +100,10 @@ public struct ImportManifest: Sendable, Equatable {
         /// maps `GetInfo(56)` to the plugin's own folder, so these are copied
         /// **into** `Plugins/<name>/` on install.
         public var pluginDirSidecars: [URL]
+        /// Compatibility report (the same `PluginImporter.analyze` due-diligence
+        /// the manual "add a plugin" flow shows) — verdict + findings, so the
+        /// review UI can flag plugins that won't fully work. `nil` if unparsed.
+        public var report: PluginImportReport?
 
         public var id: String {
             include
@@ -115,7 +119,8 @@ public struct ImportManifest: Sendable, Equatable {
             isMultiFile: Bool,
             classification: Classification,
             dataFiles: [URL] = [],
-            pluginDirSidecars: [URL] = []
+            pluginDirSidecars: [URL] = [],
+            report: PluginImportReport? = nil
         ) {
             self.include = include
             self.filename = filename
@@ -127,6 +132,7 @@ public struct ImportManifest: Sendable, Equatable {
             self.classification = classification
             self.dataFiles = dataFiles
             self.pluginDirSidecars = pluginDirSidecars
+            self.report = report
         }
     }
 
