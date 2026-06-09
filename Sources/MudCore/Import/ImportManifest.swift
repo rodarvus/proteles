@@ -5,18 +5,33 @@ import Foundation
 /// writing. Pure value type.
 ///
 /// **Privacy:** the manifest is the displayable/loggable artifact, so it carries
-/// **no secrets** — the autologin password is *not* here (see
-/// ``MUSHclientInstallScan/password``); only ``WorldSummary/hasPassword``.
+/// **no secrets** — the autologin password is *not* here (it stays on the parsed
+/// ``MUSHclientWorldFile/password`` and goes straight to the Keychain at import);
+/// the manifest only records ``WorldSummary/hasPassword``.
 public struct ImportManifest: Sendable, Equatable {
     public var world: WorldSummary
     public var plugins: [PluginEntry]
+    /// Databases found in the install, typed (mapper / S&D / dinv-per-character /
+    /// leveldb / plugin-owned / unknown). The user chooses which to import.
+    public var databases: [DatabaseEntry]
+    /// Parsed plugin state (`{worldID}-{pluginID}-state.xml` → variables), keyed
+    /// by plugin id — seeds the variable store for imported (non-package) plugins.
+    public var stateFiles: [StateFile]
     /// Things that couldn't be scanned/parsed — surfaced to the user and the
     /// "Report on GitHub" path (#feature). Never fatal.
     public var problems: [Problem]
 
-    public init(world: WorldSummary, plugins: [PluginEntry] = [], problems: [Problem] = []) {
+    public init(
+        world: WorldSummary,
+        plugins: [PluginEntry] = [],
+        databases: [DatabaseEntry] = [],
+        stateFiles: [StateFile] = [],
+        problems: [Problem] = []
+    ) {
         self.world = world
         self.plugins = plugins
+        self.databases = databases
+        self.stateFiles = stateFiles
         self.problems = problems
     }
 
@@ -94,6 +109,47 @@ public struct ImportManifest: Sendable, Equatable {
         case bundled
         /// Third-party — offer to import (user chooses).
         case offer
+    }
+
+    /// A database found in the install, typed by name/path.
+    public struct DatabaseEntry: Sendable, Equatable, Identifiable {
+        public var url: URL
+        public var kind: DatabaseKind
+        /// The character a per-character database belongs to (dinv), else nil.
+        public var character: String?
+        public var byteSize: Int
+
+        public var id: String {
+            url.path
+        }
+
+        public init(url: URL, kind: DatabaseKind, character: String? = nil, byteSize: Int) {
+            self.url = url
+            self.kind = kind
+            self.character = character
+            self.byteSize = byteSize
+        }
+    }
+
+    /// What Proteles feature a database maps to.
+    public enum DatabaseKind: String, Sendable, Equatable {
+        case mapper // Aardwolf.db → native mapper
+        case searchAndDestroy // SnDdb.db
+        case dinv // per-character dinv.db
+        case leveldb // leveldb.db
+        case pluginOwned // a third-party plugin's own db
+        case unknown // found, type not recognised — user decides
+    }
+
+    /// Parsed `<variables>` from a plugin's MUSHclient state file.
+    public struct StateFile: Sendable, Equatable {
+        public var pluginID: String
+        public var variables: [String: String]
+
+        public init(pluginID: String, variables: [String: String]) {
+            self.pluginID = pluginID
+            self.variables = variables
+        }
     }
 
     /// A scan/parse failure, for display + the GitHub-report path.

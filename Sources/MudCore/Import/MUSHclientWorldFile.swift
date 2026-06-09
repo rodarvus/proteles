@@ -11,6 +11,9 @@ import Foundation
 /// the enabled-plugin list. See `mushclient/xml/xml_load_world.cpp` for the
 /// authoritative schema.
 public struct MUSHclientWorldFile: Sendable, Equatable {
+    /// `<world id="…">` — the 24-hex world id; prefixes plugin state filenames
+    /// (`{worldID}-{pluginID}-state.xml`).
+    public var worldID: String
     /// `<world name="…">` — the display name.
     public var name: String
     /// `<world site="…">` — the hostname Proteles connects to.
@@ -32,6 +35,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
     public var pluginIncludes: [String]
 
     public init(
+        worldID: String = "",
         name: String = "",
         host: String = "",
         port: UInt16 = 0,
@@ -40,6 +44,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         macros: [Macro] = [],
         pluginIncludes: [String] = []
     ) {
+        self.worldID = worldID
         self.name = name
         self.host = host
         self.port = port
@@ -91,6 +96,7 @@ public enum MUSHclientWorldParser {
         ) {
             switch element {
             case "world":
+                world.worldID = attrs["id"] ?? world.worldID
                 world.name = attrs["name"] ?? world.name
                 world.host = attrs["site"] ?? attrs["host"] ?? world.host
                 if let port = attrs["port"], let value = UInt16(port) { world.port = value }
