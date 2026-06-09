@@ -29,6 +29,11 @@ public extension LuaRuntime {
         // `require "wait"` work. They run on the programmatic-automation API.
         registerModule("wait", source: MUSHHelperAssets.lua("wait") ?? "")
         registerModule("check", source: MUSHHelperAssets.lua("check") ?? "")
+        // `string_split` (another Nick Gammon `lua/` helper) defines the global
+        // `string.split`; third-party plugins `require "string_split"` (e.g.
+        // Hadar's spellup / double-predictor). It lives in MUSHclient's shared
+        // `lua/` dir, which the world importer doesn't copy — so provide it here.
+        registerModule("string_split", source: MUSHHelperAssets.lua("string_split") ?? "")
         // `async` is the Aardwolf HTTP/background-thread helper (LuaSocket +
         // SSL + llthreads upstream). Proteles implements it natively over
         // URLSession: `doAsyncRemoteRequest`/`HEAD`/`GETFILE` route to
