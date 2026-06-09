@@ -35,11 +35,19 @@ public enum MUSHclientMacroMapping {
         return false
     }
 
-    /// Map the world's macros to Proteles macros, dropping empty commands.
+    /// Map the world's macros to Proteles macros, dropping:
+    /// - empty commands; and
+    /// - **identity** slots whose command equals the slot name (e.g. `north` →
+    ///   `north`, `examine` → `examine`) — MUSHclient's default Game-menu slots,
+    ///   which carry no custom intent and are historical noise on import. Keyed
+    ///   slots (F-keys / Alt+letter) are unaffected: their name is a key label,
+    ///   never the command, so they never look like identities.
     public static func macros(from slots: [MUSHclientWorldFile.Macro]) -> [Macro] {
         slots.compactMap { slot in
             let command = slot.send.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !command.isEmpty else { return nil }
+            let name = slot.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard name.lowercased() != command.lowercased() else { return nil } // identity artifact
             let chord = keyChord(forSlot: slot.name) ?? KeyChord(keyCode: 0) // unbound
             return Macro(name: slot.name, chord: chord, action: .command(command))
         }
