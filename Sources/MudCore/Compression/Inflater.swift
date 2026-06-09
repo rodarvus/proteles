@@ -45,11 +45,17 @@ public final class Inflater {
     /// used per `inflate()` syscall. Larger = fewer zlib calls per chunk
     /// at the cost of memory. 64 KiB matches NWConnection's typical
     /// receive size.
-    public init(scratchCapacity: Int = 65536) throws {
+    ///
+    /// `raw` selects **headerless DEFLATE** (zlib `windowBits = -15`) instead of
+    /// the zlib-wrapped stream MCCP2 uses (`+15`). Aardwolf's WebSocket gateway
+    /// frames its telnet stream as raw deflate (no `0x78` header), so the
+    /// WebSocket transport constructs `Inflater(raw: true)`.
+    public init(scratchCapacity: Int = 65536, raw: Bool = false) throws {
         stream = z_stream()
         scratch = [UInt8](repeating: 0, count: scratchCapacity)
-        let result = inflateInit_(
+        let result = inflateInit2_(
             &stream,
+            raw ? -15 : 15,
             zlibVersion(),
             Int32(MemoryLayout<z_stream>.stride)
         )
