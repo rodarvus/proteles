@@ -50,8 +50,10 @@ public extension MUSHclientInstallScanner {
 
     /// Mapper, S&D, and leveldb are single live databases — when an install holds
     /// several copies (e.g. `plugins/leveldb/` + `plugins/state/leveldb/`), keep
-    /// only the most recently modified (the active one). Per-character dinv DBs
-    /// are all kept.
+    /// only the **largest** (most accumulated data; tiebreak most-recently
+    /// modified) — the active one. Largest-first, not newest-first, so a freshly
+    /// dropped *empty* copy can never beat the real db it'd otherwise out-date.
+    /// Per-character dinv DBs are all kept.
     static func liveSingletons(
         _ entries: [ImportManifest.DatabaseEntry]
     ) -> [ImportManifest.DatabaseEntry] {
@@ -59,7 +61,7 @@ public extension MUSHclientInstallScanner {
         var result = entries.filter { !singletons.contains($0.kind) }
         for kind in singletons {
             let live = entries.filter { $0.kind == kind }
-                .max { ($0.modified, $0.byteSize) < ($1.modified, $1.byteSize) }
+                .max { ($0.byteSize, $0.modified) < ($1.byteSize, $1.modified) }
             if let live { result.append(live) }
         }
         return result

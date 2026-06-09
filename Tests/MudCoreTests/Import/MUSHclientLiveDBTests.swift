@@ -13,13 +13,14 @@ struct MUSHclientLiveDBTests {
         #expect(kind("/x/worlds/Aardwolf.db") == .mapper) // a real one still types
     }
 
-    @Test("only the newest mapper/S&D survives; per-character DBs all kept")
+    @Test("the largest copy survives a newer-but-empty one; per-character DBs all kept")
     func liveSingletons() {
         let old = Date(timeIntervalSince1970: 1000)
         let new = Date(timeIntervalSince1970: 2000)
         let entries: [ImportManifest.DatabaseEntry] = [
-            .init(url: URL(fileURLWithPath: "/a/Aardwolf.db"), kind: .mapper, byteSize: 9, modified: old),
-            .init(url: URL(fileURLWithPath: "/b/Aardwolf.db"), kind: .mapper, byteSize: 1, modified: new),
+            // A newer 0-byte placeholder must NOT beat the real (larger, older) db.
+            .init(url: URL(fileURLWithPath: "/a/leveldb.db"), kind: .leveldb, byteSize: 999, modified: old),
+            .init(url: URL(fileURLWithPath: "/b/leveldb.db"), kind: .leveldb, byteSize: 0, modified: new),
             .init(
                 url: URL(fileURLWithPath: "/c/dinv.db"),
                 kind: .dinv,
@@ -36,9 +37,10 @@ struct MUSHclientLiveDBTests {
             )
         ]
         let kept = MUSHclientInstallScanner.liveSingletons(entries)
-        let mappers = kept.filter { $0.kind == .mapper }
-        #expect(mappers.count == 1)
-        #expect(mappers.first?.url.path == "/b/Aardwolf.db") // the newer one
+        let leveldbs = kept.filter { $0.kind == .leveldb }
+        #expect(leveldbs.count == 1)
+        // the larger (real) one, not the newer-but-empty placeholder
+        #expect(leveldbs.first?.url.path == "/a/leveldb.db")
         #expect(kept.count(where: { $0.kind == .dinv }) == 2) // both characters kept
     }
 
