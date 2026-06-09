@@ -17,7 +17,7 @@
     }
 
     @MainActor
-    private enum ScriptDialogRunner {
+    enum ScriptDialogRunner {
         static func run(_ request: ScriptDialog) -> ScriptDialogResult {
             switch request {
             case .message(let text, let title, let buttons): message(text, title, buttons)
@@ -61,15 +61,7 @@
 
             let readField: () -> String
             if multiline {
-                let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
-                textView.string = def
-                textView.isRichText = false
-                textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-                textView.isAutomaticQuoteSubstitutionEnabled = false
-                let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
-                scroll.documentView = textView
-                scroll.hasVerticalScroller = true
-                scroll.borderType = .bezelBorder
+                let (scroll, textView) = Self.makeEditBox(text: def)
                 alert.accessoryView = scroll
                 alert.window.initialFirstResponder = textView
                 readField = { textView.string }
@@ -81,6 +73,42 @@
                 readField = { field.stringValue }
             }
             return alert.runModal() == .alertFirstButtonReturn ? .text(readField()) : .text(nil)
+        }
+
+        /// A scrollable multi-line editor for the `editbox` dialog. Configures the
+        /// `NSTextView` as a proper resizable document view of the `NSScrollView`
+        /// (vertically resizable, infinite `maxSize`, width-tracking text
+        /// container) — without this the document view stays a fixed height, so
+        /// long text doesn't lay out for scrolling and the field scrolls jerkily.
+        static func makeEditBox(
+            text: String,
+            size: NSSize = NSSize(width: 480, height: 260)
+        ) -> (NSScrollView, NSTextView) {
+            let scroll = NSScrollView(frame: NSRect(origin: .zero, size: size))
+            scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = true
+            scroll.borderType = .bezelBorder
+            let content = scroll.contentSize
+
+            let textView = NSTextView(frame: NSRect(origin: .zero, size: content))
+            textView.string = text
+            textView.isRichText = false
+            textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            textView.isAutomaticQuoteSubstitutionEnabled = false
+            textView.minSize = NSSize(width: 0, height: 0)
+            textView.maxSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.isVerticallyResizable = true
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = [.width]
+            textView.textContainer?.containerSize = NSSize(
+                width: content.width, height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.textContainer?.widthTracksTextView = true
+
+            scroll.documentView = textView
+            return (scroll, textView)
         }
 
         private static func choose(
