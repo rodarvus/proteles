@@ -9,23 +9,27 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
     public var macros: [Macro]
     /// The command-button bar (GH #15).
     public var buttonBar: ButtonBar
+    /// The numeric-keypad grid (distinct from macros).
+    public var keypad: Keypad
 
     public init(
         triggers: [Trigger] = [],
         aliases: [Alias] = [],
         timers: [MudTimer] = [],
         macros: [Macro] = [],
-        buttonBar: ButtonBar = ButtonBar()
+        buttonBar: ButtonBar = ButtonBar(),
+        keypad: Keypad = Keypad()
     ) {
         self.triggers = triggers
         self.aliases = aliases
         self.timers = timers
         self.macros = macros
         self.buttonBar = buttonBar
+        self.keypad = keypad
     }
 
     private enum CodingKeys: String, CodingKey {
-        case triggers, aliases, timers, macros, buttonBar
+        case triggers, aliases, timers, macros, buttonBar, keypad
     }
 
     /// A collection missing from the file decodes as empty rather than failing
@@ -38,6 +42,7 @@ public struct ScriptDocument: Codable, Sendable, Equatable {
         timers = try container.decodeIfPresent([MudTimer].self, forKey: .timers) ?? []
         macros = try container.decodeIfPresent([Macro].self, forKey: .macros) ?? []
         buttonBar = try container.decodeIfPresent(ButtonBar.self, forKey: .buttonBar) ?? ButtonBar()
+        keypad = try container.decodeIfPresent(Keypad.self, forKey: .keypad) ?? Keypad()
     }
 }
 
@@ -106,6 +111,9 @@ public actor ScriptStore {
     /// The command-button bar (#15). Always per-character (no ``ScriptScope``
     /// sharing), persisted to `Scripts/<character>/buttonBar.json`.
     public private(set) var buttonBar = ButtonBar()
+    /// The numeric-keypad grid. Always per-character (like the button bar),
+    /// persisted to `Scripts/<character>/keypad.json`.
+    public private(set) var keypad = Keypad()
 
     public init(directory: URL, character: String) {
         self.directory = directory
@@ -120,7 +128,8 @@ public actor ScriptStore {
             aliases: aliases,
             timers: timers,
             macros: macros,
-            buttonBar: buttonBar
+            buttonBar: buttonBar,
+            keypad: keypad
         )
     }
 
@@ -135,6 +144,7 @@ public actor ScriptStore {
         timers = decode([MudTimer].self, .timers)
         macros = decode([Macro].self, .macros)
         buttonBar = loadButtonBar()
+        keypad = loadKeypad()
     }
 
     /// Replace the whole document at once (e.g. an import) and persist each kind.
@@ -144,10 +154,18 @@ public actor ScriptStore {
         timers = document.timers
         macros = document.macros
         buttonBar = document.buttonBar
+        keypad = document.keypad
         for kind in ScriptScope.Kind.allCases {
             try persist(kind)
         }
         try persistButtonBar()
+        try persistKeypad()
+    }
+
+    /// Replace the keypad grid + persist.
+    public func setKeypad(_ newKeypad: Keypad) throws {
+        keypad = newKeypad
+        try persistKeypad()
     }
 
     // MARK: - Button bar (#15)
@@ -288,6 +306,27 @@ public actor ScriptStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             try encoder.encode(buttonBar).write(to: buttonBarURL(), options: .atomic)
+        } catch {
+            throw StoreError.saveFailed(error.localizedDescription)
+        }
+    }
+
+    private func keypadURL() -> URL {
+        let url = directory.appendingPathComponent(character, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url.appendingPathComponent("keypad.json")
+    }
+
+    private func loadKeypad() -> Keypad {
+        guard let data = FileManager.default.contents(atPath: keypadURL().path) else { return Keypad() }
+        return (try? JSONDecoder().decode(Keypad.self, from: data)) ?? Keypad()
+    }
+
+    private func persistKeypad() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            try encoder.encode(keypad).write(to: keypadURL(), options: .atomic)
         } catch {
             throw StoreError.saveFailed(error.localizedDescription)
         }
