@@ -12,7 +12,6 @@ struct MUSHclientImportSheet: View {
     @State private var selectedPlugins: Set<String> = []
     @State private var selectedDatabases: Set<String> = []
     @State private var character = ""
-    @State private var profileName = "Aardwolf (imported)"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,7 +46,6 @@ struct MUSHclientImportSheet: View {
                     if !scan.world.username.isEmpty {
                         LabeledContent("Character", value: scan.world.username)
                     }
-                    TextField("Import as profile", text: $profileName)
                 }
                 Section("Scripts") {
                     Toggle(scriptsLabel(scan.world), isOn: $importScriptsKeypad)
@@ -191,12 +189,11 @@ struct MUSHclientImportSheet: View {
     }
 
     private func runImport() {
-        let target: ProfileImporter.Target = .newProfile(name: profileName)
         model.runImport(selection: .init(
             importScriptsAndKeypad: importScriptsKeypad,
             pluginIncludes: selectedPlugins,
             databasePaths: selectedDatabases,
-            target: target,
+            target: .adaptive(importedName: "Aardwolf (imported)"),
             character: character.isEmpty ? "Default" : character
         ))
     }

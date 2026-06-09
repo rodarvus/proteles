@@ -13,6 +13,13 @@ public enum ProfileImporter {
         case newProfile(name: String)
         /// Merge the world's connection config into an existing profile.
         case merge(UUID)
+        /// Resolve at import time: on a fresh install (no configured profiles)
+        /// import as the primary profile — reusing an untouched/blank profile if
+        /// one exists, else creating one named from the world — so there's no
+        /// duplicate/"(imported)" clutter. If a configured profile already exists,
+        /// create a separate `importedName` profile so the existing setup isn't
+        /// clobbered.
+        case adaptive(importedName: String)
     }
 
     public enum ImportError: Error, Equatable {
@@ -31,7 +38,10 @@ public enum ProfileImporter {
         let autologin = username.isEmpty ? nil : Autologin(username: username)
 
         let profileID: UUID
-        switch target {
+        switch await resolve(target, world: world, profiles: profiles) {
+        case .adaptive:
+            preconditionFailure("resolve() never returns .adaptive")
+
         case .newProfile(let name):
             let profile = WorldProfile(
                 name: name,
@@ -49,9 +59,12 @@ public enum ProfileImporter {
             guard var profile = await profiles.profiles.first(where: { $0.id == id }) else {
                 throw ImportError.profileNotFound(id)
             }
+            let wasBlank = profile.host.trimmingCharacters(in: .whitespaces).isEmpty
             profile.host = world.host
             profile.port = world.port
             profile.autologin = autologin
+            // Name a reused blank from the world; keep a real merge target's name.
+            if wasBlank, !world.name.isEmpty { profile.name = world.name }
             profileID = id
             try await profiles.update(profile)
         }
@@ -63,5 +76,27 @@ public enum ProfileImporter {
             )
         }
         return profileID
+    }
+
+    /// Resolve `.adaptive` to a concrete `.newProfile`/`.merge`; pass others
+    /// through. A profile counts as "configured" if it has a non-empty host.
+    private static func resolve(
+        _ target: Target,
+        world: MUSHclientWorldFile,
+        profiles: ProfileStore
+    ) async -> Target {
+        guard case .adaptive(let importedName) = target else { return target }
+        let all = await profiles.profiles
+        /// "Reusable" = the seeded Aardwolf default or a blank New World the user
+        /// hasn't set up (no autologin; default or empty host). A real profile the
+        /// user configured (autologin, or a different host) is NOT reusable.
+        func reusable(_ profile: WorldProfile) -> Bool {
+            let host = profile.host.trimmingCharacters(in: .whitespaces)
+            return profile.autologin == nil
+                && (host.isEmpty || host == WorldProfile.aardwolfDefault.host)
+        }
+        if all.contains(where: { !reusable($0) }) { return .newProfile(name: importedName) }
+        if let seed = all.first(where: reusable) { return .merge(seed.id) }
+        return .newProfile(name: world.name.isEmpty ? "Aardwolf" : world.name)
     }
 }
