@@ -47,9 +47,19 @@ public enum MUSHclientMacroMapping {
             let command = slot.send.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !command.isEmpty else { return nil }
             let name = slot.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard name.lowercased() != command.lowercased() else { return nil } // identity artifact
+            // `replace` macros prefill the command line for the user to finish
+            // (e.g. `say `); `send_now` (+ anything else) sends immediately.
+            let isReplace = slot.type == "replace"
+            // Drop identity send-now slots (name == command) — MUSHclient's default
+            // Game-menu artifacts. A `replace` prefill is meaningful even then.
+            guard isReplace || name.lowercased() != command.lowercased() else { return nil }
             let chord = keyChord(forSlot: slot.name) ?? KeyChord(keyCode: 0) // unbound
-            return Macro(name: slot.name, chord: chord, action: .command(command))
+            // Preserve a prefill's trailing space (the separator before the user's
+            // text); only strip XML newlines. A send-now command is fully trimmed.
+            let action: MacroAction = isReplace
+                ? .replaceInput(slot.send.trimmingCharacters(in: .newlines))
+                : .command(command)
+            return Macro(name: slot.name, chord: chord, action: action)
         }
     }
 }

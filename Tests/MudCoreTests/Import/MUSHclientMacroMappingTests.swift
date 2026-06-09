@@ -41,3 +41,22 @@ struct MUSHclientMacroMappingTests {
         #expect(examine?.action == .command("look in corpse"))
     }
 }
+
+@Suite("MUSHclient replace-type macros → .replaceInput")
+struct MUSHclientReplaceMacroTests {
+    @Test("type=replace → .replaceInput; send_now → .command; replace kept even if name==command")
+    func replaceType() {
+        let slots: [MUSHclientWorldFile.Macro] = [
+            .init(name: "say", send: "say ", type: "replace"), // prefill, kept
+            .init(name: "tell", send: "tell", type: "replace"), // name==command but replace → kept
+            .init(name: "north", send: "north", type: "send_now"), // identity send_now → dropped
+            .init(name: "F2", send: "kill rat", type: "send_now") // keyed send → command
+        ]
+        let macros = MUSHclientMacroMapping.macros(from: slots)
+        #expect(macros.count == 3) // north dropped
+        #expect(macros.first { $0.name == "say" }?.action == .replaceInput("say ")) // trailing space kept
+        #expect(macros.first { $0.name == "tell" }?.action == .replaceInput("tell"))
+        #expect(macros.first { $0.name == "F2" }?.action == .command("kill rat"))
+        #expect(!macros.contains { $0.name == "north" })
+    }
+}

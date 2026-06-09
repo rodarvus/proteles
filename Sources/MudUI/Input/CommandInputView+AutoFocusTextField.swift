@@ -19,7 +19,7 @@ import SwiftUI
 
         /// Macro pre-filter: returns `true` if a bound macro consumed the key
         /// (so it's swallowed, not typed). See ``CommandInputView``.
-        var onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+        var onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
 
         /// Show spell-check squiggles as you type (visual only). Auto-correct
         /// and smart substitutions are always off (see ``applyTextEditingPolicy``).
@@ -78,7 +78,26 @@ import SwiftUI
         private func fireMacroIfMatch(_ event: NSEvent) -> Bool {
             guard let onMacroKey, let window, window.isKeyWindow, event.window === window
             else { return false }
-            return onMacroKey(makeKeyChord(from: event), currentInputText.isEmpty)
+            switch onMacroKey(makeKeyChord(from: event), currentInputText.isEmpty) {
+            case .notHandled:
+                return false
+            case .handled:
+                return true
+            case .replaceInput(let text):
+                setCommandLine(text)
+                return true
+            }
+        }
+
+        /// Put `text` in the command line (without sending) + caret at the end —
+        /// a `replace`-type macro. The field owns its text, so no binding round-
+        /// trip is needed.
+        private func setCommandLine(_ text: String) {
+            stringValue = text
+            if let editor = currentEditor() {
+                editor.string = text
+                editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            }
         }
 
         /// The live text in the command line (the field editor's contents while

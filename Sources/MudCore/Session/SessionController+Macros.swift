@@ -13,6 +13,11 @@ public extension SessionController {
             await applyScriptEffects(scriptEngine.run(script))
             await persistVariablesIfDirty()
             await rearmTimerLoopIfScriptScheduled()
+        case .replaceInput:
+            // Sets the command line, which only the input field can do — handled
+            // on the key path (see CommandInputView). No-op when fired
+            // programmatically (e.g. a command-button), where there's no input.
+            break
         }
     }
 }

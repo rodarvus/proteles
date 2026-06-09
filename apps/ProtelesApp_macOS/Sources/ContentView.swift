@@ -305,14 +305,15 @@ struct ContentView: View {
                     // Macros take precedence; a command-button hotkey (#40) is the
                     // fallback binding for the same chord.
                     if let action = scripts.matchMacro(chord, context: context) {
+                        if case .replaceInput(let text) = action { return .replaceInput(text) }
                         Task { await session.fire(action) }
-                        return true
+                        return .handled
                     }
                     if let buttonID = scripts.matchButtonHotkey(chord, context: context) {
                         Task { await scripts.fireButton(buttonID) }
-                        return true
+                        return .handled
                     }
-                    return false
+                    return .notHandled
                 },
                 vocabulary: { makeCompletionVocabulary() },
                 spellChecking: commandSpellCheck,
