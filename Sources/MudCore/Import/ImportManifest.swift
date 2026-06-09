@@ -35,6 +35,21 @@ public struct ImportManifest: Sendable, Equatable {
         self.problems = problems
     }
 
+    /// Reclassify offer plugins whose id is already in Proteles' library as
+    /// ``Classification/alreadyInstalled``, so they aren't re-offered. Applied by
+    /// the app after scanning (the pure scanner has no app state).
+    public func markingAlreadyInstalled(pluginIDs: Set<String>) -> ImportManifest {
+        var copy = self
+        copy.plugins = plugins.map { entry in
+            guard entry.classification == .offer,
+                  let id = entry.pluginID, pluginIDs.contains(id) else { return entry }
+            var updated = entry
+            updated.classification = .alreadyInstalled
+            return updated
+        }
+        return copy
+    }
+
     /// Connection + macro summary (no password — see the manifest's privacy note).
     public struct WorldSummary: Sendable, Equatable {
         public var name: String
@@ -109,6 +124,9 @@ public struct ImportManifest: Sendable, Equatable {
         case bundled
         /// Third-party — offer to import (user chooses).
         case offer
+        /// An offer plugin already present in Proteles' plugin library — not
+        /// re-offered (avoids duplicate installs).
+        case alreadyInstalled
     }
 
     /// A database found in the install, typed by name/path.
@@ -118,16 +136,26 @@ public struct ImportManifest: Sendable, Equatable {
         /// The character a per-character database belongs to (dinv), else nil.
         public var character: String?
         public var byteSize: Int
+        /// Last-modified time — used to pick the **live** mapper/S&D DB when an
+        /// install holds several copies.
+        public var modified: Date
 
         public var id: String {
             url.path
         }
 
-        public init(url: URL, kind: DatabaseKind, character: String? = nil, byteSize: Int) {
+        public init(
+            url: URL,
+            kind: DatabaseKind,
+            character: String? = nil,
+            byteSize: Int,
+            modified: Date = .distantPast
+        ) {
             self.url = url
             self.kind = kind
             self.character = character
             self.byteSize = byteSize
+            self.modified = modified
         }
     }
 

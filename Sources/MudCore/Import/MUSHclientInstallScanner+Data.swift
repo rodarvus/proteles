@@ -30,16 +30,38 @@ public extension MUSHclientInstallScanner {
     /// MUSHclient-internal databases.
     static func scanDatabases(root: URL) -> [ImportManifest.DatabaseEntry] {
         guard let walker = FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: [.fileSizeKey]
+            at: root, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
         ) else { return [] }
 
         var entries: [ImportManifest.DatabaseEntry] = []
         for case let url as URL in walker where url.pathExtension.lowercased() == "db" {
             guard let typed = databaseKind(for: url) else { continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            entries.append(.init(url: url, kind: typed.kind, character: typed.character, byteSize: size))
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            entries.append(.init(
+                url: url,
+                kind: typed.kind,
+                character: typed.character,
+                byteSize: values?.fileSize ?? 0,
+                modified: values?.contentModificationDate ?? .distantPast
+            ))
         }
-        return entries.sorted { $0.url.path < $1.url.path }
+        return liveSingletons(entries).sorted { $0.url.path < $1.url.path }
+    }
+
+    /// Mapper + S&D are single live databases — when an install holds several
+    /// copies (different folders), keep only the most recently modified (the
+    /// active one). Per-character / plugin DBs are all kept.
+    static func liveSingletons(
+        _ entries: [ImportManifest.DatabaseEntry]
+    ) -> [ImportManifest.DatabaseEntry] {
+        let singletons: Set<ImportManifest.DatabaseKind> = [.mapper, .searchAndDestroy]
+        var result = entries.filter { !singletons.contains($0.kind) }
+        for kind in singletons {
+            let live = entries.filter { $0.kind == kind }
+                .max { ($0.modified, $0.byteSize) < ($1.modified, $1.byteSize) }
+            if let live { result.append(live) }
+        }
+        return result
     }
 
     /// Parse the `{worldID}-{pluginID}-state.xml` files under `state/`.
@@ -68,7 +90,9 @@ public extension MUSHclientInstallScanner {
         for url: URL
     ) -> (kind: ImportManifest.DatabaseKind, character: String?)? {
         let lower = url.path.lowercased()
-        let skip = ["search-and-destroy-v2", "winklegold", " - copy", "/backup/"]
+        // Skip the copies the user doesn't run: S&D V2, WinkleGold, "- Copy",
+        // and any backup directory (e.g. `db_backups/`, `…/backup/`).
+        let skip = ["search-and-destroy-v2", "winklegold", " - copy", "backup"]
         if skip.contains(where: lower.contains) { return nil }
 
         switch url.lastPathComponent {

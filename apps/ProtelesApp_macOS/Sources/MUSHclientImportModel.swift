@@ -36,7 +36,11 @@ final class MUSHclientImportModel {
         Task {
             do {
                 let root = try await Self.resolveRoot(url)
-                let scan = try MUSHclientImportScan.scan(installRoot: root)
+                var scan = try MUSHclientImportScan.scan(installRoot: root)
+                // Don't re-offer plugins already in Proteles' library.
+                scan.manifest = await scan.manifest.markingAlreadyInstalled(
+                    pluginIDs: Self.installedPluginIDs()
+                )
                 self.extractedZip = (root != url) ? root : nil
                 self.scan = scan
                 self.phase = .review
@@ -105,6 +109,14 @@ final class MUSHclientImportModel {
             throw ImportModelError.unzipFailed
         }
         return dest
+    }
+
+    /// Plugin ids already in Proteles' library (so we don't re-offer them).
+    private static func installedPluginIDs() async -> Set<String> {
+        guard let url = try? PluginLibraryStore.defaultStoreURL() else { return [] }
+        let library = PluginLibraryStore(url: url)
+        try? await library.load()
+        return await Set(library.entries.map(\.pluginID))
     }
 
     /// Back up `~/Documents/Proteles` to a timestamped sibling before writing.
