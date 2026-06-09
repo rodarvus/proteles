@@ -1,13 +1,14 @@
 import Foundation
 
-/// Nick Gammon's standard MUSHclient helper libraries (`wait`, `check`),
-/// bundled with MudCore (see `Resources/MUSHHelpers/PROVENANCE.md`). They carry
-/// no copyleft and are needed by the compat shim and by plugins that
-/// `require "wait"` / `require "check"` (dinv, Search-and-Destroy).
+/// Nick Gammon's standard MUSHclient helper libraries (`wait`, `check`,
+/// `string_split`), bundled with MudCore (see `Resources/MUSHHelpers/PROVENANCE.md`).
+/// They carry no copyleft and are needed by the compat shim and by plugins that
+/// `require "wait"` / `require "check"` / `require "string_split"` (dinv,
+/// Search-and-Destroy, Hadar, …).
 public enum MUSHHelperAssets {
     private static let subdirectory = "MUSHHelpers"
 
-    /// A bundled helper module's source by name (`wait`, `check`).
+    /// A bundled helper module's source by name (`wait`, `check`, `string_split`).
     public static func lua(_ name: String) -> String? {
         guard let url = Bundle.module.url(
             forResource: name, withExtension: "lua", subdirectory: subdirectory
@@ -15,8 +16,8 @@ public enum MUSHHelperAssets {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
-    /// `wait` + `check`, keyed by module name, for registering with a runtime.
+    /// `wait` + `check` + `string_split`, keyed by module name, for registering.
     public static var modules: [String: String] {
-        ["wait", "check"].reduce(into: [:]) { result, name in result[name] = lua(name) }
+        ["wait", "check", "string_split"].reduce(into: [:]) { result, name in result[name] = lua(name) }
     }
 }
