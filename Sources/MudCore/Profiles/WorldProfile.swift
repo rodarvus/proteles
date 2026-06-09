@@ -47,6 +47,11 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
     /// ``Autologin/passwordAccount(for:)``.
     public var autologin: Autologin?
 
+    /// Which transport carries this session: raw TCP telnet (``direct``) or
+    /// Aardwolf's WebSocket gateway (``webSocket``). Defaults to ``direct``;
+    /// profiles saved before this field existed decode as ``direct``.
+    public var transport: ConnectionTransport
+
     public init(
         id: UUID = UUID(),
         name: String,
@@ -55,7 +60,8 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
         encoding: TextEncoding = .utf8,
         autoconnect: Bool = false,
         paletteOverride: ColorPalette? = nil,
-        autologin: Autologin? = nil
+        autologin: Autologin? = nil,
+        transport: ConnectionTransport = .direct
     ) {
         self.id = id
         self.name = name
@@ -65,6 +71,27 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
         self.autoconnect = autoconnect
         self.paletteOverride = paletteOverride
         self.autologin = autologin
+        self.transport = transport
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, host, port, encoding, autoconnect, paletteOverride, autologin, transport
+    }
+
+    /// Custom decode so older `profiles.json` (no `transport` key, and possibly
+    /// no `encoding`/`autoconnect`) loads cleanly — the new field defaults to
+    /// ``ConnectionTransport/direct``.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        host = try container.decode(String.self, forKey: .host)
+        port = try container.decode(UInt16.self, forKey: .port)
+        encoding = try container.decodeIfPresent(TextEncoding.self, forKey: .encoding) ?? .utf8
+        autoconnect = try container.decodeIfPresent(Bool.self, forKey: .autoconnect) ?? false
+        paletteOverride = try container.decodeIfPresent(ColorPalette.self, forKey: .paletteOverride)
+        autologin = try container.decodeIfPresent(Autologin.self, forKey: .autologin)
+        transport = try container.decodeIfPresent(ConnectionTransport.self, forKey: .transport) ?? .direct
     }
 
     /// Convenience: produce the ``NetworkConnection/Endpoint`` this
@@ -117,6 +144,24 @@ public extension WorldProfile {
 public enum TextEncoding: String, Codable, Sendable, Equatable, CaseIterable {
     case utf8
     case latin1
+}
+
+/// How a session reaches the MUD.
+public enum ConnectionTransport: String, Codable, Sendable, Equatable, CaseIterable {
+    /// Raw TCP telnet with MCCP2 (``NetworkConnection``). The classic path.
+    case direct
+    /// Aardwolf's WebSocket gateway (``WebSocketConnection``,
+    /// `wss://play.aardwolf.com:6200/`): TLS, no raw sockets — the iOS path, and
+    /// a selectable option on macOS. Bridges to this profile's host/port.
+    case webSocket
+
+    /// Label for the connection editor.
+    public var displayName: String {
+        switch self {
+        case .direct: "Direct (TCP)"
+        case .webSocket: "WebSocket"
+        }
+    }
 }
 
 /// Autologin recipe stored in the profile document.

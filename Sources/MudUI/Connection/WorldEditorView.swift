@@ -39,10 +39,15 @@ struct WorldEditorView: View {
                     Text("UTF-8").tag(TextEncoding.utf8)
                     Text("Latin-1 (ISO-8859-1)").tag(TextEncoding.latin1)
                 }
+                Picker("Transport", selection: $profile.transport) {
+                    ForEach(ConnectionTransport.allCases, id: \.self) { transport in
+                        Text(transport.displayName).tag(transport)
+                    }
+                }
             } header: {
                 Text("Connection")
             } footer: {
-                Text("Changes are saved automatically.")
+                Text(connectionFooter)
             }
 
             Section("Behaviour") {
@@ -79,6 +84,13 @@ struct WorldEditorView: View {
                     .disabled(!issues.isEmpty)
             }
         }
+    }
+
+    /// Connection-section footer; notes the WebSocket gateway when selected.
+    private var connectionFooter: String {
+        profile.transport == .webSocket
+            ? "WebSocket tunnels telnet over Aardwolf's TLS gateway — the iOS path. Saved automatically."
+            : "Changes are saved automatically."
     }
 
     private var autologinSection: some View {

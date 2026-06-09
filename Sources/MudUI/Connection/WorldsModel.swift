@@ -27,13 +27,18 @@ public final class WorldsModel {
 
     private let store: ProfileStore
     private let credentials: CredentialStore
+    /// Kept pointed at the active profile's transport so the session's
+    /// `makeConnection` builds the right ``MudConnection`` (#ws).
+    private let transportSelector: TransportSelector?
 
     public init(
         store: ProfileStore,
-        credentials: CredentialStore = KeychainStore()
+        credentials: CredentialStore = KeychainStore(),
+        transportSelector: TransportSelector? = nil
     ) {
         self.store = store
         self.credentials = credentials
+        self.transportSelector = transportSelector
     }
 
     /// The active profile resolved from ``activeProfileID``.
@@ -123,5 +128,7 @@ public final class WorldsModel {
     private func refresh() async {
         profiles = await store.profiles
         activeProfileID = await store.activeProfileID
+        // Keep the transport selector aligned with the active world (#ws).
+        transportSelector?.set(activeProfile?.transport ?? .direct)
     }
 }
