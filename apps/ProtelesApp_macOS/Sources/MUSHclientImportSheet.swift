@@ -113,10 +113,15 @@ struct MUSHclientImportSheet: View {
     }
 
     private func scriptsLabel(_ world: MUSHclientWorldFile) -> String {
+        // Mapped counts (post-drop of identity macros / empty sends), so the
+        // label matches what actually imports.
+        let aliases = MUSHclientScriptMapping.aliases(from: world.aliases).count
+        let triggers = MUSHclientScriptMapping.triggers(from: world.triggers).count
+        let macros = MUSHclientMacroMapping.macros(from: world.macros).count
         var parts: [String] = []
-        if !world.aliases.isEmpty { parts.append("\(world.aliases.count) aliases") }
-        if !world.triggers.isEmpty { parts.append("\(world.triggers.count) triggers") }
-        if !world.macros.isEmpty { parts.append("\(world.macros.count) macros") }
+        if aliases > 0 { parts.append("\(aliases) aliases") }
+        if triggers > 0 { parts.append("\(triggers) triggers") }
+        if macros > 0 { parts.append("\(macros) macros") }
         if !world.keypad.isEmpty { parts.append("keypad (\(world.keypad.count))") }
         return parts.isEmpty ? "Aliases, triggers, macros, keypad" : parts.joined(separator: ", ")
     }

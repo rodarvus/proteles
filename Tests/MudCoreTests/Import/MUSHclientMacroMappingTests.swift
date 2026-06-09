@@ -21,11 +21,12 @@ struct MUSHclientMacroMappingTests {
         }
     }
 
-    @Test("macros(from:): keyed → chord, named → unbound sentinel, empty send dropped")
+    @Test("macros(from:): keyed → chord; identity + empty dropped; customized named → unbound")
     func mapsMacros() {
         let slots: [MUSHclientWorldFile.Macro] = [
             .init(name: "Alt+A", send: "kill rat", type: "send_now"),
-            .init(name: "down", send: "down", type: "send_now"),
+            .init(name: "north", send: "north", type: "send_now"), // identity → dropped
+            .init(name: "examine", send: "look in corpse", type: "send_now"), // customized → kept
             .init(name: "F5", send: "", type: "send_now") // empty → dropped
         ]
         let macros = MUSHclientMacroMapping.macros(from: slots)
@@ -33,9 +34,10 @@ struct MUSHclientMacroMappingTests {
         let alt = macros.first { $0.name == "Alt+A" }
         #expect(alt?.chord.keyCode == 0 && alt?.chord.modifiers == [.option])
         #expect(alt?.action == .command("kill rat"))
-        // "down" imported unbound (keyCode 0, no modifiers) — the editor shows "Record Key".
-        let down = macros.first { $0.name == "down" }
-        #expect(down?.chord == KeyChord(keyCode: 0))
-        #expect(down?.action == .command("down"))
+        #expect(!macros.contains { $0.name == "north" }) // identity slot dropped
+        // a named slot with a *custom* command is kept, unbound (editor shows "Record Key").
+        let examine = macros.first { $0.name == "examine" }
+        #expect(examine?.chord == KeyChord(keyCode: 0))
+        #expect(examine?.action == .command("look in corpse"))
     }
 }
