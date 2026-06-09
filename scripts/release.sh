@@ -170,8 +170,13 @@ printf '\033[32m✓ notarised + stapled:\033[0m %s\n' "$ZIP"
 cat <<EOF
 
 Next (explicit, user-gated — not done by this script). A release is NOT done
-until step 3: without it, installed copies are never offered the update.
+until step 4 confirms it's published + auto-updatable.
   1. git tag -a v$VERSION -m "Proteles v$VERSION" && git push origin v$VERSION
-  2. gh release create v$VERSION "$ZIP" --title "Proteles v$VERSION" --notes "…"
+  2. gh release create v$VERSION "$ZIP" --title "Proteles v$VERSION" --latest --notes "…"
   3. ./scripts/publish-appcast.sh "$ZIP"      # generate + sign + publish the appcast
+  4. ./scripts/check-release.sh               # assert the release is published (not a draft)
+
+Gotcha: do NOT delete/move the v$VERSION tag after creating the release —
+GitHub orphans the release into an untagged DRAFT (this bit v0.5.0). If you must
+re-cut, re-publish with: gh release edit v$VERSION --draft=false --latest
 EOF

@@ -169,10 +169,14 @@ Before committing, ALL must pass (from repo root):
    it runs `xcodegen` itself): clean Release build → Developer-ID sign (hardened
    runtime + secure timestamp) → `notarytool submit --wait` → staple → `spctl`
    verify → zipped artifact. It does **not** tag/publish — it prints the next steps.
-3. `git tag -a v<ver>` + push; `gh release create v<ver> <zip>`.
+3. `git tag -a v<ver>` + push; `gh release create v<ver> <zip> --latest`.
 4. **`./scripts/publish-appcast.sh <zip>`** — generate + EdDSA-sign the appcast and
    publish it (+ zip + deltas) to `gh-pages`. **A release is not done without this**
    — it's what makes installed copies auto-update. See `docs/SPARKLE_SETUP.md`.
+5. **`./scripts/check-release.sh`** — assert the release is published, not a draft.
+   **Gotcha:** never delete/move the `v<ver>` tag after creating the release —
+   GitHub orphans it into an untagged **draft** (this stranded `v0.5.0`); re-cuts
+   need `gh release edit v<ver> --draft=false --latest`.
 
 **Releases ship a notarized Developer-ID build** (since `v0.4.5`);
 `docs/NOTARIZATION.md` + `docs/SPARKLE_SETUP.md` document the flow. The signing
