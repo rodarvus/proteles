@@ -37,6 +37,11 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
     /// original (possibly Windows `\`-separated, subdir) path preserved — the
     /// scanner resolves these to plugin directories on disk.
     public var pluginIncludes: [String]
+    /// World-level `<alias>` rules (those defined on the world itself, not in a
+    /// plugin), in document order.
+    public var aliases: [ScriptRule]
+    /// World-level `<trigger>` rules, in document order.
+    public var triggers: [ScriptRule]
 
     public init(
         worldID: String = "",
@@ -47,7 +52,9 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         password: String? = nil,
         macros: [Macro] = [],
         keypad: [KeypadKey] = [],
-        pluginIncludes: [String] = []
+        pluginIncludes: [String] = [],
+        aliases: [ScriptRule] = [],
+        triggers: [ScriptRule] = []
     ) {
         self.worldID = worldID
         self.name = name
@@ -58,6 +65,50 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         self.macros = macros
         self.keypad = keypad
         self.pluginIncludes = pluginIncludes
+        self.aliases = aliases
+        self.triggers = triggers
+    }
+
+    /// A world-level alias or trigger as stored in the `.mcl` — the raw
+    /// MUSHclient attributes the importer maps to a Proteles ``Alias``/``Trigger``.
+    public struct ScriptRule: Sendable, Equatable {
+        /// `match` — the pattern (wildcard unless `regexp="y"`).
+        public var match: String
+        /// The `<send>` body.
+        public var send: String
+        /// `send_to` (MUSHclient `eSendTo`): 0 world, 2 output, 10 execute, 12 script.
+        public var sendTo: Int
+        public var sequence: Int
+        public var enabled: Bool
+        public var regexp: Bool
+        public var ignoreCase: Bool
+        public var keepEvaluating: Bool
+        public var group: String?
+        public var name: String?
+
+        public init(
+            match: String = "",
+            send: String = "",
+            sendTo: Int = 0,
+            sequence: Int = 100,
+            enabled: Bool = true,
+            regexp: Bool = false,
+            ignoreCase: Bool = false,
+            keepEvaluating: Bool = false,
+            group: String? = nil,
+            name: String? = nil
+        ) {
+            self.match = match
+            self.send = send
+            self.sendTo = sendTo
+            self.sequence = sequence
+            self.enabled = enabled
+            self.regexp = regexp
+            self.ignoreCase = ignoreCase
+            self.keepEvaluating = keepEvaluating
+            self.group = group
+            self.name = name
+        }
     }
 
     /// One `<macro name="…" type="…"><send>…</send></macro>` binding.
@@ -103,8 +154,23 @@ public enum MUSHclientWorldParser {
         var world = MUSHclientWorldFile()
         private var pendingMacro: MUSHclientWorldFile.Macro?
         private var pendingKey: MUSHclientWorldFile.KeypadKey?
+        private var pendingRule: MUSHclientWorldFile.ScriptRule?
         private var inSend = false
         private var sendBuffer = ""
+
+        private static func rule(from attrs: [String: String]) -> MUSHclientWorldFile.ScriptRule {
+            .init(
+                match: attrs["match"] ?? "",
+                sendTo: attrs["send_to"].flatMap { Int($0) } ?? 0,
+                sequence: attrs["sequence"].flatMap { Int($0) } ?? 100,
+                enabled: attrs["enabled"]?.lowercased() != "n",
+                regexp: attrs["regexp"]?.lowercased() == "y",
+                ignoreCase: attrs["ignore_case"]?.lowercased() == "y",
+                keepEvaluating: attrs["keep_evaluating"]?.lowercased() == "y",
+                group: attrs["group"].flatMap { $0.isEmpty ? nil : $0 },
+                name: attrs["name"].flatMap { $0.isEmpty ? nil : $0 }
+            )
+        }
 
         func parser(
             _: XMLParser,
@@ -129,7 +195,9 @@ public enum MUSHclientWorldParser {
                 pendingMacro = .init(name: attrs["name"] ?? "", send: "", type: attrs["type"] ?? "")
             case "key":
                 pendingKey = .init(key: attrs["name"] ?? "", send: "")
-            case "send" where pendingMacro != nil || pendingKey != nil:
+            case "alias", "trigger":
+                pendingRule = Self.rule(from: attrs)
+            case "send" where pendingMacro != nil || pendingKey != nil || pendingRule != nil:
                 inSend = true
                 sendBuffer = ""
             case "include" where attrs["plugin"]?.lowercased() == "y":
@@ -156,6 +224,17 @@ public enum MUSHclientWorldParser {
             return decoded
         }
 
+        /// Route a finished `<send>` body to whichever rule/macro/key is pending.
+        private func assignSend(_ buffer: String) {
+            if pendingRule != nil {
+                pendingRule?.send = buffer
+            } else if pendingKey != nil {
+                pendingKey?.send = buffer
+            } else {
+                pendingMacro?.send = buffer
+            }
+        }
+
         func parser(
             _: XMLParser,
             didEndElement element: String,
@@ -165,17 +244,19 @@ public enum MUSHclientWorldParser {
             switch element {
             case "send" where inSend:
                 inSend = false
-                if pendingKey != nil {
-                    pendingKey?.send = sendBuffer
-                } else {
-                    pendingMacro?.send = sendBuffer
-                }
+                assignSend(sendBuffer)
             case "macro":
                 if let macro = pendingMacro { world.macros.append(macro) }
                 pendingMacro = nil
             case "key":
                 if let key = pendingKey { world.keypad.append(key) }
                 pendingKey = nil
+            case "alias":
+                if let rule = pendingRule { world.aliases.append(rule) }
+                pendingRule = nil
+            case "trigger":
+                if let rule = pendingRule { world.triggers.append(rule) }
+                pendingRule = nil
             default:
                 break
             }

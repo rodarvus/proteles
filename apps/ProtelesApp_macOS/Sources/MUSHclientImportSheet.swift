@@ -50,11 +50,7 @@ struct MUSHclientImportSheet: View {
                     TextField("Import as profile", text: $profileName)
                 }
                 Section("Scripts") {
-                    Toggle(
-                        "Macros (\(scan.world.macros.count)) + keypad "
-                            + "(\(scan.world.keypad.count))",
-                        isOn: $importScriptsKeypad
-                    )
+                    Toggle(scriptsLabel(scan.world), isOn: $importScriptsKeypad)
                     TextField("Target character", text: $character)
                 }
                 pluginsSection(scan)
@@ -114,6 +110,15 @@ struct MUSHclientImportSheet: View {
                 set.wrappedValue = $0 ? set.wrappedValue.union([key]) : set.wrappedValue.subtracting([key])
             }
         )
+    }
+
+    private func scriptsLabel(_ world: MUSHclientWorldFile) -> String {
+        var parts: [String] = []
+        if !world.aliases.isEmpty { parts.append("\(world.aliases.count) aliases") }
+        if !world.triggers.isEmpty { parts.append("\(world.triggers.count) triggers") }
+        if !world.macros.isEmpty { parts.append("\(world.macros.count) macros") }
+        if !world.keypad.isEmpty { parts.append("keypad (\(world.keypad.count))") }
+        return parts.isEmpty ? "Aliases, triggers, macros, keypad" : parts.joined(separator: ", ")
     }
 
     private func databaseLabel(_ database: ImportManifest.DatabaseEntry) -> String {
