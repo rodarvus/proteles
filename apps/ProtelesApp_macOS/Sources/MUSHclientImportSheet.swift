@@ -117,10 +117,12 @@ struct MUSHclientImportSheet: View {
         // label matches what actually imports.
         let aliases = MUSHclientScriptMapping.aliases(from: world.aliases).count
         let triggers = MUSHclientScriptMapping.triggers(from: world.triggers).count
+        let timers = MUSHclientScriptMapping.timers(from: world.timers).count
         let macros = MUSHclientMacroMapping.macros(from: world.macros).count
         var parts: [String] = []
         if aliases > 0 { parts.append("\(aliases) aliases") }
         if triggers > 0 { parts.append("\(triggers) triggers") }
+        if timers > 0 { parts.append("\(timers) timers") }
         if macros > 0 { parts.append("\(macros) macros") }
         if !world.keypad.isEmpty { parts.append("keypad (\(world.keypad.count))") }
         return parts.isEmpty ? "Aliases, triggers, macros, keypad" : parts.joined(separator: ", ")
