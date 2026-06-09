@@ -102,3 +102,42 @@ struct MUSHclientPluginDataFileTests {
         #expect(!dbs.contains { $0.url.lastPathComponent == "cool.db" })
     }
 }
+
+@Suite("Import — code-referenced sidecars + leveldb dedup")
+struct MUSHclientSidecarTests {
+    @Test("a GetInfo(56)-referenced root file becomes a plugin-dir sidecar")
+    func codeReferencedSidecar() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let plugins = root.appendingPathComponent("worlds/plugins")
+        try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("gag list".utf8).write(to: root.appendingPathComponent("gag.txt"))
+        let xml = #"<muclient><plugin name="Gag" id="aaaaaaaaaaaaaaaaaaaaaaaa">"#
+            + #"<![CDATA[ for l in io.lines(GetInfo(56) .. "gag.txt") do end ]]></plugin></muclient>"#
+        try xml.write(to: plugins.appendingPathComponent("gag.xml"), atomically: true, encoding: .utf8)
+
+        let world = MUSHclientWorldFile(name: "W", host: "h", port: 23, pluginIncludes: ["gag.xml"])
+        let (entries, _) = MUSHclientInstallScanner.scanPlugins(world: world, pluginsDirectory: plugins)
+        let gag = try #require(entries.first { $0.filename == "gag.xml" })
+        #expect(gag.pluginDirSidecars.map(\.lastPathComponent) == ["gag.txt"])
+    }
+}
+
+@Suite("Import — real install: message_gagger sidecar + single leveldb", .enabled(if:
+    FileManager.default.fileExists(
+        atPath: "/Users/rodarvus/code/proteles/MUSHclient-live-from-windows/worlds/Aardwolf.mcl"
+    )))
+struct MUSHclientRealSidecarTests {
+    @Test("message_gagger's messages_to_gag.txt is a plugin-dir sidecar; leveldb deduped to one")
+    func real() throws {
+        let root = URL(fileURLWithPath: "/Users/rodarvus/code/proteles/MUSHclient-live-from-windows")
+        let world = try #require(try MUSHclientWorldParser.parse(
+            Data(contentsOf: root.appendingPathComponent("worlds/Aardwolf.mcl"))
+        ))
+        let manifest = MUSHclientInstallScanner.scan(root: root, world: world)
+
+        let gagger = manifest.plugins.first { ($0.name ?? "").localizedCaseInsensitiveContains("gagger") }
+        #expect(gagger?.pluginDirSidecars.contains { $0.lastPathComponent == "messages_to_gag.txt" } == true)
+        #expect(manifest.databases.count(where: { $0.kind == .leveldb }) == 1)
+    }
+}

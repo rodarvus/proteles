@@ -61,6 +61,13 @@ public enum MUSHclientInstallScanner {
             copyRoot = isMultiFile ? parent : url
         }
 
+        let referenced = codeReferencedFiles(
+            pluginData: url.flatMap { try? Data(contentsOf: $0) },
+            pluginsDirectory: pluginsDirectory
+        )
+        var dataFiles = dataFiles(forPluginID: parsed?.id, pluginsDirectory: pluginsDirectory)
+        dataFiles.append(contentsOf: referenced.perCharacter)
+
         return .init(
             include: include,
             filename: filename,
@@ -70,8 +77,43 @@ public enum MUSHclientInstallScanner {
             copyRoot: copyRoot,
             isMultiFile: isMultiFile,
             classification: classify(id: parsed?.id, filename: filename),
-            dataFiles: dataFiles(forPluginID: parsed?.id, pluginsDirectory: pluginsDirectory)
+            dataFiles: dataFiles,
+            pluginDirSidecars: referenced.pluginDirectory
         )
+    }
+
+    /// Scan a plugin's source for data files it reads relative to `GetInfo(n)`
+    /// (e.g. `GetInfo(56) .. "messages_to_gag.txt"`). Resolves the named file
+    /// against the install (root / world / plugins dir). `56/60/64` → the plugin's
+    /// own dir; `66/67/85` → the per-character data dir.
+    private static func codeReferencedFiles(
+        pluginData: Data?,
+        pluginsDirectory: URL
+    ) -> (pluginDirectory: [URL], perCharacter: [URL]) {
+        guard let pluginData,
+              let text = String(data: pluginData, encoding: .utf8)
+              ?? String(data: pluginData, encoding: .isoLatin1) else { return ([], []) }
+        let worldDirectory = pluginsDirectory.deletingLastPathComponent()
+        let installRoot = worldDirectory.deletingLastPathComponent()
+        let searchRoots = [installRoot, worldDirectory, pluginsDirectory]
+        let pattern = #"GetInfo\s*\(\s*(\d+)\s*\)\s*\.\.\s*["']([^"'/\\]+)["']"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return ([], []) }
+
+        var pluginDirectory: Set<URL> = []
+        var perCharacter: Set<URL> = []
+        let string = text as NSString
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: string.length)) {
+            let code = Int(string.substring(with: match.range(at: 1))) ?? 0
+            let name = string.substring(with: match.range(at: 2))
+            guard let file = searchRoots.lazy.map({ $0.appendingPathComponent(name) })
+                .first(where: { FileManager.default.fileExists(atPath: $0.path) }) else { continue }
+            switch code {
+            case 56, 60, 64: pluginDirectory.insert(file)
+            case 66, 67, 85: perCharacter.insert(file)
+            default: continue
+            }
+        }
+        return (pluginDirectory.sorted { $0.path < $1.path }, perCharacter.sorted { $0.path < $1.path })
     }
 
     /// A plugin's own `.db` files, found under its `state/<name>-<id>/` directory

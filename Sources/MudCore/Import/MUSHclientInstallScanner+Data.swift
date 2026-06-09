@@ -48,13 +48,14 @@ public extension MUSHclientInstallScanner {
         return liveSingletons(entries).sorted { $0.url.path < $1.url.path }
     }
 
-    /// Mapper + S&D are single live databases — when an install holds several
-    /// copies (different folders), keep only the most recently modified (the
-    /// active one). Per-character / plugin DBs are all kept.
+    /// Mapper, S&D, and leveldb are single live databases — when an install holds
+    /// several copies (e.g. `plugins/leveldb/` + `plugins/state/leveldb/`), keep
+    /// only the most recently modified (the active one). Per-character dinv DBs
+    /// are all kept.
     static func liveSingletons(
         _ entries: [ImportManifest.DatabaseEntry]
     ) -> [ImportManifest.DatabaseEntry] {
-        let singletons: Set<ImportManifest.DatabaseKind> = [.mapper, .searchAndDestroy]
+        let singletons: Set<ImportManifest.DatabaseKind> = [.mapper, .searchAndDestroy, .leveldb]
         var result = entries.filter { !singletons.contains($0.kind) }
         for kind in singletons {
             let live = entries.filter { $0.kind == kind }
