@@ -13,16 +13,37 @@ struct ChatEchoTests {
         #"{"chan":"chat","msg":"\#(msg)","player":"\#(player)"}"#
     }
 
-    @Test("With echo on, a channel line passes through; with echo off, it's gagged")
+    @Test("Echo on renders the channel from GMCP and gags the inline dup; echo off suppresses the echo")
     func echoToggle() {
         var plugin = ChatEcho()
-        _ = plugin.onGMCP(package: "comm.channel", json: channel("Homer chats hi", player: "Homer"))
-        // Echo defaults on.
-        #expect(plugin.onLine(line("Homer chats hi")).gag == false)
-
-        _ = plugin.handleCommand("chats echo off")
-        _ = plugin.onGMCP(package: "comm.channel", json: channel("Homer chats hi", player: "Homer"))
+        // Echo defaults on: GMCP emits a colored echo; the raw inline dup is gagged.
+        let onEffects = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel("Homer chats hi", player: "Homer")
+        )
+        #expect(onEffects == [.echoAard("Homer chats hi")])
         #expect(plugin.onLine(line("Homer chats hi")).gag == true)
+
+        // Echo off: no echo emitted, inline still gagged (hidden from main).
+        _ = plugin.handleCommand("chats echo off")
+        let offEffects = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel("Homer chats hi", player: "Homer")
+        )
+        #expect(offEffects.isEmpty)
+        #expect(plugin.onLine(line("Homer chats hi")).gag == true)
+    }
+
+    @Test("A caught tell (comm.channel only, no inline line) is echoed so it isn't lost")
+    func caughtTellEchoed() {
+        var plugin = ChatEcho()
+        // catchtells: the tell arrives via comm.channel but the server withholds
+        // the inline copy — the GMCP echo is the only way it reaches main.
+        let effects = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel("Bob tells you 'test'", player: "Bob")
+        )
+        #expect(effects == [.echoAard("Bob tells you 'test'")])
     }
 
     @Test("A non-channel line is never gagged")
@@ -32,14 +53,17 @@ struct ChatEchoTests {
         #expect(plugin.onLine(line("You hit the goblin.")).gag == false)
     }
 
-    @Test("Muting a player gags their channel line; others pass")
+    @Test("A muted speaker isn't echoed; an unmuted one is; both inline dups are gagged")
     func mutePlayer() {
         var plugin = ChatEcho()
         _ = plugin.handleCommand("chats mute homer")
-        _ = plugin.onGMCP(package: "comm.channel", json: channel("Homer chats hi", player: "Homer"))
-        _ = plugin.onGMCP(package: "comm.channel", json: channel("Bob chats yo", player: "Bob"))
+        let homer = plugin.onGMCP(package: "comm.channel", json: channel("Homer chats hi", player: "Homer"))
+        let bob = plugin.onGMCP(package: "comm.channel", json: channel("Bob chats yo", player: "Bob"))
+        #expect(homer.isEmpty) // muted → no echo (hidden)
+        #expect(bob == [.echoAard("Bob chats yo")]) // unmuted → colored echo
+        // Both raw inline dups are gagged (the echo, or its suppression, stands in).
         #expect(plugin.disposition(for: line("Homer chats hi"), now: Date()).gag == true)
-        #expect(plugin.disposition(for: line("Bob chats yo"), now: Date()).gag == false)
+        #expect(plugin.disposition(for: line("Bob chats yo"), now: Date()).gag == true)
     }
 
     @Test("A timed mute expires")

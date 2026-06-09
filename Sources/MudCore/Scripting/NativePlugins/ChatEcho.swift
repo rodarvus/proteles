@@ -4,12 +4,14 @@ import Foundation
 /// Chat window) and muting specific players (independent Swift implementation
 /// of this Aardwolf behaviour; inspired by Fiendish's `aard_chat_echo`).
 ///
-/// Channels arrive twice: as inline text in the main scrollback and as
-/// structured `comm.channel` GMCP. This plugin caches each `comm.channel`
-/// (``onGMCP(package:json:)``) and, when the matching inline line arrives
-/// (``onLine(_:)``), gags it from the main window if channel echo is off or
-/// the speaker is muted. Best-effort: a line whose GMCP hasn't arrived yet
-/// slips through. State persists per world.
+/// Channels arrive as structured `comm.channel` GMCP, and normally *also* as an
+/// inline text line. Faithful to aard_chat_echo, this plugin renders the channel
+/// **from GMCP** — ``onGMCP(package:json:)`` emits a colored ``ScriptEffect/echoAard(_:)``
+/// — and ``onLine(_:)`` gags the raw inline duplicate. Rendering from GMCP is what
+/// surfaces **held** lines: a caught tell (`catchtells`) arrives via comm.channel
+/// with its inline copy withheld by the server, so the echo is the only way it
+/// shows. Echo off / muted speakers are suppressed (no echo, inline still gagged).
+/// State persists per world.
 public struct ChatEcho: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.chatecho",
@@ -81,22 +83,29 @@ public struct ChatEcho: NativePlugin {
         let text = AardwolfColor.stripped(comm.msg).trimmingCharacters(in: .whitespaces)
         recent.append(Recent(text: text, player: comm.player))
         if recent.count > Self.recentLimit { recent.removeFirst(recent.count - Self.recentLimit) }
-        return []
+        // Faithful to aard_chat_echo: render the channel from GMCP (colored) into
+        // the main window; `onLine` gags the raw inline duplicate. This is the
+        // ONLY way held lines appear — a caught tell (`catchtells`) arrives via
+        // comm.channel with its inline copy withheld by the server, so without
+        // this echo it would be invisible. Suppressed when echo is off or the
+        // speaker is muted (the inline copy is still gagged, so it's hidden).
+        guard state.echoEnabled, !isMuted(comm.player, now: Date()) else { return [] }
+        return [.echoAard(comm.msg)]
     }
 
     public func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
         disposition(for: line, now: Date())
     }
 
-    /// Gag decision for a line (date injectable for tests).
-    func disposition(for line: Line, now: Date) -> ScriptEngine.LineDisposition {
+    /// Gag the raw inline copy of any channel we hold GMCP for: the colored echo
+    /// (or its deliberate suppression when echo is off / the speaker is muted)
+    /// was decided in ``onGMCP(package:json:)``. This is pure de-duplication —
+    /// faithful to aard_chat_echo, which renders channels from GMCP and hides the
+    /// server's inline line. (`now` retained for the protocol/test signature.)
+    func disposition(for line: Line, now _: Date) -> ScriptEngine.LineDisposition {
         let text = line.text.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, let match = recent.first(where: { $0.text == text }) else {
-            return .init()
-        }
-        if !state.echoEnabled { return .init(gag: true) }
-        if isMuted(match.player, now: now) { return .init(gag: true) }
-        return .init()
+        guard !text.isEmpty, recent.contains(where: { $0.text == text }) else { return .init() }
+        return .init(gag: true)
     }
 
     func isMuted(_ player: String, now: Date) -> Bool {
