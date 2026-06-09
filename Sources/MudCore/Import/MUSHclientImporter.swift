@@ -97,6 +97,8 @@ public enum MUSHclientImporter {
             try await ScriptImporter.apply(
                 macros: MUSHclientMacroMapping.macros(from: world.macros),
                 keypad: MUSHclientKeypadMapping.keypad(from: world.keypad),
+                aliases: MUSHclientScriptMapping.aliases(from: world.aliases),
+                triggers: MUSHclientScriptMapping.triggers(from: world.triggers),
                 into: store
             )
         }
