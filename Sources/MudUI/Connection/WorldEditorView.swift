@@ -44,6 +44,14 @@ struct WorldEditorView: View {
                         Text(transport.displayName).tag(transport)
                     }
                 }
+                if profile.transport == .webSocket {
+                    Label(
+                        "Limited GMCP: vitals, mapper & channels stay empty over WebSocket.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
             } header: {
                 Text("Connection")
             } footer: {
@@ -86,11 +94,13 @@ struct WorldEditorView: View {
         }
     }
 
-    /// Connection-section footer; notes the WebSocket gateway when selected.
+    /// Connection-section footer; warns about the WebSocket gateway's limited
+    /// GMCP when that transport is selected (#46).
     private var connectionFooter: String {
-        profile.transport == .webSocket
-            ? "WebSocket tunnels telnet over Aardwolf's TLS gateway — the iOS path. Saved automatically."
-            : "Changes are saved automatically."
+        guard profile.transport == .webSocket else { return "Changes are saved automatically." }
+        return "WebSocket uses Aardwolf's TLS gateway (the iOS path). The gateway forwards only "
+            + "limited GMCP, so the vitals HUD, mapper, and channels stay empty — use Direct for "
+            + "full features. Changes are saved automatically."
     }
 
     private var autologinSection: some View {
