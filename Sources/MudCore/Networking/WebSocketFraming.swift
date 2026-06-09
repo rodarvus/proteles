@@ -5,9 +5,10 @@ import Foundation
 /// the socket I/O so it's unit-testable.
 ///
 /// Confirmed by probing the live gateway + reading its reference web client:
-///   - **Inbound** WS text frames are `base64( one continuous raw-DEFLATE stream )`
-///     wrapping the ordinary telnet stream. One ``Inflater`` (raw mode) per
-///     connection; feed every frame through it in order.
+///   - **Inbound** each WS text frame is `base64( an *independent* raw-DEFLATE
+///     stream )` wrapping a slice of the telnet stream — the gateway compresses
+///     per frame with no shared context (unlike MCCP2's one continuous stream),
+///     so the inflater is **reset before every frame**.
 ///   - **Outbound** the gateway wants *text* frames, never binary: a plain
 ///     command line as text, and GMCP as a `{"gmcp": "<payload>"}` JSON message.
 ///     It negotiates telnet with the MUD itself (driven by the JSON handshake),
@@ -112,10 +113,14 @@ public enum WebSocketFraming {
     }
 
     /// Decode one inbound WS text frame: base64 → raw-deflate → telnet bytes.
-    /// Returns `[]` on a non-base64 frame; inflate state carries across calls.
+    /// Each frame is its **own** complete deflate stream, so the inflater is reset
+    /// first (carrying state across frames leaves the second frame undecodable —
+    /// which silently swallowed the `Password:` prompt and broke login). Returns
+    /// `[]` on a non-base64 frame.
     public static func inboundBytes(fromBase64 frame: String, inflater: Inflater) -> [UInt8] {
         let trimmed = frame.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = Data(base64Encoded: trimmed) else { return [] }
+        try? inflater.reset()
         return (try? inflater.inflate([UInt8](data))) ?? []
     }
 }
