@@ -90,6 +90,11 @@ public struct ImportManifest: Sendable, Equatable {
         public var copyRoot: URL?
         public var isMultiFile: Bool
         public var classification: Classification
+        /// The plugin's own SQLite database file(s), found in its
+        /// `state/<name>-<id>/` directory. These travel **with** the plugin —
+        /// copied to the runtime DB dir (`Databases/<character>/`) on import — so
+        /// they're not shown as separate "database" choices.
+        public var dataFiles: [URL]
 
         public var id: String {
             include
@@ -103,7 +108,8 @@ public struct ImportManifest: Sendable, Equatable {
             resolvedPath: URL?,
             copyRoot: URL?,
             isMultiFile: Bool,
-            classification: Classification
+            classification: Classification,
+            dataFiles: [URL] = []
         ) {
             self.include = include
             self.filename = filename
@@ -113,6 +119,7 @@ public struct ImportManifest: Sendable, Equatable {
             self.copyRoot = copyRoot
             self.isMultiFile = isMultiFile
             self.classification = classification
+            self.dataFiles = dataFiles
         }
     }
 

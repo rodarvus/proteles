@@ -103,8 +103,10 @@ public extension MUSHclientInstallScanner {
             // …/state/dinv-<id>/<character>/dinv.db
             return (.dinv, url.deletingLastPathComponent().lastPathComponent)
         default:
-            // A db sitting in a plugin's own state subdir is plugin-owned.
-            if lower.contains("/plugins/state/") { return (.pluginOwned, nil) }
+            // A db in a plugin's own state subdir is plugin-owned data — it
+            // travels WITH its plugin (PluginEntry.dataFiles), not as a standalone
+            // database choice, so skip it here.
+            if lower.contains("/plugins/state/") { return nil }
             return (.unknown, nil)
         }
     }

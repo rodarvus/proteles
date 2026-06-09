@@ -69,8 +69,31 @@ public enum MUSHclientInstallScanner {
             resolvedPath: url,
             copyRoot: copyRoot,
             isMultiFile: isMultiFile,
-            classification: classify(id: parsed?.id, filename: filename)
+            classification: classify(id: parsed?.id, filename: filename),
+            dataFiles: dataFiles(forPluginID: parsed?.id, pluginsDirectory: pluginsDirectory)
         )
+    }
+
+    /// A plugin's own `.db` files, found under its `state/<name>-<id>/` directory
+    /// (keyed by the plugin id suffix). These travel with the plugin on import.
+    private static func dataFiles(forPluginID id: String?, pluginsDirectory: URL) -> [URL] {
+        guard let id, !id.isEmpty else { return [] }
+        let fileManager = FileManager.default
+        let stateDirectory = pluginsDirectory.appendingPathComponent("state")
+        guard let subdirectories = try? fileManager.contentsOfDirectory(
+            at: stateDirectory, includingPropertiesForKeys: nil
+        ) else { return [] }
+
+        var files: [URL] = []
+        for directory in subdirectories where directory.lastPathComponent.hasSuffix(id) {
+            guard let walker = fileManager.enumerator(at: directory, includingPropertiesForKeys: nil) else {
+                continue
+            }
+            for case let file as URL in walker where file.pathExtension.lowercased() == "db" {
+                files.append(file)
+            }
+        }
+        return files.sorted { $0.path < $1.path }
     }
 
     private static func classify(id: String?, filename: String) -> ImportManifest.Classification {
