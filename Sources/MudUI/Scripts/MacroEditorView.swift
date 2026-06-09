@@ -20,6 +20,7 @@ struct MacroEditorView: View {
             Section("Action") {
                 Picker("Type", selection: actionKind) {
                     Text("Send command").tag(MacroActionKind.command)
+                    Text("Replace command line").tag(MacroActionKind.replaceInput)
                     Text("Run Lua script").tag(MacroActionKind.script)
                 }
                 TextField(
@@ -65,6 +66,7 @@ struct MacroEditorView: View {
                 switch macro.action {
                 case .command: .command
                 case .script: .script
+                case .replaceInput: .replaceInput
                 }
             },
             set: { macro.action = MacroActionKind.make($0, text: macro.action.text) }
@@ -81,7 +83,7 @@ struct MacroEditorView: View {
 
 /// The selectable kinds of ``MacroAction`` (the editor's type picker).
 enum MacroActionKind: String, CaseIterable, Identifiable {
-    case command, script
+    case command, replaceInput, script
 
     var id: String {
         rawValue
@@ -92,16 +94,17 @@ enum MacroActionKind: String, CaseIterable, Identifiable {
     static func make(_ kind: MacroActionKind, text: String) -> MacroAction {
         switch kind {
         case .command: .command(text)
+        case .replaceInput: .replaceInput(text)
         case .script: .script(text)
         }
     }
 }
 
 extension MacroAction {
-    /// The action's text payload (the command or the script source).
+    /// The action's text payload (the command, script source, or prefill text).
     var text: String {
         switch self {
-        case .command(let value), .script(let value): value
+        case .command(let value), .script(let value), .replaceInput(let value): value
         }
     }
 }

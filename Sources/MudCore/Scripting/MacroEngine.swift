@@ -72,6 +72,10 @@ public enum MacroAction: Sendable, Equatable, Hashable, Codable {
     case command(String)
     /// Run as Lua in the user script environment.
     case script(String)
+    /// Put the text in the command line **without sending** — the user finishes
+    /// typing and presses Enter. MUSHclient's `replace`-type macro (e.g. a `say `
+    /// prefix). Handled by the input field; a no-op when fired programmatically.
+    case replaceInput(String)
 }
 
 /// A key bound to an action, persisted per world alongside triggers/aliases/

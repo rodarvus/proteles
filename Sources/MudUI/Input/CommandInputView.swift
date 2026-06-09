@@ -5,6 +5,17 @@ import SwiftUI
     import AppKit
 #endif
 
+/// What an `onMacroKey` handler did with a key chord.
+public enum MacroKeyOutcome: Sendable, Equatable {
+    /// Not a macro chord — let the keypress type normally.
+    case notHandled
+    /// A macro fired (send/script); swallow the keypress.
+    case handled
+    /// A `replace`-type macro: put this text in the command line (don't send)
+    /// and swallow the keypress. The field sets its own text + caret.
+    case replaceInput(String)
+}
+
 /// Command input field (auto-growing, multi-line capable).
 ///
 /// On macOS this is an `NSTextField`-backed field (``CommandField``) so it
@@ -40,7 +51,7 @@ import SwiftUI
 /// hardware-keyboard story to support yet).
 public struct CommandInputView: View {
     private let onSubmit: (String) -> Void
-    private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)?
+    private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> MacroKeyOutcome)?
     private let vocabulary: (@MainActor () -> CompletionVocabulary)?
     private let spellChecking: Bool
     private let ghostHint: Bool
@@ -59,7 +70,7 @@ public struct CommandInputView: View {
     ///     mangle commands like `cast 'armor'`.
     public init(
         onSubmit: @escaping (String) -> Void,
-        onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> Bool)? = nil,
+        onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> MacroKeyOutcome)? = nil,
         vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
         spellChecking: Bool = false,
         ghostHint: Bool = true
@@ -103,7 +114,7 @@ public struct CommandInputView: View {
     /// macOS command field. See ``CommandInputView`` for behaviour.
     private struct CommandField: NSViewRepresentable {
         let onSubmit: (String) -> Void
-        let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+        let onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
         let spellChecking: Bool
         let ghostHint: Bool
@@ -493,7 +504,7 @@ public struct CommandInputView: View {
     /// is accepted for API parity but unused (no key monitor off macOS).
     private struct CommandField: View {
         let onSubmit: (String) -> Void
-        let onMacroKey: (@MainActor (KeyChord, Bool) -> Bool)?
+        let onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
         var vocabulary: (@MainActor () -> CompletionVocabulary)?
         var spellChecking = false
         var ghostHint = true
