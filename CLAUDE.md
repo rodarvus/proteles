@@ -7,15 +7,21 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.5.0`** (tag + GitHub release, **notarized Developer-ID build**;
+**Shipped `v0.6.0`** (tag + GitHub release, **notarized Developer-ID build**;
 `scripts/release.sh` runs the build→sign→notarize→staple→verify flow). The
 build-out phases are **done**; we are **polishing + debugging from live play**.
-Since `v0.4.x`: a **storage reshape** (all user data under `~/Documents/Proteles/`,
+`v0.6.0` adds a **one-shot MUSHclient import** (`File ▸ Import from MUSHclient…`,
+D-101): a whole install (folder or `.zip`) → connection + autologin,
+aliases/triggers/timers/macros/keypad, third-party plugins (vetted by the same
+`PluginImporter.analyze` due-diligence as a manual add), and the
+mapper/S&D/dinv/leveldb DBs, into an **adaptive** profile behind a reviewable
+sheet — **no GPL vendoring** (package plugins skipped via `PackagePluginCatalog`).
+Earlier: a **storage reshape** (all user data under `~/Documents/Proteles/`,
 hand-editable `Settings/*.json`, per-character flat plugin DBs in `Databases/`),
-and a **command-completion overhaul** (full 519-command verb base + aliases,
+a **command-completion overhaul** (full 519-command verb base + aliases,
 kind-aware channel ghosting, per-verb argument completion — exits/spells/areas/
-items). The **Sparkle auto-updater** shipped (Phase 1 + seamless-resume Phase 2).
-~1300 tests, four gates green. See **PLAN.md §0** for what works and the
+items), and the **Sparkle auto-updater** (Phase 1 + seamless-resume Phase 2).
+~1356 tests, four gates green. See **PLAN.md §0** for what works and the
 **decision log (§12)** for history.
 
 ## Backlog — GitHub Issues are the source of truth

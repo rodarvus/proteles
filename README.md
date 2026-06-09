@@ -103,9 +103,18 @@ for the modern Mac — no Wine, no VM, no emulator.
   shim: `dinv build` identifies your whole inventory **including items inside
   containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
   **portal navigation** all work.
-- **Import your existing data.** Beyond the mapper + S&D databases, you can bring
-  over your **dinv** and **leveldb** databases too (**Databases ▸ Import
-  Inventory / Import Leveling**) — done while disconnected, taking effect on your
+- **Import your whole MUSHclient setup** — **File ▸ Import from MUSHclient…**
+  takes your existing install (a folder or a `.zip`) and brings it across in one
+  pass: connection + **autologin** (password → Keychain), your
+  **aliases/triggers/timers/macros/keypad**, your **third-party plugins** (each
+  with the same compatibility check as adding one by hand), and your
+  **mapper / Search-and-Destroy / inventory / leveling** databases. A review
+  sheet shows exactly what will be brought over first, and it backs up your
+  current data before writing. On a fresh install it just becomes your profile;
+  if you already have one, it lands as a separate "Aardwolf (imported)".
+- **Or import individual databases.** Already set up, and just want the data?
+  Bring over the mapper, S&D, **dinv**, or **leveldb** databases on their own
+  (**Databases ▸ Import …**) — done while disconnected, taking effect on your
   next connect. Plugins initialise only once you're in-game (after the MOTD), so
   their login-time server probes don't fail.
 - The **Aardwolf MUSHclient plugin package** is ported natively (all 43 plugins
