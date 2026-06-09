@@ -59,5 +59,10 @@ struct MUSHclientWorldFileRealTests {
         #expect(world.pluginIncludes.count == 48)
         // Subdir plugins preserve their Windows-style path.
         #expect(world.pluginIncludes.contains(#"dinv\dinv.xml"#))
+        // Keypad parsed as a distinct grid (assert key labels + count, never the
+        // bound commands — those are the user's private data).
+        #expect(world.keypad.count >= 12)
+        let keys = Set(world.keypad.map(\.key))
+        #expect(keys.isSuperset(of: ["0", "8", "5", "/"]))
     }
 }
