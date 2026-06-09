@@ -10,12 +10,14 @@ public enum ScriptImporter {
         keypad: Keypad,
         aliases: [Alias] = [],
         triggers: [Trigger] = [],
+        timers: [MudTimer] = [],
         into store: ScriptStore
     ) async throws {
         var document = await store.document
         document.macros.append(contentsOf: macros)
         document.aliases.append(contentsOf: aliases)
         document.triggers.append(contentsOf: triggers)
+        document.timers.append(contentsOf: timers)
         document.keypad = keypad
         try await store.replace(with: document)
     }

@@ -42,6 +42,8 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
     public var aliases: [ScriptRule]
     /// World-level `<trigger>` rules, in document order.
     public var triggers: [ScriptRule]
+    /// World-level `<timer>` rules, in document order.
+    public var timers: [Timer]
 
     public init(
         worldID: String = "",
@@ -54,7 +56,8 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         keypad: [KeypadKey] = [],
         pluginIncludes: [String] = [],
         aliases: [ScriptRule] = [],
-        triggers: [ScriptRule] = []
+        triggers: [ScriptRule] = [],
+        timers: [Timer] = []
     ) {
         self.worldID = worldID
         self.name = name
@@ -67,6 +70,58 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         self.pluginIncludes = pluginIncludes
         self.aliases = aliases
         self.triggers = triggers
+        self.timers = timers
+    }
+
+    /// A world-level `<timer>` as stored in the `.mcl`. Either an interval timer
+    /// (`hour`/`minute`/`second` + `offset_*`) or an at-time timer (`at_time="y"`,
+    /// fires at the wall-clock `hour:minute:second`). Mapped to a Proteles
+    /// ``MudTimer``.
+    public struct Timer: Sendable, Equatable {
+        public var hour: Int
+        public var minute: Int
+        public var second: Double
+        public var offsetHour: Int
+        public var offsetMinute: Int
+        public var offsetSecond: Double
+        public var atTime: Bool
+        public var oneShot: Bool
+        public var enabled: Bool
+        /// `send_to` (MUSHclient `eSendTo`): 0 world (send), 12 script.
+        public var sendTo: Int
+        public var send: String
+        public var name: String?
+        public var group: String?
+
+        public init(
+            hour: Int = 0,
+            minute: Int = 0,
+            second: Double = 0,
+            offsetHour: Int = 0,
+            offsetMinute: Int = 0,
+            offsetSecond: Double = 0,
+            atTime: Bool = false,
+            oneShot: Bool = false,
+            enabled: Bool = true,
+            sendTo: Int = 0,
+            send: String = "",
+            name: String? = nil,
+            group: String? = nil
+        ) {
+            self.hour = hour
+            self.minute = minute
+            self.second = second
+            self.offsetHour = offsetHour
+            self.offsetMinute = offsetMinute
+            self.offsetSecond = offsetSecond
+            self.atTime = atTime
+            self.oneShot = oneShot
+            self.enabled = enabled
+            self.sendTo = sendTo
+            self.send = send
+            self.name = name
+            self.group = group
+        }
     }
 
     /// A world-level alias or trigger as stored in the `.mcl` — the raw
@@ -155,8 +210,29 @@ public enum MUSHclientWorldParser {
         private var pendingMacro: MUSHclientWorldFile.Macro?
         private var pendingKey: MUSHclientWorldFile.KeypadKey?
         private var pendingRule: MUSHclientWorldFile.ScriptRule?
+        private var pendingTimer: MUSHclientWorldFile.Timer?
         private var inSend = false
         private var sendBuffer = ""
+
+        private static func timer(from attrs: [String: String]) -> MUSHclientWorldFile.Timer {
+            func num(_ key: String) -> Double {
+                attrs[key].flatMap { Double($0) } ?? 0
+            }
+            return .init(
+                hour: Int(num("hour")),
+                minute: Int(num("minute")),
+                second: num("second"),
+                offsetHour: Int(num("offset_hour")),
+                offsetMinute: Int(num("offset_minute")),
+                offsetSecond: num("offset_second"),
+                atTime: attrs["at_time"]?.lowercased() == "y",
+                oneShot: attrs["one_shot"]?.lowercased() == "y",
+                enabled: attrs["enabled"]?.lowercased() != "n",
+                sendTo: attrs["send_to"].flatMap { Int($0) } ?? 0,
+                name: attrs["name"].flatMap { $0.isEmpty ? nil : $0 },
+                group: attrs["group"].flatMap { $0.isEmpty ? nil : $0 }
+            )
+        }
 
         private static func rule(from attrs: [String: String]) -> MUSHclientWorldFile.ScriptRule {
             .init(
@@ -172,6 +248,19 @@ public enum MUSHclientWorldParser {
             )
         }
 
+        private func applyWorldAttributes(_ attrs: [String: String]) {
+            world.worldID = attrs["id"] ?? world.worldID
+            world.name = attrs["name"] ?? world.name
+            world.host = attrs["site"] ?? attrs["host"] ?? world.host
+            if let port = attrs["port"], let value = UInt16(port) { world.port = value }
+            world.username = attrs["player"] ?? world.username
+            if let stored = attrs["password"], !stored.isEmpty {
+                world.password = Self.decodePassword(
+                    stored, base64: attrs["password_base64"]?.lowercased() == "y"
+                )
+            }
+        }
+
         func parser(
             _: XMLParser,
             didStartElement element: String,
@@ -181,23 +270,17 @@ public enum MUSHclientWorldParser {
         ) {
             switch element {
             case "world":
-                world.worldID = attrs["id"] ?? world.worldID
-                world.name = attrs["name"] ?? world.name
-                world.host = attrs["site"] ?? attrs["host"] ?? world.host
-                if let port = attrs["port"], let value = UInt16(port) { world.port = value }
-                world.username = attrs["player"] ?? world.username
-                if let stored = attrs["password"], !stored.isEmpty {
-                    world.password = Self.decodePassword(
-                        stored, base64: attrs["password_base64"]?.lowercased() == "y"
-                    )
-                }
+                applyWorldAttributes(attrs)
             case "macro":
                 pendingMacro = .init(name: attrs["name"] ?? "", send: "", type: attrs["type"] ?? "")
             case "key":
                 pendingKey = .init(key: attrs["name"] ?? "", send: "")
             case "alias", "trigger":
                 pendingRule = Self.rule(from: attrs)
-            case "send" where pendingMacro != nil || pendingKey != nil || pendingRule != nil:
+            case "timer":
+                pendingTimer = Self.timer(from: attrs)
+            case "send" where pendingMacro != nil || pendingKey != nil
+                || pendingRule != nil || pendingTimer != nil:
                 inSend = true
                 sendBuffer = ""
             case "include" where attrs["plugin"]?.lowercased() == "y":
@@ -224,9 +307,11 @@ public enum MUSHclientWorldParser {
             return decoded
         }
 
-        /// Route a finished `<send>` body to whichever rule/macro/key is pending.
+        /// Route a finished `<send>` body to whichever rule/timer/macro/key is pending.
         private func assignSend(_ buffer: String) {
-            if pendingRule != nil {
+            if pendingTimer != nil {
+                pendingTimer?.send = buffer
+            } else if pendingRule != nil {
                 pendingRule?.send = buffer
             } else if pendingKey != nil {
                 pendingKey?.send = buffer
@@ -246,17 +331,20 @@ public enum MUSHclientWorldParser {
                 inSend = false
                 assignSend(sendBuffer)
             case "macro":
-                if let macro = pendingMacro { world.macros.append(macro) }
+                pendingMacro.map { world.macros.append($0) }
                 pendingMacro = nil
             case "key":
-                if let key = pendingKey { world.keypad.append(key) }
+                pendingKey.map { world.keypad.append($0) }
                 pendingKey = nil
             case "alias":
-                if let rule = pendingRule { world.aliases.append(rule) }
+                pendingRule.map { world.aliases.append($0) }
                 pendingRule = nil
             case "trigger":
-                if let rule = pendingRule { world.triggers.append(rule) }
+                pendingRule.map { world.triggers.append($0) }
                 pendingRule = nil
+            case "timer":
+                pendingTimer.map { world.timers.append($0) }
+                pendingTimer = nil
             default:
                 break
             }

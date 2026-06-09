@@ -99,6 +99,7 @@ public enum MUSHclientImporter {
                 keypad: MUSHclientKeypadMapping.keypad(from: world.keypad),
                 aliases: MUSHclientScriptMapping.aliases(from: world.aliases),
                 triggers: MUSHclientScriptMapping.triggers(from: world.triggers),
+                timers: MUSHclientScriptMapping.timers(from: world.timers),
                 into: store
             )
         }
@@ -122,21 +123,9 @@ public enum MUSHclientImporter {
 
         // 3b. Plugin-owned data files travel with their plugin → the runtime DB
         // dir (Databases/<character>/), so the plugin finds them after import.
-        for plugin in selectedPlugins where plugin.classification == .offer {
-            for dataFile in plugin.dataFiles {
-                do {
-                    try DatabaseImporter.copy(
-                        .init(url: dataFile, kind: .pluginOwned, byteSize: 0),
-                        character: selection.character,
-                        in: env.databasesDirectory
-                    )
-                } catch {
-                    problems.append(.init(
-                        item: dataFile.lastPathComponent, reason: error.localizedDescription
-                    ))
-                }
-            }
-        }
+        problems += copyPluginDataFiles(
+            selectedPlugins, character: selection.character, into: env.databasesDirectory
+        )
 
         // 4. Databases.
         for database in manifest.databases where selection.databasePaths.contains(database.id) {
@@ -152,5 +141,31 @@ public enum MUSHclientImporter {
         }
 
         return Result(profileID: profileID, problems: problems)
+    }
+
+    /// Copy each selected offer plugin's own data files into the per-character DB
+    /// dir. Best-effort; failures become problems.
+    private static func copyPluginDataFiles(
+        _ plugins: [ImportManifest.PluginEntry],
+        character: String,
+        into databasesDirectory: URL
+    ) -> [ImportManifest.Problem] {
+        var problems: [ImportManifest.Problem] = []
+        for plugin in plugins where plugin.classification == .offer {
+            for dataFile in plugin.dataFiles {
+                do {
+                    try DatabaseImporter.copy(
+                        .init(url: dataFile, kind: .pluginOwned, byteSize: 0),
+                        character: character,
+                        in: databasesDirectory
+                    )
+                } catch {
+                    problems.append(.init(
+                        item: dataFile.lastPathComponent, reason: error.localizedDescription
+                    ))
+                }
+            }
+        }
+        return problems
     }
 }
