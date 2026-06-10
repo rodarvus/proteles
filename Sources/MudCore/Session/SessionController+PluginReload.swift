@@ -16,6 +16,13 @@ extension SessionController {
                 await applyScriptEffects(searchAndDestroy.call(function, args: args))
                 await rearmTimerLoopIfSnDScheduled()
             }
+        case .searchAndDestroyState(let target, let targets, let gotoCount):
+            // The S&D host's shim-readable state changed → mirror it into the
+            // shim runtime, where CallPlugin(<S&D id>, "target_as_json") etc.
+            // answer synchronously (the effect path can't return values).
+            await scriptEngine?.setSearchAndDestroyState(
+                target: target, targets: targets, gotoCount: gotoCount
+            )
         case .simulate(let text):
             await reinjectSimulated(text)
         case .injectGMCP(let package, let json):

@@ -40,4 +40,12 @@ public extension ScriptEngine {
     func setBridgedPlugin(_ id: String, installed: Bool) async {
         await runtime.setBridgedPlugin(id, installed: installed)
     }
+
+    /// Mirror S&D's shim-readable state (from a `.searchAndDestroyState`
+    /// effect) into the shim runtime, so plugin `CallPlugin` reads of
+    /// `target_as_json`/`targets_as_json`/`goto_list_count` answer
+    /// synchronously from the latest pushed snapshot.
+    func setSearchAndDestroyState(target: String?, targets: String?, gotoCount: String?) async {
+        await runtime.setSearchAndDestroyShimState(target: target, targets: targets, gotoCount: gotoCount)
+    }
 }
