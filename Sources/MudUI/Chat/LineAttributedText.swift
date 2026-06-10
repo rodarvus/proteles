@@ -29,6 +29,15 @@ extension Line {
             if style.underline {
                 result[range].underlineStyle = .single
             }
+            // Clickable spans (URL auto-linkify): SwiftUI `Text` opens a
+            // `.link` attribute in the browser on click. Command links have
+            // no SwiftUI handler here, so only real URLs map.
+            if case .openURL(let urlString)? = run.link?.action {
+                if let url = URL(string: urlString) {
+                    result[range].link = url
+                    result[range].underlineStyle = .single
+                }
+            }
         }
         return result
     }

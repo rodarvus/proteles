@@ -49,3 +49,19 @@ public extension ScriptEngine {
         await runtime.setSearchAndDestroyShimState(target: target, targets: targets, gotoCount: gotoCount)
     }
 }
+
+public extension ScriptEngine {
+    /// Pause/resume all automations (triggers/aliases/timers/native). While
+    /// suspended, input is sent verbatim and incoming lines pass through
+    /// (Note mode). The dispatch path also reads ``automationsSuspended`` to
+    /// bypass mapper/S&D interception while a note is being written.
+    func setSuspended(_ value: Bool) {
+        suspended = value
+    }
+
+    /// Whether automations are currently suspended — read by the dispatch
+    /// path (note-text bypass), tests, and diagnostics.
+    var automationsSuspended: Bool {
+        suspended
+    }
+}

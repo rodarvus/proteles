@@ -67,7 +67,10 @@ public actor ChatStore {
             timestamp: Date(),
             channel: channel,
             player: player,
-            line: AardwolfColor.styledLine(from: message, id: LineID(id))
+            // Linkify here so channel lines are clickable in the Chat window —
+            // they arrive via comm.channel GMCP and never pass the output
+            // pipeline's URLLinkify plugin (live report: chat URLs dead).
+            line: URLLinkifier.linkify(AardwolfColor.styledLine(from: message, id: LineID(id)))
         )
         lines.append(chatLine)
         if lines.count > maxLines {
