@@ -46,20 +46,36 @@ public struct FloatingMiniWindow<Content: View>: View {
 
     /// Opt-in translucency so output that slides under a floating panel stays
     /// readable (the panel floats over the game text by design — §3.4). Off,
-    /// the chrome is today's solid material; on, the whole panel renders at
-    /// `floatingPanelAlpha` (0.3…1.0, Settings ▸ Appearance).
+    /// the chrome is today's solid material; on, only the BACKGROUND fades to
+    /// `floatingPanelAlpha` (0.3…1.0, Settings ▸ Appearance) — the panel's
+    /// own text stays full-contrast. (A whole-panel fade made both layers
+    /// unreadable at useful alphas — live feedback, 2026-06-10.)
     @AppStorage("floatingPanelTranslucent") private var translucent = false
     @AppStorage("floatingPanelAlpha") private var panelAlpha = 0.7
+
+    private var backgroundOpacity: Double {
+        translucent ? max(0.3, min(panelAlpha, 1.0)) : 1
+    }
+
+    // (Environment plumbing for the content-background fade lives below the
+    // view: PanelBackgroundOpacityKey.)
 
     public var body: some View {
         VStack(spacing: 0) {
             header
             content
+                // Panel content paints its own opaque background (Channels,
+                // Info fill the theme colour) — fade those too, or the chrome
+                // fade does nothing. Text drawn over them stays full-contrast.
+                .environment(\.panelBackgroundOpacity, backgroundOpacity)
         }
         .modifier(MiniWindowSizing(hugContent: hugContent, explicitSize: explicitSize))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.regularMaterial)
+                .opacity(backgroundOpacity)
+        )
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator, lineWidth: 1))
-        .opacity(translucent ? max(0.3, min(panelAlpha, 1.0)) : 1)
         .overlay(alignment: .bottomTrailing) { resizeGrip }
         .background(sizeReader)
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
@@ -283,4 +299,12 @@ private extension FloatingAnchor {
         case .bottomTrailing: .bottomTrailing
         }
     }
+}
+
+public extension EnvironmentValues {
+    /// How opaque a panel's own background fill should be — 1 everywhere
+    /// except inside a translucent floating miniwindow, which fades content
+    /// backgrounds along with its chrome so underlying game text shows
+    /// through (the text drawn over them keeps full contrast).
+    @Entry var panelBackgroundOpacity: Double = 1
 }

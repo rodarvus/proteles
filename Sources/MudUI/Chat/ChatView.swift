@@ -10,6 +10,9 @@ public struct ChatView: View {
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("chat.timestamps") private var showTimestamps = false
     @AppStorage("chat.timestampSeconds") private var timestampSeconds = false
+    /// 1 except in a translucent floating miniwindow (the chrome fades the
+    /// content backgrounds with it; the chat text keeps full contrast).
+    @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
     public init(model: ChatModel) {
         self.model = model
@@ -91,7 +94,7 @@ public struct ChatView: View {
                 description: Text("Channel and tell messages appear here once you're connected.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(palette.defaultBackground))
+            .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
         } else {
             chatList
         }
@@ -119,7 +122,7 @@ public struct ChatView: View {
             .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
             .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
         }
-        .background(Color(palette.defaultBackground))
+        .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
     }
 
     private func row(_ chatLine: ChatLine) -> some View {
