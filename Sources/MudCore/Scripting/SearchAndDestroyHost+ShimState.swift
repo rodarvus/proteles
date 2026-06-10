@@ -118,3 +118,28 @@ extension SearchAndDestroyHost {
         )
     }
 }
+
+/// Variable persistence (#52): the host runs S&D on its OWN runtime, so the
+/// engine-side store wiring never saw its `SetVariable` writes — every
+/// session re-scraped the area index and the `xset` flags reset. The session
+/// hydrates the host's scope from the per-world ``VariableStore`` BEFORE
+/// `load()` (S&D reads `GetVariable` at script top-level: the `xset` flags,
+/// `mcvar_area_range`, …) and drains the dirty scopes into the same store
+/// after each batch, exactly like the main engine.
+public extension SearchAndDestroyHost {
+    /// Seed the runtime's S&D-scoped variables from persisted values. Call
+    /// before ``load()``.
+    func hydrateVariables(_ variables: [String: String]) async {
+        await runtime.loadVariables([Self.pluginID: variables])
+    }
+
+    /// The scopes mutated since the last call (clears the set).
+    func takeDirtyVariableScopes() async -> Set<String> {
+        await runtime.takeDirtyVariableScopes()
+    }
+
+    /// A snapshot of every scope's variables (for persistence).
+    func variablesSnapshot() async -> [String: [String: String]] {
+        await runtime.variablesSnapshot()
+    }
+}

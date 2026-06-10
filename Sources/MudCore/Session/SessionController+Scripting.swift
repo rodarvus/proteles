@@ -324,10 +324,14 @@ public extension SessionController {
     /// `OnPluginInstall` reads persisted values). The store is then written
     /// through as variables change.
     func attachVariableStore(_ store: VariableStore) async {
-        guard let scriptEngine else { return }
         variableStore = store
         try? await store.load()
-        await scriptEngine.loadVariables(store.scopes)
+        // The S&D host hydrates separately (its own runtime, before its
+        // load — see hydrateSearchAndDestroyVariables), so the store
+        // attaches even with no script engine (#52).
+        if let scriptEngine {
+            await scriptEngine.loadVariables(store.scopes)
+        }
     }
 
     /// Attach a per-world native-plugin store and hydrate the engine's
@@ -408,16 +412,51 @@ public extension SessionController {
     }
 
     /// Persist any variable scopes mutated since the last call to the
-    /// attached store. Cheap when nothing changed (no I/O). Called after each
-    /// batch of script execution so plugin variables survive relaunches.
+    /// attached store — from the script engine AND the S&D host (its own
+    /// runtime, invisible to the engine — #52). Cheap when nothing changed
+    /// (no I/O). Called after each batch of script execution so plugin
+    /// variables survive relaunches.
     func persistVariablesIfDirty() async {
-        guard let variableStore, let scriptEngine else { return }
-        let dirty = await scriptEngine.takeDirtyVariableScopes()
-        guard !dirty.isEmpty else { return }
-        let snapshot = await scriptEngine.variablesSnapshot()
-        for scope in dirty {
-            try? await variableStore.update(scope: scope, variables: snapshot[scope] ?? [:])
+        guard let variableStore else { return }
+        if let scriptEngine {
+            await persistDirtyScopes(
+                dirty: scriptEngine.takeDirtyVariableScopes(),
+                snapshot: { await scriptEngine.variablesSnapshot() },
+                into: variableStore
+            )
         }
+        if let searchAndDestroy {
+            await persistDirtyScopes(
+                dirty: searchAndDestroy.takeDirtyVariableScopes(),
+                snapshot: { await searchAndDestroy.variablesSnapshot() },
+                into: variableStore
+            )
+        }
+    }
+
+    /// Write one runtime's dirty scopes to the store (snapshot lazily — most
+    /// calls have nothing dirty).
+    private func persistDirtyScopes(
+        dirty: Set<String>,
+        snapshot: () async -> [String: [String: String]],
+        into store: VariableStore
+    ) async {
+        guard !dirty.isEmpty else { return }
+        let all = await snapshot()
+        for scope in dirty {
+            try? await store.update(scope: scope, variables: all[scope] ?? [:])
+        }
+    }
+
+    /// Hydrate the S&D host's persisted variables (its runtime is separate
+    /// from the script engine's, so ``attachVariableStore(_:)`` can't reach
+    /// it). Call BEFORE ``SearchAndDestroyHost/load()`` — S&D reads
+    /// `GetVariable` at script top-level (the `xset` flags, area ranges), so
+    /// hydrating after load is too late (#52).
+    func hydrateSearchAndDestroyVariables(_ host: SearchAndDestroyHost) async {
+        guard let variableStore else { return }
+        let scope = SearchAndDestroyHost.pluginID
+        await host.hydrateVariables(variableStore.scopes[scope] ?? [:])
     }
 
     /// Render an ANSI-SGR string into a single ``Line`` with styled runs, by

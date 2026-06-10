@@ -78,6 +78,13 @@ public actor SearchAndDestroyHost {
     /// Register S&D's modules + curated bindings and load its `core.lua`.
     /// Throws if the vendored script is missing or fails to compile/run.
     public func load() async throws {
+        // The dedicated runtime is ALL S&D: pin the variable scope so the
+        // script's TOP-LEVEL GetVariable reads (the xset flags hydrate into
+        // locals right here at load) and every write land in the persisted
+        // S&D scope — not the default user scope (#52). Firings re-bind the
+        // same scope per-run.
+        await runtime.setVariableScope(Self.pluginID)
+
         // Automations first — their source (the plugin XML) is also the
         // preferred source for the SCRIPT, below.
         try loadAutomations()
