@@ -162,6 +162,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// The host runs it and delivers any resulting broadcasts (e.g. the
     /// 500/501 path results) back through `OnPluginBroadcast`.
     case mapperCall(function: String, args: [String])
+    /// `CallPlugin(<S&D id>, fn, …)` from a shim plugin, bridged to the native
+    /// S&D host (the user plugin's campaign mode drives `do_cp_check` etc.).
+    case callSearchAndDestroy(function: String, args: [String])
     /// A plugin asked the native Chat Capture plugin to store a line from
     /// outside (`CallPlugin(<chat-capture id>, "storeFromOutside", text, tab)`)
     /// — the bridge to native chat for rsocial/hadar_spellup etc. The host

@@ -290,7 +290,13 @@ public extension LuaRuntime {
     -- simply proceeds, and callers wrapping the call in `check()` see eOK.
     function EnablePlugin(id, flag) return error_code.eOK end
     function DisablePlugin(id) return error_code.eOK end
-    function IsPluginInstalled(id) return id == nil or id == GetPluginID() end
+    -- True for the caller itself, any LOADED shim plugin, and the natively-
+    -- bridged ids (GMCP handler, chat capture, mapper, S&D when attached) —
+    -- plugins gate whole features on these (campaign mode checks for S&D).
+    function IsPluginInstalled(id)
+      if id == nil or id == GetPluginID() then return true end
+      return proteles.isPluginInstalled(tostring(id)) == true
+    end
     -- check(code): MUSHclient's return-code guard (lua/check.lua) — raise a Lua
     -- error if an API call didn't return eOK, else pass the code through. Our
     -- API functions return eOK on success, so check() is a no-op on the happy
@@ -369,6 +375,11 @@ public extension LuaRuntime {
         require "gmcphelper" -- ensure gmcp() is defined
         local args = {...}
         return error_code.eOK, __toLuaLiteral(gmcp(args[1]))
+      end
+      -- Search & Destroy runs natively on its own host runtime: forward the
+      -- call so plugins can drive it (do_cp_check etc.).
+      if id == "30000000537461726C696E67" then
+        proteles.sndCall(fn, ...); return error_code.eOK
       end
       -- Aardwolf Chat Capture plugin: storeFromOutside(text, tab, foreground)
       -- adds a line under a tab. Bridge it to native chat (rsocial, hadar

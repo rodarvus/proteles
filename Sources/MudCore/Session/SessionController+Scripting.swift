@@ -138,6 +138,9 @@ public extension SessionController {
     /// import or plugin change re-runs the world load).
     func attachSearchAndDestroy(_ host: SearchAndDestroyHost) async {
         searchAndDestroy = host
+        // Shim plugins can now gate on + call into S&D (IsPluginInstalled /
+        // CallPlugin bridges).
+        await scriptEngine?.setBridgedPlugin(SearchAndDestroyHost.pluginID, installed: true)
         // The connect-time state handler only fires on a transition, so a host
         // attached mid-session must be told it's connected + given the current
         // GMCP snapshot, or its first xcp sits in an "unknown state".
@@ -368,6 +371,11 @@ public extension SessionController {
     func loadScripts(_ document: ScriptDocument) async {
         guard let scriptEngine else { return }
         await scriptEngine.reload(document)
+        // The mapper / S&D bridges re-assert on (re-)attach later in the world
+        // load; reset here so a feature disabled this load (D-107) stops
+        // answering IsPluginInstalled.
+        await scriptEngine.setBridgedPlugin(SearchAndDestroyHost.pluginID, installed: false)
+        await scriptEngine.setBridgedPlugin(Self.mapperBridgePluginID, installed: false)
         restartTimerLoop()
     }
 
@@ -405,8 +413,15 @@ public extension SessionController {
 
     /// Attach the per-world live map. Call when a world loads; the GMCP
     /// stream then feeds it room/area/sector updates.
+    /// The MUSHclient mapper plugin id the shim's IsPluginInstalled bridge
+    /// answers for when the native mapper is attached.
+    static let mapperBridgePluginID = "b6eae87ccedd84f510b74714"
+
     func attachMapper(_ mapper: Mapper) {
         self.mapper = mapper
+        Task { [scriptEngine] in
+            await scriptEngine?.setBridgedPlugin(Self.mapperBridgePluginID, installed: true)
+        }
         mapperNotesTask?.cancel()
         mapperNotesTask = Task { [weak self] in
             guard let stream = await self?.mapper?.subscribeNotes() else { return }

@@ -12,12 +12,28 @@ extension LuaRuntime {
         case .info: [infoValue(arguments)]
         case .pluginID: [.string(pluginContext.pluginID)]
         case .isConnected: [.boolean(connected)]
-        case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
-        case .monotonic: [.number(Date().timeIntervalSince1970)]
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
+        case .sqliteAllowed, .monotonic, .databaseDir, .isPluginInstalled:
+            miscValue(function, arguments)
+        default: []
+        }
+    }
+
+    /// The grab-bag of small scalar queries, split from ``queryValue`` for
+    /// its complexity budget. `isPluginInstalled` answers true for a loaded
+    /// shim plugin or a natively-bridged id (mapper / S&D / GMCP / chat).
+    nonisolated func miscValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        switch function {
+        case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
+        case .monotonic: [.number(Date().timeIntervalSince1970)]
         case .databaseDir: [.string(databasesDirectory)]
+        case .isPluginInstalled:
+            [.boolean({
+                let id = Self.argString(arguments, 0)
+                return pluginEnvs[id] != nil || bridgedPluginIDs.contains(id)
+            }())]
         default: []
         }
     }
@@ -200,6 +216,11 @@ extension LuaRuntime {
                 channel: Self.argOptionalString(arguments, 1) ?? ""
             ))
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .sndCall:
+            effects.append(.callSearchAndDestroy(
+                function: Self.argString(arguments, 0),
+                args: arguments.dropFirst().map { $0.stringValue ?? "" }
+            ))
         case .accelerator: registerAccelerator(arguments)
         case .http: registerHTTPRequest(arguments)
         case .button:

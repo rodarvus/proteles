@@ -141,6 +141,16 @@ public actor LuaRuntime {
     /// regardless of load order. Set by ``setPluginContext``.
     nonisolated(unsafe) var pluginContexts: [String: PluginContext] = [:]
 
+    /// MUSHclient plugin ids whose behaviour Proteles provides NATIVELY, so the
+    /// shim's `IsPluginInstalled` answers true and plugins gate features on
+    /// them (the user plugin's campaign mode checks for S&D this way). The
+    /// GMCP handler + chat capture bridges are unconditional; the session adds
+    /// the mapper/S&D ids when those hosts attach.
+    nonisolated(unsafe) var bridgedPluginIDs: Set<String> = [
+        "3e7dedbe37e44942dd46d264", // aard GMCP handler (gmcpval bridge)
+        "b555825a4a5700c35fa80780" // chat capture (storeFromOutside bridge)
+    ]
+
     /// Live output-view pixel size, answered for `GetInfo(280/281)` (#30). Pushed
     /// from the app as the window resizes; defaults to MUSHclient's classic
     /// 800×600 so a plugin reading geometry before the app reports a size still
@@ -153,12 +163,6 @@ public actor LuaRuntime {
     /// keep its DB flat in the shared Databases tree (#43/#44). Empty until the
     /// session knows the character. Set via ``setDatabasesDirectory(_:)``.
     nonisolated(unsafe) var databasesDirectory = ""
-
-    /// Set the per-character Databases directory surfaced by
-    /// `proteles.databaseDir()`. Called by the session once the character is known.
-    func setDatabasesDirectory(_ path: String) {
-        databasesDirectory = path
-    }
 
     /// Per-plugin sandbox environments (plugin id → registry ref of an env table
     /// whose `__index` falls back to `_G`), so plugins can't clobber each other's
@@ -243,34 +247,6 @@ public actor LuaRuntime {
         setMatchGlobals(captures, named)
         setStyleGlobal(styles)
         return try run(script)
-    }
-
-    /// Evaluate an expression and return its numeric result.
-    public func number(_ expression: String) throws -> Double {
-        try evaluate(expression)
-        defer { clua_pop(state, 1) }
-        guard lua_isnumber(state, -1) != 0 else {
-            throw LuaError.typeMismatch("expected a number from \(expression.debugDescription)")
-        }
-        return lua_tonumber(state, -1)
-    }
-
-    /// Evaluate an expression and return its string result (Lua coerces numbers).
-    public func string(_ expression: String) throws -> String {
-        try evaluate(expression)
-        defer { clua_pop(state, 1) }
-        guard lua_isstring(state, -1) != 0, let cString = clua_tostring(state, -1) else {
-            throw LuaError.typeMismatch("expected a string from \(expression.debugDescription)")
-        }
-        return String(cString: cString)
-    }
-
-    /// Evaluate an expression and return its boolean truthiness (Lua
-    /// rules: everything except `false` and `nil` is true).
-    public func boolean(_ expression: String) throws -> Bool {
-        try evaluate(expression)
-        defer { clua_pop(state, 1) }
-        return lua_toboolean(state, -1) != 0
     }
 
     /// Set a global to a number.
@@ -375,6 +351,8 @@ public actor LuaRuntime {
         setHostFunction("hyperlink", .hyperlink)
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("chatCapture", .chatCapture)
+        setHostFunction("isPluginInstalled", .isPluginInstalled)
+        setHostFunction("sndCall", .sndCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
         setHostFunction("publish", .publish)
         installProtelesAPIAutomation()
@@ -425,7 +403,8 @@ public actor LuaRuntime {
         case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
-             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button:
+             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
+             .sndCall:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -440,7 +419,8 @@ public actor LuaRuntime {
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
-             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet, .databaseDir:
+             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet, .databaseDir,
+             .isPluginInstalled:
             return queryValue(function, arguments)
         default:
             registerOrRaise(function, arguments)
@@ -569,8 +549,9 @@ public actor LuaRuntime {
     // MARK: - Private
 
     /// Compile + run `return <expression>`, leaving the single result on
-    /// the stack for the caller to read and pop.
-    private func evaluate(_ expression: String) throws {
+    /// the stack for the caller to read and pop. (Internal so the typed
+    /// expression readers in `LuaRuntime+Evaluation` can drive it.)
+    func evaluate(_ expression: String) throws {
         try load("return \(expression)")
         try call(argumentCount: 0, resultCount: 1)
     }

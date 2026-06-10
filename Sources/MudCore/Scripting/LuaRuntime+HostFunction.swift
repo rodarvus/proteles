@@ -44,5 +44,7 @@ extension LuaRuntime {
         case dialog, accelerator, http
         case clipboardGet, clipboardSet
         case databaseDir
+        case isPluginInstalled
+        case sndCall
     }
 }
