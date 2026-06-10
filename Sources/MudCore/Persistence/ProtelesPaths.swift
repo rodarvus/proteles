@@ -76,6 +76,17 @@ public enum ProtelesPaths {
         )
     }
 
+    /// `~/Documents/Proteles/Sounds/` — the user's event-cue sounds (the
+    /// soundpack's `.wav`s, #10). Proteles ships no audio with provenance
+    /// risk; files arrive via the MUSHclient import (their own copies), a
+    /// manual drop, or the optional CC0 default set. User files win.
+    public static func soundsDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("Sounds", isDirectory: true),
+            fileManager
+        )
+    }
+
     /// `~/Documents/Proteles/MapImages/` — the user's map background textures
     /// (the per-area `texture` filenames the mapper DB references, e.g.
     /// `forest.png`). Proteles ships and imports **no** image files — the

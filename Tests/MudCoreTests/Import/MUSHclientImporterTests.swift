@@ -157,6 +157,56 @@ struct MUSHclientImporterTests {
         ))
     }
 
+    @Test("soundpack wavs copy to Sounds — user files kept (#10 tier 1)")
+    func sounds() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("install/sounds")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("their-ding".utf8).write(to: source.appendingPathComponent("quest.wav"))
+        try Data("their-tick".utf8).write(to: source.appendingPathComponent("tick.wav"))
+        try Data("notes".utf8).write(to: source.appendingPathComponent("readme.txt"))
+
+        let entry = try #require(MUSHclientInstallScanner.scanSounds(
+            root: root.appendingPathComponent("install")
+        ))
+        #expect(entry.count == 2)
+
+        let destination = root.appendingPathComponent("Sounds")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("customised".utf8).write(to: destination.appendingPathComponent("quest.wav"))
+
+        var env = makeEnv(root: root, scriptsDir: root.appendingPathComponent("Scripts"))
+        env.soundsDirectory = destination
+        try await env.profiles.load()
+        try await env.library.load()
+        var manifest = makeManifest(
+            pluginXML: root.appendingPathComponent("unused.xml"),
+            dbSrc: root.appendingPathComponent("unused.db")
+        )
+        manifest.plugins = []
+        manifest.databases = []
+        manifest.sounds = entry
+
+        let result = try await MUSHclientImporter.run(
+            world: makeWorld(),
+            manifest: manifest,
+            selection: .init(
+                importScriptsAndKeypad: false,
+                pluginIncludes: [],
+                databasePaths: [],
+                target: .newProfile(name: "Aardwolf (imported)"),
+                character: "Hero"
+            ),
+            into: env
+        )
+        #expect(result.problems.isEmpty)
+        let copied = try String(contentsOf: destination.appendingPathComponent("tick.wav"), encoding: .utf8)
+        #expect(copied == "their-tick")
+        let kept = try String(contentsOf: destination.appendingPathComponent("quest.wav"), encoding: .utf8)
+        #expect(kept == "customised")
+    }
+
     /// Build the two-sided S&D fixture: THEIR folder in a fake install (plus
     /// a `-V2` decoy the scanner must skip) and OUR packaged install dir.
     private func makeSnDFolders(under root: URL) throws -> (ours: URL, theirs: URL) {
