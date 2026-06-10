@@ -110,14 +110,19 @@ public final class ScriptsModel {
         if let home = try? ProtelesPaths.home() {
             await session.attachWorldDataDirectory(home.path)
         }
+        // Core features (D-107): each profile can opt out of the mapper /
+        // dinv / leveldb / S&D — consult the store before attaching each.
+        let disabledFeatures = await CoreFeatureStore.disabledFeatures(forProfile: id)
         // Attach the live map, backed by the global Databases/Aardwolf.db.
-        if let mapper = Self.makeMapper() {
+        if !disabledFeatures.contains("mapper"), let mapper = Self.makeMapper() {
             await session.attachMapper(mapper)
         }
         // Attach the native Search-and-Destroy host (if installed): its own
         // sandboxed runtime, pointed at the global Databases/ dir (its
         // SnDdb.db). Inert when S&D isn't installed (host.load throws).
-        await loadSearchAndDestroyHost()
+        if !disabledFeatures.contains("search-and-destroy") {
+            await loadSearchAndDestroyHost()
+        }
         // ARM (don't load yet) this world's enabled library plugins + the bundled
         // leveldb. ALL MUSHclient plugin initialisation is deferred until the
         // character is in-game (first char.status state ≥ 3, after the MOTD), so
@@ -132,10 +137,13 @@ public final class ScriptsModel {
             try? await library.load()
             pluginDirectories = await library.enabled(forProfile: id).compactMap { try? $0.directory() }
         }
-        if let dinvData = try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character) {
+        let dinvData = disabledFeatures.contains("dinv")
+            ? nil : try? ProtelesPaths.pluginDataDirectory(named: "dinv", character: character)
+        if let dinvData {
             await session.armBundledDinv(stateDirectory: dinvData.path)
         }
-        let levelDBHome = try? ProtelesPaths.pluginDirectory(named: "leveldb")
+        let levelDBHome = disabledFeatures.contains("leveldb")
+            ? nil : try? ProtelesPaths.pluginDirectory(named: "leveldb")
         await session.armInitialPlugins(
             directories: pluginDirectories,
             character: character,

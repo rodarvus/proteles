@@ -5,23 +5,61 @@ import SwiftUI
     import UniformTypeIdentifiers
 #endif
 
-/// The "Plugins" window: lists the user's added plugins (the library) plus the
-/// built-in native features, and adds new ones — from your Mac or a URL —
-/// showing a compatibility report (what works, what doesn't) from
-/// ``PluginImporter`` before they go in. Every added plugin lives in its own
-/// discoverable directory under `~/Documents/Proteles/Plugins/<name>/`
-/// (see `docs/plans/PLUGIN_LIBRARY_PLAN.md`). Adding / removing / toggling /
-/// updating re-syncs the live session so the change applies immediately.
+/// The Plugins window's three panes (D-107): a category sidebar (Core
+/// Features / Modules / Library), the selected category's items —
+/// alphabetised, with enable toggles — and the detail pane.
+enum PluginCategory: String, CaseIterable, Identifiable, Hashable {
+    case features, modules, library
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .features: "Core Features"
+        case .modules: "Modules"
+        case .library: "Library"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .features: "map"
+        case .modules: "gearshape.2"
+        case .library: "puzzlepiece.extension"
+        }
+    }
+}
+
+/// An error surfaced to the user: a plain-language headline + the technical
+/// detail underneath (never a bare `localizedDescription`, DESIGN.md §3.7).
+struct PluginsError: Identifiable {
+    let id = UUID()
+    let title: String
+    let advice: String
+    let detail: String
+}
+
+/// The "Plugins" window: the user's plugin library plus the built-in
+/// features/modules, three-paned (D-107). Adding shows a compatibility
+/// report (``PluginImporter``) before anything goes in; every added plugin
+/// lives in its own discoverable directory under
+/// `~/Documents/Proteles/Plugins/<name>/`. Changes apply to the live
+/// session immediately.
 public struct PluginsView: View {
     @Bindable private var model: PluginsModel
 
+    @State private var category: PluginCategory? = .library
     /// A plugin staged for adding (files chosen / download extracted), paired
     /// with its analysis. Drives the report sheet. `nil` when none in progress.
     @State private var pendingAdd: PendingAdd?
     @State private var isAdding = false
     @State private var urlPromptShown = false
     @State private var urlText = ""
-    @State private var errorMessage: String?
+    @State private var presentedError: PluginsError?
+    /// A library plugin staged for removal, awaiting confirmation (§3.7).
+    @State private var removalCandidate: LibraryPluginRow?
 
     public init(model: PluginsModel) {
         self.model = model
@@ -29,11 +67,13 @@ public struct PluginsView: View {
 
     public var body: some View {
         NavigationSplitView {
-            sidebar
+            categorySidebar
+        } content: {
+            categoryContent
         } detail: {
             detail
         }
-        .frame(minWidth: 640, minHeight: 440)
+        .frame(minWidth: 760, minHeight: 440)
         .navigationTitle("Plugins")
         .sheet(item: $pendingAdd) { pending in
             AddPluginReportSheet(
@@ -44,65 +84,119 @@ public struct PluginsView: View {
             )
         }
         .sheet(isPresented: $urlPromptShown) { urlPromptSheet }
-        .alert("Couldn't add the plugin", isPresented: errorBinding) {
-            Button("OK", role: .cancel) { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
+        .alert(item: $presentedError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text("\(error.advice)\n\n\(error.detail)"),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .confirmationDialog(
+            removalCandidate.map { "Remove the plugin “\($0.name)”?" } ?? "",
+            isPresented: confirmingRemoval,
+            titleVisibility: .visible,
+            presenting: removalCandidate
+        ) { plugin in
+            Button("Remove Plugin", role: .destructive) {
+                Task { await model.remove(pluginID: plugin.id) }
+            }
+        } message: { _ in
+            Text("This unloads it and deletes its folder — including any data "
+                + "it saved — from your Plugins library. You can't undo this.")
         }
     }
 
-    // MARK: - Sidebar
+    // MARK: - Columns
 
-    private var sidebar: some View {
+    private var categorySidebar: some View {
+        List(selection: $category) {
+            ForEach(PluginCategory.allCases) { category in
+                Label(category.title, systemImage: category.icon)
+                    .tag(category)
+            }
+        }
+        .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+        .onChange(of: category) { _, _ in model.selection = nil }
+    }
+
+    private var categoryContent: some View {
+        Group {
+            switch category ?? .library {
+            case .features: featuresList
+            case .modules: modulesList
+            case .library: libraryList
+            }
+        }
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Button("From your Mac…", action: beginAddFromMac)
+                        .keyboardShortcut("n", modifiers: .command)
+                    Button("From a URL…") { urlText = ""; urlPromptShown = true }
+                } label: {
+                    Label("Add Plugin…", systemImage: "plus")
+                }
+                .help("Add a MUSHclient plugin to the library (⌘N for a file)")
+                Button {
+                    if let plugin = model.selectedLibrary { removalCandidate = plugin }
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .help("Remove the selected library plugin (⌫ in the list)")
+                .disabled(model.selectedLibrary == nil)
+            }
+        }
+    }
+
+    private var featuresList: some View {
         List(selection: $model.selection) {
-            Section("Core features") {
-                ForEach(model.builtInFeatures) { feature in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(feature.name).font(.body)
-                        Text("Built in · always active")
-                            .font(.caption2).foregroundStyle(.secondary)
+            ForEach(model.sortedFeatures) { feature in
+                BuiltInFeatureRowView(
+                    feature: feature,
+                    enabled: model.featureEnabled(feature.id),
+                    onToggle: { enabled in
+                        Task { await model.setFeatureEnabled(enabled, id: feature.id) }
                     }
-                    .tag(PluginSelection.feature(feature.id))
-                }
+                )
+                .tag(PluginSelection.feature(feature.id))
             }
-            if !model.nativePlugins.isEmpty {
-                Section("Proteles modules") {
-                    ForEach(model.nativePlugins) { plugin in
-                        NativePluginRowView(plugin: plugin) { enabled in
-                            Task { await model.setNativeEnabled(enabled, id: plugin.id) }
-                        }
-                        .tag(PluginSelection.native(plugin.id))
-                    }
+        }
+    }
+
+    private var modulesList: some View {
+        List(selection: $model.selection) {
+            ForEach(model.sortedNatives) { plugin in
+                NativePluginRowView(plugin: plugin) { enabled in
+                    Task { await model.setNativeEnabled(enabled, id: plugin.id) }
                 }
+                .tag(PluginSelection.native(plugin.id))
             }
-            Section("Plugins") {
-                ForEach(model.libraryPlugins) { plugin in
+        }
+    }
+
+    @ViewBuilder
+    private var libraryList: some View {
+        if model.libraryPlugins.isEmpty {
+            ContentUnavailableView {
+                Label("No Plugins", systemImage: "puzzlepiece.extension")
+            } description: {
+                Text("Add a MUSHclient plugin — from your Mac or a URL — "
+                    + "to get started.")
+            } actions: {
+                Button("Add from your Mac…", action: beginAddFromMac)
+            }
+        } else {
+            List(selection: $model.selection) {
+                ForEach(model.sortedLibrary) { plugin in
                     LibraryPluginRowView(plugin: plugin) { enabled in
                         Task { await model.setEnabled(enabled, pluginID: plugin.id) }
                     }
                     .tag(PluginSelection.library(plugin.id))
                 }
-                if model.libraryPlugins.isEmpty {
-                    Text("Add a MUSHclient plugin — from your Mac or a URL — to get started.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
             }
-        }
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Button("From your Mac…", action: beginAddFromMac)
-                    Button("From a URL…") { urlText = ""; urlPromptShown = true }
-                } label: {
-                    Label("Add Plugin…", systemImage: "plus")
-                }
-                Button {
-                    if let id = model.selectedLibrary?.id { Task { await model.remove(pluginID: id) } }
-                } label: {
-                    Label("Remove", systemImage: "trash")
-                }
-                .disabled(model.selectedLibrary == nil)
+            .onDeleteCommandCompat {
+                if let plugin = model.selectedLibrary { removalCandidate = plugin }
             }
         }
     }
@@ -112,7 +206,13 @@ public struct PluginsView: View {
     @ViewBuilder
     private var detail: some View {
         if let feature = model.selectedFeature {
-            BuiltInFeatureDetail(feature: feature)
+            BuiltInFeatureDetail(
+                feature: feature,
+                enabled: model.featureEnabled(feature.id),
+                onToggle: { enabled in
+                    Task { await model.setFeatureEnabled(enabled, id: feature.id) }
+                }
+            )
         } else if let native = model.selectedNative {
             NativePluginDetail(plugin: native)
         } else if let plugin = model.selectedLibrary {
@@ -122,13 +222,13 @@ public struct PluginsView: View {
                 onReveal: { reveal(plugin) },
                 onUpdate: { update(plugin) },
                 onExport: { export(plugin) },
-                onRemove: { Task { await model.remove(pluginID: plugin.id) } }
+                onRemove: { removalCandidate = plugin }
             )
         } else {
             ContentUnavailableView(
-                "No Plugin Selected",
+                "Nothing Selected",
                 systemImage: "puzzlepiece.extension",
-                description: Text("Select a plugin to see what it does, or add a new one.")
+                description: Text("Select an item to see what it does, or add a plugin.")
             )
         }
     }
@@ -164,8 +264,11 @@ public struct PluginsView: View {
 
     // MARK: - Actions
 
-    private var errorBinding: Binding<Bool> {
-        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    private var confirmingRemoval: Binding<Bool> {
+        Binding(
+            get: { removalCandidate != nil },
+            set: { if !$0 { removalCandidate = nil } }
+        )
     }
 
     private func beginAddFromMac() {
@@ -197,7 +300,12 @@ public struct PluginsView: View {
                     tempDir: temp
                 )
             } catch {
-                errorMessage = error.localizedDescription
+                presentedError = PluginsError(
+                    title: "Couldn't download the plugin",
+                    advice: "Check the URL points at a plugin .xml, or a .zip "
+                        + "release/repo download, and that you're online.",
+                    detail: error.localizedDescription
+                )
             }
         }
     }
@@ -242,7 +350,11 @@ public struct PluginsView: View {
             do {
                 try PluginExporter.export(pluginDirectory: plugin.directory, to: destination)
             } catch {
-                errorMessage = error.localizedDescription
+                presentedError = PluginsError(
+                    title: "Couldn't export the plugin",
+                    advice: "Check you can write to the chosen location.",
+                    detail: error.localizedDescription
+                )
             }
         #endif
     }

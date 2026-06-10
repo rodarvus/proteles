@@ -19,6 +19,8 @@ public struct NativePluginRow: Identifiable, Sendable, Equatable {
 /// Always present + active; listed so it's discoverable.
 public struct BuiltInFeatureRow: Identifiable, Sendable, Equatable {
     public let id: String
+    /// SF Symbol for the row/detail.
+    public let icon: String
     public let name: String
     public let summary: String
     public let commands: [String]
@@ -35,6 +37,9 @@ public struct LibraryPluginRow: Identifiable, Sendable, Equatable {
     public let origin: PluginOrigin
     /// `false` if the directory no longer resolves to a parseable plugin.
     public let parsed: Bool
+    /// Best-effort command hints derived from the plugin's alias patterns
+    /// (D-107) — e.g. `dinv …`. Empty when nothing command-shaped parses.
+    public let commandHints: [String]
     public var enabled: Bool
 }
 
@@ -65,6 +70,7 @@ public final class PluginsModel {
     public let builtInFeatures: [BuiltInFeatureRow] = [
         BuiltInFeatureRow(
             id: "mapper",
+            icon: "map.fill",
             name: "Mapper",
             summary: "Native graphical GMCP mapper (a from-scratch reimplementation of "
                 + "aard_GMCP_mapper). Auto-maps as you explore; pathfinds with portals/recalls; "
@@ -80,6 +86,7 @@ public final class PluginsModel {
         ),
         BuiltInFeatureRow(
             id: "dinv",
+            icon: "bag.fill",
             name: "dinv (Inventory)",
             summary: "The dinv inventory manager (MIT) — bundled and run verbatim through the "
                 + "MUSHclient compatibility shim. Scans and identifies your whole inventory into a "
@@ -92,6 +99,7 @@ public final class PluginsModel {
         ),
         BuiltInFeatureRow(
             id: "leveldb",
+            icon: "chart.bar.fill",
             name: "leveldb (Leveling DB)",
             summary: "The leveldb leveling database (MIT) — bundled and run verbatim through the "
                 + "MUSHclient compatibility shim. Passively records kills, deaths, quests, "
@@ -107,6 +115,7 @@ public final class PluginsModel {
         ),
         BuiltInFeatureRow(
             id: "search-and-destroy",
+            icon: "scope",
             name: "Search & Destroy",
             summary: "The Search-and-Destroy campaign/quest hunter (by Crowley) — not bundled with "
                 + "Proteles; install it on request from the Search & Destroy panel. It then runs its "
@@ -122,6 +131,19 @@ public final class PluginsModel {
     ]
 
     public var selection: PluginSelection?
+
+    /// Alphabetised lists for the window's columns (D-107).
+    public var sortedFeatures: [BuiltInFeatureRow] {
+        builtInFeatures.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    public var sortedNatives: [NativePluginRow] {
+        nativePlugins.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    public var sortedLibrary: [LibraryPluginRow] {
+        libraryPlugins.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
     private let session: SessionController
     private var profileID: UUID?
@@ -196,9 +218,43 @@ public final class PluginsModel {
                 directory: directory ?? URL(fileURLWithPath: "/"),
                 origin: entry.origin,
                 parsed: plugin != nil,
+                commandHints: PluginCommandHints.from(aliases: plugin?.aliases ?? []),
                 enabled: entry.isEnabled(forProfile: profileID)
             )
         }
+        await refreshFeatures()
+    }
+
+    // MARK: - Core features (D-107)
+
+    /// The core features the active profile disabled (mirrors the store).
+    public private(set) var disabledFeatures: Set<String> = []
+
+    /// Reloads the whole world's scripts so a core-feature toggle takes
+    /// effect live — supplied by the app (`ScriptsModel.load(forProfile:)`).
+    public var resyncWorld: (() async -> Void)?
+
+    public func featureEnabled(_ id: String) -> Bool {
+        !disabledFeatures.contains(id)
+    }
+
+    /// Mirror the core-feature flags from the store.
+    public func refreshFeatures() async {
+        guard let profileID, let url = try? CoreFeatureStore.defaultStoreURL() else { return }
+        let store = CoreFeatureStore(url: url)
+        await store.load()
+        disabledFeatures = await store.disabled(forProfile: profileID)
+    }
+
+    /// Enable/disable a core feature for the active profile, then reload the
+    /// world's scripts so it applies live (attach/detach happens there).
+    public func setFeatureEnabled(_ enabled: Bool, id: String) async {
+        guard let profileID, let url = try? CoreFeatureStore.defaultStoreURL() else { return }
+        let store = CoreFeatureStore(url: url)
+        await store.load()
+        try? await store.setEnabled(enabled, featureID: id, forProfile: profileID)
+        await refreshFeatures()
+        await resyncWorld?()
     }
 
     /// Enable/disable a native plugin by id; applies live and persists the flag

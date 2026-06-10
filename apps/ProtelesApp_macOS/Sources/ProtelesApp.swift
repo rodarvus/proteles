@@ -347,6 +347,10 @@ struct ProtelesApp: App {
                 .task(id: worlds.activeProfileID) {
                     guard let id = worlds.activeProfileID else { return }
                     plugins.prepare(profileID: id)
+                    // A core-feature toggle (D-107) applies by reloading the
+                    // world's scripts — the attach/arm gating lives there.
+                    let scripts = scripts
+                    plugins.resyncWorld = { await scripts.load(forProfile: id) }
                     await plugins.refreshNative()
                     await plugins.refresh()
                 }
