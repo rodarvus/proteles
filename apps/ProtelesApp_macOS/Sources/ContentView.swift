@@ -539,7 +539,10 @@ extension ContentView {
         case .group: AnyView(GroupPanel(state: gmcp))
         case .help: AnyView(HelpPanelView(model: help))
         case .levels: AnyView(LevelDBPanelView(model: levels))
-        case .commandBar: AnyView(CommandBarView(scripts: scripts))
+        case .commandBar: AnyView(CommandBarView(scripts: scripts, onOpenEditor: {
+                openWindow(id: ProtelesApp.scriptsWindowID)
+                scripts.requestButtonsTab()
+            }))
         }
     }
 }

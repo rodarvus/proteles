@@ -15,6 +15,29 @@ struct CommandButtonEditor: View {
 
     var body: some View {
         Form {
+            // The live preview is the panel's real tile view (D-106) — what
+            // you style here is exactly what the command bar will show.
+            Section("Preview") {
+                HStack(spacing: 12) {
+                    VStack(spacing: 2) {
+                        CommandButtonCell(button: button, isOn: false) {}
+                        if button.isToggle {
+                            Text("off").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: 180)
+                    if button.isToggle {
+                        VStack(spacing: 2) {
+                            CommandButtonCell(button: button, isOn: true) {}
+                            Text("on").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: 180)
+                    }
+                }
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity)
+            }
+
             Section("Button") {
                 TextField("Label", text: $button.label)
                 Picker("Action", selection: kind(for: \.action)) {
@@ -50,11 +73,8 @@ struct CommandButtonEditor: View {
             }
 
             Section("Appearance") {
-                Picker("Tint", selection: tintSelection) {
-                    ForEach(Self.tints, id: \.hex) { Text($0.name).tag($0.hex) }
-                }
-                TextField("SF Symbol name (optional)", text: $button.icon.orEmpty())
-                    .autocorrectionDisabled()
+                tintSwatches
+                ButtonSymbolPicker(symbol: $button.icon)
             }
 
             Section("Hotkey badge") {
@@ -117,8 +137,32 @@ struct CommandButtonEditor: View {
 
     // MARK: - Appearance / hotkey bindings
 
-    private var tintSelection: Binding<String?> {
-        Binding(get: { button.tint }, set: { button.tint = $0 })
+    /// The tint as tappable colour swatches (a ring marks the selection) —
+    /// glanceable like the Finder's tag colours, instead of a names-only menu.
+    private var tintSwatches: some View {
+        LabeledContent("Tint") {
+            HStack(spacing: 8) {
+                ForEach(Self.tints, id: \.hex) { tint in
+                    Button {
+                        button.tint = tint.hex
+                    } label: {
+                        Circle()
+                            .fill(tint.hex.map { Color(hex: $0) } ?? Color.accentColor)
+                            .frame(width: 18, height: 18)
+                            .overlay(
+                                Circle().strokeBorder(
+                                    .primary.opacity(button.tint == tint.hex ? 0.7 : 0),
+                                    lineWidth: 2
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(tint.name)
+                    .accessibilityLabel("\(tint.name) tint")
+                    .accessibilityAddTraits(button.tint == tint.hex ? .isSelected : [])
+                }
+            }
+        }
     }
 
     private var showsHotkey: Binding<Bool> {
