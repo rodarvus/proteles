@@ -64,6 +64,10 @@ struct DevelopmentSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            // The former Diagnostics tab (crash/hang capture + reports),
+            // folded in by the #35 settings review.
+            DiagnosticsSections()
         }
         .formStyle(.grouped)
     }
