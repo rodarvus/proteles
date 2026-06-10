@@ -44,6 +44,9 @@ public enum MUSHclientImporter {
         public var library: PluginLibraryStore
         public var pluginsDirectory: URL
         public var databasesDirectory: URL
+        /// Destination for the install's map background textures
+        /// (`~/Documents/Proteles/MapImages/`); nil skips that step.
+        public var mapImagesDirectory: URL?
         public var makeScriptStore: @Sendable (String) -> ScriptStore
         public var makeVariableStore: @Sendable (UUID) -> VariableStore
         public var now: Date
@@ -54,6 +57,7 @@ public enum MUSHclientImporter {
             library: PluginLibraryStore,
             pluginsDirectory: URL,
             databasesDirectory: URL,
+            mapImagesDirectory: URL? = nil,
             makeScriptStore: @escaping @Sendable (String) -> ScriptStore,
             makeVariableStore: @escaping @Sendable (UUID) -> VariableStore,
             now: Date
@@ -63,6 +67,7 @@ public enum MUSHclientImporter {
             self.library = library
             self.pluginsDirectory = pluginsDirectory
             self.databasesDirectory = databasesDirectory
+            self.mapImagesDirectory = mapImagesDirectory
             self.makeScriptStore = makeScriptStore
             self.makeVariableStore = makeVariableStore
             self.now = now
@@ -140,7 +145,38 @@ public enum MUSHclientImporter {
             }
         }
 
+        // 5. Map background textures (worlds/plugins/images → MapImages/) —
+        // the user's own copies, so no licensing issue arises (#11 concerns
+        // Proteles *shipping* them, which it still doesn't). Existing files
+        // are kept (re-imports never clobber a user's customised texture).
+        if let images = manifest.mapImages, let destination = env.mapImagesDirectory {
+            problems += copyMapImages(from: images.directory, to: destination)
+        }
+
         return Result(profileID: profileID, problems: problems)
+    }
+
+    /// Copy every image file, skipping ones already present. Best-effort;
+    /// failures become problems.
+    private static func copyMapImages(from source: URL, to destination: URL) -> [ImportManifest.Problem] {
+        let extensions: Set = ["png", "jpg", "jpeg", "gif", "bmp"]
+        let fileManager = FileManager.default
+        guard let items = try? fileManager.contentsOfDirectory(
+            at: source, includingPropertiesForKeys: nil
+        ) else { return [] }
+        var problems: [ImportManifest.Problem] = []
+        for file in items where extensions.contains(file.pathExtension.lowercased()) {
+            let target = destination.appendingPathComponent(file.lastPathComponent)
+            guard !fileManager.fileExists(atPath: target.path) else { continue }
+            do {
+                try fileManager.copyItem(at: file, to: target)
+            } catch {
+                problems.append(.init(
+                    item: file.lastPathComponent, reason: error.localizedDescription
+                ))
+            }
+        }
+        return problems
     }
 
     /// Copy each selected offer plugin's own data files into the per-character DB

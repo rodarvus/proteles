@@ -22,8 +22,23 @@ public extension MUSHclientInstallScanner {
             plugins: plugins,
             databases: scanDatabases(root: root),
             stateFiles: scanState(pluginsDirectory: pluginsDirectory, worldID: world.worldID),
-            problems: problems
+            problems: problems,
+            mapImages: scanMapImages(pluginsDirectory: pluginsDirectory)
         )
+    }
+
+    /// The map background textures the GMCP mapper tiles
+    /// (`worlds/plugins/images/*.png|jpg|…`), or nil when the folder is absent
+    /// or holds no images. Imported into `~/Documents/Proteles/MapImages/`.
+    static func scanMapImages(pluginsDirectory: URL) -> ImportManifest.MapImagesEntry? {
+        let directory = pluginsDirectory.appendingPathComponent("images")
+        let extensions: Set = ["png", "jpg", "jpeg", "gif", "bmp"]
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return nil }
+        let count = items.count { extensions.contains($0.pathExtension.lowercased()) }
+        guard count > 0 else { return nil }
+        return ImportManifest.MapImagesEntry(directory: directory, count: count)
     }
 
     /// Find + type every `.db` under the install, skipping duplicates/backups and
