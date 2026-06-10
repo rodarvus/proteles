@@ -220,45 +220,13 @@ struct ProtelesApp: App {
                 }
                 .keyboardShortcut("h", modifiers: [.command, .option])
             }
-            CommandMenu("Debug") {
-                Button("Start Recording") {
-                    let session = session
-                    Task {
-                        do {
-                            let url = try SessionRecorder.defaultRecordingURL()
-                            try await session.startRecording(to: url)
-                            NSLog("[Proteles] recording to \(url.path)")
-                        } catch {
-                            NSLog("[Proteles] start recording failed: \(error)")
-                        }
-                    }
-                }
-                Button("Stop Recording") {
-                    let session = session
-                    Task {
-                        await session.stopRecording()
-                        NSLog("[Proteles] recording stopped")
-                    }
-                }
-            }
-            CommandMenu("Databases") {
-                Button("Import Map Database…") { map.importDatabase() }
-                Button("Import Search & Destroy Database…") { snd.requestImport() }
-                Button("Import Inventory (dinv) Database…") { pluginDBs.importDinv() }
-                Button("Import Leveling (leveldb) Database…") { pluginDBs.importLevelDB() }
-                Divider()
-                Menu("Reset Databases (Testing)") {
-                    Button("Empty Map Database…") { map.resetDatabase() }
-                    Button("Empty Search & Destroy Database…") { snd.requestReset() }
-                    Button("Delete Inventory (dinv) Database…") { pluginDBs.resetDinv() }
-                    Button("Delete Leveling (leveldb) Database…") { pluginDBs.resetLevelDB() }
-                }
-            }
+            // Debug + Databases menus moved to Settings ▸ Development (the
+            // user's call: dev/maintenance tools, not daily-play commands).
         }
 
         // Preferences (⌘,). SwiftUI adds the standard "Settings…" app-menu item.
         Settings {
-            SettingsView()
+            SettingsView(session: session, map: map, snd: snd, pluginDBs: pluginDBs)
         }
 
         // Detached panels: each torn-out panel gets its own window, keyed by
