@@ -66,6 +66,25 @@ extension AliasTarget {
     }
 }
 
+extension TriggerTarget {
+    var label: String {
+        switch self {
+        case .world: "Send to MUD"
+        case .execute: "Re-process as input"
+        case .output: "Echo locally"
+        }
+    }
+
+    /// The send field's placeholder, matched to where the text will go.
+    var fieldLabel: String {
+        switch self {
+        case .world: "Send to MUD"
+        case .execute: "Command (runs through aliases)"
+        case .output: "Text to echo"
+        }
+    }
+}
+
 extension Binding where Value == String? {
     /// Bridge an optional-string model field to a `TextField`: an empty
     /// field reads/writes as `nil`.

@@ -55,11 +55,21 @@ public struct TriggerMatch: Sendable, Equatable {
     public let captures: [String]
     /// Named captures from `(?<name>…)` groups.
     public let named: [String: String]
+    /// Where ``whole`` sits in the matched line, in UTF-16 code units (the
+    /// `StyledRun` index space) — so a `.matchedText` highlight can restyle
+    /// exactly the matched span. Nil for matches built without one.
+    public let utf16Range: Range<Int>?
 
-    public init(whole: String, captures: [String], named: [String: String] = [:]) {
+    public init(
+        whole: String,
+        captures: [String],
+        named: [String: String] = [:],
+        utf16Range: Range<Int>? = nil
+    ) {
         self.whole = whole
         self.captures = captures
         self.named = named
+        self.utf16Range = utf16Range
     }
 
     /// Substitute captures into a send template: `%0`–`%9` numbered groups,
@@ -132,6 +142,21 @@ public struct TriggerMatch: Sendable, Equatable {
     }
 }
 
+/// Where a trigger's expanded ``Trigger/sendText`` goes (D-105). The
+/// output-side counterpart of ``AliasTarget``, trimmed to the subset an
+/// Aardwolf player uses (MUSHclient's `eSendTo` 0/10/2): there is no
+/// `.script` case because ``Trigger/script`` is its own field.
+public enum TriggerTarget: String, Sendable, Equatable, Codable, CaseIterable {
+    /// Send the expansion to the MUD (`eSendToWorld`). The default.
+    case world
+    /// Re-feed the expansion through the input pipeline — aliases and
+    /// `;`-stacking apply (`eSendToExecute`).
+    case execute
+    /// Echo the expansion to the local output, sending nothing
+    /// (`eSendToOutput`).
+    case output
+}
+
 /// A line-matching rule and the response to fire when it matches. A pure
 /// value type: matching is decided here, but *executing* the response
 /// (sending, running the script, gagging) is the host's job — keeping the
@@ -156,10 +181,14 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
     public var oneShot: Bool
     /// Omit the matched line from the output.
     public var gag: Bool
-    /// Text to send to the MUD on match, with `%`-substitution.
+    /// Text to send on match, with `%`-substitution; ``sendTo`` says where.
     public var sendText: String?
+    /// Where the expanded ``sendText`` goes (D-105). Defaults to the MUD.
+    public var sendTo: TriggerTarget
     /// Lua to run on match (the host provides the captures).
     public var script: String?
+    /// Restyle the line on match (D-105) — nil leaves the MUD's colours alone.
+    public var highlight: TriggerHighlight?
 
     public init(
         id: UUID = UUID(),
@@ -173,7 +202,9 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         oneShot: Bool = false,
         gag: Bool = false,
         sendText: String? = nil,
-        script: String? = nil
+        sendTo: TriggerTarget = .world,
+        script: String? = nil,
+        highlight: TriggerHighlight? = nil
     ) {
         self.id = id
         self.name = name
@@ -186,7 +217,30 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         self.oneShot = oneShot
         self.gag = gag
         self.sendText = sendText
+        self.sendTo = sendTo
         self.script = script
+        self.highlight = highlight
+    }
+
+    /// Tolerant decode: ``sendTo`` (D-105) and ``highlight`` are additions —
+    /// triggers stored before them decode with the old behaviour (send to
+    /// the MUD, no restyle).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        pattern = try container.decode(TriggerPattern.self, forKey: .pattern)
+        caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        sequence = try container.decode(Int.self, forKey: .sequence)
+        group = try container.decodeIfPresent(String.self, forKey: .group)
+        continueEvaluation = try container.decode(Bool.self, forKey: .continueEvaluation)
+        oneShot = try container.decode(Bool.self, forKey: .oneShot)
+        gag = try container.decode(Bool.self, forKey: .gag)
+        sendText = try container.decodeIfPresent(String.self, forKey: .sendText)
+        sendTo = try container.decodeIfPresent(TriggerTarget.self, forKey: .sendTo) ?? .world
+        script = try container.decodeIfPresent(String.self, forKey: .script)
+        highlight = try container.decodeIfPresent(TriggerHighlight.self, forKey: .highlight)
     }
 }
 
@@ -197,10 +251,14 @@ public struct TriggerFiring: Sendable, Equatable {
     public let match: TriggerMatch
     /// `sendText` with captures substituted in (if any).
     public let send: String?
+    /// Where ``send`` goes (D-105): the MUD, the input pipeline, or a local echo.
+    public let target: TriggerTarget
     /// The trigger's script (raw), if any.
     public let script: String?
     /// Whether the line should be omitted from output.
     public let gag: Bool
+    /// Restyle to apply to the displayed line (D-105), if any.
+    public let highlight: TriggerHighlight?
 }
 
 /// Matches incoming lines against a sorted set of triggers (PLAN.md §8.6).
@@ -277,8 +335,10 @@ public struct TriggerEngine {
                 triggerID: trigger.id,
                 match: match,
                 send: trigger.sendText.map { match.expand($0) },
+                target: trigger.sendTo,
                 script: trigger.script,
-                gag: trigger.gag
+                gag: trigger.gag,
+                highlight: trigger.highlight
             ))
             if trigger.oneShot { oneShotsToRemove.append(trigger.id) }
             if !trigger.continueEvaluation { break }

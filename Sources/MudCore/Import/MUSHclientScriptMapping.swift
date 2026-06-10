@@ -73,11 +73,19 @@ public enum MUSHclientScriptMapping {
         }
     }
 
+    /// `send_to=12` puts the body in ``Trigger/script`` (Proteles keeps the
+    /// script as its own field); 2/10 map to the ``TriggerTarget`` (D-105);
+    /// anything else sends to the world.
     public static func triggers(from rules: [MUSHclientWorldFile.ScriptRule]) -> [Trigger] {
         rules.compactMap { rule in
             guard !rule.match.isEmpty else { return nil }
             let send = rule.send.trimmingCharacters(in: .whitespacesAndNewlines)
             let isScript = rule.sendTo == 12
+            let target: TriggerTarget = switch rule.sendTo {
+            case 2: .output
+            case 10: .execute
+            default: .world
+            }
             return Trigger(
                 name: rule.name,
                 pattern: pattern(rule),
@@ -87,6 +95,7 @@ public enum MUSHclientScriptMapping {
                 group: rule.group,
                 continueEvaluation: rule.keepEvaluating,
                 sendText: isScript || send.isEmpty ? nil : send,
+                sendTo: target,
                 script: isScript && !send.isEmpty ? send : nil
             )
         }

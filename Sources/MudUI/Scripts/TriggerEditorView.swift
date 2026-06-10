@@ -28,10 +28,27 @@ struct TriggerEditorView: View {
             }
 
             Section("Action") {
-                TextField("Send to MUD", text: $trigger.sendText.orEmpty())
+                Picker("Send to", selection: $trigger.sendTo) {
+                    ForEach(TriggerTarget.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                TextField(trigger.sendTo.fieldLabel, text: $trigger.sendText.orEmpty())
                 TextField("Script (Lua)", text: $trigger.script.orEmpty(), axis: .vertical)
                     .font(.body.monospaced())
                     .lineLimit(3...10)
+            }
+
+            Section("Highlight") {
+                Toggle("Highlight on match", isOn: highlightEnabled)
+                if trigger.highlight != nil {
+                    ColorPicker(
+                        "Colour", selection: highlightColor, supportsOpacity: false
+                    )
+                    Toggle("Bold", isOn: highlightBold)
+                    Picker("Apply to", selection: highlightScope) {
+                        Text("Whole line").tag(TriggerHighlight.Scope.wholeLine)
+                        Text("Matched text").tag(TriggerHighlight.Scope.matchedText)
+                    }
+                }
             }
 
             Section("Test") {
@@ -70,5 +87,68 @@ struct TriggerEditorView: View {
             get: { trigger.pattern.text },
             set: { trigger.pattern = .make(kind: trigger.pattern.kind, text: $0) }
         )
+    }
+
+    // MARK: - Highlight bindings (D-105)
+
+    /// A bright yellow whole-line restyle — the classic "make this line jump
+    /// out" starting point; tweak from there.
+    private static let defaultHighlight = TriggerHighlight(
+        foreground: .rgb(red: 255, green: 255, blue: 85)
+    )
+
+    private var highlightEnabled: Binding<Bool> {
+        Binding(
+            get: { trigger.highlight != nil },
+            set: { trigger.highlight = $0 ? Self.defaultHighlight : nil }
+        )
+    }
+
+    private var highlightBold: Binding<Bool> {
+        Binding(
+            get: { trigger.highlight?.bold ?? false },
+            set: { trigger.highlight?.bold = $0 }
+        )
+    }
+
+    private var highlightScope: Binding<TriggerHighlight.Scope> {
+        Binding(
+            get: { trigger.highlight?.scope ?? .wholeLine },
+            set: { trigger.highlight?.scope = $0 }
+        )
+    }
+
+    private var highlightColor: Binding<Color> {
+        Binding(
+            get: {
+                guard case .rgb(let red, let green, let blue) = trigger.highlight?.foreground
+                else { return Color(red: 1, green: 1, blue: 85 / 255) }
+                return Color(
+                    red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255
+                )
+            },
+            set: { trigger.highlight?.foreground = Self.ansiColor(from: $0) }
+        )
+    }
+
+    /// Reduce a picked SwiftUI `Color` to the 24-bit sRGB ``ANSIColor`` the
+    /// styling pipeline stores.
+    private static func ansiColor(from color: Color) -> ANSIColor {
+        #if os(macOS)
+            let resolved = NSColor(color).usingColorSpace(.sRGB) ?? .yellow
+            return .rgb(
+                red: UInt8(clamping: Int(resolved.redComponent * 255)),
+                green: UInt8(clamping: Int(resolved.greenComponent * 255)),
+                blue: UInt8(clamping: Int(resolved.blueComponent * 255))
+            )
+        #else
+            var red: CGFloat = 1, green: CGFloat = 1, blue: CGFloat = 0, alpha: CGFloat = 1
+            UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+            return .rgb(
+                red: UInt8(clamping: Int(red * 255)),
+                green: UInt8(clamping: Int(green * 255)),
+                blue: UInt8(clamping: Int(blue * 255))
+            )
+        #endif
     }
 }
