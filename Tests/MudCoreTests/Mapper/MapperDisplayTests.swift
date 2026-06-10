@@ -40,6 +40,28 @@ struct MapperDisplayTests {
         }
     }
 
+    @Test("mapper textures toggles the area background and persists per-profile")
+    func textures() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MapperDisplay-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mapper = try Mapper(store: MapperStore(url: url))
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Spot","zone":"z","exits":{}}"#
+        )
+        #expect(await mapper.useTextures == true) // default on, like the reference
+        // On with no texture column → the reference default rides the layout.
+        #expect(await mapper.currentLayout().areaTexture == "test5.png")
+        _ = await mapper.handleCommand("mapper textures off")
+        #expect(await mapper.useTextures == false)
+        #expect(await mapper.currentLayout().areaTexture == nil)
+        // The flag persists in proteles_meta — a fresh mapper on the same
+        // store (a world reload) comes back off.
+        let reopened = try Mapper(store: MapperStore(url: url))
+        #expect(await reopened.useTextures == false)
+    }
+
     @Test("database reports the active database file (reference wording)")
     func databaseName() async throws {
         let mapper = try makeMapper()

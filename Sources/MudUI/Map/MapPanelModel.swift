@@ -22,6 +22,9 @@ public final class MapPanelModel {
     public private(set) var showOtherAreas = false
     /// Whether to mark exits leaving the current area. Off by default.
     public private(set) var showAreaExits = false
+    /// Whether the area's background texture tiles behind the map. Mirrors
+    /// the mapper's persisted setting (default on, like the reference).
+    public private(set) var useTextures = true
 
     /// Which map is shown: the graphical GMCP layout or the server's captured
     /// ASCII map (`<MAPSTART>…<MAPEND>`, via the AsciiMap plugin).
@@ -93,6 +96,7 @@ public final class MapPanelModel {
         // Adopt the mapper's persisted (per-profile) preferences.
         showOtherAreas = await mapper.showOtherAreas
         showAreaExits = await mapper.showAreaExits
+        useTextures = await mapper.useTextures
         layout = await mapper.currentLayout()
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in
@@ -115,6 +119,14 @@ public final class MapPanelModel {
         showAreaExits.toggle()
         let value = showAreaExits
         Task { await mapper?.setShowAreaExits(value) }
+    }
+
+    /// Toggle the tiled area background texture (the mapper republishes the
+    /// layout with/without its texture name).
+    public func toggleUseTextures() {
+        useTextures.toggle()
+        let value = useTextures
+        Task { await mapper?.setUseTextures(value) }
     }
 
     // MARK: - Actions (reuse the `mapper` command surface)

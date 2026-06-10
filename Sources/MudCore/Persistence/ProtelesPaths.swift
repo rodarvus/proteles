@@ -76,6 +76,19 @@ public enum ProtelesPaths {
         )
     }
 
+    /// `~/Documents/Proteles/MapImages/` — the user's map background textures
+    /// (the per-area `texture` filenames the mapper DB references, e.g.
+    /// `forest.png`). Proteles ships and imports **no** image files — the
+    /// MUSHclient package's textures are GPL (issue #11); users who want them
+    /// drop copies here themselves. A referenced file that isn't present just
+    /// means a plain map background.
+    public static func mapImagesDirectory(fileManager: FileManager = .default) throws -> URL {
+        try ensure(
+            home(fileManager: fileManager).appendingPathComponent("MapImages", isDirectory: true),
+            fileManager
+        )
+    }
+
     // MARK: - Settings (config — issue #43)
 
     /// `~/Documents/Proteles/Settings/` — app preferences + world profiles +

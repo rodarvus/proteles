@@ -120,6 +120,9 @@ extension Mapper {
                                          > sorted by distance (default is on)
         mapper shownotes [on/off]      --> ON will cause room notes to display
                                          > automatically upon entering (default is on)
+        mapper textures [on/off]       --> ON tiles the area's background texture
+                                         > behind the map, from images you place in
+                                         > ~/Documents/Proteles/MapImages (default is on)
         mapper compact [on/off]        --> ON will make it so no blank lines are
                                          > displayed by the mapper (default is off)
         mapper backups <off/on>        --> Turn off or on automatic database backups

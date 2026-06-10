@@ -70,7 +70,7 @@ public struct MapPanelView: View {
             let layout = model.layout
             let geometry = MapGeometry(size: geo.size, zoom: zoom, pan: pan)
             ZStack {
-                MapPalette.background
+                mapBackground(layout)
                 Canvas { context, _ in
                     for link in layout.links {
                         draw(link, in: context, geometry: geometry)
@@ -220,6 +220,23 @@ public struct MapPanelView: View {
         noteText = room.note ?? ""
     }
 
+    /// The map's backdrop: the current area's texture tiled edge-to-edge
+    /// (when textures are on and the user has the file in
+    /// `~/Documents/Proteles/MapImages/`), else the plain palette colour.
+    @ViewBuilder
+    private func mapBackground(_ layout: MapLayout) -> some View {
+        #if os(macOS)
+            if let name = layout.areaTexture, let image = MapTextureCache.shared.image(named: name) {
+                Image(nsImage: image)
+                    .resizable(resizingMode: .tile)
+            } else {
+                MapPalette.background
+            }
+        #else
+            MapPalette.background
+        #endif
+    }
+
     private var toolbar: some View {
         VStack(spacing: 1) {
             toolbarButton("plus") { setZoom(zoom * 1.25) }
@@ -239,6 +256,12 @@ public struct MapPanelView: View {
                 tint: model.showAreaExits ? .accentColor : nil,
                 help: "Mark exits to other areas"
             ) { model.toggleShowAreaExits() }
+            Divider().frame(width: 28)
+            toolbarButton(
+                "photo",
+                tint: model.useTextures ? .accentColor : nil,
+                help: "Tile the area's background texture (from ~/Documents/Proteles/MapImages)"
+            ) { model.toggleUseTextures() }
             Divider().frame(width: 28)
             toolbarButton("square.and.arrow.down", help: "Import a map database…") {
                 model.importDatabase()
