@@ -8,10 +8,15 @@ import SwiftUI
 /// toggle buttons show their on/off state. Authoring is in Scripts ▸ Buttons.
 public struct CommandBarView: View {
     private let scripts: ScriptsModel
+    /// Opens the Scripts window on the Buttons tab (wired by the app); when
+    /// absent the empty state is text-only. Keeps the panel's empty state
+    /// actionable instead of a dead end (DESIGN.md §3.7, D-106).
+    private let onOpenEditor: (() -> Void)?
     @State private var selectedGroup: UUID?
 
-    public init(scripts: ScriptsModel) {
+    public init(scripts: ScriptsModel, onOpenEditor: (() -> Void)? = nil) {
         self.scripts = scripts
+        self.onOpenEditor = onOpenEditor
     }
 
     public var body: some View {
@@ -38,7 +43,14 @@ public struct CommandBarView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("No command buttons yet.").font(.callout).foregroundStyle(.secondary)
-            Text("Add buttons in Scripts ▸ Buttons.").font(.caption).foregroundStyle(.tertiary)
+            if let onOpenEditor {
+                Button("Open Scripts ▸ Buttons") { onOpenEditor() }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.tint)
+                    .font(.caption)
+            } else {
+                Text("Add buttons in Scripts ▸ Buttons.").font(.caption).foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -73,49 +85,5 @@ public struct CommandBarView: View {
     }
 }
 
-/// One button tile: icon + label (+ a hotkey-echo badge), tinted; a toggle fills
-/// solid when on.
-private struct CommandButtonCell: View {
-    let button: CommandButton
-    let isOn: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon = button.icon, !icon.isEmpty {
-                    Image(systemName: icon)
-                }
-                Text(button.label).lineLimit(1).truncationMode(.tail)
-                if let chord = button.hotkeyEcho {
-                    Text(KeyChordFormatter.describe(chord))
-                        .font(.caption2)
-                        .foregroundStyle(filled ? .white.opacity(0.8) : .secondary)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 8)
-            .background(
-                filled ? tint.opacity(0.9) : tint.opacity(0.16),
-                in: RoundedRectangle(cornerRadius: 6)
-            )
-            .foregroundStyle(filled ? .white : .primary)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6).strokeBorder(tint.opacity(0.4), lineWidth: filled ? 0 : 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(button.isToggle ? "\(button.label) (toggle)" : button.label)
-    }
-
-    /// A toggle that's on draws solid; momentary + toggle-off draw tinted-light.
-    private var filled: Bool {
-        button.isToggle && isOn
-    }
-
-    private var tint: Color {
-        button.tint.map { Color(hex: $0) } ?? .accentColor
-    }
-}
+// CommandButtonCell (the tile view) lives in CommandButtonCell.swift — it's
+// shared with the button editor's live preview (D-106).

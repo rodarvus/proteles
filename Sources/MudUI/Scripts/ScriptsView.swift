@@ -31,7 +31,12 @@ public struct ScriptsView: View {
     @State var aliasQuery = ""
     @State var timerQuery = ""
     @State var macroQuery = ""
+    @State var buttonQuery = ""
     @State var deleteRequest: ScriptsDeleteRequest?
+    /// The button group being renamed (D-106) — renaming is an explicit
+    /// context-menu act, not an always-editable header field.
+    @State var renamingGroupID: UUID?
+    @FocusState var groupRenameFocus: UUID?
     /// Which tab's filter field holds keyboard focus — driven by ⌥⌘F (§3.2;
     /// the reason the deployment floor moved to macOS 15 / `searchFocused`).
     /// ⌘F proper is Find-in-scrollback on the main window (D-104).
@@ -71,6 +76,10 @@ public struct ScriptsView: View {
             guard filterableTabs.contains(selectedTab) else { return }
             filterFocus = selectedTab
         }
+        // The command-bar panel's empty state deep-links here (D-106).
+        .onChange(of: model.buttonsTabRequests) { _, _ in
+            selectedTab = .buttons
+        }
         .confirmationDialog(
             deleteRequest?.title ?? "",
             isPresented: confirmingDelete,
@@ -85,9 +94,10 @@ public struct ScriptsView: View {
         }
     }
 
-    /// The tabs that have a filter field (Keypad and Buttons don't).
+    /// The tabs that have a filter field (only Keypad doesn't — 17 keys
+    /// need no search).
     private var filterableTabs: Set<Tab> {
-        [.triggers, .aliases, .timers, .macros]
+        [.triggers, .aliases, .timers, .macros, .buttons]
     }
 
     // MARK: - Delete confirmation

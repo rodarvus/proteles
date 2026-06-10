@@ -41,6 +41,23 @@ public extension ScriptsModel {
         selectedButtonID = button.id
     }
 
+    /// Duplicate a button in place (D-106): the copy lands right after the
+    /// original in its group, and becomes the selection.
+    func duplicateButton(_ id: UUID) async {
+        var copyID: UUID?
+        await updateButtonBar { bar in
+            for groupIndex in bar.groups.indices {
+                guard let buttonIndex = bar.groups[groupIndex].buttons
+                    .firstIndex(where: { $0.id == id }) else { continue }
+                let copy = bar.groups[groupIndex].buttons[buttonIndex].duplicated()
+                bar.groups[groupIndex].buttons.insert(copy, at: buttonIndex + 1)
+                copyID = copy.id
+                return
+            }
+        }
+        if let copyID { selectedButtonID = copyID }
+    }
+
     func deleteButton(_ id: UUID) async {
         await updateButtonBar { bar in
             for index in bar.groups.indices {

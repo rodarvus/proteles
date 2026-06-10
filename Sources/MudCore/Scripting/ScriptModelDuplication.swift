@@ -18,7 +18,22 @@ public extension Trigger {
             oneShot: oneShot,
             gag: gag,
             sendText: sendText,
-            script: script
+            sendTo: sendTo,
+            script: script,
+            highlight: highlight
+        )
+    }
+}
+
+public extension CommandButton {
+    func duplicated() -> CommandButton {
+        CommandButton(
+            label: label,
+            action: action,
+            kind: kind,
+            tint: tint,
+            icon: icon,
+            hotkeyEcho: hotkeyEcho
         )
     }
 }

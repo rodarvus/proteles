@@ -38,6 +38,17 @@ enum ScriptItemFilter {
         ])
     }
 
+    static func matches(_ button: CommandButton, query: String) -> Bool {
+        let offText: String? = switch button.kind {
+        case .momentary: nil
+        case .toggle(let off): off.text
+        }
+        let actionText: String = switch button.action {
+        case .command(let text), .script(let text), .replaceInput(let text): text
+        }
+        return matches(query, anyOf: [button.label, actionText, offText])
+    }
+
     private static func matches(_ query: String, anyOf fields: [String?]) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return true }

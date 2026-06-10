@@ -38,6 +38,16 @@ public final class ScriptsModel {
     public var selectedMacroID: UUID?
     public var selectedButtonGroupID: UUID?
     public var selectedButtonID: UUID?
+    /// Bumped by ``requestButtonsTab()`` — the Scripts window watches it and
+    /// switches to the Buttons tab (the command-bar panel's empty state links
+    /// straight to the editor, D-106).
+    public private(set) var buttonsTabRequests = 0
+
+    /// Ask the Scripts window (open or about to open) to show the Buttons tab.
+    public func requestButtonsTab() {
+        buttonsTabRequests += 1
+    }
+
     /// Which script kinds are shared across characters (for the editor toggles).
     public private(set) var scriptScope = ScriptScope()
 

@@ -23,6 +23,7 @@ struct DetachedPanelWindow: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.openWindow) private var openWindow
     @State private var gmcp = GMCPState()
 
     var body: some View {
@@ -72,7 +73,10 @@ struct DetachedPanelWindow: View {
         case .group: GroupPanel(state: gmcp)
         case .help: HelpPanelView(model: help)
         case .levels: LevelDBPanelView(model: levels)
-        case .commandBar: CommandBarView(scripts: scripts)
+        case .commandBar: CommandBarView(scripts: scripts, onOpenEditor: {
+                openWindow(id: ProtelesApp.scriptsWindowID)
+                scripts.requestButtonsTab()
+            })
         case .output: EmptyView() // output isn't detachable (it's the main window)
         }
     }
