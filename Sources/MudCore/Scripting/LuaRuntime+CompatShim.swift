@@ -189,10 +189,14 @@ public extension LuaRuntime {
     end
     -- GetNormalColour(n)/GetBoldColour(n): the world's ANSI colour n as a BGR int,
     -- matching MUSHColour (Swift) so a trigger's styles[i].textcolour compares.
-    local __nc = { [0] = 0, 128, 32768, 32896, 8388608, 8388736, 8421376, 12632256 }
-    local __bc = { [0] = 8421504, 255, 65280, 65535, 16711680, 16711935, 16776960, 16777215 }
-    function GetNormalColour(w) return __nc[tonumber(w) or 7] or 0 end
-    function GetBoldColour(w) return __bc[tonumber(w) or 7] or 0 end
+    -- ONE-BASED like MUSHclient (methods_colours.cpp: bounds 1..8, [n-1] lookup,
+    -- out of range returns 0) — 7 is CYAN, 8 is white. A 0-based table here
+    -- broke every plugin colour guard: rsocials compares styles[1].textcolour
+    -- to GetNormalColour(7), got white instead of cyan, and never forwarded.
+    local __nc = { 0, 128, 32768, 32896, 8388608, 8388736, 8421376, 12632256 }
+    local __bc = { 8421504, 255, 65280, 65535, 16711680, 16711935, 16776960, 16777215 }
+    function GetNormalColour(w) return __nc[tonumber(w) or 0] or 0 end
+    function GetBoldColour(w) return __bc[tonumber(w) or 0] or 0 end
     -- Hyperlink(action, text, hint): clickable text → the native primitive
     -- (action: URL → opens browser, else sent as a command). A pending prefix is
     -- flushed first; inline composition with Tell/Note isn't supported.
