@@ -3,6 +3,22 @@
     <channel>
         <title>Proteles</title>
         <item>
+            <title>0.7.0</title>
+            <pubDate>Wed, 10 Jun 2026 20:29:01 +0100</pubDate>
+            <sparkle:version>44</sparkle:version>
+            <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://rodarvus.github.io/proteles/Proteles-0.7.0.zip" length="12464986" type="application/octet-stream" sparkle:edSignature="ghxC2s7akEdwAJIGXM3HwELselHTjzZO3g9o9MeJkIX5yLzQbfYyb2c1mvOFefEq7DuVAF7vQ3ptigB8eIgCCA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles44-43.delta" sparkle:deltaFrom="43" length="2030842" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="8RD8z5nV1k8hhTIXWXnKAhiMNc+9TgeEQI2LU/oya029Yuui6/PwN3gvV9xeuOBHs/DBebx7ebv7Aw1it9m4Cg=="/>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles44-42.delta" sparkle:deltaFrom="42" length="2186846" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="E612HhJs9zX6vuFvj+pLCWwHLNMPxMKvVh6FDELqcA28I0n88cJ1AC7fq25jdppQ34j8plUql3kNK0HpcfgZBQ=="/>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles44-41.delta" sparkle:deltaFrom="41" length="4133626" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="WMl1B7mVjMjVCRPeLxueABiGtFl32RaVdeatwQH8V3SK1mzNvmcM6qC7pF7HSEyUX7ACSo8Y2k2XAirke2mxBQ=="/>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles44-40.delta" sparkle:deltaFrom="40" length="4224890" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="3J9URmox7WZnOjbLwCNajsdP7TfpWY7tlamBSJj5ig71pBAR3NQI3yjzerVMOA3UQqUa763GD4KayA9j5Mh+Aw=="/>
+                <enclosure url="https://rodarvus.github.io/proteles/Proteles44-39.delta" sparkle:deltaFrom="39" length="4210398" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="PUgKYPLN++1/xMcSozqdnESWMiDnW2jJrSp1OC3vG0grkugG2Izdi00bp6yS3AP7PE4S/XyxgrvX/n0yy9grDA=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.6.0</title>
             <pubDate>Tue, 09 Jun 2026 21:32:18 +0100</pubDate>
             <sparkle:version>43</sparkle:version>
