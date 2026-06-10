@@ -34,7 +34,9 @@ public final class LevelDBStore: Sendable {
     }
 
     public let url: URL
-    private let dbQueue: DatabaseQueue
+    /// Internal (not private): the #12 insight queries live in
+    /// `LevelDBStore+Insights` (file-length budget) and read through it.
+    let dbQueue: DatabaseQueue
 
     public init(url: URL) throws {
         self.url = url

@@ -15,9 +15,11 @@ public final class LevelDBPanelModel {
     /// Live HUD (B), faithful tables (A), analytics charts (C), journey (D).
     public enum Mode: String, CaseIterable, Identifiable, Sendable {
         case live
-        case reports
-        case analytics
         case journey
+        case days
+        case insights
+        case records
+        case tables
 
         public var id: String {
             rawValue
@@ -26,18 +28,22 @@ public final class LevelDBPanelModel {
         public var label: String {
             switch self {
             case .live: "Live"
-            case .reports: "Reports"
-            case .analytics: "Analytics"
             case .journey: "Journey"
+            case .days: "Days"
+            case .insights: "Insights"
+            case .records: "Records"
+            case .tables: "Tables"
             }
         }
 
         public var systemImage: String {
             switch self {
             case .live: "bolt.fill"
-            case .reports: "tablecells"
-            case .analytics: "chart.xyaxis.line"
             case .journey: "map"
+            case .days: "calendar"
+            case .insights: "chart.xyaxis.line"
+            case .records: "trophy"
+            case .tables: "tablecells"
             }
         }
     }
@@ -72,6 +78,14 @@ public final class LevelDBPanelModel {
     }
 
     public private(set) var report = LevelDBReport()
+    /// The #12 insight bundle (days, pace, economics, records).
+    public private(set) var insights = LevelDBInsightsBundle()
+    /// The Days tab's selection + its loaded story.
+    public var selectedDay: String? {
+        didSet { if oldValue != selectedDay { loadDayDetail() } }
+    }
+
+    public private(set) var dayDetail: LevelDBDayDetail?
     public private(set) var isLoading = false
     public private(set) var loadError: String?
     /// `true` when the leveldb DB file doesn't exist yet (plugin never run).
@@ -131,10 +145,34 @@ public final class LevelDBPanelModel {
         }
     }
 
+    /// Load the selected day's story off-main (#12 Days tab).
+    private func loadDayDetail() {
+        guard let day = selectedDay else {
+            dayDetail = nil
+            return
+        }
+        let url = databaseURLOverride ?? character.flatMap { try? LevelDBStore.defaultURL(character: $0) }
+        guard let url else { return }
+        Task {
+            let detail = await Self.dayDetailOffMain(url: url, day: day)
+            await MainActor.run { self.dayDetail = detail }
+        }
+    }
+
+    private nonisolated static func dayDetailOffMain(url: URL, day: String) async -> LevelDBDayDetail? {
+        guard let store = try? LevelDBStore(url: url) else { return nil }
+        return try? store.dayDetail(day)
+    }
+
+    /// Preview/test seam for the insights bundle.
+    public func previewInsights(_ bundle: LevelDBInsightsBundle) {
+        insights = bundle
+    }
+
     /// Loaded report, or a human message on failure (kept as a plain enum so it
     /// crosses the actor boundary without needing an `Error` payload).
     enum LoadOutcome {
-        case success(LevelDBReport)
+        case success(LevelDBReport, LevelDBInsightsBundle)
         case failure(String)
     }
 
@@ -143,7 +181,9 @@ public final class LevelDBPanelModel {
     ) async -> LoadOutcome {
         do {
             let store = try LevelDBStore(url: url)
-            return try .success(store.load(band: band, sort: sort, now: now))
+            let report = try store.load(band: band, sort: sort, now: now)
+            let insights = try store.insights(now: now)
+            return .success(report, insights)
         } catch {
             return .failure(error.localizedDescription)
         }
@@ -152,8 +192,16 @@ public final class LevelDBPanelModel {
     private func apply(_ result: LoadOutcome) {
         isLoading = false
         switch result {
-        case .success(let report):
+        case .success(let report, let insights):
             self.report = report
+            self.insights = insights
+            // Keep the Days selection alive across refreshes; default to the
+            // newest day so the tab opens on "today's story".
+            if selectedDay == nil || !insights.days.contains(where: { $0.day == selectedDay }) {
+                selectedDay = insights.days.first?.day
+            } else {
+                loadDayDetail() // refresh the open story with new data
+            }
             loadError = nil
             if !hasAutoSelectedBand, band.isAll, !report.summary.currentBand.isAll {
                 hasAutoSelectedBand = true
