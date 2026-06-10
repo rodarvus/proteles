@@ -152,6 +152,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish a captured ASCII map block (its styled lines) to the Map
     /// panel; an empty array clears it.
     case updateMap([Line])
+    /// Publish a captured continent bigmap (border-stripped styled lines) for
+    /// a continent zone id — the map panel renders it while overland.
+    case updateBigmap(zone: Int, name: String, lines: [Line])
     /// Set the witnessed-tick anchor for the status-bar countdown (a `Date`,
     /// or `nil` to clear). Emitted by the native `TickTimer` plugin on each
     /// `comm.tick`; routing it through an effect (rather than decoding in the

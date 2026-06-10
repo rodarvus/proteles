@@ -51,6 +51,11 @@ public actor SessionController {
     /// Map window. Fed by the native ASCII-map plugin via `.updateMap`.
     public nonisolated let mapStore: MapStore
 
+    /// Captured continent bigmaps (`{bigmap}…{/bigmap}`), keyed by zone;
+    /// rendered by the map panel while overland. Fed by the native
+    /// Continent-Bigmap plugin via `.updateBigmap`.
+    public nonisolated let bigmapStore: BigmapStore
+
     /// Durable, controller-lifetime stream of connection-state transitions for
     /// the UI. The underlying ``NetworkConnection`` is *one-shot* (recreated per
     /// ``connect(to:autologin:)``), so its own state stream can't be observed
@@ -334,6 +339,7 @@ public actor SessionController {
         self.gmcpState = gmcpState
         self.chatStore = chatStore
         mapStore = MapStore()
+        bigmapStore = BigmapStore()
         self.scriptEngine = scriptEngine
         let (stream, continuation) = AsyncStream<State>.makeStream(
             bufferingPolicy: .unbounded

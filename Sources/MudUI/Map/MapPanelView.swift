@@ -8,6 +8,8 @@ import SwiftUI
 /// right-click for the full action menu.
 public struct MapPanelView: View {
     @Bindable private var model: MapPanelModel
+    /// Theme palette for the continent bigmap's ANSI cell colours.
+    @AppStorage("themeID") private var themeID = Theme.default.id
 
     @State private var zoom: CGFloat = 1
     @State private var zoomStart: CGFloat = 1
@@ -40,13 +42,40 @@ public struct MapPanelView: View {
             }
     }
 
-    /// The active map view: the graphical layout, or its empty state.
+    /// The active map view: the continent bigmap while overland, the
+    /// graphical layout in areas, or the empty state.
     @ViewBuilder
     private var content: some View {
-        if model.layout.isEmpty {
+        if let continent = model.layout.continent {
+            continentBody(continent)
+        } else if model.layout.isEmpty {
             emptyState
         } else {
             mapBody
+        }
+    }
+
+    /// Overland: render the captured bigmap with the player marked — or a
+    /// calm placeholder until the capture arrives (it's requested
+    /// automatically on entering the continent).
+    @ViewBuilder
+    private func continentBody(_ continent: MapLayout.Continent) -> some View {
+        if let map = model.bigmaps[continent.zone] {
+            ContinentMapView(
+                map: map,
+                position: continent,
+                palette: Theme.with(id: themeID).palette
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(MapPalette.background)
+        } else {
+            ContentUnavailableView(
+                "Travelling Overland",
+                systemImage: "globe.americas",
+                description: Text("Fetching the continent map… The area map resumes when you enter an area.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(MapPalette.background)
         }
     }
 

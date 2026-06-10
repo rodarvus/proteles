@@ -271,10 +271,25 @@ public actor Mapper {
         return buildLayout(for: uid)
     }
 
+    /// Overland position while GMCP says `coord.cont == 1` (nil in areas).
+    /// The graph fan-out halts there — the layout carries this instead, and
+    /// the panel renders the captured continent bigmap (the reference's
+    /// `halt_drawing` + Bigmap window).
+    public private(set) var continentPosition: MapLayout.Continent?
+
     /// Build the layout around `uid` with the live terrain palette + the
     /// current `showOtherAreas` setting.
     private func buildLayout(for uid: String) -> MapLayout {
-        MapLayout.build(
+        if let continent = continentPosition {
+            return MapLayout.continent(
+                current: uid,
+                zone: continent.zone,
+                x: continent.x,
+                y: continent.y,
+                pkBlink: pkBlink
+            )
+        }
+        return MapLayout.build(
             graph: graph,
             current: uid,
             maxDepth: scanDepth,
@@ -367,6 +382,14 @@ public actor Mapper {
         let uid = Self.uid(for: info)
         let previousRoomUID = currentRoomUID
         currentRoomUID = uid
+
+        // Overland tracking (reference: got_gmcp_room's current_room_is_cont).
+        // Rooms are still recorded below — only the fan-out *drawing* halts.
+        if let coord = info.coord, coord.cont == 1, let zone = coord.id, zone != -1 {
+            continentPosition = MapLayout.Continent(zone: zone, x: coord.x ?? 0, y: coord.y ?? 0)
+        } else {
+            continentPosition = nil
+        }
 
         let existing = graph[uid]
         let exits = Self.mergedExits(gmcp: info.exits, existing: existing)

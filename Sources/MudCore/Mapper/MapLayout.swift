@@ -116,6 +116,27 @@ public struct MapLayout: Sendable, Equatable {
     /// resolves the name against `~/Documents/Proteles/MapImages/`; a missing
     /// file means a plain background (Proteles ships no image assets, #11).
     public let areaTexture: String?
+    /// Set while the player is overland (GMCP `coord.cont == 1`): the graph
+    /// fan-out is meaningless there, so the layout carries no rooms and the
+    /// panel renders the captured continent bigmap instead (the reference
+    /// halts the GMCP mapper's drawing and shows the Bigmap window). `zone`
+    /// is the continent id (`coord.id`); `x`/`y` the 0-based cell on the
+    /// border-stripped bigmap grid (`coord.x`/`coord.y`).
+    public let continent: Continent?
+
+    /// Overland position (see ``continent``).
+    public struct Continent: Sendable, Equatable {
+        public let zone: Int
+        public let x: Int
+        public let y: Int
+
+        public init(zone: Int, x: Int, y: Int) {
+            self.zone = zone
+            self.x = x
+            self.y = y
+        }
+    }
+
     /// Bounding box of placed rooms, in grid units (origin = current room).
     public let minX: Int
     public let minY: Int
@@ -164,6 +185,7 @@ public struct MapLayout: Sendable, Equatable {
                 areaExits: [],
                 pkBlink: pkBlink,
                 areaTexture: nil,
+                continent: nil,
                 minX: 0,
                 minY: 0,
                 maxX: 0,
@@ -193,6 +215,7 @@ public struct MapLayout: Sendable, Equatable {
             areaExits: areaExits,
             pkBlink: pkBlink,
             areaTexture: useTextures ? textureName(for: currentArea, graph: graph) : nil,
+            continent: nil,
             minX: xs.min() ?? 0,
             minY: ys.min() ?? 0,
             maxX: xs.max() ?? 0,
@@ -207,6 +230,31 @@ public struct MapLayout: Sendable, Equatable {
         let name = area.flatMap { graph.areas[$0]?.texture }
         guard let name, !name.isEmpty else { return "test5.png" }
         return name
+    }
+
+    /// The overland layout: no placed rooms (the fan-out is halted, like the
+    /// reference's `halt_drawing`), just the continent position for the
+    /// bigmap render.
+    public static func continent(
+        current: String,
+        zone: Int,
+        x: Int,
+        y: Int,
+        pkBlink: Bool = true
+    ) -> MapLayout {
+        MapLayout(
+            current: current,
+            rooms: [],
+            links: [],
+            areaExits: [],
+            pkBlink: pkBlink,
+            areaTexture: nil,
+            continent: Continent(zone: zone, x: x, y: y),
+            minX: 0,
+            minY: 0,
+            maxX: 0,
+            maxY: 0
+        )
     }
 
     // swiftlint:disable function_parameter_count
@@ -472,6 +520,7 @@ public struct MapLayout: Sendable, Equatable {
         areaExits: [AreaExitMarker],
         pkBlink: Bool,
         areaTexture: String?,
+        continent: Continent?,
         minX: Int,
         minY: Int,
         maxX: Int,
@@ -483,6 +532,7 @@ public struct MapLayout: Sendable, Equatable {
         self.areaExits = areaExits
         self.pkBlink = pkBlink
         self.areaTexture = areaTexture
+        self.continent = continent
         self.minX = minX
         self.minY = minY
         self.maxX = maxX

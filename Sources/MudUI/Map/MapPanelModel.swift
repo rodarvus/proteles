@@ -42,6 +42,9 @@ public final class MapPanelModel {
     public var viewMode: ViewMode = .graphical
     /// The latest server ASCII map (styled lines), mirrored from `MapStore`.
     public private(set) var asciiMap: [Line] = []
+    /// Captured continent bigmaps by zone, mirrored from `BigmapStore` —
+    /// rendered while the layout says the player is overland.
+    public private(set) var bigmaps: [Int: BigmapStore.ContinentMap] = [:]
 
     /// Result of the most recent import, shown in an alert (nil = none).
     public var importAlert: ImportAlert?
@@ -58,6 +61,7 @@ public final class MapPanelModel {
     private var bindTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
     private var asciiTask: Task<Void, Never>?
+    private var bigmapTask: Task<Void, Never>?
 
     public init(session: SessionController) {
         self.session = session
@@ -82,6 +86,13 @@ public final class MapPanelModel {
                 asciiMap = lines
             }
         }
+        // Mirror captured continent bigmaps (rendered while overland).
+        bigmapTask = Task { [weak self] in
+            guard let self else { return }
+            for await map in await session.bigmapStore.subscribe() {
+                bigmaps[map.zone] = map
+            }
+        }
         bindTask = Task { [weak self] in
             guard let self else { return }
             for await mapper in await session.mapperAttachments() {
@@ -98,12 +109,24 @@ public final class MapPanelModel {
         showAreaExits = await mapper.showAreaExits
         useTextures = await mapper.useTextures
         layout = await mapper.currentLayout()
+        await backfillBigmap(for: layout)
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in
             for await newLayout in stream {
                 self?.layout = newLayout
+                await self?.backfillBigmap(for: newLayout)
             }
         }
+    }
+
+    /// The bigmap stream has no backfill — when a layout turns overland and
+    /// the zone's map was captured before this panel subscribed, read it from
+    /// the store directly.
+    private func backfillBigmap(for layout: MapLayout) async {
+        guard let continent = layout.continent, bigmaps[continent.zone] == nil,
+              let map = await session.bigmapStore.map(forZone: continent.zone)
+        else { return }
+        bigmaps[map.zone] = map
     }
 
     /// Toggle whether neighbouring areas render inline (pushes to the mapper,
