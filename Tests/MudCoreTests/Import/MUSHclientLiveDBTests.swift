@@ -36,12 +36,48 @@ struct MUSHclientLiveDBTests {
                 modified: old
             )
         ]
-        let kept = MUSHclientInstallScanner.liveSingletons(entries)
+        let kept = MUSHclientInstallScanner.liveSingletons(entries, root: URL(fileURLWithPath: "/x"))
         let leveldbs = kept.filter { $0.kind == .leveldb }
         #expect(leveldbs.count == 1)
         // the larger (real) one, not the newer-but-empty placeholder
         #expect(leveldbs.first?.url.path == "/a/leveldb.db")
         #expect(kept.count(where: { $0.kind == .dinv }) == 2) // both characters kept
+    }
+
+    @Test("mapper/S&D pick the top-level copy, not the byte-largest subdir copy")
+    func topLevelMapperSnD() {
+        let root = URL(fileURLWithPath: "/install")
+        let entries: [ImportManifest.DatabaseEntry] = [
+            // a byte-LARGER but incomplete copy nested under a subdir…
+            .init(
+                url: root.appendingPathComponent("worlds/plugins/Aardwolf.db"),
+                kind: .mapper,
+                byteSize: 99000,
+                modified: .distantFuture
+            ),
+            // …vs the live one at the install root (smaller bytes) — root must win.
+            .init(
+                url: root.appendingPathComponent("Aardwolf.db"),
+                kind: .mapper,
+                byteSize: 10000,
+                modified: .distantPast
+            ),
+            .init(
+                url: root.appendingPathComponent("Search-and-Destroy-V2/SnDdb.db"),
+                kind: .searchAndDestroy,
+                byteSize: 99000,
+                modified: .distantFuture
+            ),
+            .init(
+                url: root.appendingPathComponent("SnDdb.db"),
+                kind: .searchAndDestroy,
+                byteSize: 10000,
+                modified: .distantPast
+            )
+        ]
+        let kept = MUSHclientInstallScanner.liveSingletons(entries, root: root)
+        #expect(kept.first { $0.kind == .mapper }?.url.path == "/install/Aardwolf.db")
+        #expect(kept.first { $0.kind == .searchAndDestroy }?.url.path == "/install/SnDdb.db")
     }
 
     @Test("markingAlreadyInstalled reclassifies offer plugins present in the library")
