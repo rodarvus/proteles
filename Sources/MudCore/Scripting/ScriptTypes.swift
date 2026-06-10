@@ -238,6 +238,12 @@ public enum ScriptEffect: Sendable, Equatable {
     /// with the response to fire the plugin's stored Lua callback (kept in the
     /// runtime keyed by `request.id`). Allowed freely (MUSHclient parity).
     case httpRequest(HTTPRequest)
+    /// Play a one-shot sound cue (#10): the native Soundpack plugin's events,
+    /// the compat shim's `PlaySound`, and the S&D host's target-nearby cues
+    /// all land here. `volume` is *linear* gain 0–1 (the MUSHclient dB curve
+    /// already applied — see ``SoundVolume``); `pan` is −1…1. The session
+    /// re-publishes onto ``SessionController/soundCues`` for the app's player.
+    case playSound(file: String, volume: Double, pan: Double)
 }
 
 /// An outbound HTTP request a plugin's `async` helper asked for (the network

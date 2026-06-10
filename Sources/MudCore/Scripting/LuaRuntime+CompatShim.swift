@@ -133,8 +133,9 @@ public extension LuaRuntime {
       eTriggerAlreadyExists = 30006,
       eAliasNotFound = 30013,
       eTimerNotFound = 30017,
-      eVariableNotFound = 30046,
+      eVariableNotFound = 30019,
       eOptionOutOfRange = 30024,
+      eBadParameter = 30046,
     }
     error_desc = error_desc or {}
 
@@ -235,6 +236,23 @@ public extension LuaRuntime {
       state = function(label, on) proteles.button("state", tostring(label or ""), on and "1" or "0") end,
       remove = function(label) proteles.button("remove", tostring(label or "")) end,
     }
+    -- Sounds (#10): PlaySound(buffer, file, loop, volume_dB, pan) plays a
+    -- one-shot cue through the app's player. Buffer management and looping
+    -- don't apply (each cue is fire-and-forget); volume is MUSHclient dB
+    -- (0 = full, out-of-range coerces to full — S&D passes 100), pan is
+    -- −100…100. A relative filename resolves against the user's Sounds dir
+    -- (GetInfo(74)); the host converts units. Sound(file) is the simple form.
+    function PlaySound(buffer, file, loop, volume, pan)
+      file = tostring(file or "")
+      if file == "" then return error_code.eBadParameter end
+      proteles.playSound(file, tonumber(volume) or 0, tonumber(pan) or 0)
+      return error_code.eOK
+    end
+    function Sound(file) return PlaySound(0, file, false, 0, 0) end
+    -- One-shot playback: nothing is ever "still playing" to stop or query.
+    function StopSound(buffer) return error_code.eOK end
+    function GetSoundStatus(buffer) return -3 end -- not playing
+
     -- SendSpecial(Message, Echo, Queue, Log, History): MUSHclient's send with
     -- options. We honour Echo (true → echo like Send; false/nil → no echo);
     -- Queue/Log/History don't apply and are ignored. The common one-arg call

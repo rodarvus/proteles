@@ -211,6 +211,8 @@ public extension SessionController {
             publishedModelsContinuation.yield(json)
         case .httpRequest(let request):
             performHTTPRequest(request)
+        case .playSound(let file, let volume, let pan):
+            soundCuesContinuation.yield(SoundCue(file: file, volume: volume, pan: pan))
         default:
             await applyInboundControlEffect(effect)
         }

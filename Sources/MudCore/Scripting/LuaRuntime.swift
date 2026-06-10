@@ -386,6 +386,7 @@ public actor LuaRuntime {
         setHostFunction("clipboardGet", .clipboardGet)
         setHostFunction("clipboardSet", .clipboardSet)
         setHostFunction("databaseDir", .databaseDir)
+        setHostFunction("playSound", .playSound)
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
@@ -409,7 +410,7 @@ public actor LuaRuntime {
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
-             .sndCall:
+             .sndCall, .playSound:
             recordEffect(function, arguments)
             return []
         case .call:

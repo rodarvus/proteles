@@ -88,6 +88,10 @@ public actor SessionController {
     /// to the live bar + persists.
     public nonisolated let buttonCommands: AsyncStream<ButtonCommand>
     nonisolated let buttonCommandsContinuation: AsyncStream<ButtonCommand>.Continuation
+    /// Sound cues (#10) — `.playSound` effects from the Soundpack plugin, the
+    /// compat shim, and the S&D host; the app's cue player subscribes + plays.
+    public nonisolated let soundCues: AsyncStream<SoundCue>
+    nonisolated let soundCuesContinuation: AsyncStream<SoundCue>.Continuation
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
@@ -364,6 +368,8 @@ public actor SessionController {
             AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (buttonCommands, buttonCommandsContinuation) =
             AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
+        (soundCues, soundCuesContinuation) =
+            AsyncStream<SoundCue>.makeStream(bufferingPolicy: .bufferingNewest(16))
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
