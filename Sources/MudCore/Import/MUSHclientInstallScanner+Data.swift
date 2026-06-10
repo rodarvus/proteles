@@ -45,24 +45,41 @@ public extension MUSHclientInstallScanner {
                 modified: values?.contentModificationDate ?? .distantPast
             ))
         }
-        return liveSingletons(entries).sorted { $0.url.path < $1.url.path }
+        return liveSingletons(entries, root: root).sorted { $0.url.path < $1.url.path }
     }
 
-    /// Mapper, S&D, and leveldb are single live databases — when an install holds
-    /// several copies (e.g. `plugins/leveldb/` + `plugins/state/leveldb/`), keep
-    /// only the **largest** (most accumulated data; tiebreak most-recently
-    /// modified) — the active one. Largest-first, not newest-first, so a freshly
-    /// dropped *empty* copy can never beat the real db it'd otherwise out-date.
-    /// Per-character dinv DBs are all kept.
+    /// Reduce the mapper, S&D, and leveldb databases to their single live copy.
+    ///
+    /// Mapper + S&D are the player's active databases at the MUSHclient install
+    /// **top level** (`<root>/Aardwolf.db`, `<root>/SnDdb.db`). Other copies — under
+    /// `worlds/plugins/…`, a `Search-and-Destroy-V2/` folder, ad-hoc merge/backup
+    /// dirs — are not the live ones, and byte size is a bad proxy (a fragmented or
+    /// extra-indexed file can be larger yet have fewer rooms). So just take the
+    /// top-level copy; no size/room guessing. (Defensive fallback: the largest, if
+    /// somehow none sits at root.) leveldb is a plugin DB (never at the root), so
+    /// keep its largest non-empty copy. Per-character dinv DBs are all kept.
     static func liveSingletons(
-        _ entries: [ImportManifest.DatabaseEntry]
+        _ entries: [ImportManifest.DatabaseEntry],
+        root: URL
     ) -> [ImportManifest.DatabaseEntry] {
-        let singletons: Set<ImportManifest.DatabaseKind> = [.mapper, .searchAndDestroy, .leveldb]
-        var result = entries.filter { !singletons.contains($0.kind) }
-        for kind in singletons {
-            let live = entries.filter { $0.kind == kind }
-                .max { ($0.byteSize, $0.modified) < ($1.byteSize, $1.modified) }
-            if let live { result.append(live) }
+        let rootPath = root.standardizedFileURL.path
+        func atRoot(_ entry: ImportManifest.DatabaseEntry) -> Bool {
+            entry.url.deletingLastPathComponent().standardizedFileURL.path == rootPath
+        }
+        func largest(_ items: [ImportManifest.DatabaseEntry]) -> ImportManifest.DatabaseEntry? {
+            items.max { ($0.byteSize, $0.modified) < ($1.byteSize, $1.modified) }
+        }
+        var result = entries.filter {
+            $0.kind != .mapper && $0.kind != .searchAndDestroy && $0.kind != .leveldb
+        }
+        for kind in [ImportManifest.DatabaseKind.mapper, .searchAndDestroy] {
+            let candidates = entries.filter { $0.kind == kind }
+            if let chosen = candidates.first(where: atRoot) ?? largest(candidates) {
+                result.append(chosen)
+            }
+        }
+        if let live = largest(entries.filter { $0.kind == .leveldb }) {
+            result.append(live)
         }
         return result
     }
