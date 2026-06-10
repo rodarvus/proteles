@@ -329,14 +329,28 @@ public actor SearchAndDestroyHost {
         styles: [ScriptStyleRun] = []
     ) async -> [ScriptEffect] {
         do {
+            // Bound to S&D's registered context (D-108): the generic
+            // `runScript` resets the ambient context, which blanked
+            // `GetInfo(66)` inside firings — every fire-time `sqlite3.open`
+            // built a relative path the sandbox denied, `area_index_line`
+            // died silently per row, the area index stayed empty, and every
+            // room-campaign target printed `unknown:` (see the runtime's
+            // `runScript(_:asPlugin:)` doc).
             return try await runtime.runScript(
                 script,
+                asPlugin: Self.pluginID,
                 matches: match?.captures ?? [],
                 named: match?.named ?? [:],
                 styles: styles
             )
         } catch {
-            return []
+            // Surface the failure instead of vanishing it — the dead trigger
+            // handler above was invisible for weeks because this returned [].
+            return [.note(
+                text: "S&D script error: \(error)",
+                foreground: "red",
+                background: nil
+            )]
         }
     }
 
