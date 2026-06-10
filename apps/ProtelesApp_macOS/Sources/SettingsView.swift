@@ -56,9 +56,10 @@ private struct GeneralSettingsView: View {
                 Text("Hide completely empty lines from the game output.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Hide Aardwolf tag lines", isOn: $gagTagLines)
-                Text("Hide leftover protocol tag lines like {rname} / {coords} "
-                    + "from the output. Display-only — plugins still receive them.")
+                Toggle("Clean Aardwolf tag markers", isOn: $gagTagLines)
+                Text("Strip {rname}-style markers so the content shows, and "
+                    + "hide pure-data tags like {coords}. Display-only — "
+                    + "plugins still receive the raw lines.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
