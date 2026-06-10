@@ -76,6 +76,34 @@ struct KeypadModelTests {
         #expect(model.keypad.bindings.count == 11)
     }
 
+    @Test("dispatch: macro outranks keypad on the same key; unbound keys pass through")
+    func dispatchPrecedence() async throws {
+        let (model, store) = try await Self.makeModel()
+        await model.setKeypadCommand("north", for: .num8)
+        let chord = KeyChord(keyCode: KeyCode.keypad8, isKeypad: true)
+        let session = SessionController()
+
+        // Keypad layer takes the bound key…
+        #expect(MacroKeyDispatch.handle(
+            chord, context: MacroContext(), scripts: model, session: session
+        ) == .handled)
+        // …an unbound keypad key passes through to typing…
+        #expect(MacroKeyDispatch.handle(
+            KeyChord(keyCode: KeyCode.keypad9, isKeypad: true),
+            context: MacroContext(),
+            scripts: model,
+            session: session
+        ) == .notHandled)
+
+        // …and a macro on the same key wins (observable: replace-input is a
+        // macro-only outcome, so .replaceInput proves the macro fired).
+        try await store.addMacro(Macro(chord: chord, action: .replaceInput("say ")))
+        await model.refresh()
+        #expect(MacroKeyDispatch.handle(
+            chord, context: MacroContext(), scripts: model, session: session
+        ) == .replaceInput("say "))
+    }
+
     @Test("a genuinely fresh profile is seeded with the default layout, once")
     func freshSeed() async throws {
         let (model, store) = try await Self.makeModel()
