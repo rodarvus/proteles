@@ -302,10 +302,15 @@ struct ContentView: View {
                         inputIsEmpty: inputIsEmpty,
                         navigationModeOn: navigationMode
                     )
-                    // Macros take precedence; a command-button hotkey (#40) is the
+                    // Precedence (D-102): an explicit macro wins, then the
+                    // keypad grid, then a command-button hotkey (#40) as the
                     // fallback binding for the same chord.
                     if let action = scripts.matchMacro(chord, context: context) {
                         if case .replaceInput(let text) = action { return .replaceInput(text) }
+                        Task { await session.fire(action) }
+                        return .handled
+                    }
+                    if let action = scripts.matchKeypad(chord) {
                         Task { await session.fire(action) }
                         return .handled
                     }

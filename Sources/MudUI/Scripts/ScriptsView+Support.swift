@@ -58,7 +58,7 @@ struct ScriptsDeleteRequest {
         case deleteMacro(UUID)
         case deleteButton(UUID)
         case deleteButtonGroup(UUID)
-        case restoreDefaultMacros
+        case restoreDefaultKeypad
     }
 
     let action: Action
@@ -129,12 +129,12 @@ struct ScriptsDeleteRequest {
         )
     }
 
-    static let restoreDefaultMacros = Self(
-        action: .restoreDefaultMacros,
+    static let restoreDefaultKeypad = Self(
+        action: .restoreDefaultKeypad,
         title: "Restore the default keypad layout?",
         confirmLabel: "Restore Defaults",
-        message: "This replaces all your macros with the built-in keypad set. "
-            + noUndo
+        message: "This replaces all keypad commands with the built-in "
+            + "navigation set. \(noUndo)"
     )
 
     private static func named(

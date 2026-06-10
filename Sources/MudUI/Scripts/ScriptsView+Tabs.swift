@@ -47,6 +47,7 @@ extension ScriptsView {
                 }
             }
             .searchable(text: $triggerQuery, placement: .sidebar, prompt: "Filter")
+            .searchFocused($filterFocus, equals: .triggers)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
                 itemToolbar(
@@ -125,6 +126,7 @@ extension ScriptsView {
                 }
             }
             .searchable(text: $aliasQuery, placement: .sidebar, prompt: "Filter")
+            .searchFocused($filterFocus, equals: .aliases)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
                 itemToolbar(
@@ -203,6 +205,7 @@ extension ScriptsView {
                 }
             }
             .searchable(text: $timerQuery, placement: .sidebar, prompt: "Filter")
+            .searchFocused($filterFocus, equals: .timers)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
                 itemToolbar(
@@ -269,8 +272,8 @@ extension ScriptsView {
                     emptyList(
                         "No Macros",
                         systemImage: "keyboard",
-                        blurb: "A macro binds a key to a command or script. "
-                            + "The More menu restores the default keypad set.",
+                        blurb: "A macro binds a key (or key combination) to a "
+                            + "command or script.",
                         addLabel: "Add Macro",
                         add: { await model.addMacro() }
                     )
@@ -281,6 +284,7 @@ extension ScriptsView {
                 }
             }
             .searchable(text: $macroQuery, placement: .sidebar, prompt: "Filter")
+            .searchFocused($filterFocus, equals: .macros)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .toolbar {
                 itemToolbar(
@@ -293,16 +297,6 @@ extension ScriptsView {
                     canModify: model.selectedMacroID != nil
                 )
                 scopeToggleItem(.macros)
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Restore Default Keypad Layout") {
-                            deleteRequest = .restoreDefaultMacros
-                        }
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-                    .help("More macro actions")
-                }
             }
         } detail: {
             if let id = model.selectedMacroID, let binding = model.binding(forMacro: id) {
@@ -338,6 +332,22 @@ extension ScriptsView {
         guard let macro = model.macros.first(where: { $0.id == model.selectedMacroID })
         else { return }
         deleteRequest = .macro(macro)
+    }
+
+    // MARK: - Keypad (D-102)
+
+    var keypadTab: some View {
+        KeypadEditorView(model: model)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        deleteRequest = .restoreDefaultKeypad
+                    } label: {
+                        Label("Restore Defaults", systemImage: "arrow.counterclockwise")
+                    }
+                    .help("Replace all keypad commands with the built-in navigation set")
+                }
+            }
     }
 
     // MARK: - Buttons (#15)

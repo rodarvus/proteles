@@ -25,6 +25,10 @@ public final class ScriptsModel {
     /// The command-button bar (#15) — mirrored from the store, edited via the
     /// Buttons tab + the scripting API, shown in the command-bar panel.
     public private(set) var buttonBar = ButtonBar()
+    /// The keypad command grid (D-102) — mirrored from the store, edited via
+    /// the Keypad tab, matched by the key monitor *behind* macros (macros →
+    /// keypad → button hotkeys). Mutations live in `ScriptsModel+Keypad.swift`.
+    public private(set) var keypad = Keypad()
     /// Transient on/off state for toggle buttons (not persisted).
     public var buttonToggleStates: [UUID: Bool] = [:]
 
@@ -76,7 +80,7 @@ public final class ScriptsModel {
             Task { @MainActor in self?.addPluginMacro(macro) }
         }
         scriptScope = await store.scope
-        await seedDefaultMacrosIfNeeded(store: store, profileID: id)
+        await migrateAndSeedKeypad(store: store, profileID: id)
         await refresh()
         await session.loadScripts(store.document)
         // Hydrate persisted plugin/script variables before loading plugins,
@@ -338,17 +342,6 @@ public final class ScriptsModel {
         selectedMacroID = macros.first?.id
     }
 
-    /// Replace all macros with the built-in keypad layout (a "Restore
-    /// defaults" action). Overwrites the user's current set.
-    public func restoreDefaultMacros() async {
-        guard let store else { return }
-        var document = await store.document
-        document.macros = MacroEngine.defaultNavigationMacros()
-        try? await store.replace(with: document)
-        await refresh()
-        selectedMacroID = macros.first?.id
-    }
-
     public func duplicateMacro(id: UUID) async {
         guard let original = macros.first(where: { $0.id == id }) else { return }
         let copy = original.duplicated()
@@ -375,20 +368,6 @@ public final class ScriptsModel {
         )
     }
 
-    /// On a profile's first load, seed the built-in keypad layout — once per
-    /// profile (deleting them won't re-seed). Existing profiles created before
-    /// this feature get the defaults on their next load.
-    private func seedDefaultMacrosIfNeeded(store: ScriptStore, profileID: UUID) async {
-        let key = "com.proteles.macrosSeeded.\(profileID.uuidString)"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        var document = await store.document
-        if document.macros.isEmpty {
-            document.macros = MacroEngine.defaultNavigationMacros()
-            try? await store.replace(with: document)
-        }
-        UserDefaults.standard.set(true, forKey: key)
-    }
-
     // MARK: - Private
 
     /// Open (or create) the per-world map store and load its graph. The DB
@@ -409,6 +388,7 @@ public final class ScriptsModel {
         timers = document.timers
         macros = document.macros
         buttonBar = document.buttonBar
+        keypad = document.keypad
         syncMacroEngine()
     }
 
