@@ -44,13 +44,17 @@ struct CommandButtonEditor: View {
                     Text("Send command").tag(MacroActionKind.command)
                     Text("Run Lua script").tag(MacroActionKind.script)
                 }
-                TextField(
-                    kind(for: \.action).wrappedValue == .script ? "Script (Lua)" : "Command",
-                    text: text(for: \.action),
-                    axis: .vertical
+                CommandBodyEditor(
+                    title: kind(for: \.action).wrappedValue == .script
+                        ? "Script (Lua)" : "Command",
+                    text: text(for: \.action)
                 )
-                .font(.body.monospaced())
-                .lineLimit(1...8)
+                if kind(for: \.action).wrappedValue == .command {
+                    Text("Runs through aliases and ;-stacking, as if typed. "
+                        + "Each line sends separately; ;; sends a literal ;.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Toggle") {
@@ -60,13 +64,11 @@ struct CommandButtonEditor: View {
                         Text("Send command").tag(MacroActionKind.command)
                         Text("Run Lua script").tag(MacroActionKind.script)
                     }
-                    TextField(
-                        offKind.wrappedValue == .script ? "Off script (Lua)" : "Off command",
-                        text: offText,
-                        axis: .vertical
+                    CommandBodyEditor(
+                        title: offKind.wrappedValue == .script
+                            ? "Off script (Lua)" : "Off command",
+                        text: offText
                     )
-                    .font(.body.monospaced())
-                    .lineLimit(1...6)
                     Text("On fires the action above; Off fires this. The panel tracks the state.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

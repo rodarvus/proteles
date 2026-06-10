@@ -1,13 +1,28 @@
 import Foundation
 
 public extension SessionController {
+    /// A multi-line command body, split into the lines to send — MUSHclient
+    /// Send-box semantics: each non-blank line goes through the input
+    /// pipeline separately (`;`-stacking then applies per line). Pure.
+    static func commandLines(_ body: String) -> [String] {
+        // "\r\n" is a single Character (one grapheme cluster) — match it
+        // explicitly or CRLF bodies don't split.
+        body.split(omittingEmptySubsequences: true) { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
     /// Fire a macro's action. A `.command` runs through the same input
-    /// pipeline as typed text (so aliases + `;`-stacking apply); a `.script`
-    /// runs as Lua in the user script environment and its effects are applied.
+    /// pipeline as typed text (so aliases + `;`-stacking apply); a multi-line
+    /// body sends each line separately (a command button authored like a
+    /// MUSHclient Send box). A `.script` runs as Lua in the user script
+    /// environment and its effects are applied.
     func fire(_ action: MacroAction) async {
         switch action {
         case .command(let command):
-            try? await send(command)
+            for line in Self.commandLines(command) {
+                try? await send(line)
+            }
         case .script(let script):
             guard let scriptEngine else { return }
             await applyScriptEffects(scriptEngine.run(script))
