@@ -29,6 +29,8 @@ struct ContentView: View {
     let updater: Updater
     /// Posts session notifications (tells/mentions) as macOS notifications.
     @State private var notifications = NotificationController()
+    /// Plays soundpack/plugin cues (#10) from the session's sound stream.
+    @State private var cuePlayer = CuePlayerController()
     @Environment(\.openWindow) var openWindow
     /// Not `private` so the `ContentView+PluginDatabases` extension (separate
     /// file) can gate import/reset on the live connection state.
@@ -232,6 +234,12 @@ struct ContentView: View {
         .task {
             for await note in session.notifications {
                 notifications.post(note)
+            }
+        }
+        .task {
+            // Render soundpack/plugin cues (#10) — AVAudioPlayer one-shots.
+            for await cue in session.soundCues {
+                cuePlayer.play(cue)
             }
         }
         .task {
