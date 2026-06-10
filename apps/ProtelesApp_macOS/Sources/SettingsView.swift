@@ -7,6 +7,12 @@ import SwiftUI
 /// apply live (they drive `@AppStorage` keys that `ContentView` observes).
 /// Structured to grow — Connection, Scripts, and theming tabs slot in later.
 struct SettingsView: View {
+    // Models for the Development tab's recording + database actions.
+    let session: SessionController
+    let map: MapPanelModel
+    let snd: SnDPanelModel
+    let pluginDBs: PluginDatabasesModel
+
     var body: some View {
         TabView {
             GeneralSettingsView()
@@ -23,6 +29,8 @@ struct SettingsView: View {
                 .tabItem { Label("Notifications", systemImage: "bell") }
             DiagnosticsSettingsView()
                 .tabItem { Label("Diagnostics", systemImage: "ladybug") }
+            DevelopmentSettingsView(session: session, map: map, snd: snd, pluginDBs: pluginDBs)
+                .tabItem { Label("Development", systemImage: "hammer") }
         }
         // A flexible frame (not a fixed width) so the Settings window is
         // resizable AND can't collapse: short tabs like Diagnostics used to
@@ -323,7 +331,6 @@ private extension Color {
 /// Connection behaviour.
 private struct ConnectionSettingsView: View {
     @AppStorage("autoReconnect") private var autoReconnect = true
-    @AppStorage("autoRecordSessions") private var autoRecordSessions = true
     @AppStorage("keepAlive") private var keepAlive = true
 
     var body: some View {
@@ -339,13 +346,6 @@ private struct ConnectionSettingsView: View {
                 Toggle("Keep the connection alive when idle", isOn: $keepAlive)
                 Text("Send a silent keep-alive periodically so Aardwolf doesn't "
                     + "disconnect a quiet session for being idle.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle("Record sessions automatically", isOn: $autoRecordSessions)
-                Text("Save a replayable capture of each session locally (under the "
-                    + "app's Application Support folder). Takes effect on the next connection.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
