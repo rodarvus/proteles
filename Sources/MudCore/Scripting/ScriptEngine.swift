@@ -7,24 +7,6 @@ import Foundation
 /// decision rather than touching the network/scrollback, so it stays testable
 /// without a live session; the host (``SessionController``) applies the result.
 public actor ScriptEngine {
-    /// What to do with a processed line.
-    public struct LineDisposition: Sendable, Equatable {
-        /// Omit the line from output.
-        public var gag: Bool
-        /// Effects produced by matched triggers / their scripts, in order.
-        public var effects: [ScriptEffect]
-        /// A rewritten line to display *instead* of the original (e.g. a
-        /// text substitution), preserving the original id/timestamp. `nil`
-        /// leaves the incoming line unchanged.
-        public var replacement: Line?
-
-        public init(gag: Bool = false, effects: [ScriptEffect] = [], replacement: Line? = nil) {
-            self.gag = gag
-            self.effects = effects
-            self.replacement = replacement
-        }
-    }
-
     let runtime: LuaRuntime
     var triggers = TriggerEngine()
     var aliases = AliasEngine()
@@ -431,10 +413,17 @@ public actor ScriptEngine {
         // While suspended (Note mode), lines pass through untouched.
         if suspended { return LineDisposition() }
         var disposition = LineDisposition()
+        // Highlights collected from firings, applied to the *displayed* line
+        // after native plugins have had their say (they may replace it).
+        var highlights: [(highlight: TriggerHighlight, matchRange: Range<Int>?)] = []
         for firing in triggers.process(line.text) {
             if firing.gag { disposition.gag = true }
+            if let highlight = firing.highlight {
+                highlights.append((highlight, firing.match.utf16Range))
+            }
             if let send = firing.send, !send.isEmpty {
-                disposition.effects.append(.send(send))
+                // D-105: route the expanded send per the trigger's target.
+                disposition.effects.append(Self.sendEffect(send, target: firing.target))
             }
             if let script = firing.script {
                 let owner = automationOwners[firing.triggerID]
@@ -456,7 +445,8 @@ public actor ScriptEngine {
         if native.gag { disposition.gag = true }
         disposition.effects.append(contentsOf: native.effects)
         disposition.replacement = native.replacement
-        return disposition
+        // Trigger highlights (D-105) restyle whatever will be displayed.
+        return Self.applyingHighlights(highlights, to: disposition, original: line)
     }
 
     /// Run a trigger/alias script: in the owning plugin's environment when

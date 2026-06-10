@@ -46,7 +46,14 @@ struct PatternMatcher {
             named[entry.original] = namedRange.location == NSNotFound
                 ? "" : text.substring(with: namedRange)
         }
-        return TriggerMatch(whole: captures.first ?? "", captures: captures, named: named)
+        let wholeRange = result.range
+        return TriggerMatch(
+            whole: captures.first ?? "",
+            captures: captures,
+            named: named,
+            utf16Range: wholeRange.location == NSNotFound
+                ? nil : wholeRange.location..<(wholeRange.location + wholeRange.length)
+        )
     }
 
     /// Matches a named-group opener `(?<name>` / `(?P<name>`. The name class
