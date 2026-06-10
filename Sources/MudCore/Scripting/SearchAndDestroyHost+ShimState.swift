@@ -14,11 +14,6 @@ import Foundation
 /// into the shim runtime's `__snd_state`, whose values the shim's
 /// `CallPlugin` returns synchronously.
 extension SearchAndDestroyHost {
-    /// The accessors the shim mirrors. `target_as_json` is upstream S&D API
-    /// (intended for exactly this kind of cross-plugin read); the other two
-    /// are appended into the chunk by ``appendingShimAccessors(to:)``.
-    static let shimAccessorNames = ["target_as_json", "targets_as_json", "goto_list_count"]
-
     /// Append chunk-scope accessors for S&D state that lives in file-scope
     /// *locals* no other runtime can reach (`main_target_list`, `gotoList`)
     /// — same load-time-injection rationale as the `xg_draw_window` bridge
@@ -74,10 +69,10 @@ extension SearchAndDestroyHost {
     /// Called by every host entry point that ran Lua (a non-firing line skips
     /// it — nothing can have changed). A failed probe changes nothing.
     func appendingShimState(to effects: [ScriptEffect]) async -> [ScriptEffect] {
-        guard let snapshot = await evaluate(Self.shimStateProbe),
-              snapshot != lastShimStateSnapshot
-        else { return effects }
-        lastShimStateSnapshot = snapshot
+        guard let snapshot = await evaluate(Self.shimStateProbe) else { return effects }
+        let canonical = Self.canonical(snapshot)
+        guard canonical != lastShimStateSnapshot else { return effects }
+        lastShimStateSnapshot = canonical
         return effects + [Self.shimStateEffect(from: snapshot)]
     }
 
@@ -87,8 +82,27 @@ extension SearchAndDestroyHost {
     /// for the next change (plugin/DB ops re-run the whole world load).
     public func shimStateEffect() async -> ScriptEffect {
         let snapshot = await evaluate(Self.shimStateProbe) ?? "\u{1F}\u{1F}"
-        lastShimStateSnapshot = snapshot
+        lastShimStateSnapshot = Self.canonical(snapshot)
         return Self.shimStateEffect(from: snapshot)
+    }
+
+    /// The change-diff form of a probe snapshot. `json.encode`'s key order is
+    /// unstable call-to-call (Lua `pairs` order), so comparing raw snapshots
+    /// re-emits identical states; the diff therefore compares each part
+    /// re-serialized with sorted keys. The RAW accessor output is still what
+    /// travels to the shim — readers parse any key order.
+    private static func canonical(_ snapshot: String) -> String {
+        snapshot.components(separatedBy: "\u{1F}").map { part -> String in
+            guard !part.isEmpty,
+                  let object = try? JSONSerialization.jsonObject(
+                      with: Data(part.utf8), options: [.fragmentsAllowed]
+                  ),
+                  let data = try? JSONSerialization.data(
+                      withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed]
+                  )
+            else { return part }
+            return String(decoding: data, as: UTF8.self)
+        }.joined(separator: "\u{1F}")
     }
 
     /// Decode a probe snapshot ("" fields → nil: accessor absent or failing).
