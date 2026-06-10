@@ -1,6 +1,22 @@
+import AppKit
 import MudCore
+import MudOutputView_macOS
 import MudUI
 import SwiftUI
+
+private struct OutputFindActionKey: FocusedValueKey {
+    typealias Value = (NSTextFinder.Action) -> Void
+}
+
+extension FocusedValues {
+    /// "Run a find-bar action on this window's scrollback" — published by the
+    /// main game window (D-104), consumed by Edit ▸ Find/Find Next/Find
+    /// Previous, which grey out wherever there's no searchable output.
+    var outputFindAction: ((NSTextFinder.Action) -> Void)? {
+        get { self[OutputFindActionKey.self] }
+        set { self[OutputFindActionKey.self] = newValue }
+    }
+}
 
 /// Session + worlds commands, extracted so they can use
 /// `@Environment(\.openWindow)` (which the `App` struct itself can't
@@ -15,9 +31,12 @@ struct ProtelesCommands: Commands {
     var resumeStore: ResumeTokenStore?
     @Environment(\.openWindow) private var openWindow
     /// Published by the key Scripts window (nil elsewhere) — backs the
-    /// Edit ▸ Filter Scripts ⌘F menu item, so the shortcut is discoverable
+    /// Edit ▸ Filter Scripts ⌥⌘F menu item, so the shortcut is discoverable
     /// in the menu bar (DESIGN.md §3.2) and greyed out where it can't act.
     @FocusedValue(\.scriptsFilterAction) private var scriptsFilterAction
+    /// Published by the main game window — backs Edit ▸ Find (⌘F) over the
+    /// scrollback (D-104).
+    @FocusedValue(\.outputFindAction) private var outputFindAction
     /// Display preference, persisted in UserDefaults; ``ContentView`` mirrors
     /// the same key and pushes it to the session.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
@@ -33,10 +52,27 @@ struct ProtelesCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
-            // Edit ▸ Filter Scripts: focus the filter field of the frontmost
-            // Scripts tab. Enabled only while a Scripts window is key.
-            Button("Filter Scripts") { scriptsFilterAction?() }
+            // Edit ▸ Find over the main window's scrollback (D-104): the
+            // system find bar — incremental, highlight-all, case options,
+            // and "Insert Pattern" wildcard tokens.
+            Button("Find…") { outputFindAction?(.showFindInterface) }
                 .keyboardShortcut("f", modifiers: [.command])
+                .disabled(outputFindAction == nil)
+            Button("Find Next") { outputFindAction?(.nextMatch) }
+                .keyboardShortcut("g", modifiers: [.command])
+                .disabled(outputFindAction == nil)
+            Button("Find Previous") { outputFindAction?(.previousMatch) }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(outputFindAction == nil)
+
+            Divider()
+
+            // Edit ▸ Filter Scripts (⌥⌘F, the Mail convention — ⌘F finds in
+            // content, ⌥⌘F focuses the list filter): focus the filter field
+            // of the frontmost Scripts tab. Enabled while a Scripts window
+            // is key.
+            Button("Filter Scripts") { scriptsFilterAction?() }
+                .keyboardShortcut("f", modifiers: [.command, .option])
                 .disabled(scriptsFilterAction == nil)
         }
 

@@ -24,6 +24,11 @@
         /// text-render frames to the session transcript (perf diagnosis — see
         /// ``RenderCoordinator/RenderFrameStats``).
         private let onFrameFlush: ((RenderFrameStats) -> Void)?
+        /// Opt this instance's history view into ⌘F (the system find bar,
+        /// D-104). Exactly one view per window should be findable, so
+        /// ``MudOutputFindBar`` can locate it unambiguously — the app turns
+        /// this on for the main game output only.
+        private let findable: Bool
 
         public init(
             store: ScrollbackStore,
@@ -31,6 +36,7 @@
             fontSize: CGFloat = 13,
             fontName: String = "",
             showsLiveTail: Bool = true,
+            findable: Bool = false,
             onCommand: ((String) -> Void)? = nil,
             onFrameFlush: ((RenderFrameStats) -> Void)? = nil
         ) {
@@ -39,6 +45,7 @@
             self.fontSize = fontSize
             self.fontName = fontName
             self.showsLiveTail = showsLiveTail
+            self.findable = findable
             self.onCommand = onCommand
             self.onFrameFlush = onFrameFlush
         }
@@ -69,6 +76,11 @@
             scrollView.autohidesScrollers = true
             scrollView.borderType = .noBorder
             let textView = makeTextView()
+            // The find bar lives on the history view only — never the tail
+            // mirror (it holds just the last few lines, so finding there
+            // would silently search a fraction of the scrollback).
+            textView.usesFindBar = findable
+            textView.isIncrementalSearchingEnabled = findable
             scrollView.documentView = textView
 
             // Static content (the Help window): a plain scroll view, no live-tail

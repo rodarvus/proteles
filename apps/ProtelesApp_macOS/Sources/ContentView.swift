@@ -280,11 +280,17 @@ struct ContentView: View {
                 palette: theme.palette,
                 fontSize: CGFloat(outputFontSize),
                 fontName: outputFontName,
+                findable: true, // ⌘F find-in-scrollback (D-104)
                 onCommand: { command in Task { try? await session.send(command) } },
                 onFrameFlush: { stats in logSlowFrame(stats) }
             )
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
+            // Backs Edit ▸ Find/Find Next/Find Previous (⌘F/⌘G/⇧⌘G, D-104):
+            // route the action to this window's findable output view.
+            .focusedSceneValue(\.outputFindAction) { action in
+                MudOutputFindBar.perform(action, in: NSApp.keyWindow)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Report the live output-view size for plugins' GetInfo(280/281) (#30).
             .background(GeometryReader { proxy in
