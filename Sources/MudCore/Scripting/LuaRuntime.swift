@@ -164,6 +164,11 @@ public actor LuaRuntime {
     /// session knows the character. Set via ``setDatabasesDirectory(_:)``.
     nonisolated(unsafe) var databasesDirectory = ""
 
+    /// Whether script errors ALSO surface as red scrollback notes (the
+    /// paired `.diagnostic` always reaches the Lua Console regardless) —
+    /// Settings ▸ Input ▸ Scripting (#16). Default on.
+    nonisolated(unsafe) var errorNotesVisible = true
+
     /// Per-plugin sandbox environments (plugin id → registry ref of an env table
     /// whose `__index` falls back to `_G`), so plugins can't clobber each other's
     /// globals. See `LuaRuntime+PluginEnvironments`.

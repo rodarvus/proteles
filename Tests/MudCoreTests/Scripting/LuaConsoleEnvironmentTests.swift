@@ -74,3 +74,29 @@ struct LuaConsoleEnvironmentTests {
         #expect(noteTexts(effects).contains { $0.contains("kapow") })
     }
 }
+
+extension LuaConsoleEnvironmentTests {
+    @Test("error red notes can be routed console-only (#16) — diagnostics always flow")
+    func errorNotesToggle() async throws {
+        let crashing = """
+        <muclient>
+        <plugin id="cccccccccccccccccccccccc" name="Crashy2"/>
+        <aliases>
+        <alias match="^boom2$" enabled="y" regexp="y" send_to="12" script="go_boom"/>
+        </aliases>
+        <script><![CDATA[
+        function go_boom() error("kapow") end
+        ]]></script>
+        </muclient>
+        """
+        let engine = try ScriptEngine()
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: crashing))
+        await engine.setErrorNotesVisible(false)
+        let effects = await engine.expandInput("boom2")
+        #expect(!noteTexts(effects).contains { $0.contains("kapow") }, "red note leaked while off")
+        #expect(effects.contains { if case .diagnostic = $0 { true } else { false } })
+        await engine.setErrorNotesVisible(true)
+        let visible = await engine.expandInput("boom2")
+        #expect(noteTexts(visible).contains { $0.contains("kapow") })
+    }
+}

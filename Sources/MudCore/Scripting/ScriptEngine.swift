@@ -585,10 +585,10 @@ public actor ScriptEngine {
         do {
             return try await runtime.runScript(script, matches: matches, named: named, styles: styles)
         } catch {
-            return [
-                .note(text: "Script error: \(error)", foreground: "red", background: nil),
-                .diagnostic(source: "user", message: "Script error: \(error)")
-            ]
+            let message = "Script error: \(error)"
+            let diagnostic = ScriptEffect.diagnostic(source: "user", message: message)
+            guard await runtime.errorNotesVisible else { return [diagnostic] }
+            return [.note(text: message, foreground: "red", background: nil), diagnostic]
         }
     }
 }

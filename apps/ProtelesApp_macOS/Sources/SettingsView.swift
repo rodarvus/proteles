@@ -282,6 +282,7 @@ private struct InputSettingsView: View {
     @AppStorage("inputGhostHint") private var inputGhostHint = true
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
     @AppStorage("navigationMode") private var navigationMode = false
+    @AppStorage("scriptErrorsInOutput") private var scriptErrorsInOutput = true
 
     var body: some View {
         Form {
@@ -312,6 +313,15 @@ private struct InputSettingsView: View {
                     .foregroundStyle(.secondary)
                 Text("Keypad bindings, macros, and aliases are edited in "
                     + "Tools ▸ Scripts (⇧⌘T).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Scripting") {
+                Toggle("Show script errors in the main output", isOn: $scriptErrorsInOutput)
+                    .help("Off: errors go only to the Lua Console (Tools ▸ Lua Console)")
+                Text("Plugin and trigger errors always stream to the Lua Console "
+                    + "with the plugin that raised them; this also echoes each as "
+                    + "a red note in the game output.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

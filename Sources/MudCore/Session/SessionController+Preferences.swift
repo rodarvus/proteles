@@ -11,6 +11,12 @@ public extension SessionController {
 
     /// Withhold leftover Aardwolf tag lines (`{rname}`/`{coords}`/…) from the
     /// live window. Display-only + post-processing: plugins still see the line.
+    /// Whether script errors also appear as red notes in the main output
+    /// (Settings ▸ Input ▸ Scripting, #16); the Lua Console sees them always.
+    func setScriptErrorsInOutput(_ enabled: Bool) async {
+        await scriptEngine?.setErrorNotesVisible(enabled)
+    }
+
     func setGagTagLines(_ enabled: Bool) {
         gagTagLines = enabled
     }

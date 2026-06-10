@@ -194,9 +194,11 @@ public extension LuaRuntime {
             let name = pluginContexts[id]?.pluginName ?? ""
             return name.isEmpty ? id : name
         }
+        let diagnostic = ScriptEffect.diagnostic(source: source, message: text)
+        guard errorNotesVisible else { return [diagnostic] }
         return [
             .note(text: text, foreground: "red", background: nil),
-            .diagnostic(source: source, message: text)
+            diagnostic
         ]
     }
 }
