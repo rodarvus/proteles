@@ -6,6 +6,31 @@ import SwiftUI
 
 // MARK: - Rows
 
+/// A core-feature row (mapper / dinv / leveldb / S&D): name + state, with an
+/// enable toggle (D-107 — these were "always active" until now).
+struct BuiltInFeatureRowView: View {
+    let feature: BuiltInFeatureRow
+    let enabled: Bool
+    let onToggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: feature.icon)
+                .foregroundStyle(enabled ? Color.accentColor : .secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(feature.name).lineLimit(1)
+                Text(enabled ? "Built in" : "Built in · disabled for this world")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(get: { enabled }, set: onToggle))
+                .labelsHidden()
+                .help("Enable or disable \(feature.name) for this world")
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 /// A built-in native plugin row: name + summary, with an enable toggle.
 struct NativePluginRowView: View {
     let plugin: NativePluginRow
@@ -59,10 +84,13 @@ struct LibraryPluginRowView: View {
 
 // MARK: - Detail content
 
-/// The detail pane for a built-in core feature (mapper / S&D): what it is and
-/// its key commands. Read-only — these are always-active native hosts.
+/// The detail pane for a built-in core feature (mapper / dinv / leveldb /
+/// S&D): what it is, its key commands, and the per-world enable toggle
+/// (D-107).
 struct BuiltInFeatureDetail: View {
     let feature: BuiltInFeatureRow
+    let enabled: Bool
+    let onToggle: (Bool) -> Void
 
     var body: some View {
         ScrollView {
@@ -72,6 +100,16 @@ struct BuiltInFeatureDetail: View {
                     Text("Built in").font(.caption).foregroundStyle(.secondary)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(
+                        "Enabled for this world",
+                        isOn: Binding(get: { enabled }, set: onToggle)
+                    )
+                    .toggleStyle(.switch)
+                    Text("Toggling reloads the world's scripts, so it applies "
+                        + "right away. Its data and database stay on disk.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Text(feature.summary).font(.callout).foregroundStyle(.secondary)
                 if !feature.commands.isEmpty {
@@ -175,19 +213,40 @@ struct LibraryPluginDetail: View {
 
                 HStack(spacing: 10) {
                     Button("Reveal in Finder", systemImage: "folder", action: onReveal)
+                        .help("Open the plugin's folder in the Finder")
                     Button(updateLabel, systemImage: "arrow.triangle.2.circlepath", action: onUpdate)
+                        .help(updateHelp)
                     Button("Export…", systemImage: "square.and.arrow.up", action: onExport)
+                        .help("Zip the plugin to share (its per-character data is excluded)")
                     Button("Remove", systemImage: "trash", role: .destructive, action: onRemove)
+                        .help("Remove the plugin and delete its folder")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
                 if !plugin.parsed {
                     Label(
-                        "The plugin's files couldn't be found or parsed.",
+                        "The plugin's files couldn't be found or parsed. "
+                            + "Use “\(updateLabel)” to re-point it at the plugin's "
+                            + "files, or Remove it.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(.orange)
+                }
+
+                if !plugin.commandHints.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("COMMANDS").font(.caption.bold()).foregroundStyle(.secondary)
+                        ForEach(plugin.commandHints.prefix(12), id: \.self) { hint in
+                            Text(hint).font(.callout.monospaced()).textSelection(.enabled)
+                        }
+                        if plugin.commandHints.count > 12 {
+                            Text("…and \(plugin.commandHints.count - 12) more")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text("Best effort — read from the plugin's alias patterns.")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -218,7 +277,14 @@ struct LibraryPluginDetail: View {
     private var updateLabel: String {
         switch plugin.origin {
         case .file: "Update from file…"
-        case .url: "Refresh"
+        case .url: "Update from URL"
+        }
+    }
+
+    private var updateHelp: String {
+        switch plugin.origin {
+        case .file: "Replace the plugin's files with a newer copy from your Mac"
+        case .url: "Re-download the plugin from where it was added"
         }
     }
 }
