@@ -47,5 +47,6 @@ extension LuaRuntime {
         case isPluginInstalled
         case sndCall
         case playSound
+        case speak
     }
 }

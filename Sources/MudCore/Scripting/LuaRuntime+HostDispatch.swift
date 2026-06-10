@@ -200,14 +200,12 @@ extension LuaRuntime {
                 title: Self.argString(arguments, 0),
                 body: Self.argString(arguments, 1)
             ))
-        case .playSound:
-            // MUSHclient `PlaySound` units: volume in dB (0 = full; out of
-            // range coerces to full), pan −100…100. Converted here so the
-            // effect carries player-ready linear gain.
-            effects.append(.playSound(
-                file: Self.argString(arguments, 0),
-                volume: SoundVolume.playSoundGain(volumeDb: Self.argDouble(arguments, 1)),
-                pan: SoundVolume.playSoundPan(mushPan: Self.argDouble(arguments, 2))
+        case .speak:
+            // proteles.speak(text[, interrupt]) — plugin TTS (#9, the
+            // ttsSpeak analog); spoken whenever the user has TTS enabled.
+            effects.append(.speak(
+                text: Self.argString(arguments, 0),
+                interrupt: Self.argBool(arguments, 1)
             ))
         default: recordOutputEffect(function, arguments)
         }
@@ -225,6 +223,15 @@ extension LuaRuntime {
                 channel: Self.argOptionalString(arguments, 1) ?? ""
             ))
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
+        case .playSound:
+            // MUSHclient `PlaySound` units: volume in dB (0 = full; out of
+            // range coerces to full), pan −100…100. Converted here so the
+            // effect carries player-ready linear gain (#10).
+            effects.append(.playSound(
+                file: Self.argString(arguments, 0),
+                volume: SoundVolume.playSoundGain(volumeDb: Self.argDouble(arguments, 1)),
+                pan: SoundVolume.playSoundPan(mushPan: Self.argDouble(arguments, 2))
+            ))
         case .sndCall:
             effects.append(.callSearchAndDestroy(
                 function: Self.argString(arguments, 0),

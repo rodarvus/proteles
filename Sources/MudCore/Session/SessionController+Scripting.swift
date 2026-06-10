@@ -69,6 +69,8 @@ public extension SessionController {
             await scrollbackStore.append(displayLine)
             // Phase-2 keyword notifications fire on lines the user actually sees.
             notifyForOutput(displayLine.text)
+            // TTS (#9) speaks displayed lines only — gagged spam never talks.
+            speakForOutput(displayLine.text)
         } else {
             // Record *why* a line was withheld (the transcript otherwise only has
             // the pre-gag RECV, so a leak/over-gag report can't be diagnosed from
@@ -198,6 +200,7 @@ public extension SessionController {
     /// budget.
     private func applyControlEffect(_ effect: ScriptEffect) async {
         if await applyStoreEffect(effect) { return }
+        if applySpeechEffect(effect) { return }
         switch effect {
         case .setAutomationsSuspended(let suspended):
             await scriptEngine?.setSuspended(suspended)

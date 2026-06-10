@@ -244,6 +244,22 @@ public enum ScriptEffect: Sendable, Equatable {
     /// already applied — see ``SoundVolume``); `pan` is −1…1. The session
     /// re-publishes onto ``SessionController/soundCues`` for the app's player.
     case playSound(file: String, volume: Double, pan: Double)
+    /// Speak `text` aloud (#9) — `tts say`, `proteles.speak`, or the
+    /// TextToSpeech plugin. `interrupt` cuts off the current utterance.
+    /// Re-published onto ``SessionController/speechRequests``.
+    case speak(text: String, interrupt: Bool)
+    /// Stop speaking and flush the utterance queue (`tts stop`).
+    case stopSpeaking
+    /// Set the session's spoken-output mode (what ``SpeechFilter`` passes) —
+    /// emitted by the TextToSpeech plugin's commands and its install.
+    case setSpeechMode(SpeechMode)
+    /// `Settings/speech.json` changed (rate/voice/routing) — the app's
+    /// speech controller re-reads it.
+    case speechConfigChanged
+    /// Speak the last `count` displayed lines (`tts last [n]`) from the
+    /// session's recent-output buffer (only the session sees post-gag
+    /// display lines; the plugin can't).
+    case speakRecentOutput(count: Int)
 }
 
 /// An outbound HTTP request a plugin's `async` helper asked for (the network

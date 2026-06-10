@@ -31,6 +31,8 @@ struct ContentView: View {
     @State private var notifications = NotificationController()
     /// Plays soundpack/plugin cues (#10) from the session's sound stream.
     @State private var cuePlayer = CuePlayerController()
+    /// Speaks TTS requests (#9) — AVSpeechSynthesizer or VoiceOver routing.
+    @State private var speech = SpeechController()
     @Environment(\.openWindow) var openWindow
     /// Not `private` so the `ContentView+PluginDatabases` extension (separate
     /// file) can gate import/reset on the live connection state.
@@ -240,6 +242,12 @@ struct ContentView: View {
             // Render soundpack/plugin cues (#10) — AVAudioPlayer one-shots.
             for await cue in session.soundCues {
                 cuePlayer.play(cue)
+            }
+        }
+        .task {
+            // Speak TTS requests (#9) — app voice or VoiceOver routing.
+            for await request in session.speechRequests {
+                speech.handle(request)
             }
         }
         .task {
