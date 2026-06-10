@@ -195,6 +195,7 @@ public actor Mapper {
         showAreaExits = Self.persistedFlag(store, Self.showAreaExitsKey)
         pkBlink = Self.persistedFlag(store, Self.pkBlinkKey, default: true)
         showNotes = Self.persistedFlag(store, Self.showNotesKey, default: true)
+        useTextures = Self.persistedFlag(store, Self.useTexturesKey, default: true)
         scanDepth = Self.persistedInt(store, Self.scanDepthKey, default: Self.defaultScanDepth)
         // Restore the designated bounce portal/recall (reference `storage` rows),
         // so they survive a restart / world reload.
@@ -206,11 +207,12 @@ public actor Mapper {
     static let bouncePortalKey = "bounce_portal"
     static let bounceRecallKey = "bounce_recall"
 
-    private static let showOtherAreasKey = "ui.show_other_areas"
-    private static let showAreaExitsKey = "ui.show_area_exits"
-    private static let pkBlinkKey = "ui.pk_blink"
-    private static let showNotesKey = "ui.show_notes"
-    private static let scanDepthKey = "ui.scan_depth"
+    static let showOtherAreasKey = "ui.show_other_areas"
+    static let showAreaExitsKey = "ui.show_area_exits"
+    static let pkBlinkKey = "ui.pk_blink"
+    static let showNotesKey = "ui.show_notes"
+    static let scanDepthKey = "ui.scan_depth"
+    static let useTexturesKey = "ui.use_textures"
 
     /// Default + clamp range for the scan depth (rooms drawn outward).
     public static let defaultScanDepth = 600
@@ -235,22 +237,28 @@ public actor Mapper {
     /// Whether neighbouring areas render inline (vs. cross-area exits drawn as
     /// stubs). Defaults off, matching the Aardwolf mapper's `show_other_areas`
     /// default — each area reads as a self-contained map. Toggled from the UI.
-    public private(set) var showOtherAreas = false
+    public internal(set) var showOtherAreas = false
 
     /// Whether to mark exits that leave the current area with a boundary
     /// marker (Aardwolf's `SHOW_AREA_EXITS`, default off). Toggled from the UI.
-    public private(set) var showAreaExits = false
+    public internal(set) var showAreaExits = false
 
     /// Whether the PK warning animates (Aardwolf's `BLINK_PK_TITLE`, default
     /// on). The PK indicator itself stays regardless.
-    public private(set) var pkBlink = true
+    public internal(set) var pkBlink = true
 
     /// Whether a room's player note is echoed on arrival (Aardwolf's
     /// `shownotes`, default on). Toggled by `mapper shownotes [on|off]`.
-    public private(set) var showNotes = true
+    public internal(set) var showNotes = true
+
+    /// Whether the current area's background texture tiles behind the map
+    /// (Aardwolf's `USE_TEXTURES`, default on like the reference). With no
+    /// files in `~/Documents/Proteles/MapImages/` this is a no-op — Proteles
+    /// ships no textures (#11).
+    public internal(set) var useTextures = true
 
     /// How many rooms the fan-out BFS draws outward (Aardwolf's scan depth).
-    public private(set) var scanDepth = Mapper.defaultScanDepth
+    public internal(set) var scanDepth = Mapper.defaultScanDepth
 
     // MARK: - Layout publishing
 
@@ -274,49 +282,10 @@ public actor Mapper {
             showOtherAreas: showOtherAreas,
             showAreaExits: showAreaExits,
             pkBlink: pkBlink,
+            useTextures: useTextures,
             terrainColours: terrainColours,
             environments: environments
         )
-    }
-
-    /// Toggle whether other areas render inline, persist it, and republish.
-    public func setShowOtherAreas(_ value: Bool) {
-        guard value != showOtherAreas else { return }
-        showOtherAreas = value
-        try? store.setMeta(value ? "1" : "0", forKey: Self.showOtherAreasKey)
-        publishLayout()
-    }
-
-    /// Toggle the area-exit boundary markers, persist it, and republish.
-    public func setShowAreaExits(_ value: Bool) {
-        guard value != showAreaExits else { return }
-        showAreaExits = value
-        try? store.setMeta(value ? "1" : "0", forKey: Self.showAreaExitsKey)
-        publishLayout()
-    }
-
-    /// Toggle the PK warning animation, persist it, and republish.
-    public func setPKBlink(_ value: Bool) {
-        guard value != pkBlink else { return }
-        pkBlink = value
-        try? store.setMeta(value ? "1" : "0", forKey: Self.pkBlinkKey)
-        publishLayout()
-    }
-
-    /// Toggle whether room notes echo on arrival, and persist it.
-    public func setShowNotes(_ value: Bool) {
-        guard value != showNotes else { return }
-        showNotes = value
-        try? store.setMeta(value ? "1" : "0", forKey: Self.showNotesKey)
-    }
-
-    /// Set how many rooms the map draws outward (clamped), persist, republish.
-    public func setScanDepth(_ value: Int) {
-        let clamped = min(max(value, Self.scanDepthRange.lowerBound), Self.scanDepthRange.upperBound)
-        guard clamped != scanDepth else { return }
-        scanDepth = clamped
-        try? store.setMeta(String(clamped), forKey: Self.scanDepthKey)
-        publishLayout()
     }
 
     /// Subscribe to layout updates (no backfill — read ``currentLayout()``

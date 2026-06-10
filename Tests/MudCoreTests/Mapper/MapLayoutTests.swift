@@ -202,4 +202,25 @@ struct MapLayoutTests {
         #expect(placed(layout, "1")?.terrainColorIndex == 10) // forest → 10
         #expect(placed(layout, "2")?.terrainColorIndex == 4) // env id 4 → "water" → 4
     }
+
+    @Test("Area texture rides the layout when enabled (with the reference default)")
+    func areaTexture() {
+        var g = graph(["1": [:]], areaByUID: ["1": "verume"])
+        g.areas["verume"] = Area(uid: "verume", name: "Verume", texture: "sand.png")
+
+        // Off (the default): no texture name, whatever the area says.
+        #expect(MapLayout.build(graph: g, current: "1").areaTexture == nil)
+        // On: the area's texture column.
+        #expect(MapLayout.build(graph: g, current: "1", useTextures: true).areaTexture == "sand.png")
+
+        // An area with no texture recorded → the reference's room-level
+        // default (aardmapper.lua's get_room falls back to test5.png).
+        g.areas["verume"] = Area(uid: "verume", name: "Verume", texture: "")
+        #expect(MapLayout.build(graph: g, current: "1", useTextures: true).areaTexture == "test5.png")
+        g.areas["verume"] = nil
+        #expect(MapLayout.build(graph: g, current: "1", useTextures: true).areaTexture == "test5.png")
+
+        // The empty layout (unknown room) never carries one.
+        #expect(MapLayout.build(graph: g, current: "missing", useTextures: true).areaTexture == nil)
+    }
 }

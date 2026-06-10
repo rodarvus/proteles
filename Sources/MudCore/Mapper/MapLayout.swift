@@ -110,6 +110,12 @@ public struct MapLayout: Sendable, Equatable {
     /// Render hint: animate the PK warning (Aardwolf's `BLINK_PK_TITLE`).
     /// Carried on the layout so a runtime toggle reaches the view live.
     public let pkBlink: Bool
+    /// Background texture filename for the current room's area, drawn tiled
+    /// behind the map (the reference mapper's per-area `texture` with its
+    /// `test5.png` room-level default) — nil when textures are off. The view
+    /// resolves the name against `~/Documents/Proteles/MapImages/`; a missing
+    /// file means a plain background (Proteles ships no image assets, #11).
+    public let areaTexture: String?
     /// Bounding box of placed rooms, in grid units (origin = current room).
     public let minX: Int
     public let minY: Int
@@ -146,6 +152,7 @@ public struct MapLayout: Sendable, Equatable {
         showOtherAreas: Bool = true,
         showAreaExits: Bool = false,
         pkBlink: Bool = true,
+        useTextures: Bool = false,
         terrainColours: [String: Int] = [:],
         environments: [String: String] = [:]
     ) -> MapLayout {
@@ -156,6 +163,7 @@ public struct MapLayout: Sendable, Equatable {
                 links: [],
                 areaExits: [],
                 pkBlink: pkBlink,
+                areaTexture: nil,
                 minX: 0,
                 minY: 0,
                 maxX: 0,
@@ -184,11 +192,21 @@ public struct MapLayout: Sendable, Equatable {
             links: links,
             areaExits: areaExits,
             pkBlink: pkBlink,
+            areaTexture: useTextures ? textureName(for: currentArea, graph: graph) : nil,
             minX: xs.min() ?? 0,
             minY: ys.min() ?? 0,
             maxX: xs.max() ?? 0,
             maxY: ys.max() ?? 0
         )
+    }
+
+    /// The texture file for an area: its `texture` column, falling back to the
+    /// reference's room-level default (`test5.png` in aardmapper.lua's
+    /// `get_room`) when the area has none recorded.
+    static func textureName(for area: String?, graph: RoomGraph) -> String? {
+        let name = area.flatMap { graph.areas[$0]?.texture }
+        guard let name, !name.isEmpty else { return "test5.png" }
+        return name
     }
 
     // swiftlint:disable function_parameter_count
@@ -453,6 +471,7 @@ public struct MapLayout: Sendable, Equatable {
         links: [MapLink],
         areaExits: [AreaExitMarker],
         pkBlink: Bool,
+        areaTexture: String?,
         minX: Int,
         minY: Int,
         maxX: Int,
@@ -463,6 +482,7 @@ public struct MapLayout: Sendable, Equatable {
         self.links = links
         self.areaExits = areaExits
         self.pkBlink = pkBlink
+        self.areaTexture = areaTexture
         self.minX = minX
         self.minY = minY
         self.maxX = maxX
