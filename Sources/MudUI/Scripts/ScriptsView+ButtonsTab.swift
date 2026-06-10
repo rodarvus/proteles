@@ -95,7 +95,7 @@ extension ScriptsView {
     private func buttonRow(_ button: CommandButton) -> some View {
         HStack(spacing: 6) {
             if let icon = button.icon, !icon.isEmpty {
-                Image(systemName: icon)
+                ButtonIconView(icon: icon)
                     .foregroundStyle(button.tint.map { Color(hex: $0) } ?? .accentColor)
                     .frame(minWidth: 18)
             }

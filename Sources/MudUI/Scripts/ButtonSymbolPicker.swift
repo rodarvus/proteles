@@ -26,7 +26,7 @@ struct ButtonSymbolPicker: View {
         LabeledContent("Icon") {
             HStack(spacing: 8) {
                 if let symbol, !symbol.isEmpty {
-                    Image(systemName: symbol)
+                    ButtonIconView(icon: symbol)
                         .frame(minWidth: 20)
                 }
                 Button(symbol?.isEmpty == false ? "Change…" : "Choose…") {
@@ -40,7 +40,7 @@ struct ButtonSymbolPicker: View {
                 }
             }
         }
-        TextField("Or any SF Symbol name", text: Binding(
+        TextField("Or any SF Symbol name — or an emoji", text: Binding(
             get: { symbol ?? "" },
             set: { symbol = $0.isEmpty ? nil : $0 }
         ))

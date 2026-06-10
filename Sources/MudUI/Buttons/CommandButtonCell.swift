@@ -5,6 +5,29 @@ import SwiftUI
 /// toggle fills solid when on. Shared by the command-bar panel and the
 /// button editor's live preview (D-106) — the preview renders *this* view,
 /// so what you style is exactly what the bar shows.
+/// A button's icon: an SF Symbol when the string names one, else the text
+/// itself (so an emoji — or any glyph — works as an icon too).
+struct ButtonIconView: View {
+    let icon: String
+
+    var body: some View {
+        if Self.isSymbolName(icon) {
+            Image(systemName: icon)
+        } else {
+            Text(icon)
+        }
+    }
+
+    /// Whether the platform knows `name` as an SF Symbol.
+    static func isSymbolName(_ name: String) -> Bool {
+        #if os(macOS)
+            NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+        #else
+            UIImage(systemName: name) != nil
+        #endif
+    }
+}
+
 struct CommandButtonCell: View {
     let button: CommandButton
     let isOn: Bool
@@ -14,7 +37,7 @@ struct CommandButtonCell: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 if let icon = button.icon, !icon.isEmpty {
-                    Image(systemName: icon)
+                    ButtonIconView(icon: icon)
                 }
                 Text(button.label).lineLimit(1).truncationMode(.tail)
                 if let chord = button.hotkeyEcho {

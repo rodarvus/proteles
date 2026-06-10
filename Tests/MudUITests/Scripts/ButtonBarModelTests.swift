@@ -96,3 +96,24 @@ struct ButtonBarModelTests {
         #expect(model.buttonsTabRequests == before + 1)
     }
 }
+
+@MainActor
+@Suite("Button fixes from live feedback (2026-06-10)")
+struct ButtonLiveFeedbackTests {
+    @Test("multi-line command bodies split into per-line sends; blanks dropped")
+    func commandLineSplitting() {
+        #expect(SessionController.commandLines("look") == ["look"])
+        #expect(SessionController.commandLines("q request\nwhere") == ["q request", "where"])
+        #expect(SessionController.commandLines("a\r\nb\n\n  \nc") == ["a", "b", "c"])
+        #expect(SessionController.commandLines("").isEmpty)
+        // `;`-stacking is the pipeline's job, per line — not split here.
+        #expect(SessionController.commandLines("kill rat;loot") == ["kill rat;loot"])
+    }
+
+    @Test("an SF Symbol name is recognised; an emoji falls back to text")
+    func iconFallback() {
+        #expect(ButtonIconView.isSymbolName("bolt.fill"))
+        #expect(!ButtonIconView.isSymbolName("🐯"))
+        #expect(!ButtonIconView.isSymbolName("not.a.real.symbol.name"))
+    }
+}

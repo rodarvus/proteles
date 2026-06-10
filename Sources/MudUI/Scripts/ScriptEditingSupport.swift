@@ -85,6 +85,28 @@ extension TriggerTarget {
     }
 }
 
+/// A multi-line command/script body field. A `TextEditor`, because Return
+/// must insert a line — a multiline `TextField` *submits* on Return, which
+/// made multi-line button bodies impossible to type (live feedback,
+/// 2026-06-10). Each line of a command body is sent separately on fire.
+struct CommandBodyEditor: View {
+    let title: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextEditor(text: $text)
+                .font(.body.monospaced())
+                .frame(minHeight: 44, maxHeight: 150)
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 extension Binding where Value == String? {
     /// Bridge an optional-string model field to a `TextField`: an empty
     /// field reads/writes as `nil`.
