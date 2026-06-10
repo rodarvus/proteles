@@ -44,6 +44,13 @@ public struct FloatingMiniWindow<Content: View>: View {
         self.content = content()
     }
 
+    /// Opt-in translucency so output that slides under a floating panel stays
+    /// readable (the panel floats over the game text by design — §3.4). Off,
+    /// the chrome is today's solid material; on, the whole panel renders at
+    /// `floatingPanelAlpha` (0.3…1.0, Settings ▸ Appearance).
+    @AppStorage("floatingPanelTranslucent") private var translucent = false
+    @AppStorage("floatingPanelAlpha") private var panelAlpha = 0.7
+
     public var body: some View {
         VStack(spacing: 0) {
             header
@@ -52,6 +59,7 @@ public struct FloatingMiniWindow<Content: View>: View {
         .modifier(MiniWindowSizing(hugContent: hugContent, explicitSize: explicitSize))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator, lineWidth: 1))
+        .opacity(translucent ? max(0.3, min(panelAlpha, 1.0)) : 1)
         .overlay(alignment: .bottomTrailing) { resizeGrip }
         .background(sizeReader)
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
