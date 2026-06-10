@@ -13,6 +13,50 @@ extension SessionController {
         return String(trimmed.dropFirst("/lua".count)).trimmingCharacters(in: .whitespaces)
     }
 
+    /// Evaluate Lua typed into the **Lua Console window**: the input echoes
+    /// into the console transcript, `print`/`Note`/result output is routed to
+    /// the console (NOT the scrollback), and every other effect (sends,
+    /// timers, …) applies normally. `environment` picks a loaded plugin's
+    /// sandbox env (nil = the user environment, like `/lua`).
+    public func runLuaConsoleWindow(_ code: String, environment: String?) async {
+        await scriptDiagnostics.append(ScriptDiagnostic(
+            severity: .input, source: environment, message: code
+        ))
+        guard let scriptEngine else {
+            await scriptDiagnostics.append(ScriptDiagnostic(
+                severity: .error, source: nil, message: "scripting is unavailable"
+            ))
+            return
+        }
+        let effects = await scriptEngine.evaluateConsole(code, inPlugin: environment)
+        var passthrough: [ScriptEffect] = []
+        for effect in effects {
+            switch effect {
+            case .note(let text, let foreground, _):
+                await scriptDiagnostics.append(ScriptDiagnostic(
+                    severity: foreground == "red" ? .error : .output,
+                    source: environment,
+                    message: Self.strippedConsolePrefix(text)
+                ))
+            case .echo(let text):
+                await scriptDiagnostics.append(ScriptDiagnostic(
+                    severity: .output, source: environment, message: text
+                ))
+            default:
+                passthrough.append(effect)
+            }
+        }
+        await applyScriptEffects(passthrough)
+        await persistVariablesIfDirty()
+        await rearmTimerLoopIfScriptScheduled()
+    }
+
+    /// Console notes arrive prefixed `lua: ` (for scrollback identification);
+    /// inside the console window that's noise.
+    static func strippedConsolePrefix(_ text: String) -> String {
+        text.hasPrefix("lua: ") ? String(text.dropFirst(5)) : text
+    }
+
     /// Evaluate console Lua and apply its effects (echo output + result/errors).
     func runLuaConsole(_ code: String) async {
         guard let scriptEngine else {
