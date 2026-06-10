@@ -32,6 +32,12 @@ targets:
       # available app-wide without a system install. See Resources/Fonts/OFL-*.txt.
       - path: Resources/Fonts
         type: folder
+      # Bundled default soundpack cues (#10) — CC0, derived from Kenney's
+      # Interface Sounds; see Resources/DefaultSounds/PROVENANCE.md. Copied to
+      # Contents/Resources/DefaultSounds/; a same-named file in the user's
+      # ~/Documents/Proteles/Sounds/ always overrides.
+      - path: Resources/DefaultSounds
+        type: folder
     info:
       path: Info.plist
       properties:
