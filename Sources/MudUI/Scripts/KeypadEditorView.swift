@@ -141,6 +141,12 @@ struct KeypadEditorView: View {
                 .font(.body.monospaced())
                 .frame(maxWidth: 320)
                 .focused($commandFieldFocused)
+                .onSubmit {
+                    // Return commits and closes the editor row — the binding
+                    // already saved every keystroke, so this is pure dismissal.
+                    commandFieldFocused = false
+                    selectedKey = nil
+                }
             }
         } else {
             Text("Select a key to set the command it sends.")
