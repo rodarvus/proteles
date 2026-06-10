@@ -19,7 +19,18 @@ public struct LevelDBPanelView: View {
             content
         }
         .frame(minWidth: 340, minHeight: 260)
-        .task { if model.report.summary.totalKills == 0 { model.reload() } }
+        // Fresh data every time the window opens — the old empty-only guard
+        // froze the panel on its connect-time snapshot (live report) — and a
+        // gentle auto-refresh while it stays open, so a running grind's
+        // levels/pups appear without touching the reload button. Reads are
+        // read-only + off-main; the plugin stays the sole writer (D-71).
+        .task { model.reload() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(45))
+                model.reload()
+            }
+        }
     }
 
     @ViewBuilder
@@ -34,18 +45,32 @@ public struct LevelDBPanelView: View {
         } else if let error = model.loadError, model.report.summary.totalKills == 0 {
             placeholder(icon: "exclamationmark.triangle", title: "Couldn't read the database", message: error)
         } else {
-            ScrollView {
-                Group {
-                    switch model.mode {
-                    case .live: LevelDBLiveView(report: model.report)
-                    case .reports: LevelDBReportsView(model: model)
-                    case .analytics: LevelDBAnalyticsView(report: model.report)
-                    case .journey: LevelDBJourneyView(report: model.report)
+            // Days/Insights/Records manage their own scrolling (split view /
+            // ScrollView inside); the classic faces keep the shared wrapper.
+            switch model.mode {
+            case .days:
+                LevelDBDaysView(model: model)
+                footer
+            case .insights:
+                LevelDBInsightsView(insights: model.insights)
+                footer
+            case .records:
+                LevelDBRecordsView(records: model.insights.records)
+                footer
+            case .live, .journey, .tables:
+                ScrollView {
+                    Group {
+                        switch model.mode {
+                        case .live: LevelDBLiveView(report: model.report)
+                        case .tables: LevelDBReportsView(model: model)
+                        case .journey: LevelDBJourneyView(report: model.report)
+                        default: EmptyView()
+                        }
                     }
+                    .padding(14)
                 }
-                .padding(14)
+                footer
             }
-            footer
         }
     }
 
