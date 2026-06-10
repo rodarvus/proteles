@@ -136,6 +136,26 @@ public actor SearchAndDestroyHost {
     end
     """
 
+    /// Call an S&D global function by name with string arguments — the
+    /// `CallPlugin(<S&D id>, fn, …)` bridge for shim plugins (the user
+    /// plugin's campaign mode drives `do_cp_check` etc.). The name must be a
+    /// plain identifier; unknown functions are a quiet no-op (matching
+    /// MUSHclient's eNoSuchRoutine tolerance).
+    public func call(_ function: String, args: [String] = []) async -> [ScriptEffect] {
+        let identifier = function.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+        guard identifier, !function.isEmpty else { return [] }
+        let quoted = args.map { arg in
+            "\"" + arg
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                + "\""
+        }.joined(separator: ", ")
+        let effects = await (try? runtime.run(
+            "if type(\(function)) == 'function' then \(function)(\(quoted)) end"
+        )) ?? []
+        return consume(effects)
+    }
+
     /// Force a campaign/quest detection pass — run S&D's `do_cp_info()` (sends
     /// `cp info`, enables the scrape triggers, and on the end-of-info line sets
     /// `current_activity = "cp"` + publishes). Used by the panel's "Scan now"

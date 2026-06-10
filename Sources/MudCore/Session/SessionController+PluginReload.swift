@@ -10,6 +10,12 @@ extension SessionController {
     /// the primary switch stays under the cyclomatic-complexity limit.
     func applyInboundControlEffect(_ effect: ScriptEffect) async {
         switch effect {
+        case .callSearchAndDestroy(let function, let args):
+            // A shim plugin's CallPlugin(<S&D id>, fn, …) → the native host.
+            if let searchAndDestroy {
+                await applyScriptEffects(searchAndDestroy.call(function, args: args))
+                await rearmTimerLoopIfSnDScheduled()
+            }
         case .simulate(let text):
             await reinjectSimulated(text)
         case .injectGMCP(let package, let json):

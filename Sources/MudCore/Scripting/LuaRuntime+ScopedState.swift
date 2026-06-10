@@ -19,6 +19,22 @@ public extension LuaRuntime {
         if !context.pluginID.isEmpty { pluginContexts[context.pluginID] = context }
     }
 
+    /// Mark a natively-bridged MUSHclient plugin id present/absent (the
+    /// session calls this as the mapper / S&D host attach or unload).
+    func setBridgedPlugin(_ id: String, installed: Bool) {
+        if installed {
+            bridgedPluginIDs.insert(id)
+        } else {
+            bridgedPluginIDs.remove(id)
+        }
+    }
+
+    /// Set the per-character Databases directory surfaced by
+    /// `proteles.databaseDir()`. Called by the session once the character is known.
+    func setDatabasesDirectory(_ path: String) {
+        databasesDirectory = path
+    }
+
     /// Update the live connection state reported by `proteles.isConnected`.
     func setConnected(_ value: Bool) {
         connected = value

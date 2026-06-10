@@ -8,3 +8,12 @@ public extension ScriptEngine {
         await runtime.evaluateConsole(code)
     }
 }
+
+public extension ScriptEngine {
+    /// Mark a natively-bridged MUSHclient plugin id present/absent for the
+    /// shim's `IsPluginInstalled` (the session calls this as the mapper / S&D
+    /// host attach or a world reload drops them).
+    func setBridgedPlugin(_ id: String, installed: Bool) async {
+        await runtime.setBridgedPlugin(id, installed: installed)
+    }
+}
