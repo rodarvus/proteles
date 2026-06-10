@@ -17,6 +17,16 @@ extension SessionController {
         logTranscript(.note, text)
     }
 
+    /// Run every plugin's `OnPluginSaveState` and persist dirty variables —
+    /// the app calls this at termination so quitting while connected doesn't
+    /// lose state changed since connect (the `ldb on` loss). Effects are
+    /// discarded: there's no output to show during teardown.
+    public func savePluginState() async {
+        guard let scriptEngine else { return }
+        _ = await scriptEngine.savePluginState()
+        await persistVariablesIfDirty()
+    }
+
     func processChunk(_ wireBytes: [UInt8]) async {
         // Tee to the recorder before doing any parser work — we want
         // the *wire* bytes on disk so a replay re-runs the full

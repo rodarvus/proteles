@@ -3126,12 +3126,17 @@ end
 -- =============================================================================
 function ldb_on(name, line, wildcards)
    enabled = true
+   -- Proteles patch: persist immediately (upstream relies on OnPluginSaveState,
+   -- which only ran on disconnect/quit; a crash after `ldb on` lost it).
+   SetVariable("enabled", "true")
    if not db then open_db() end
    ColourNote("cyan", "", PREFIX .. "Data collection enabled.")
 end
 
 function ldb_off(name, line, wildcards)
    enabled = false
+   -- Proteles patch: see ldb_on.
+   SetVariable("enabled", "false")
    ColourNote("cyan", "", PREFIX .. "Data collection disabled.")
 end
 

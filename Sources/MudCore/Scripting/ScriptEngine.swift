@@ -307,6 +307,14 @@ public actor ScriptEngine {
         return effects
     }
 
+    /// Fire `OnPluginSaveState` on every loaded plugin without disconnecting —
+    /// MUSHclient also saves state outside disconnect (world save, autosave).
+    /// Called on app termination so quitting while connected doesn't lose
+    /// plugin state changed since connect (`ldb on` was lost this way).
+    public func savePluginState() async -> [ScriptEffect] {
+        await fireCallbackOnAll("OnPluginSaveState")
+    }
+
     /// Invoke a plugin lifecycle callback (`OnPluginConnect`, … ) by name.
     @discardableResult
     public func callGlobal(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {

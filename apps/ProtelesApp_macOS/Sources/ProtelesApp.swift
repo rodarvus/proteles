@@ -107,24 +107,7 @@ struct ProtelesApp: App {
 
         // Register the built-in native plugins (ported from the Aardwolf
         // package). Registration is quick and completes well before connect.
-        if let scriptEngine {
-            Task {
-                await scriptEngine.registerNativePlugin(AardGMCPHandler())
-                await scriptEngine.registerNativePlugin(VitalShortcuts())
-                await scriptEngine.registerNativePlugin(NoteMode())
-                await scriptEngine.registerNativePlugin(TextSubstitution())
-                await scriptEngine.registerNativePlugin(ChatEcho())
-                await scriptEngine.registerNativePlugin(AsciiMap())
-                await scriptEngine.registerNativePlugin(TickTimer())
-                await scriptEngine.registerNativePlugin(URLLinkify())
-                await scriptEngine.registerNativePlugin(InventorySerialsPlugin())
-                // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
-                // pickers) for shim plugins that pop a dialog.
-                await scriptEngine.setDialogProvider(makeScriptDialogProvider())
-                // Native NSPasteboard for plugin GetClipboard/SetClipboard.
-                await scriptEngine.setClipboardProvider(makeClipboardProvider())
-            }
-        }
+        if let scriptEngine { Self.registerNativePlugins(on: scriptEngine) }
 
         // Profile store → WorldsModel. defaultStoreURL only fails if
         // Application Support is unavailable (effectively never on
@@ -156,6 +139,8 @@ struct ProtelesApp: App {
         // Single-session client: no window tabbing, so the "Show Tab Bar" /
         // "Show All Tabs" menu items don't clutter the menu bar.
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        Self.wireTerminationSave(session: session)
 
         // Opt-in crash/hang diagnostics (MetricKit): subscribe iff the user has
         // enabled it. MetricKit delivers any pending payload shortly after launch.
@@ -379,6 +364,36 @@ struct ProtelesApp: App {
     /// Build the session-log URL: a per-world subfolder when enabled, pruning
     /// old logs to the retention limit first. Called by the session on connect.
     ///
+    /// Register the built-in native plugins + the dialog/clipboard providers
+    /// (split from `init` for its body-length budget).
+    private static func registerNativePlugins(on scriptEngine: ScriptEngine) {
+        Task {
+            await scriptEngine.registerNativePlugin(AardGMCPHandler())
+            await scriptEngine.registerNativePlugin(VitalShortcuts())
+            await scriptEngine.registerNativePlugin(NoteMode())
+            await scriptEngine.registerNativePlugin(TextSubstitution())
+            await scriptEngine.registerNativePlugin(ChatEcho())
+            await scriptEngine.registerNativePlugin(AsciiMap())
+            await scriptEngine.registerNativePlugin(TickTimer())
+            await scriptEngine.registerNativePlugin(URLLinkify())
+            await scriptEngine.registerNativePlugin(InventorySerialsPlugin())
+            // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
+            // pickers) for shim plugins that pop a dialog.
+            await scriptEngine.setDialogProvider(makeScriptDialogProvider())
+            // Native NSPasteboard for plugin GetClipboard/SetClipboard.
+            await scriptEngine.setClipboardProvider(makeClipboardProvider())
+        }
+    }
+
+    /// Save plugin state on quit (OnPluginSaveState + variable persist) —
+    /// disconnect already saves; quitting while connected must too (`ldb on`
+    /// was lost this way). Wired via ``AppDelegate/onTerminate``.
+    private static func wireTerminationSave(session: SessionController) {
+        Task { @MainActor in
+            AppDelegate.onTerminate = { await session.savePluginState() }
+        }
+    }
+
     /// **`nonisolated`** (and the helpers it calls): the session invokes this from
     /// its own actor — *off* the main actor — via the `logFileURL` closure. SwiftUI's
     /// `App` protocol is `@MainActor`, which otherwise infers `@MainActor` onto every
@@ -437,6 +452,22 @@ struct ProtelesApp: App {
 /// instead observe `NSMenu` item additions and drop Format whenever it (re)
 /// appears. A MUD client has no rich-text formatting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Runs before termination completes — set by `ProtelesApp.init` to save
+    /// plugin state (`OnPluginSaveState` + variable persist), so quitting
+    /// while connected doesn't lose state changed since connect (`ldb on`
+    /// was lost this way; disconnect already saved, quit didn't).
+    @MainActor static var onTerminate: (() async -> Void)?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let hook = Self.onTerminate else { return .terminateNow }
+        Self.onTerminate = nil // run once; re-entry terminates immediately
+        Task { @MainActor in
+            await hook()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
         NotificationCenter.default.addObserver(
             self,
