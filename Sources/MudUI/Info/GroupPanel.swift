@@ -10,6 +10,10 @@ public struct GroupPanel: View {
     private let state: GMCPState
     @AppStorage("group.roomOnly") private var roomOnly = false
     @AppStorage("group.sort") private var sortRaw = GroupMemberSort.standard.rawValue
+    /// 1 except in a translucent floating miniwindow, whose chrome material is
+    /// the one backdrop — our own material on top would compound opacity
+    /// (the Character-panel live report, 2026-06-10).
+    @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
     public init(state: GMCPState) {
         self.state = state
@@ -41,7 +45,7 @@ public struct GroupPanel: View {
                 placeholder("Not in a group.")
             }
         }
-        .background(.regularMaterial)
+        .background(.regularMaterial.opacity(panelBackgroundOpacity < 1 ? 0 : 1))
     }
 
     private var header: some View {

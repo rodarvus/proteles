@@ -14,6 +14,13 @@ public struct ChatView: View {
     /// content backgrounds with it; the chat text keeps full contrast).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
+    /// Inside a translucent miniwindow the chrome's material is the one
+    /// backdrop — painting our theme fill on top of it COMPOUNDS opacity
+    /// (live report, 2026-06-10). Drop the fill there; keep it when docked.
+    private var fillOpacity: Double {
+        panelBackgroundOpacity < 1 ? 0 : 1
+    }
+
     public init(model: ChatModel) {
         self.model = model
     }
@@ -94,7 +101,7 @@ public struct ChatView: View {
                 description: Text("Channel and tell messages appear here once you're connected.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
+            .background(Color(palette.defaultBackground).opacity(fillOpacity))
         } else {
             chatList
         }
@@ -122,7 +129,7 @@ public struct ChatView: View {
             .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
             .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
         }
-        .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
+        .background(Color(palette.defaultBackground).opacity(fillOpacity))
     }
 
     private func row(_ chatLine: ChatLine) -> some View {
