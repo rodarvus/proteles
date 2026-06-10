@@ -9,6 +9,8 @@ import SwiftUI
 public struct InfoPanel: View {
     private let state: GMCPState
     @AppStorage("themeID") private var themeID = Theme.default.id
+    /// 1 except in a translucent floating miniwindow (see FloatingMiniWindow).
+    @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
     public init(state: GMCPState) {
         self.state = state
@@ -46,7 +48,7 @@ public struct InfoPanel: View {
             }
         }
         .padding(10)
-        .background(Color(palette.defaultBackground))
+        .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
     }
 
     private var gap: some View {
