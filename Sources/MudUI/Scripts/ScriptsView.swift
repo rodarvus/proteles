@@ -32,8 +32,9 @@ public struct ScriptsView: View {
     @State var timerQuery = ""
     @State var macroQuery = ""
     @State var deleteRequest: ScriptsDeleteRequest?
-    /// Which tab's filter field holds keyboard focus — driven by ⌘F (§3.2;
+    /// Which tab's filter field holds keyboard focus — driven by ⌥⌘F (§3.2;
     /// the reason the deployment floor moved to macOS 15 / `searchFocused`).
+    /// ⌘F proper is Find-in-scrollback on the main window (D-104).
     @FocusState var filterFocus: Tab?
 
     public init(model: ScriptsModel) {
@@ -63,7 +64,7 @@ public struct ScriptsView: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
-        // Backs Edit ▸ Filter Scripts (⌘F): focus this window's frontmost
+        // Backs Edit ▸ Filter Scripts (⌥⌘F): focus this window's frontmost
         // filter field. Republished on every state change, so the captured
         // tab stays current; a no-op on the unfilterable tabs.
         .focusedSceneValue(\.scriptsFilterAction) { [selectedTab] in
