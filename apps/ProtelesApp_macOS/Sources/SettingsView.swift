@@ -95,6 +95,9 @@ private struct AppearanceSettingsView: View {
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
+    // Floating-panel translucency — read by FloatingMiniWindow (MudUI).
+    @AppStorage("floatingPanelTranslucent") private var floatingPanelTranslucent = false
+    @AppStorage("floatingPanelAlpha") private var floatingPanelAlpha = 0.7
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -156,6 +159,24 @@ private struct AppearanceSettingsView: View {
                     .font(sampleFont)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Floating Panels") {
+                Toggle("Translucent floating panels", isOn: $floatingPanelTranslucent)
+                LabeledContent("Opacity") {
+                    HStack(spacing: 10) {
+                        Slider(value: $floatingPanelAlpha, in: 0.3...1.0)
+                            .frame(width: 180)
+                        Text("\(Int(floatingPanelAlpha * 100)) %")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+                .disabled(!floatingPanelTranslucent)
+                Text("Lets game text show through floating panels like the "
+                    + "Text Map. Applies immediately.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
