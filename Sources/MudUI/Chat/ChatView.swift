@@ -109,11 +109,13 @@ public struct ChatView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                // Overlay, auto-hiding scroller like the main output —
+                // .scrollIndicators(.automatic) keeps a permanent legacy bar
+                // when the system shows scroll bars "Always".
+                .overlayScrollers()
             }
-            // Match the main output: pin to the bottom (resists accidental drift)
-            // and only show the scroller while scrolling.
+            // Match the main output: pin to the bottom (resists accidental drift).
             .defaultScrollAnchor(.bottom)
-            .scrollIndicators(.automatic)
             .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
             .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
         }
