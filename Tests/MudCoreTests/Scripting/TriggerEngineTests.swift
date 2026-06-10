@@ -129,12 +129,29 @@ struct TriggerEngineEvaluationTests {
         #expect(sends == ["first", "second"])
     }
 
-    @Test("Equal sequences keep insertion order")
+    @Test("Equal sequences + identical match text keep insertion order")
     func stableOrder() throws {
         var engine = TriggerEngine()
         try engine.add(Trigger(pattern: .substring("x"), sequence: 100, sendText: "a"))
         try engine.add(Trigger(pattern: .substring("x"), sequence: 100, sendText: "b"))
         #expect(engine.process("x").map(\.send) == ["a", "b"])
+    }
+
+    /// MUSHclient's `CompareTrigger` (doc.cpp): equal sequences sort by the
+    /// match text, byte order. The roomscan shape depends on it: the end
+    /// marker `*{/roomchars}*` (`*` = 0x2A) must fire BEFORE the armed
+    /// catch-all `^(?P<char_line>.+)$` (`^` = 0x5E) on the `{/roomchars}`
+    /// line, whatever order the plugin defined them in.
+    @Test("Equal sequences tie-break on match text, not insertion order")
+    func matchTextTieBreak() throws {
+        var engine = TriggerEngine()
+        try engine.add(Trigger(
+            pattern: .regex("^(?P<char_line>.+)$"), sequence: 40, sendText: "catch-all"
+        ))
+        try engine.add(Trigger(
+            pattern: .wildcard("*{/roomchars}*"), sequence: 40, sendText: "end-marker"
+        ))
+        #expect(engine.process("{/roomchars}").map(\.send) == ["end-marker", "catch-all"])
     }
 
     @Test("continueEvaluation=false stops later triggers; a non-match never does")

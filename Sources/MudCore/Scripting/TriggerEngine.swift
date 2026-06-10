@@ -20,6 +20,17 @@ public enum TriggerPattern: Sendable, Equatable, Codable {
     /// unanchored. Numbered and `(?<name>…)` captures are supported.
     case regex(String)
 
+    /// The match text as authored (the wildcard/regex/literal source, before
+    /// any conversion). This is the string MUSHclient stores as the trigger's
+    /// "match" and uses to order same-sequence triggers — see ``TriggerEngine``.
+    var matchText: String {
+        switch self {
+        case .substring(let text), .beginsWith(let text), .exact(let text),
+             .wildcard(let text), .regex(let text):
+            text
+        }
+    }
+
     /// The regex source this pattern compiles to.
     func regexSource() -> String {
         switch self {
@@ -169,7 +180,8 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
     public var pattern: TriggerPattern
     public var caseSensitive: Bool
     public var enabled: Bool
-    /// Lower fires first; ties keep insertion order.
+    /// Lower fires first; ties run in match-text byte order (MUSHclient's
+    /// `CompareTrigger` tiebreak — see ``TriggerEngine``).
     public var sequence: Int
     /// Optional group for bulk enable/disable.
     public var group: String?
@@ -263,9 +275,16 @@ public struct TriggerFiring: Sendable, Equatable {
 
 /// Matches incoming lines against a sorted set of triggers (PLAN.md §8.6).
 ///
-/// Evaluation order is explicit: triggers run in ascending ``Trigger/sequence``
-/// (ties in insertion order). A match fires the trigger; evaluation continues
-/// to later triggers unless the matched trigger sets
+/// Evaluation order is explicit: triggers run in ascending ``Trigger/sequence``,
+/// ties in ascending **match text** (byte order) — MUSHclient's `CompareTrigger`
+/// tiebreak, which plugins are written against. A real plugin arms a catch-all
+/// `^(?P<x>.+)$` between `{roomchars}`…`{/roomchars}` markers and relies on the
+/// end marker's handler running *first* on the `{/roomchars}` line (both match
+/// it at the same sequence; `*{/roomchars}*` sorts before `^…`) to clear a
+/// "scanning" flag the catch-all's handler gates on — insertion-order ties made
+/// the catch-all capture the tag itself as a mob name in empty rooms. Exact
+/// duplicates keep insertion order. A match fires the trigger; evaluation
+/// continues to later triggers unless the matched trigger sets
 /// ``Trigger/continueEvaluation`` to false. A non-match never stops the loop
 /// (unlike MUSHclient). One-shot triggers are removed after they fire.
 public struct TriggerEngine {
@@ -293,8 +312,19 @@ public struct TriggerEngine {
         } catch PatternMatcher.MatchError.invalidPattern(let source) {
             throw TriggerError.invalidPattern(source)
         }
-        let index = triggers.firstIndex { $0.sequence > trigger.sequence } ?? triggers.count
+        let index = triggers.firstIndex { existing in
+            existing.sequence > trigger.sequence ||
+                (existing.sequence == trigger.sequence &&
+                    matchTextOrder(trigger.pattern.matchText, precedes: existing.pattern.matchText))
+        } ?? triggers.count
         triggers.insert(trigger, at: index)
+    }
+
+    /// Strict byte-order "less than" (MUSHclient compares the match CStrings
+    /// with `_tcscmp`) — NOT Unicode-canonical `String` comparison, which can
+    /// disagree with byte order outside ASCII.
+    private func matchTextOrder(_ lhs: String, precedes rhs: String) -> Bool {
+        lhs.utf8.lexicographicallyPrecedes(rhs.utf8)
     }
 
     /// Remove a trigger by id.
