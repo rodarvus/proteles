@@ -298,27 +298,17 @@ struct ContentView: View {
             CommandInputView(
                 onSubmit: { command in Task { try? await session.send(command) } },
                 onMacroKey: { chord, inputIsEmpty in
-                    let context = MacroContext(
-                        inputIsEmpty: inputIsEmpty,
-                        navigationModeOn: navigationMode
+                    // Layer precedence + transcript diagnostics live in
+                    // MacroKeyDispatch (D-102: macro → keypad → button hotkey).
+                    MacroKeyDispatch.handle(
+                        chord,
+                        context: MacroContext(
+                            inputIsEmpty: inputIsEmpty,
+                            navigationModeOn: navigationMode
+                        ),
+                        scripts: scripts,
+                        session: session
                     )
-                    // Precedence (D-102): an explicit macro wins, then the
-                    // keypad grid, then a command-button hotkey (#40) as the
-                    // fallback binding for the same chord.
-                    if let action = scripts.matchMacro(chord, context: context) {
-                        if case .replaceInput(let text) = action { return .replaceInput(text) }
-                        Task { await session.fire(action) }
-                        return .handled
-                    }
-                    if let action = scripts.matchKeypad(chord) {
-                        Task { await session.fire(action) }
-                        return .handled
-                    }
-                    if let buttonID = scripts.matchButtonHotkey(chord, context: context) {
-                        Task { await scripts.fireButton(buttonID) }
-                        return .handled
-                    }
-                    return .notHandled
                 },
                 vocabulary: { makeCompletionVocabulary() },
                 spellChecking: commandSpellCheck,

@@ -154,6 +154,23 @@ struct ScriptsDeleteRequest {
     }
 }
 
+private struct ScriptsFilterActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+public extension FocusedValues {
+    /// "Focus the frontmost Scripts tab's filter field" — published by the
+    /// key Scripts window via `focusedSceneValue`, consumed by the app's
+    /// **Edit ▸ Filter Scripts** (⌘F) menu command, which is disabled (nil)
+    /// in every other window. The menu route keeps the shortcut discoverable
+    /// (DESIGN.md §3.2) — an invisible in-window button does not reliably
+    /// register its chord.
+    var scriptsFilterAction: (() -> Void)? {
+        get { self[ScriptsFilterActionKey.self] }
+        set { self[ScriptsFilterActionKey.self] = newValue }
+    }
+}
+
 extension View {
     /// `onDeleteCommand` is macOS-only; MudUI also builds for iOS, where the
     /// Scripts lists simply don't take the Delete key (touch UIs delete by

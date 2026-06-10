@@ -63,17 +63,12 @@ public struct ScriptsView: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
-        .background {
-            // ⌘F focuses the frontmost tab's filter field. A hidden button
-            // (not a menu command) keeps the chord scoped to this window.
-            Button("Filter") {
-                guard filterableTabs.contains(selectedTab) else { return }
-                filterFocus = selectedTab
-            }
-            .keyboardShortcut("f", modifiers: .command)
-            .opacity(0)
-            .frame(width: 0, height: 0)
-            .accessibilityHidden(true)
+        // Backs Edit ▸ Filter Scripts (⌘F): focus this window's frontmost
+        // filter field. Republished on every state change, so the captured
+        // tab stays current; a no-op on the unfilterable tabs.
+        .focusedSceneValue(\.scriptsFilterAction) { [selectedTab] in
+            guard filterableTabs.contains(selectedTab) else { return }
+            filterFocus = selectedTab
         }
         .confirmationDialog(
             deleteRequest?.title ?? "",
