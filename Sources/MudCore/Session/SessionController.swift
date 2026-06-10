@@ -344,7 +344,7 @@ public actor SessionController {
         self.gmcpState = gmcpState
         self.chatStore = chatStore
         mapStore = MapStore()
-        bigmapStore = BigmapStore()
+        bigmapStore = BigmapStore(url: BigmapStore.defaultStoreURL())
         scriptDiagnostics = ScriptDiagnosticsStore()
         self.scriptEngine = scriptEngine
         let (stream, continuation) = AsyncStream<State>.makeStream(

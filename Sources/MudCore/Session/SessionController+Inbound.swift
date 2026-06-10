@@ -22,8 +22,11 @@ extension SessionController {
     /// lose state changed since connect (the `ldb on` loss). Effects are
     /// discarded: there's no output to show during teardown.
     public func savePluginState() async {
-        guard let scriptEngine else { return }
-        _ = await scriptEngine.savePluginState()
+        if let scriptEngine {
+            _ = await scriptEngine.savePluginState()
+        }
+        // Always drain dirty variables — the S&D host persists through the
+        // same path even when no script engine is attached (#52).
         await persistVariablesIfDirty()
     }
 

@@ -185,6 +185,9 @@ public final class ScriptsModel {
         guard let databases = try? ProtelesPaths.databasesDirectory(),
               let host = try? SearchAndDestroyHost() else { return }
         await host.configure(directory: databases.path)
+        // Persisted variables must land BEFORE load() — S&D reads GetVariable
+        // at script top-level (the xset flags, area ranges) — #52.
+        await session.hydrateSearchAndDestroyVariables(host)
         try? await host.load()
         await session.attachSearchAndDestroy(host)
     }
