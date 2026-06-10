@@ -8,382 +8,98 @@ import SwiftUI
 /// manager. Edits bind live through ``ScriptsModel`` so they persist and
 /// take effect in the running session immediately. List rows carry an
 /// enable toggle + a Duplicate/Delete context menu, mirrored by the toolbar.
+///
+/// Polish pass (#35): every list is filterable (the toolbar search field),
+/// Add/Duplicate ride ⌘N/⌘D and the Delete key deletes (keyboard-first,
+/// DESIGN.md §3.2), deletes confirm (§3.7), empty lists explain themselves
+/// (§3.5), and grouped items get per-group bulk enable/disable.
+///
+/// The five tab builders live in `ScriptsView+Tabs.swift`; this file holds
+/// the window shell + the shared delete-confirmation plumbing. The stored
+/// properties are `internal` (not `private`) so that extension file can
+/// reach them — stored state can't move into an extension.
 public struct ScriptsView: View {
-    @Bindable private var model: ScriptsModel
+    /// Which tab is frontmost — drives the ⌘N/⌘D routing (the shortcut
+    /// belongs to the visible tab's toolbar only, so the chord is unambiguous).
+    enum Tab: Hashable {
+        case triggers, aliases, timers, macros, buttons
+    }
+
+    @Bindable var model: ScriptsModel
+    @State var selectedTab: Tab = .triggers
+    @State var triggerQuery = ""
+    @State var aliasQuery = ""
+    @State var timerQuery = ""
+    @State var macroQuery = ""
+    @State var deleteRequest: ScriptsDeleteRequest?
 
     public init(model: ScriptsModel) {
         self.model = model
     }
 
     public var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             triggersTab
                 .tabItem { Label("Triggers", systemImage: "bolt.fill") }
+                .tag(Tab.triggers)
             aliasesTab
                 .tabItem { Label("Aliases", systemImage: "text.cursor") }
+                .tag(Tab.aliases)
             timersTab
                 .tabItem { Label("Timers", systemImage: "timer") }
+                .tag(Tab.timers)
             macrosTab
                 .tabItem { Label("Macros", systemImage: "keyboard") }
+                .tag(Tab.macros)
             buttonsTab
                 .tabItem { Label("Buttons", systemImage: "rectangle.grid.2x2") }
+                .tag(Tab.buttons)
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
-    }
-
-    /// A toolbar switch toggling whether this kind is shared across all
-    /// characters (stored in `Scripts/_shared`) or kept per-character.
-    @ToolbarContentBuilder
-    private func scopeToggleItem(_ kind: ScriptScope.Kind) -> some ToolbarContent {
-        ToolbarItem(placement: .automatic) {
-            Toggle("Shared", isOn: Binding(
-                get: { model.scriptScope.isGlobal(kind) },
-                set: { on in Task { await model.setScriptGlobal(kind, on) } }
-            ))
-            .toggleStyle(.switch)
-            .help("Share these \(kind.rawValue) across all your characters "
-                + "(Scripts/_shared) instead of keeping them per-character.")
+        .confirmationDialog(
+            deleteRequest?.title ?? "",
+            isPresented: confirmingDelete,
+            titleVisibility: .visible,
+            presenting: deleteRequest
+        ) { request in
+            Button(request.confirmLabel, role: .destructive) {
+                Task { await perform(request) }
+            }
+        } message: { request in
+            Text(request.message)
         }
     }
 
-    // MARK: - Triggers
+    // MARK: - Delete confirmation
 
-    private var triggersTab: some View {
-        NavigationSplitView {
-            List(selection: $model.selectedTriggerID) {
-                ForEach(model.triggers) { trigger in
-                    ScriptRow(
-                        title: title(trigger.pattern.text, fallback: "New Trigger"),
-                        subtitle: trigger.sendText ?? trigger.script ?? "—",
-                        isEnabled: model.binding(forTrigger: trigger.id)?.enabled
-                            ?? .constant(trigger.enabled)
-                    )
-                    .tag(trigger.id)
-                    .contextMenu {
-                        rowMenu(
-                            duplicate: { await model.duplicateTrigger(id: trigger.id) },
-                            delete: {
-                                model.selectedTriggerID = trigger.id
-                                await model.removeSelectedTrigger()
-                            }
-                        )
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            .toolbar {
-                itemToolbar(
-                    add: { await model.addTrigger() },
-                    duplicate: { if let id = model.selectedTriggerID { await model.duplicateTrigger(id: id) }
-                    },
-                    remove: { await model.removeSelectedTrigger() },
-                    canModify: model.selectedTriggerID != nil
-                )
-                scopeToggleItem(.triggers)
-            }
-        } detail: {
-            if let id = model.selectedTriggerID, let binding = model.binding(forTrigger: id) {
-                TriggerEditorView(trigger: binding)
-            } else {
-                unavailable("No Trigger Selected", systemImage: "bolt")
-            }
-        }
-    }
-
-    // MARK: - Aliases
-
-    private var aliasesTab: some View {
-        NavigationSplitView {
-            List(selection: $model.selectedAliasID) {
-                ForEach(model.aliases) { alias in
-                    ScriptRow(
-                        title: title(alias.pattern.text, fallback: "New Alias"),
-                        subtitle: alias.sendText ?? "—",
-                        isEnabled: model.binding(forAlias: alias.id)?.enabled
-                            ?? .constant(alias.enabled)
-                    )
-                    .tag(alias.id)
-                    .contextMenu {
-                        rowMenu(
-                            duplicate: { await model.duplicateAlias(id: alias.id) },
-                            delete: {
-                                model.selectedAliasID = alias.id
-                                await model.removeSelectedAlias()
-                            }
-                        )
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            .toolbar {
-                itemToolbar(
-                    add: { await model.addAlias() },
-                    duplicate: { if let id = model.selectedAliasID { await model.duplicateAlias(id: id) } },
-                    remove: { await model.removeSelectedAlias() },
-                    canModify: model.selectedAliasID != nil
-                )
-                scopeToggleItem(.aliases)
-            }
-        } detail: {
-            if let id = model.selectedAliasID, let binding = model.binding(forAlias: id) {
-                AliasEditorView(alias: binding)
-            } else {
-                unavailable("No Alias Selected", systemImage: "text.cursor")
-            }
-        }
-    }
-
-    // MARK: - Timers
-
-    private var timersTab: some View {
-        NavigationSplitView {
-            List(selection: $model.selectedTimerID) {
-                ForEach(model.timers) { timer in
-                    ScriptRow(
-                        title: timer.label?.isEmpty == false ? timer.label! : "Timer",
-                        subtitle: Self.timerSummary(timer),
-                        isEnabled: model.binding(forTimer: timer.id)?.enabled
-                            ?? .constant(timer.enabled)
-                    )
-                    .tag(timer.id)
-                    .contextMenu {
-                        rowMenu(
-                            duplicate: { await model.duplicateTimer(id: timer.id) },
-                            delete: {
-                                model.selectedTimerID = timer.id
-                                await model.removeSelectedTimer()
-                            }
-                        )
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            .toolbar {
-                itemToolbar(
-                    add: { await model.addTimer() },
-                    duplicate: { if let id = model.selectedTimerID { await model.duplicateTimer(id: id) } },
-                    remove: { await model.removeSelectedTimer() },
-                    canModify: model.selectedTimerID != nil
-                )
-                scopeToggleItem(.timers)
-            }
-        } detail: {
-            if let id = model.selectedTimerID, let binding = model.binding(forTimer: id) {
-                TimerEditorView(timer: binding)
-            } else {
-                unavailable("No Timer Selected", systemImage: "timer")
-            }
-        }
-    }
-
-    // MARK: - Macros
-
-    private var macrosTab: some View {
-        NavigationSplitView {
-            List(selection: $model.selectedMacroID) {
-                ForEach(model.macros) { macro in
-                    ScriptRow(
-                        title: macroTitle(macro),
-                        subtitle: macro.action.text.isEmpty ? "—" : macro.action.text,
-                        isEnabled: model.binding(forMacro: macro.id)?.enabled
-                            ?? .constant(macro.enabled)
-                    )
-                    .tag(macro.id)
-                    .contextMenu {
-                        rowMenu(
-                            duplicate: { await model.duplicateMacro(id: macro.id) },
-                            delete: {
-                                model.selectedMacroID = macro.id
-                                await model.removeSelectedMacro()
-                            }
-                        )
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            .toolbar {
-                itemToolbar(
-                    add: { await model.addMacro() },
-                    duplicate: { if let id = model.selectedMacroID { await model.duplicateMacro(id: id) } },
-                    remove: { await model.removeSelectedMacro() },
-                    canModify: model.selectedMacroID != nil
-                )
-                scopeToggleItem(.macros)
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Restore Default Keypad Layout") {
-                            Task { await model.restoreDefaultMacros() }
-                        }
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-                    .help("More macro actions")
-                }
-            }
-        } detail: {
-            if let id = model.selectedMacroID, let binding = model.binding(forMacro: id) {
-                MacroEditorView(macro: binding)
-            } else {
-                unavailable("No Macro Selected", systemImage: "keyboard")
-            }
-        }
-    }
-
-    private func macroTitle(_ macro: Macro) -> String {
-        if let name = macro.name, !name.isEmpty { return name }
-        return KeyChordFormatter.describe(macro.chord)
-    }
-
-    // MARK: - Buttons (#15)
-
-    private var buttonsTab: some View {
-        NavigationSplitView {
-            List(selection: $model.selectedButtonID) {
-                ForEach(model.buttonBar.groups) { group in
-                    Section {
-                        ForEach(group.buttons) { button in
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(button.label.isEmpty ? "—" : button.label)
-                                Text(button.action.text.isEmpty ? "—" : button.action.text)
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                            .tag(button.id)
-                            .contextMenu {
-                                Button("Delete", role: .destructive) {
-                                    Task { await model.deleteButton(button.id) }
-                                }
-                            }
-                        }
-                        Button {
-                            Task { await model.addButton(toGroup: group.id) }
-                        } label: {
-                            Label("Add Button", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderless)
-                    } header: {
-                        HStack {
-                            TextField("Group", text: model.bindingForGroupName(group.id))
-                                .textFieldStyle(.plain)
-                            Spacer()
-                            Button(role: .destructive) {
-                                Task { await model.deleteButtonGroup(group.id) }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.addButtonGroup() }
-                    } label: {
-                        Label("Add Group", systemImage: "folder.badge.plus")
-                    }
-                    .help("Add a button group/page")
-                }
-            }
-        } detail: {
-            if let id = model.selectedButtonID, let binding = model.binding(forButton: id) {
-                CommandButtonEditor(button: binding)
-            } else {
-                unavailable("No Button Selected", systemImage: "rectangle.grid.2x2")
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func title(_ text: String, fallback: String) -> String {
-        text.isEmpty ? fallback : text
-    }
-
-    @ViewBuilder
-    private func rowMenu(
-        duplicate: @escaping () async -> Void,
-        delete: @escaping () async -> Void
-    ) -> some View {
-        Button("Duplicate") { Task { await duplicate() } }
-        Button("Delete", role: .destructive) { Task { await delete() } }
-    }
-
-    @ToolbarContentBuilder
-    private func itemToolbar(
-        add: @escaping () async -> Void,
-        duplicate: @escaping () async -> Void,
-        remove: @escaping () async -> Void,
-        canModify: Bool
-    ) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button { Task { await add() } } label: { Label("Add", systemImage: "plus") }
-            Button { Task { await duplicate() } } label: {
-                Label("Duplicate", systemImage: "plus.square.on.square")
-            }
-            .disabled(!canModify)
-            Button(role: .destructive) { Task { await remove() } } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .disabled(!canModify)
-        }
-    }
-
-    private func unavailable(_ title: String, systemImage: String) -> some View {
-        ContentUnavailableView(
-            title,
-            systemImage: systemImage,
-            description: Text("Select an item from the list, or add a new one.")
+    private var confirmingDelete: Binding<Bool> {
+        Binding(
+            get: { deleteRequest != nil },
+            set: { if !$0 { deleteRequest = nil } }
         )
     }
 
-    private static func timerSummary(_ timer: MudTimer) -> String {
-        switch timer.schedule {
-        case .after(let delay): "once after \(Self.seconds(delay))"
-        case .every(let interval, _): "every \(Self.seconds(interval))"
-        case .atTimeOfDay(let hour, let minute, _):
-            String(format: "daily at %02d:%02d", hour, minute)
+    private func perform(_ request: ScriptsDeleteRequest) async {
+        switch request.action {
+        case .deleteTrigger(let id):
+            model.selectedTriggerID = id
+            await model.removeSelectedTrigger()
+        case .deleteAlias(let id):
+            model.selectedAliasID = id
+            await model.removeSelectedAlias()
+        case .deleteTimer(let id):
+            model.selectedTimerID = id
+            await model.removeSelectedTimer()
+        case .deleteMacro(let id):
+            model.selectedMacroID = id
+            await model.removeSelectedMacro()
+        case .deleteButton(let id):
+            await model.deleteButton(id)
+        case .deleteButtonGroup(let id):
+            await model.deleteButtonGroup(id)
+        case .restoreDefaultMacros:
+            await model.restoreDefaultMacros()
         }
-    }
-
-    private static func seconds(_ value: TimeInterval) -> String {
-        value == value.rounded() ? "\(Int(value))s" : "\(value)s"
-    }
-}
-
-/// One row in a scripts list: an enable checkbox, a title, and a dimmed
-/// subtitle. The row dims when disabled.
-private struct ScriptRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isEnabled: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            enableToggle
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.body.monospaced())
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-        }
-        .padding(.vertical, 2)
-        .opacity(isEnabled ? 1 : 0.6)
-    }
-
-    private var enableToggle: some View {
-        Toggle("Enabled", isOn: $isEnabled)
-            .labelsHidden()
-            .help("Enable or disable this item")
-        #if os(macOS)
-            .toggleStyle(.checkbox)
-        #endif
     }
 }
