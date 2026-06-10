@@ -85,6 +85,24 @@ struct NotificationRulesSection: View {
         }
     }
 
+    /// The threshold of an `.hpBelow` rule, editable in place (you shouldn't
+    /// have to delete + re-add the rule to tune the percent).
+    private func thresholdBinding(_ rule: NotificationRule) -> Binding<Int> {
+        Binding(
+            get: {
+                let current = rules.first { $0.id == rule.id } ?? rule
+                if case .hpBelow(let percent) = current.trigger { return percent }
+                return 25
+            },
+            set: { newValue in
+                var all = rules
+                guard let index = all.firstIndex(where: { $0.id == rule.id }) else { return }
+                all[index].trigger = .hpBelow(newValue)
+                setRules(all)
+            }
+        )
+    }
+
     private func ruleRow(_ rule: NotificationRule) -> some View {
         DisclosureGroup {
             Picker("Sound", selection: field(rule, \.sound)) {
@@ -92,6 +110,14 @@ struct NotificationRulesSection: View {
             }
             if case .keyword = rule.trigger {
                 Toggle("Match as regular expression", isOn: field(rule, \.regex))
+            }
+            if case .hpBelow(let percent) = rule.trigger {
+                Stepper(
+                    "Threshold: \(percent)%",
+                    value: thresholdBinding(rule),
+                    in: 1...99,
+                    step: 5
+                )
             }
             TextField("Title (optional)", text: field(rule, \.titleTemplate))
             TextField(
