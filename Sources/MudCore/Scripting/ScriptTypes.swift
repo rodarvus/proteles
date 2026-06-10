@@ -155,6 +155,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish a captured continent bigmap (border-stripped styled lines) for
     /// a continent zone id — the map panel renders it while overland.
     case updateBigmap(zone: Int, name: String, lines: [Line])
+    /// A script diagnostic for the Lua Console (errors carry the owning
+    /// plugin's name as `source`). Emitted ALONGSIDE the red scrollback note,
+    /// so the console is a tee — applying it only feeds the console store.
+    case diagnostic(source: String?, message: String)
     /// Set the witnessed-tick anchor for the status-bar countdown (a `Date`,
     /// or `nil` to clear). Emitted by the native `TickTimer` plugin on each
     /// `comm.tick`; routing it through an effect (rather than decoding in the

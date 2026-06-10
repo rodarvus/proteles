@@ -103,10 +103,8 @@ public extension LuaRuntime {
             luaPushValue(state, argument)
         }
         if lua_pcall(state, Int32(arguments.count), 0, 0) != 0 {
-            effects.append(.note(
-                text: "Lua callback error in \(name): \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
+            effects.append(contentsOf: scriptErrorEffects(
+                "Lua callback error in \(name): \(Self.popMessage(state))", pluginID: pluginID
             ))
         }
         return effects
@@ -139,10 +137,8 @@ public extension LuaRuntime {
         }
         luaPushValue(state, .string(text))
         if lua_pcall(state, 1, 1, 0) != 0 {
-            effects.append(.note(
-                text: "Lua callback error in OnPluginSend: \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
+            effects.append(contentsOf: scriptErrorEffects(
+                "Lua callback error in OnPluginSend: \(Self.popMessage(state))", pluginID: pluginID
             ))
             return (effects, true)
         }
@@ -175,22 +171,32 @@ public extension LuaRuntime {
         }
         guard let envRef = pluginEnvs[pluginID] else { return effects }
         guard Self.loadBuffer(state, source, name: "=" + chunkName) == 0 else {
-            effects.append(.note(
-                text: "Lua compile error: \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
+            effects.append(contentsOf: scriptErrorEffects(
+                "Lua compile error: \(Self.popMessage(state))", pluginID: pluginID
             ))
             return effects
         }
         lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [chunk, env]
         lua_setfenv(state, -2) // set chunk's env; pops env; [chunk]
         if lua_pcall(state, 0, 0, 0) != 0 {
-            effects.append(.note(
-                text: "\(errorLabel): \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
+            effects.append(contentsOf: scriptErrorEffects(
+                "\(errorLabel): \(Self.popMessage(state))", pluginID: pluginID
             ))
         }
         return effects
+    }
+
+    /// A script error as paired effects: the red scrollback note (existing
+    /// behaviour) plus a `.diagnostic` for the Lua Console, attributed to the
+    /// plugin's display name (falling back to its id).
+    func scriptErrorEffects(_ text: String, pluginID: String?) -> [ScriptEffect] {
+        let source = pluginID.map { id in
+            let name = pluginContexts[id]?.pluginName ?? ""
+            return name.isEmpty ? id : name
+        }
+        return [
+            .note(text: text, foreground: "red", background: nil),
+            .diagnostic(source: source, message: text)
+        ]
     }
 }

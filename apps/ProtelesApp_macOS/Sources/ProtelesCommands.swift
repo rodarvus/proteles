@@ -118,6 +118,11 @@ struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.pluginsWindowID)
             }
             .keyboardShortcut("P", modifiers: [.command, .shift])
+
+            Button("Lua Console…") {
+                openWindow(id: ProtelesApp.luaConsoleWindowID)
+            }
+            .keyboardShortcut("Y", modifiers: [.command, .shift])
         }
 
         // Panels live in the main-window tiled dock (not separate windows, which

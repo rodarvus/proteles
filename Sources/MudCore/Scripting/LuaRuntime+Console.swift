@@ -14,15 +14,26 @@ extension LuaRuntime {
     /// captured as effects (the compat shim routes them through `proteles.*`), and
     /// any compile/runtime error becomes a single red note. Never throws.
     ///
-    /// Runs in the `_user` scope/context (like a user alias), not a plugin's, so
-    /// it pokes at the same globals the user's own scripts see.
-    public func evaluateConsole(_ code: String) -> [ScriptEffect] {
+    /// Runs in the `_user` scope/context (like a user alias) by default, so it
+    /// pokes at the same globals the user's own scripts see — or, when
+    /// `pluginID` names a loaded shim plugin, inside that plugin's sandbox
+    /// environment + variable scope (the console's environment picker), so
+    /// you can inspect/poke a plugin's locals-turned-globals directly.
+    public func evaluateConsole(_ code: String, pluginID: String? = nil) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
         defer { releaseTransientRefs() }
         let previousScope = currentVariableScope
         let previousContext = pluginContext
-        currentVariableScope = "_user"
-        pluginContext = .default
+        if let pluginID {
+            guard pluginEnvs[pluginID] != nil else {
+                return [Self.consoleNote("error: no loaded plugin environment '\(pluginID)'", color: "red")]
+            }
+            currentVariableScope = pluginID
+            if let context = pluginContexts[pluginID] { pluginContext = context }
+        } else {
+            currentVariableScope = "_user"
+            pluginContext = .default
+        }
         defer { currentVariableScope = previousScope; pluginContext = previousContext }
 
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,6 +50,12 @@ extension LuaRuntime {
                 effects.append(Self.consoleNote("error: \(popError())", color: "red"))
                 return effects
             }
+        }
+        // Run inside the picked plugin's sandbox env (its `__index` still
+        // reaches `_G`, so shared helpers keep working).
+        if let pluginID, let envRef = pluginEnvs[pluginID] {
+            lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [chunk, env]
+            lua_setfenv(state, -2) // [chunk]
         }
 
         clua_install_timeout(state, executionTimeout.inSeconds, Self.hookInstructionInterval)
@@ -82,5 +99,14 @@ extension LuaRuntime {
     /// from MUD text and obviously came from `/lua`.
     static func consoleNote(_ text: String, color: String) -> ScriptEffect {
         .note(text: "lua: \(text)", foreground: color, background: nil)
+    }
+}
+
+public extension LuaRuntime {
+    /// A loaded plugin's display name for the console's environment picker
+    /// (its `<plugin name=…>`), falling back to the id.
+    func pluginDisplayName(_ pluginID: String) -> String {
+        let name = pluginContexts[pluginID]?.pluginName ?? ""
+        return name.isEmpty ? pluginID : name
     }
 }

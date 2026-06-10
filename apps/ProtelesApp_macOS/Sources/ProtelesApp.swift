@@ -52,6 +52,9 @@ struct ProtelesApp: App {
     /// The active world's installed MUSHclient plugins (Plugins window).
     @State private var plugins: PluginsModel
 
+    /// Script diagnostics + REPL (Lua Console window).
+    @State private var luaConsole: LuaConsoleModel
+
     /// The graphical GMCP map (docked Map panel).
     @State private var map: MapPanelModel
 
@@ -122,6 +125,7 @@ struct ProtelesApp: App {
         _chat = State(initialValue: ChatModel(store: session.chatStore))
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
+        _luaConsole = State(initialValue: LuaConsoleModel(session: session))
         _map = State(initialValue: MapPanelModel(session: session))
         _asciiMap = State(initialValue: MapModel(store: session.mapStore))
 
@@ -295,6 +299,12 @@ struct ProtelesApp: App {
         .defaultSize(width: 820, height: 680)
         .windowResizability(.contentSize)
 
+        Window("Lua Console", id: ProtelesApp.luaConsoleWindowID) {
+            LuaConsoleView(model: luaConsole)
+                .navigationTitle("Lua Console")
+        }
+        .defaultSize(width: 640, height: 400)
+
         Window("Plugins", id: ProtelesApp.pluginsWindowID) {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
@@ -316,6 +326,7 @@ struct ProtelesApp: App {
     static let pluginsWindowID = "plugins"
     static let helpWindowID = "help"
     static let levelsWindowID = "levels"
+    static let luaConsoleWindowID = "luaConsole"
 
     /// `~/Library/Application Support/com.proteles.ProtelesApp/logs` — where
     /// user session logs are written (used by the log-file builder + the

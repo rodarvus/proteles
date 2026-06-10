@@ -276,6 +276,7 @@ public extension SessionController {
     /// ``applyScriptEffects(_:)`` to keep each switch within the complexity
     /// budget.
     private func applyControlEffect(_ effect: ScriptEffect) async {
+        if await applyStoreEffect(effect) { return }
         switch effect {
         case .setAutomationsSuspended(let suspended):
             await scriptEngine?.setSuspended(suspended)
@@ -283,12 +284,6 @@ public extension SessionController {
             await persistNativePluginState(id: id)
         case .aardwolfTelnet(let option, let on):
             try? await sendRaw(Self.aardwolfTelnetBytes(option: option, on: on))
-        case .updateMap(let map):
-            await mapStore.update(map)
-        case .updateBigmap(let zone, let name, let lines):
-            await bigmapStore.update(BigmapStore.ContinentMap(zone: zone, name: name, lines: lines))
-        case .updateTick(let date):
-            await gmcpState.setLastTick(date)
         case .mapperCall(let function, let args):
             await applyMapperCall(function: function, args: args)
         case .publishModel(let json):
@@ -298,6 +293,28 @@ public extension SessionController {
         default:
             await applyInboundControlEffect(effect)
         }
+    }
+
+    /// Effects that just feed a UI store (the captured maps, the tick anchor,
+    /// the Lua Console). Returns true when handled.
+    private func applyStoreEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .updateMap(let map):
+            await mapStore.update(map)
+        case .updateBigmap(let zone, let name, let lines):
+            await bigmapStore.update(BigmapStore.ContinentMap(zone: zone, name: name, lines: lines))
+        case .diagnostic(let source, let message):
+            // The paired red note already went to the scrollback — this tee
+            // feeds only the Lua Console window.
+            await scriptDiagnostics.append(ScriptDiagnostic(
+                severity: .error, source: source, message: message
+            ))
+        case .updateTick(let date):
+            await gmcpState.setLastTick(date)
+        default:
+            return false
+        }
+        return true
     }
 
     /// MUSHclient `Simulate`: feed `text` back through the inbound pipeline as

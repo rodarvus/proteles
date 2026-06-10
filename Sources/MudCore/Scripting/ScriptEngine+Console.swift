@@ -1,11 +1,35 @@
 public extension ScriptEngine {
-    /// Evaluate one-off **console** input (the `/lua …` command, #41) on the live
-    /// user runtime, returning the effects to surface (captured `print`/`Note`
-    /// output, an `= value` echo for expressions, or a single red error note).
-    /// See ``LuaRuntime/evaluateConsole(_:)``.
+    /// Evaluate one-off **console** input (the `/lua …` command, #41, and the
+    /// Lua Console window) on the live runtime, returning the effects to
+    /// surface (captured `print`/`Note` output, an `= value` echo for
+    /// expressions, or a single red error note). `inPlugin` runs the code in
+    /// that loaded plugin's sandbox environment (the console's environment
+    /// picker). See ``LuaRuntime/evaluateConsole(_:pluginID:)``.
     @discardableResult
-    func evaluateConsole(_ code: String) async -> [ScriptEffect] {
-        await runtime.evaluateConsole(code)
+    func evaluateConsole(_ code: String, inPlugin pluginID: String? = nil) async -> [ScriptEffect] {
+        await runtime.evaluateConsole(code, pluginID: pluginID)
+    }
+
+    /// One pickable Lua Console environment: a loaded shim plugin.
+    struct ConsoleEnvironment: Sendable, Equatable, Identifiable {
+        public let id: String
+        public let name: String
+
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    /// The loaded plugin environments console code can run in, in load order
+    /// (plus the implicit user environment, which is `inPlugin: nil`).
+    func consoleEnvironments() async -> [ConsoleEnvironment] {
+        var environments: [ConsoleEnvironment] = []
+        for id in loadedPluginIDs {
+            let name = await runtime.pluginDisplayName(id)
+            environments.append(ConsoleEnvironment(id: id, name: name))
+        }
+        return environments
     }
 }
 

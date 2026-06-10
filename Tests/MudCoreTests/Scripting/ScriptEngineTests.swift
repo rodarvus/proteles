@@ -52,16 +52,23 @@ struct ScriptEngineTests {
         #expect(disposition == ScriptEngine.LineDisposition())
     }
 
-    @Test("A throwing trigger script surfaces as a red note")
+    @Test("A throwing trigger script surfaces as a red note + console diagnostic")
     func scriptError() async throws {
         let engine = try ScriptEngine()
         try await engine.addTrigger(Trigger(pattern: .substring("x"), script: "error('boom')"))
         let disposition = await engine.process(line: "x")
-        #expect(disposition.effects.count == 1)
+        #expect(disposition.effects.count == 2)
         if case .note(let text, "red", _) = disposition.effects.first {
             #expect(text.contains("boom"))
         } else {
             Issue.record("expected a red error note")
+        }
+        // The Lua Console's tee rides alongside (attributed "user").
+        if case .diagnostic(let source, let message) = disposition.effects.last {
+            #expect(source == "user")
+            #expect(message.contains("boom"))
+        } else {
+            Issue.record("expected a paired diagnostic")
         }
     }
 
