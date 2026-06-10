@@ -46,5 +46,6 @@ extension LuaRuntime {
         case databaseDir
         case isPluginInstalled
         case sndCall
+        case playSound
     }
 }

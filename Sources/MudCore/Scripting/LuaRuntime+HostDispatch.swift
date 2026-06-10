@@ -200,6 +200,15 @@ extension LuaRuntime {
                 title: Self.argString(arguments, 0),
                 body: Self.argString(arguments, 1)
             ))
+        case .playSound:
+            // MUSHclient `PlaySound` units: volume in dB (0 = full; out of
+            // range coerces to full), pan −100…100. Converted here so the
+            // effect carries player-ready linear gain.
+            effects.append(.playSound(
+                file: Self.argString(arguments, 0),
+                volume: SoundVolume.playSoundGain(volumeDb: Self.argDouble(arguments, 1)),
+                pan: SoundVolume.playSoundPan(mushPan: Self.argDouble(arguments, 2))
+            ))
         default: recordOutputEffect(function, arguments)
         }
     }

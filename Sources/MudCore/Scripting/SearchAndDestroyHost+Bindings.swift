@@ -275,8 +275,17 @@ extension SearchAndDestroyHost {
     function Repaint() end
     function Redraw() end
     function SetCursor(...) return 0 end
-    function Sound(...) return 0 end
-    function PlaySound(...) return 0 end
+    -- Sounds (#10): S&D plays its own cues (target_nearby.wav /
+    -- other_target_here.wav) via PlaySound(0, GetInfo(74) .. file, false,
+    -- 100, 0) — volume 100 is out of MUSHclient's dB range and coerces to
+    -- full volume (methods_sounds.cpp); the host converts units.
+    function PlaySound(buffer, file, loop, volume, pan)
+      file = tostring(file or "")
+      if file == "" then return 30046 end -- eBadParameter
+      proteles.playSound(file, tonumber(volume) or 0, tonumber(pan) or 0)
+      return 0
+    end
+    function Sound(file) return PlaySound(0, file, false, 0, 0) end
     function Hash(s) return tostring(s) end
     function FixupHTML(s) return tostring(s) end
     function GetUniqueNumber() return 0 end

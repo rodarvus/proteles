@@ -37,6 +37,16 @@ public struct PluginContext: Sendable, Equatable {
     public var soundsDirectory: String
     public var logDirectory: String
 
+    /// The shared `~/Documents/Proteles/Sounds/` path (trailing slash) every
+    /// context resolves `GetInfo(74)` to by default, so a plugin's
+    /// `PlaySound(0, GetInfo(74) .. "x.wav", …)` (S&D's cues, the reference
+    /// soundpack idiom) finds the user's cue files. Empty if the data home
+    /// can't be created. Evaluated once, lazily (path lookup + mkdir).
+    public static let defaultSoundsPath: String = {
+        guard let url = try? ProtelesPaths.soundsDirectory() else { return "" }
+        return url.path + "/"
+    }()
+
     public init(
         pluginID: String,
         pluginName: String,
@@ -46,7 +56,7 @@ public struct PluginContext: Sendable, Equatable {
         worldDirectory: String = "",
         appDirectory: String = "",
         stateDirectory: String = "",
-        soundsDirectory: String = "",
+        soundsDirectory: String = PluginContext.defaultSoundsPath,
         logDirectory: String = ""
     ) {
         self.pluginID = pluginID
