@@ -172,6 +172,16 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `CallPlugin(<S&D id>, fn, …)` from a shim plugin, bridged to the native
     /// S&D host (the user plugin's campaign mode drives `do_cp_check` etc.).
     case callSearchAndDestroy(function: String, args: [String])
+    /// A fresh snapshot of S&D's shim-readable accessors (`target_as_json`,
+    /// `targets_as_json`, `goto_list_count`), emitted by the S&D host whenever
+    /// their combined value changes. The session mirrors it into the shim
+    /// runtime so a plugin's `CallPlugin(<S&D id>, "target_as_json")` answers
+    /// SYNCHRONOUSLY — `.callSearchAndDestroy` is applied *after* the calling
+    /// Lua returns, so a cross-runtime read can never carry a value back (a
+    /// plugin reading the current target through the effect path always saw
+    /// nil and concluded "no campaign" while S&D was mid-hunt). A nil field
+    /// means the loaded S&D doesn't define that accessor.
+    case searchAndDestroyState(target: String?, targets: String?, gotoCount: String?)
     /// A plugin asked the native Chat Capture plugin to store a line from
     /// outside (`CallPlugin(<chat-capture id>, "storeFromOutside", text, tab)`)
     /// — the bridge to native chat for rsocial/hadar_spellup etc. The host

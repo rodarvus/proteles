@@ -16,9 +16,15 @@ public actor SearchAndDestroyHost {
         case loadFailed(String)
     }
 
-    private let runtime: LuaRuntime
+    /// Internal (not private) so the shim-state mirror extension
+    /// (`SearchAndDestroyHost+ShimState`) can evaluate the read accessors.
+    let runtime: LuaRuntime
     /// The latest JSON model S&D published (via the `xg_draw_window` bridge).
     public private(set) var model: String?
+    /// The last shim-readable state snapshot (the mirror's raw separator-
+    /// joined form), so ``appendingShimState(to:)`` only emits a
+    /// `.searchAndDestroyState` effect when the state actually changed.
+    var lastShimStateSnapshot: String?
 
     /// S&D's triggers/aliases/timers, parsed from the vendored plugin XML.
     /// These drive the host's own matching (S&D runs on its dedicated runtime,
@@ -72,7 +78,30 @@ public actor SearchAndDestroyHost {
     /// Register S&D's modules + curated bindings and load its `core.lua`.
     /// Throws if the vendored script is missing or fails to compile/run.
     public func load() async throws {
-        guard let core = SearchAndDestroyAssets.core else { throw HostError.assetsMissing }
+        // Automations first — their source (the plugin XML) is also the
+        // preferred source for the SCRIPT, below.
+        try loadAutomations()
+
+        // Single source of truth (#53): run the `<script>` CDATA from the
+        // same `Search_and_Destroy.xml` the triggers/aliases come from, so
+        // functions and automations can never skew (the packaged release
+        // shipped a current XML beside a stale pre-split `core.lua`, which
+        // armed `xset autonav` with no `xset_autonav` to call). The split
+        // `core.lua` remains the fallback for older installs.
+        let raw: String
+        if let script = automations?.script, !script.isEmpty {
+            raw = script
+        } else if let core = SearchAndDestroyAssets.core {
+            raw = core
+        } else {
+            throw HostError.assetsMissing
+        }
+        // The [Proteles bridge] (model publishing for the native panel) is
+        // injected HERE, not baked at packaging — so it rides on whatever
+        // S&D source is installed. See SearchAndDestroyHost+BridgeInjection.
+        // The shim accessors (`targets_as_json`/`goto_list_count`) append the
+        // same way — see SearchAndDestroyHost+ShimState.
+        let source = Self.appendingShimAccessors(to: Self.injectingBridge(into: raw))
 
         // S&D's `require`/`dofile` targets resolve from these modules (the
         // loader falls back to a module by basename for dofile): its own data
@@ -84,19 +113,15 @@ public actor SearchAndDestroyHost {
         })
         await runtime.registerModule("movewindow", source: Self.movewindowStub)
 
-        // Curated host API (globals S&D calls), then the script itself. S&D's
-        // `xg_draw_window` carries a small [Proteles bridge] block that
-        // publishes its model (it must live in core.lua's scope to read the
-        // display locals); we just capture the published JSON in `run`.
+        // Curated host API (globals S&D calls), then the script itself; we
+        // capture the bridge's published JSON in `run`.
         do {
             _ = try await runtime.run(Self.bindings)
-            _ = try await runtime.run(core)
+            _ = try await runtime.run(source)
             _ = try await runtime.run(Self.postLoadOverrides)
         } catch {
             throw HostError.loadFailed(String(describing: error))
         }
-
-        try loadAutomations()
     }
 
     /// Neutralise S&D's network self-update path. `download_file` checks an
@@ -153,7 +178,7 @@ public actor SearchAndDestroyHost {
         let effects = await (try? runtime.run(
             "if type(\(function)) == 'function' then \(function)(\(quoted)) end"
         )) ?? []
-        return consume(effects)
+        return await appendingShimState(to: consume(effects))
     }
 
     /// Force a campaign/quest detection pass — run S&D's `do_cp_info()` (sends
@@ -166,7 +191,7 @@ public actor SearchAndDestroyHost {
         let effects = await (try? runtime.run(
             "if type(do_cp_info) == 'function' then do_cp_info() end"
         )) ?? []
-        return consume(effects)
+        return await appendingShimState(to: consume(effects))
     }
 
     /// Parse S&D's triggers/aliases/timers from the vendored plugin XML into
@@ -226,7 +251,9 @@ public actor SearchAndDestroyHost {
         let styles = Self.styleRuns(text: line, runs: runs, palette: renderPalette)
         var out: [ScriptEffect] = []
         var gag = false
+        var fired = false
         for firing in triggers.process(line) {
+            fired = true
             if firing.gag { gag = true }
             out += await applyFiring(
                 send: firing.send,
@@ -235,6 +262,9 @@ public actor SearchAndDestroyHost {
                 styles: styles
             )
         }
+        // Only firings can move S&D's state — skip the mirror probe on the
+        // (overwhelmingly common) lines that match nothing.
+        if fired { out = await appendingShimState(to: out) }
         return (out, gag)
     }
 
@@ -285,7 +315,7 @@ public actor SearchAndDestroyHost {
             case .output: out.append(.echo(send))
             }
         }
-        return out
+        return await appendingShimState(to: out)
     }
 
     /// The next instant any enabled S&D timer is due, or nil if none — so the
@@ -298,9 +328,12 @@ public actor SearchAndDestroyHost {
     /// `tim_init_plugin` bootstrap and the navigation tick timers).
     public func fireTimers(at now: Date = Date()) async -> [ScriptEffect] {
         var out: [ScriptEffect] = []
+        var fired = false
         for firing in timers.due(at: now) {
+            fired = true
             out += await applyFiring(send: firing.send, script: firing.script, match: nil)
         }
+        if fired { out = await appendingShimState(to: out) }
         return out
     }
 
@@ -326,7 +359,7 @@ public actor SearchAndDestroyHost {
             .string("GMCP"),
             .string(package)
         ])
-        return consume(effects)
+        return await appendingShimState(to: consume(effects))
     }
 
     private func applyFiring(
@@ -511,7 +544,7 @@ public actor SearchAndDestroyHost {
     public func run(_ script: String) async throws -> [ScriptEffect] {
         let effects = try await runtime.run(script)
         _ = consume(effects)
-        return effects
+        return await appendingShimState(to: effects)
     }
 
     /// Evaluate a Lua expression to a string (`tostring`), or nil on error.

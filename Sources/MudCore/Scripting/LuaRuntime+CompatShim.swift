@@ -376,9 +376,20 @@ public extension LuaRuntime {
         local args = {...}
         return error_code.eOK, __toLuaLiteral(gmcp(args[1]))
       end
-      -- Search & Destroy runs natively on its own host runtime: forward the
-      -- call so plugins can drive it (do_cp_check etc.).
+      -- Search & Destroy runs natively on its own host runtime. Its read
+      -- accessors answer SYNCHRONOUSLY from `__snd_state` — the snapshot the
+      -- host re-mirrors here whenever it changes — because `proteles.sndCall`
+      -- is an effect applied only after this Lua call returns, so it can
+      -- never carry a return value back (a campaign-driving plugin read nil
+      -- here and wrongly concluded "no active campaign" while S&D was
+      -- mid-hunt). An accessor S&D doesn't define has no mirrored key and
+      -- returns no result (the callers' degrade path). Everything else
+      -- forwards as a fire-and-forget call (do_cp_check etc.).
       if id == "30000000537461726C696E67" then
+        if fn == "target_as_json" or fn == "targets_as_json" or fn == "goto_list_count" then
+          local state = __snd_state
+          return error_code.eOK, state and state[fn]
+        end
         proteles.sndCall(fn, ...); return error_code.eOK
       end
       -- Aardwolf Chat Capture plugin: storeFromOutside(text, tab, foreground)

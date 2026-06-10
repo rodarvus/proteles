@@ -1,3 +1,4 @@
+import CLua
 import Foundation
 
 /// Host-facing controls for the runtime's scoped, plugin-aware state — the
@@ -17,6 +18,27 @@ public extension LuaRuntime {
     func setPluginContext(_ context: PluginContext) {
         pluginContext = context
         if !context.pluginID.isEmpty { pluginContexts[context.pluginID] = context }
+    }
+
+    /// Mirror S&D's shim-readable accessor values into the global
+    /// `__snd_state` table, so the compat shim's `CallPlugin(<S&D id>,
+    /// "target_as_json")` (and friends) can answer synchronously — the
+    /// `proteles.sndCall` effect path is fire-and-forget and can never carry a
+    /// return value back to the calling Lua. A nil field means the loaded S&D
+    /// doesn't define that accessor; the shim then returns no result (the
+    /// callers' documented degrade path). Keys match the accessor names.
+    func setSearchAndDestroyShimState(target: String?, targets: String?, gotoCount: String?) {
+        lua_createtable(state, 0, 3)
+        for (name, value) in [
+            ("target_as_json", target),
+            ("targets_as_json", targets),
+            ("goto_list_count", gotoCount)
+        ] {
+            guard let value else { continue }
+            lua_pushstring(state, value)
+            lua_setfield(state, -2, name)
+        }
+        clua_setglobal(state, "__snd_state")
     }
 
     /// Mark a natively-bridged MUSHclient plugin id present/absent (the

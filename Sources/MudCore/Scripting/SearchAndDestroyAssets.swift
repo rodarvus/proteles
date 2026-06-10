@@ -20,7 +20,8 @@ public enum SearchAndDestroyAssets {
             .appendingPathComponent("search-and-destroy", isDirectory: true)
     }
 
-    /// Whether S&D is installed (its `core.lua` is present in the install dir).
+    /// Whether S&D is installed (its plugin XML — the preferred script
+    /// source, #53 — or the split `core.lua` is present in the install dir).
     public static var isInstalled: Bool {
         isInstalled(in: installDirectory)
     }
@@ -58,9 +59,10 @@ public enum SearchAndDestroyAssets {
 
     // MARK: - Directory-injectable accessors
 
-    /// Whether S&D is installed in `directory` (its `core.lua` is present).
+    /// Whether S&D is installed in `directory` (its plugin XML or the split
+    /// `core.lua` is present — either can supply the script, #53).
     public static func isInstalled(in directory: URL?) -> Bool {
-        core(in: directory) != nil
+        pluginXML(in: directory) != nil || core(in: directory) != nil
     }
 
     /// The plugin's main script read from `directory`, or nil if absent.
