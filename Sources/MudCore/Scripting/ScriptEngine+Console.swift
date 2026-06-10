@@ -65,3 +65,11 @@ public extension ScriptEngine {
         suspended
     }
 }
+
+public extension ScriptEngine {
+    /// Whether script errors also surface as red notes in the main output
+    /// (they always reach the Lua Console's stream) — Settings ▸ Input (#16).
+    func setErrorNotesVisible(_ visible: Bool) async {
+        runtime.errorNotesVisible = visible
+    }
+}

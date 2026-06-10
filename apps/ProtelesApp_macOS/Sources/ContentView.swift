@@ -53,6 +53,7 @@ struct ContentView: View {
     /// "Omit Blank Lines" display preference (View menu); pushed to the session
     /// on launch and whenever it changes. Same UserDefaults key as the toggle.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
+    @AppStorage("scriptErrorsInOutput") private var scriptErrorsInOutput = true
     /// Hide leftover Aardwolf tag lines ({rname}/{coords}/…) from output.
     @AppStorage("gagTagLines") private var gagTagLines = false
     /// Rich Exits: clickable exit hyperlinks in the main output (View menu).
@@ -175,6 +176,9 @@ struct ContentView: View {
             for await line in await session.scrollbackStore.subscribe() {
                 recentLines.append(line.text)
             }
+        }
+        .task(id: scriptErrorsInOutput) {
+            await session.setScriptErrorsInOutput(scriptErrorsInOutput)
         }
         .task(id: omitBlankLines) {
             await session.setOmitBlankLines(omitBlankLines)
