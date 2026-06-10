@@ -183,9 +183,6 @@ struct ProtelesApp: App {
             // the Format menu (rich-text styling), File ▸ New (no documents),
             // and the View ▸ Show/Customise Toolbar + sidebar commands.
             CommandGroup(replacing: .textFormatting) {}
-            CommandGroup(replacing: .newItem) {
-                Button("Import from MUSHclient…") { presentMUSHclientImport() }
-            }
             CommandGroup(replacing: .toolbar) {}
             CommandGroup(replacing: .sidebar) {}
             CommandGroup(replacing: .help) {}
@@ -208,7 +205,8 @@ struct ProtelesApp: App {
                 worlds: worlds,
                 scripts: scripts,
                 layout: layout,
-                resumeStore: resumeStore
+                resumeStore: resumeStore,
+                importFromMUSHclient: presentMUSHclientImport
             )
             CommandGroup(after: .pasteboard) {
                 Button("Copy as ANSI Colour Codes") {

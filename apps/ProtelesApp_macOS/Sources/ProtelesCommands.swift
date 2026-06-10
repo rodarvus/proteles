@@ -29,6 +29,10 @@ struct ProtelesCommands: Commands {
     /// Resume breadcrumb store (#42) — cleared on an explicit Disconnect so an
     /// intentional disconnect doesn't auto-reconnect on a later relaunch.
     var resumeStore: ResumeTokenStore?
+    /// Presents the one-shot MUSHclient import (D-101) — owned by the app
+    /// (it needs the import model), surfaced here so File reads top-down:
+    /// connect, disconnect, worlds, import.
+    var importFromMUSHclient: () -> Void
     @Environment(\.openWindow) private var openWindow
     /// Published by the key Scripts window (nil elsewhere) — backs the
     /// Edit ▸ Filter Scripts ⌥⌘F menu item, so the shortcut is discoverable
@@ -76,8 +80,13 @@ struct ProtelesCommands: Commands {
                 .disabled(scriptsFilterAction == nil)
         }
 
-        CommandGroup(after: .newItem) {
-            Button("Connect") {
+        // File: the session + data lifecycle (connect, disconnect, worlds,
+        // import). Replaces ⌘N — Proteles has no "new document". The editor
+        // and tool windows live under Tools, not here (#35 menu pass).
+        CommandGroup(replacing: .newItem) {
+            // Surface WHICH world ⌘K connects to (the Worlds window's active
+            // selection) right on the menu item.
+            Button(worlds.activeProfile.map { "Connect to \($0.name)" } ?? "Connect") {
                 let session = session
                 let worlds = worlds
                 let scripts = scripts
@@ -109,6 +118,15 @@ struct ProtelesCommands: Commands {
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
 
+            Divider()
+
+            Button("Import from MUSHclient…") { importFromMUSHclient() }
+        }
+
+        // Tools: the editor/inspector windows. A dedicated menu (between View
+        // and Window) instead of crowding File — these open workspaces, they
+        // don't act on the session.
+        CommandMenu("Tools") {
             Button("Scripts…") {
                 openWindow(id: ProtelesApp.scriptsWindowID)
             }
@@ -123,6 +141,14 @@ struct ProtelesCommands: Commands {
                 openWindow(id: ProtelesApp.luaConsoleWindowID)
             }
             .keyboardShortcut("Y", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Levels") { openWindow(id: ProtelesApp.levelsWindowID) }
+                .keyboardShortcut("L", modifiers: [.command, .shift])
+
+            Button("Game Help") { openWindow(id: ProtelesApp.helpWindowID) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
         }
 
         // Panels live in the main-window tiled dock (not separate windows, which
@@ -141,10 +167,6 @@ struct ProtelesCommands: Commands {
                 .keyboardShortcut("U", modifiers: [.command, .shift])
             Toggle(isOn: panelBinding(.info)) { Text("Character") }
                 .keyboardShortcut("I", modifiers: [.command, .shift])
-            Button("Levels") { openWindow(id: ProtelesApp.levelsWindowID) }
-                .keyboardShortcut("L", modifiers: [.command, .shift])
-            Button("Help") { openWindow(id: ProtelesApp.helpWindowID) }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
 
             Divider()
 
@@ -157,10 +179,11 @@ struct ProtelesCommands: Commands {
             // @AppStorage; ContentView pushes the value to the session.
             Toggle("Omit Blank Lines", isOn: $omitBlankLines)
 
-            // Hide leftover Aardwolf telnet-102 tag lines ({rname}/{coords}/…)
+            // Strip leftover Aardwolf telnet-102 tag markers ({rname}/{coords}/…)
             // from the output. Display-only + post-processing, so plugins still
             // receive them; persists via @AppStorage, pushed by ContentView.
-            Toggle("Hide Aardwolf Tag Lines", isOn: $gagTagLines)
+            // (Named to match Settings ▸ Appearance ▸ "Clean Aardwolf tag markers".)
+            Toggle("Clean Aardwolf Tags", isOn: $gagTagLines)
 
             // Make room exits (incl. custom exits) clickable in the main output
             // (native equivalent of Aardwolf-Rich-Exits, no miniwindow). Enabling
