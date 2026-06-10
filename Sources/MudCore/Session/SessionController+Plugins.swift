@@ -30,6 +30,14 @@ public extension SessionController {
             return
         }
         await scriptEngine.setModuleSearchPaths(resolved.map(\.directory.path))
+        // Surface the flat per-character Databases dir for `proteles.databaseDir()`
+        // (#44) BEFORE any OnPluginInstall runs, so a DB-backed plugin opens its
+        // SQLite in the shared Databases tree (where the importer writes it), not
+        // nested under its own state dir. `loadOnePlugin` + dinv/leveldb already do
+        // this; the batch initial-load path was missing it.
+        if let dbPath = databasesDirectoryPath(forCharacter: character) {
+            await scriptEngine.setDatabasesDirectory(dbPath)
+        }
 
         var paths: [String: (code: URL, data: URL)] = [:]
         for (directory, xml) in resolved {
