@@ -2,7 +2,7 @@ name: ProtelesApp_macOS
 options:
   bundleIdPrefix: com.proteles
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "15.0"
   developmentLanguage: en
   createIntermediateGroups: true
   generateEmptyDirectories: true
@@ -104,4 +104,4 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         COMBINE_HIDPI_IMAGES: YES
-        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"

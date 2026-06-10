@@ -22,7 +22,7 @@ public struct ScriptsView: View {
     /// Which tab is frontmost — drives the ⌘N/⌘D routing (the shortcut
     /// belongs to the visible tab's toolbar only, so the chord is unambiguous).
     enum Tab: Hashable {
-        case triggers, aliases, timers, macros, buttons
+        case triggers, aliases, timers, macros, keypad, buttons
     }
 
     @Bindable var model: ScriptsModel
@@ -32,6 +32,9 @@ public struct ScriptsView: View {
     @State var timerQuery = ""
     @State var macroQuery = ""
     @State var deleteRequest: ScriptsDeleteRequest?
+    /// Which tab's filter field holds keyboard focus — driven by ⌘F (§3.2;
+    /// the reason the deployment floor moved to macOS 15 / `searchFocused`).
+    @FocusState var filterFocus: Tab?
 
     public init(model: ScriptsModel) {
         self.model = model
@@ -51,12 +54,27 @@ public struct ScriptsView: View {
             macrosTab
                 .tabItem { Label("Macros", systemImage: "keyboard") }
                 .tag(Tab.macros)
+            keypadTab
+                .tabItem { Label("Keypad", systemImage: "square.grid.3x3") }
+                .tag(Tab.keypad)
             buttonsTab
                 .tabItem { Label("Buttons", systemImage: "rectangle.grid.2x2") }
                 .tag(Tab.buttons)
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
+        .background {
+            // ⌘F focuses the frontmost tab's filter field. A hidden button
+            // (not a menu command) keeps the chord scoped to this window.
+            Button("Filter") {
+                guard filterableTabs.contains(selectedTab) else { return }
+                filterFocus = selectedTab
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
         .confirmationDialog(
             deleteRequest?.title ?? "",
             isPresented: confirmingDelete,
@@ -69,6 +87,11 @@ public struct ScriptsView: View {
         } message: { request in
             Text(request.message)
         }
+    }
+
+    /// The tabs that have a filter field (Keypad and Buttons don't).
+    private var filterableTabs: Set<Tab> {
+        [.triggers, .aliases, .timers, .macros]
     }
 
     // MARK: - Delete confirmation
@@ -98,8 +121,8 @@ public struct ScriptsView: View {
             await model.deleteButton(id)
         case .deleteButtonGroup(let id):
             await model.deleteButtonGroup(id)
-        case .restoreDefaultMacros:
-            await model.restoreDefaultMacros()
+        case .restoreDefaultKeypad:
+            await model.restoreDefaultKeypad()
         }
     }
 }
