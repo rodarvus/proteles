@@ -100,4 +100,60 @@ struct MUSHclientImporterTests {
             atPath: env.databasesDirectory.appendingPathComponent("Hero/dinv.db").path
         ))
     }
+
+    @Test("map background textures copy to MapImages — never clobbering existing files")
+    func mapImages() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // The install's worlds/plugins/images, plus a non-image straggler.
+        let source = root.appendingPathComponent("install/worlds/plugins/images")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("new-forest".utf8).write(to: source.appendingPathComponent("forest.png"))
+        try Data("new-sand".utf8).write(to: source.appendingPathComponent("sand.png"))
+        try Data("notes".utf8).write(to: source.appendingPathComponent("readme.txt"))
+
+        // The scanner reports the folder + image count (txt excluded).
+        let entry = try #require(MUSHclientInstallScanner.scanMapImages(
+            pluginsDirectory: source.deletingLastPathComponent()
+        ))
+        #expect(entry.count == 2)
+
+        // Destination already holds a customised forest.png — it must survive.
+        let destination = root.appendingPathComponent("MapImages")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("customised".utf8).write(to: destination.appendingPathComponent("forest.png"))
+
+        var env = makeEnv(root: root, scriptsDir: root.appendingPathComponent("Scripts"))
+        env.mapImagesDirectory = destination
+        try await env.profiles.load()
+        try await env.library.load()
+        var manifest = makeManifest(
+            pluginXML: root.appendingPathComponent("unused.xml"),
+            dbSrc: root.appendingPathComponent("unused.db")
+        )
+        manifest.plugins = []
+        manifest.databases = []
+        manifest.mapImages = entry
+
+        let result = try await MUSHclientImporter.run(
+            world: makeWorld(),
+            manifest: manifest,
+            selection: .init(
+                importScriptsAndKeypad: false,
+                pluginIncludes: [],
+                databasePaths: [],
+                target: .newProfile(name: "Aardwolf (imported)"),
+                character: "Hero"
+            ),
+            into: env
+        )
+        #expect(result.problems.isEmpty)
+        let copied = try String(contentsOf: destination.appendingPathComponent("sand.png"), encoding: .utf8)
+        #expect(copied == "new-sand")
+        let kept = try String(contentsOf: destination.appendingPathComponent("forest.png"), encoding: .utf8)
+        #expect(kept == "customised")
+        #expect(!FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("readme.txt").path
+        ))
+    }
 }

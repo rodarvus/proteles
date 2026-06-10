@@ -143,6 +143,7 @@ final class MUSHclientImportModel {
             library: PluginLibraryStore(url: PluginLibraryStore.defaultStoreURL()),
             pluginsDirectory: pluginsDirectory,
             databasesDirectory: databasesDirectory,
+            mapImagesDirectory: try? ProtelesPaths.mapImagesDirectory(),
             makeScriptStore: { ScriptStore(directory: scriptsDirectory, character: $0) },
             makeVariableStore: { world in
                 let url = (try? ProtelesPaths.variablesFile(world: world.uuidString))

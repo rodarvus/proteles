@@ -20,19 +20,37 @@ public struct ImportManifest: Sendable, Equatable {
     /// Things that couldn't be scanned/parsed — surfaced to the user and the
     /// "Report on GitHub" path (#feature). Never fatal.
     public var problems: [Problem]
+    /// The install's map background textures (`worlds/plugins/images/`), if the
+    /// folder exists — copied to `~/Documents/Proteles/MapImages/` at import.
+    /// The user's own copies; Proteles still bundles none (GPL, #11).
+    public var mapImages: MapImagesEntry?
 
     public init(
         world: WorldSummary,
         plugins: [PluginEntry] = [],
         databases: [DatabaseEntry] = [],
         stateFiles: [StateFile] = [],
-        problems: [Problem] = []
+        problems: [Problem] = [],
+        mapImages: MapImagesEntry? = nil
     ) {
         self.world = world
         self.plugins = plugins
         self.databases = databases
         self.stateFiles = stateFiles
         self.problems = problems
+        self.mapImages = mapImages
+    }
+
+    /// The map-texture folder found in the install.
+    public struct MapImagesEntry: Sendable, Equatable {
+        public var directory: URL
+        /// How many image files it holds (for the review sheet).
+        public var count: Int
+
+        public init(directory: URL, count: Int) {
+            self.directory = directory
+            self.count = count
+        }
     }
 
     /// Reclassify offer plugins whose id is already in Proteles' library as

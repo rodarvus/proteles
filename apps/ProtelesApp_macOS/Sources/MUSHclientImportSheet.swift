@@ -105,6 +105,12 @@ struct MUSHclientImportSheet: View {
                 ForEach(importable) { database in
                     Toggle(databaseLabel(database), isOn: membership($selectedDatabases, database.id))
                 }
+                if let images = scan.manifest.mapImages {
+                    Text("Plus \(images.count) map background textures → Documents/Proteles/MapImages "
+                        + "(your own copies; files already there are kept).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
