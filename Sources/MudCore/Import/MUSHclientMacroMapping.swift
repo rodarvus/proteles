@@ -37,29 +37,31 @@ public enum MUSHclientMacroMapping {
 
     /// Map the world's macros to Proteles macros, dropping:
     /// - empty commands; and
-    /// - **identity** slots whose command equals the slot name (e.g. `north` →
-    ///   `north`, `examine` → `examine`) — MUSHclient's default Game-menu slots,
-    ///   which carry no custom intent and are historical noise on import. Keyed
-    ///   slots (F-keys / Alt+letter) are unaffected: their name is a key label,
-    ///   never the command, so they never look like identities.
+    /// - **identity** named slots, whose command (trimmed) equals the slot
+    ///   name (`north` → `north`, `examine` → `examine`, `drop` → `drop `) —
+    ///   MUSHclient's default Game-menu slots, *whatever their type*. They're
+    ///   compatibility artifacts for antique MUDs, never user intent, and an
+    ///   Aardwolf player has no use for an unbound "examine → examine" macro
+    ///   (live-import feedback, 2026-06-10; previously only the send-now ones
+    ///   were dropped and the `replace`-type defaults slipped through). Keyed
+    ///   slots (F-keys / Alt+letter) are never dropped by this rule: their
+    ///   name is a key label, so it never equals the command.
     public static func macros(from slots: [MUSHclientWorldFile.Macro]) -> [Macro] {
         slots.compactMap { slot in
             let command = slot.send.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !command.isEmpty else { return nil }
             let name = slot.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let chord = keyChord(forSlot: slot.name)
+            // Identity check on the *unkeyed* (Game-menu) slots only.
+            guard chord != nil || name.lowercased() != command.lowercased() else { return nil }
             // `replace` macros prefill the command line for the user to finish
             // (e.g. `say `); `send_now` (+ anything else) sends immediately.
-            let isReplace = slot.type == "replace"
-            // Drop identity send-now slots (name == command) — MUSHclient's default
-            // Game-menu artifacts. A `replace` prefill is meaningful even then.
-            guard isReplace || name.lowercased() != command.lowercased() else { return nil }
-            let chord = keyChord(forSlot: slot.name) ?? KeyChord(keyCode: 0) // unbound
             // Preserve a prefill's trailing space (the separator before the user's
             // text); only strip XML newlines. A send-now command is fully trimmed.
-            let action: MacroAction = isReplace
+            let action: MacroAction = slot.type == "replace"
                 ? .replaceInput(slot.send.trimmingCharacters(in: .newlines))
                 : .command(command)
-            return Macro(name: slot.name, chord: chord, action: action)
+            return Macro(name: slot.name, chord: chord ?? KeyChord(keyCode: 0), action: action)
         }
     }
 }

@@ -44,19 +44,28 @@ struct MUSHclientMacroMappingTests {
 
 @Suite("MUSHclient replace-type macros → .replaceInput")
 struct MUSHclientReplaceMacroTests {
-    @Test("type=replace → .replaceInput; send_now → .command; replace kept even if name==command")
+    @Test("identity named slots are dropped whatever their type — antique Game-menu defaults")
+    func identityDefaultsDropped() {
+        let slots: [MUSHclientWorldFile.Macro] = [
+            .init(name: "say", send: "say ", type: "replace"), // default prefill → dropped
+            .init(name: "drop", send: "drop", type: "replace"), // identity replace → dropped
+            .init(name: "examine", send: "examine", type: "replace"), // identity replace → dropped
+            .init(name: "north", send: "north", type: "send_now") // identity send-now → dropped
+        ]
+        #expect(MUSHclientMacroMapping.macros(from: slots).isEmpty)
+    }
+
+    @Test("type=replace → .replaceInput (trailing space kept); keyed slots are never identity-dropped")
     func replaceType() {
         let slots: [MUSHclientWorldFile.Macro] = [
-            .init(name: "say", send: "say ", type: "replace"), // prefill, kept
-            .init(name: "tell", send: "tell", type: "replace"), // name==command but replace → kept
-            .init(name: "north", send: "north", type: "send_now"), // identity send_now → dropped
+            .init(name: "F3", send: "say ", type: "replace"), // keyed prefill → kept
+            .init(name: "whisper", send: "tell a friend ", type: "replace"), // customized named → kept
             .init(name: "F2", send: "kill rat", type: "send_now") // keyed send → command
         ]
         let macros = MUSHclientMacroMapping.macros(from: slots)
-        #expect(macros.count == 3) // north dropped
-        #expect(macros.first { $0.name == "say" }?.action == .replaceInput("say ")) // trailing space kept
-        #expect(macros.first { $0.name == "tell" }?.action == .replaceInput("tell"))
+        #expect(macros.count == 3)
+        #expect(macros.first { $0.name == "F3" }?.action == .replaceInput("say ")) // trailing space kept
+        #expect(macros.first { $0.name == "whisper" }?.action == .replaceInput("tell a friend "))
         #expect(macros.first { $0.name == "F2" }?.action == .command("kill rat"))
-        #expect(!macros.contains { $0.name == "north" })
     }
 }
