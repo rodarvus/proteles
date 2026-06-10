@@ -24,6 +24,12 @@ public struct ImportManifest: Sendable, Equatable {
     /// folder exists — copied to `~/Documents/Proteles/MapImages/` at import.
     /// The user's own copies; Proteles still bundles none (GPL, #11).
     public var mapImages: MapImagesEntry?
+    /// The install's own Search & Destroy copy, when one exists. Proteles
+    /// provides S&D natively (latest release, tested) and that stays the
+    /// default — but a user running a customised/beta S&D can choose to
+    /// import THEIR copy instead (#53: the host loads any S&D source now,
+    /// injecting the panel bridge at load).
+    public var searchAndDestroy: SearchAndDestroyEntry?
 
     public init(
         world: WorldSummary,
@@ -31,7 +37,8 @@ public struct ImportManifest: Sendable, Equatable {
         databases: [DatabaseEntry] = [],
         stateFiles: [StateFile] = [],
         problems: [Problem] = [],
-        mapImages: MapImagesEntry? = nil
+        mapImages: MapImagesEntry? = nil,
+        searchAndDestroy: SearchAndDestroyEntry? = nil
     ) {
         self.world = world
         self.plugins = plugins
@@ -39,6 +46,7 @@ public struct ImportManifest: Sendable, Equatable {
         self.stateFiles = stateFiles
         self.problems = problems
         self.mapImages = mapImages
+        self.searchAndDestroy = searchAndDestroy
     }
 
     /// The map-texture folder found in the install.
@@ -50,6 +58,16 @@ public struct ImportManifest: Sendable, Equatable {
         public init(directory: URL, count: Int) {
             self.directory = directory
             self.count = count
+        }
+    }
+
+    /// The install's S&D folder (holds `Search_and_Destroy.xml` + its `lua/`
+    /// modules).
+    public struct SearchAndDestroyEntry: Sendable, Equatable {
+        public var directory: URL
+
+        public init(directory: URL) {
+            self.directory = directory
         }
     }
 

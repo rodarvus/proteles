@@ -23,8 +23,27 @@ public extension MUSHclientInstallScanner {
             databases: scanDatabases(root: root),
             stateFiles: scanState(pluginsDirectory: pluginsDirectory, worldID: world.worldID),
             problems: problems,
-            mapImages: scanMapImages(pluginsDirectory: pluginsDirectory)
+            mapImages: scanMapImages(pluginsDirectory: pluginsDirectory),
+            searchAndDestroy: scanSearchAndDestroy(root: root)
         )
+    }
+
+    /// The install's own Search & Destroy folder (the one holding
+    /// `Search_and_Destroy.xml`), or nil. Skips the copies the user doesn't
+    /// run (`Search-and-Destroy-V2`, WinkleGold, backups) — same rule as the
+    /// database scan.
+    static func scanSearchAndDestroy(root: URL) -> ImportManifest.SearchAndDestroyEntry? {
+        guard let walker = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: nil
+        ) else { return nil }
+        let skip = ["search-and-destroy-v2", "winklegold", " - copy", "backup"]
+        for case let url as URL in walker {
+            guard url.lastPathComponent == "Search_and_Destroy.xml" else { continue }
+            let lower = url.path.lowercased()
+            guard !skip.contains(where: lower.contains) else { continue }
+            return ImportManifest.SearchAndDestroyEntry(directory: url.deletingLastPathComponent())
+        }
+        return nil
     }
 
     /// The map background textures the GMCP mapper tiles
