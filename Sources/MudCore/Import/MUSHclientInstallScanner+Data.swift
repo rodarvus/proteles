@@ -24,7 +24,8 @@ public extension MUSHclientInstallScanner {
             stateFiles: scanState(pluginsDirectory: pluginsDirectory, worldID: world.worldID),
             problems: problems,
             mapImages: scanMapImages(pluginsDirectory: pluginsDirectory),
-            searchAndDestroy: scanSearchAndDestroy(root: root)
+            searchAndDestroy: scanSearchAndDestroy(root: root),
+            sounds: scanSounds(root: root)
         )
     }
 
@@ -44,6 +45,19 @@ public extension MUSHclientInstallScanner {
             return ImportManifest.SearchAndDestroyEntry(directory: url.deletingLastPathComponent())
         }
         return nil
+    }
+
+    /// The install's soundpack cues (`<root>/sounds/*.wav`), or nil when the
+    /// folder is absent/empty. Imported into `~/Documents/Proteles/Sounds/`
+    /// (#10 tier 1: the user's own files — no redistribution by us).
+    static func scanSounds(root: URL) -> ImportManifest.SoundsEntry? {
+        let directory = root.appendingPathComponent("sounds")
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return nil }
+        let count = items.count { $0.pathExtension.lowercased() == "wav" }
+        guard count > 0 else { return nil }
+        return ImportManifest.SoundsEntry(directory: directory, count: count)
     }
 
     /// The map background textures the GMCP mapper tiles

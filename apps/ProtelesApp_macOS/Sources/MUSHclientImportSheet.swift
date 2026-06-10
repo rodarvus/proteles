@@ -113,6 +113,12 @@ struct MUSHclientImportSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if let sounds = scan.manifest.sounds {
+                    Text("Plus \(sounds.count) soundpack cues → Documents/Proteles/Sounds "
+                        + "(your own copies; files already there are kept).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

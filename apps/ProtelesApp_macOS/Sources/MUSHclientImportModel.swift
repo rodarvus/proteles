@@ -145,6 +145,7 @@ final class MUSHclientImportModel {
             databasesDirectory: databasesDirectory,
             mapImagesDirectory: try? ProtelesPaths.mapImagesDirectory(),
             searchAndDestroyDirectory: SearchAndDestroyAssets.defaultInstallDirectory,
+            soundsDirectory: try? ProtelesPaths.soundsDirectory(),
             makeScriptStore: { ScriptStore(directory: scriptsDirectory, character: $0) },
             makeVariableStore: { world in
                 let url = (try? ProtelesPaths.variablesFile(world: world.uuidString))

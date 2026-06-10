@@ -30,6 +30,9 @@ public struct ImportManifest: Sendable, Equatable {
     /// import THEIR copy instead (#53: the host loads any S&D source now,
     /// injecting the panel bridge at load).
     public var searchAndDestroy: SearchAndDestroyEntry?
+    /// The install's soundpack `.wav`s (`<root>/sounds/`), if present —
+    /// copied to `~/Documents/Proteles/Sounds/` at import (#10).
+    public var sounds: SoundsEntry?
 
     public init(
         world: WorldSummary,
@@ -38,7 +41,8 @@ public struct ImportManifest: Sendable, Equatable {
         stateFiles: [StateFile] = [],
         problems: [Problem] = [],
         mapImages: MapImagesEntry? = nil,
-        searchAndDestroy: SearchAndDestroyEntry? = nil
+        searchAndDestroy: SearchAndDestroyEntry? = nil,
+        sounds: SoundsEntry? = nil
     ) {
         self.world = world
         self.plugins = plugins
@@ -47,12 +51,25 @@ public struct ImportManifest: Sendable, Equatable {
         self.problems = problems
         self.mapImages = mapImages
         self.searchAndDestroy = searchAndDestroy
+        self.sounds = sounds
     }
 
     /// The map-texture folder found in the install.
     public struct MapImagesEntry: Sendable, Equatable {
         public var directory: URL
         /// How many image files it holds (for the review sheet).
+        public var count: Int
+
+        public init(directory: URL, count: Int) {
+            self.directory = directory
+            self.count = count
+        }
+    }
+
+    /// The install's soundpack folder.
+    public struct SoundsEntry: Sendable, Equatable {
+        public var directory: URL
+        /// How many `.wav` files it holds (for the review sheet).
         public var count: Int
 
         public init(directory: URL, count: Int) {

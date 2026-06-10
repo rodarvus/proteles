@@ -57,6 +57,9 @@ public enum MUSHclientImporter {
         /// destination when the user opts to import THEIR S&D copy; nil
         /// skips that step.
         public var searchAndDestroyDirectory: URL?
+        /// Destination for the install's soundpack `.wav`s
+        /// (`~/Documents/Proteles/Sounds/`); nil skips that step.
+        public var soundsDirectory: URL?
         public var makeScriptStore: @Sendable (String) -> ScriptStore
         public var makeVariableStore: @Sendable (UUID) -> VariableStore
         public var now: Date
@@ -69,6 +72,7 @@ public enum MUSHclientImporter {
             databasesDirectory: URL,
             mapImagesDirectory: URL? = nil,
             searchAndDestroyDirectory: URL? = nil,
+            soundsDirectory: URL? = nil,
             makeScriptStore: @escaping @Sendable (String) -> ScriptStore,
             makeVariableStore: @escaping @Sendable (UUID) -> VariableStore,
             now: Date
@@ -80,6 +84,7 @@ public enum MUSHclientImporter {
             self.databasesDirectory = databasesDirectory
             self.mapImagesDirectory = mapImagesDirectory
             self.searchAndDestroyDirectory = searchAndDestroyDirectory
+            self.soundsDirectory = soundsDirectory
             self.makeScriptStore = makeScriptStore
             self.makeVariableStore = makeVariableStore
             self.now = now
@@ -157,25 +162,35 @@ public enum MUSHclientImporter {
             }
         }
 
-        // 5. Map background textures (worlds/plugins/images → MapImages/) —
-        // the user's own copies, so no licensing issue arises (#11 concerns
-        // Proteles *shipping* them, which it still doesn't). Existing files
-        // are kept (re-imports never clobber a user's customised texture).
+        // 5. The asset copies (textures, sounds, optionally their S&D).
+        problems += copyAssets(manifest: manifest, selection: selection, env: env)
+
+        return Result(profileID: profileID, problems: problems)
+    }
+
+    /// The user's own asset files (#10/#11: their copies — no redistribution
+    /// by us). Existing files are kept (re-imports never clobber a user's
+    /// customisation); their S&D replaces ours only on explicit opt-in (#53).
+    private static func copyAssets(
+        manifest: ImportManifest,
+        selection: Selection,
+        env: Environment
+    ) -> [ImportManifest.Problem] {
+        var problems: [ImportManifest.Problem] = []
         if let images = manifest.mapImages, let destination = env.mapImagesDirectory {
             problems += copyMapImages(from: images.directory, to: destination)
         }
-
-        // 6. The install's own S&D, only when the user opted in (Proteles'
-        // tested copy is the default; #53 lets the host run either — the
-        // panel bridge injects at load). Their XML + lua modules REPLACE
-        // same-named files; our split core.lua stays as the inert fallback.
+        if let sounds = manifest.sounds, let destination = env.soundsDirectory {
+            problems += copyFlatFiles(
+                from: sounds.directory, to: destination, extensions: ["wav"]
+            )
+        }
         if selection.importSearchAndDestroyCode, let theirs = manifest.searchAndDestroy {
             if let destination = env.searchAndDestroyDirectory {
                 problems += copySearchAndDestroy(from: theirs.directory, to: destination)
             }
         }
-
-        return Result(profileID: profileID, problems: problems)
+        return problems
     }
 
     /// Copy the install's S&D plugin files (the XML + every `.lua` beside it
@@ -214,7 +229,16 @@ public enum MUSHclientImporter {
     /// Copy every image file, skipping ones already present. Best-effort;
     /// failures become problems.
     private static func copyMapImages(from source: URL, to destination: URL) -> [ImportManifest.Problem] {
-        let extensions: Set = ["png", "jpg", "jpeg", "gif", "bmp"]
+        copyFlatFiles(from: source, to: destination, extensions: ["png", "jpg", "jpeg", "gif", "bmp"])
+    }
+
+    /// Copy a folder's files with the given extensions, never clobbering an
+    /// existing file (a re-import can't undo a user's customisation).
+    private static func copyFlatFiles(
+        from source: URL,
+        to destination: URL,
+        extensions: Set<String>
+    ) -> [ImportManifest.Problem] {
         let fileManager = FileManager.default
         guard let items = try? fileManager.contentsOfDirectory(
             at: source, includingPropertiesForKeys: nil
