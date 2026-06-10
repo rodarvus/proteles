@@ -156,4 +156,86 @@ struct MUSHclientImporterTests {
             atPath: destination.appendingPathComponent("readme.txt").path
         ))
     }
+
+    /// Build the two-sided S&D fixture: THEIR folder in a fake install (plus
+    /// a `-V2` decoy the scanner must skip) and OUR packaged install dir.
+    private func makeSnDFolders(under root: URL) throws -> (ours: URL, theirs: URL) {
+        let theirs = root.appendingPathComponent("install/worlds/plugins/Search-and-Destroy")
+        try FileManager.default.createDirectory(
+            at: theirs.appendingPathComponent("lua"), withIntermediateDirectories: true
+        )
+        try Data("their-xml".utf8).write(to: theirs.appendingPathComponent("Search_and_Destroy.xml"))
+        try Data("their-areas".utf8).write(
+            to: theirs.appendingPathComponent("lua/areaReferences.lua")
+        )
+        let ours = root.appendingPathComponent("Plugins/search-and-destroy")
+        try FileManager.default.createDirectory(at: ours, withIntermediateDirectories: true)
+        try Data("our-xml".utf8).write(to: ours.appendingPathComponent("Search_and_Destroy.xml"))
+        try Data("our-core".utf8).write(to: ours.appendingPathComponent("core.lua"))
+        let decoy = root.appendingPathComponent("install/worlds/plugins/Search-and-Destroy-V2")
+        try FileManager.default.createDirectory(at: decoy, withIntermediateDirectories: true)
+        try Data("v2".utf8).write(to: decoy.appendingPathComponent("Search_and_Destroy.xml"))
+        return (ours, theirs)
+    }
+
+    @Test("the install's S&D copies over ours only on explicit opt-in (#53)")
+    func searchAndDestroyChoice() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (ours, _) = try makeSnDFolders(under: root)
+
+        // The scanner finds their folder (and skips the -V2 decoy).
+        let entry = try #require(MUSHclientInstallScanner.scanSearchAndDestroy(
+            root: root.appendingPathComponent("install")
+        ))
+        #expect(entry.directory.lastPathComponent == "Search-and-Destroy")
+
+        var env = makeEnv(root: root, scriptsDir: root.appendingPathComponent("Scripts"))
+        env.searchAndDestroyDirectory = ours
+        try await env.profiles.load()
+        try await env.library.load()
+        var manifest = makeManifest(
+            pluginXML: root.appendingPathComponent("unused.xml"),
+            dbSrc: root.appendingPathComponent("unused.db")
+        )
+        manifest.plugins = []
+        manifest.databases = []
+        manifest.searchAndDestroy = entry
+        func selection(_ theirs: Bool) -> MUSHclientImporter.Selection {
+            .init(
+                importScriptsAndKeypad: false,
+                pluginIncludes: [],
+                databasePaths: [],
+                target: .newProfile(name: "Aardwolf (imported)"),
+                character: "Hero",
+                importSearchAndDestroyCode: theirs
+            )
+        }
+
+        // Default (ours): the install dir is untouched.
+        _ = try await MUSHclientImporter.run(
+            world: makeWorld(), manifest: manifest, selection: selection(false), into: env
+        )
+        var xml = try String(
+            contentsOf: ours.appendingPathComponent("Search_and_Destroy.xml"), encoding: .utf8
+        )
+        #expect(xml == "our-xml")
+
+        // Opt-in: their XML + lua modules replace ours; core.lua stays (the
+        // inert fallback — the XML is the source of truth).
+        let result = try await MUSHclientImporter.run(
+            world: makeWorld(), manifest: manifest, selection: selection(true), into: env
+        )
+        #expect(result.problems.isEmpty)
+        xml = try String(
+            contentsOf: ours.appendingPathComponent("Search_and_Destroy.xml"), encoding: .utf8
+        )
+        #expect(xml == "their-xml")
+        let areas = try String(
+            contentsOf: ours.appendingPathComponent("areaReferences.lua"), encoding: .utf8
+        )
+        #expect(areas == "their-areas")
+        let core = try String(contentsOf: ours.appendingPathComponent("core.lua"), encoding: .utf8)
+        #expect(core == "our-core")
+    }
 }

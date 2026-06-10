@@ -21,19 +21,25 @@ public enum MUSHclientImporter {
         public var target: ProfileImporter.Target
         /// Target character for per-character scripts/keypad + character-less DBs.
         public var character: String
+        /// Replace Proteles' Search & Destroy with the scanned install's copy
+        /// (an UNTESTED version — Proteles' own, the latest release, stays the
+        /// recommended default, so this is opt-in per import).
+        public var importSearchAndDestroyCode: Bool
 
         public init(
             importScriptsAndKeypad: Bool,
             pluginIncludes: Set<String>,
             databasePaths: Set<String>,
             target: ProfileImporter.Target,
-            character: String
+            character: String,
+            importSearchAndDestroyCode: Bool = false
         ) {
             self.importScriptsAndKeypad = importScriptsAndKeypad
             self.pluginIncludes = pluginIncludes
             self.databasePaths = databasePaths
             self.target = target
             self.character = character
+            self.importSearchAndDestroyCode = importSearchAndDestroyCode
         }
     }
 
@@ -47,6 +53,10 @@ public enum MUSHclientImporter {
         /// Destination for the install's map background textures
         /// (`~/Documents/Proteles/MapImages/`); nil skips that step.
         public var mapImagesDirectory: URL?
+        /// Proteles' S&D install dir (`Plugins/search-and-destroy/`), the
+        /// destination when the user opts to import THEIR S&D copy; nil
+        /// skips that step.
+        public var searchAndDestroyDirectory: URL?
         public var makeScriptStore: @Sendable (String) -> ScriptStore
         public var makeVariableStore: @Sendable (UUID) -> VariableStore
         public var now: Date
@@ -58,6 +68,7 @@ public enum MUSHclientImporter {
             pluginsDirectory: URL,
             databasesDirectory: URL,
             mapImagesDirectory: URL? = nil,
+            searchAndDestroyDirectory: URL? = nil,
             makeScriptStore: @escaping @Sendable (String) -> ScriptStore,
             makeVariableStore: @escaping @Sendable (UUID) -> VariableStore,
             now: Date
@@ -68,6 +79,7 @@ public enum MUSHclientImporter {
             self.pluginsDirectory = pluginsDirectory
             self.databasesDirectory = databasesDirectory
             self.mapImagesDirectory = mapImagesDirectory
+            self.searchAndDestroyDirectory = searchAndDestroyDirectory
             self.makeScriptStore = makeScriptStore
             self.makeVariableStore = makeVariableStore
             self.now = now
@@ -153,7 +165,50 @@ public enum MUSHclientImporter {
             problems += copyMapImages(from: images.directory, to: destination)
         }
 
+        // 6. The install's own S&D, only when the user opted in (Proteles'
+        // tested copy is the default; #53 lets the host run either — the
+        // panel bridge injects at load). Their XML + lua modules REPLACE
+        // same-named files; our split core.lua stays as the inert fallback.
+        if selection.importSearchAndDestroyCode, let theirs = manifest.searchAndDestroy {
+            if let destination = env.searchAndDestroyDirectory {
+                problems += copySearchAndDestroy(from: theirs.directory, to: destination)
+            }
+        }
+
         return Result(profileID: profileID, problems: problems)
+    }
+
+    /// Copy the install's S&D plugin files (the XML + every `.lua` beside it
+    /// or in its `lua/` subfolder) over ours. Best-effort; failures become
+    /// problems.
+    private static func copySearchAndDestroy(
+        from source: URL,
+        to destination: URL
+    ) -> [ImportManifest.Problem] {
+        let fileManager = FileManager.default
+        var problems: [ImportManifest.Problem] = []
+        try? fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        var files = [source.appendingPathComponent("Search_and_Destroy.xml")]
+        for folder in [source, source.appendingPathComponent("lua")] {
+            let items = (try? fileManager.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: nil
+            )) ?? []
+            files += items.filter { $0.pathExtension.lowercased() == "lua" }
+        }
+        for file in files where fileManager.fileExists(atPath: file.path) {
+            let target = destination.appendingPathComponent(file.lastPathComponent)
+            do {
+                if fileManager.fileExists(atPath: target.path) {
+                    try fileManager.removeItem(at: target)
+                }
+                try fileManager.copyItem(at: file, to: target)
+            } catch {
+                problems.append(.init(
+                    item: file.lastPathComponent, reason: error.localizedDescription
+                ))
+            }
+        }
+        return problems
     }
 
     /// Copy every image file, skipping ones already present. Best-effort;

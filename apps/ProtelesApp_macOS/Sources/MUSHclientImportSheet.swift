@@ -11,6 +11,7 @@ struct MUSHclientImportSheet: View {
     @State private var importScriptsKeypad = true
     @State private var selectedPlugins: Set<String> = []
     @State private var selectedDatabases: Set<String> = []
+    @State private var importTheirSnD = false
     @State private var character = ""
 
     var body: some View {
@@ -53,6 +54,7 @@ struct MUSHclientImportSheet: View {
                 }
                 pluginsSection(scan)
                 databasesSection(scan)
+                searchAndDestroySection(scan)
                 if !scan.manifest.problems.isEmpty {
                     Section("Issues (\(scan.manifest.problems.count))") {
                         ForEach(scan.manifest.problems, id: \.item) { problem in
@@ -111,6 +113,27 @@ struct MUSHclientImportSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+
+    /// Proteles ships its own S&D (latest release, tested with the native
+    /// panel) — that's the default. A user running a customised/beta copy can
+    /// opt to import theirs instead (#53: the host runs either source).
+    @ViewBuilder private func searchAndDestroySection(_ scan: MUSHclientImportScan.Scan) -> some View {
+        if scan.manifest.searchAndDestroy != nil {
+            Section("Search & Destroy") {
+                Picker("Plugin code", selection: $importTheirSnD) {
+                    Text("Use Proteles' copy — latest, tested (recommended)").tag(false)
+                    Text("Import this install's copy — untested").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Text("Either way the S&D database above imports normally. Proteles' copy "
+                    + "is the current upstream release; an older imported copy may not "
+                    + "work fully.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -209,7 +232,8 @@ struct MUSHclientImportSheet: View {
             pluginIncludes: selectedPlugins,
             databasePaths: selectedDatabases,
             target: .adaptive(importedName: "Aardwolf (imported)"),
-            character: character.isEmpty ? "Default" : character
+            character: character.isEmpty ? "Default" : character,
+            importSearchAndDestroyCode: importTheirSnD
         ))
     }
 
