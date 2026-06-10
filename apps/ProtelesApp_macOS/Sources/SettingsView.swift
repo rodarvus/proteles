@@ -3,9 +3,14 @@ import MudCore
 import MudUI
 import SwiftUI
 
-/// First-pass Preferences (⌘,). A tabbed Settings window; both controls here
-/// apply live (they drive `@AppStorage` keys that `ContentView` observes).
-/// Structured to grow — Connection, Scripts, and theming tabs slot in later.
+/// Preferences (⌘,) — seven tabs, each answering one question (#35 review):
+/// **Appearance** (what the output looks like), **Status Bar** (the vitals
+/// bars), **Input** (the command line), **Panels** (the floating/docked
+/// panels), **Session** (the wire + what's kept on disk), **Notifications**,
+/// and **Development** (recording, databases, crash diagnostics). There is
+/// deliberately no "General" grab-bag: every setting lives where you'd look
+/// for it. All controls apply live (they drive `@AppStorage` keys their
+/// consumers observe).
 struct SettingsView: View {
     // Models for the Development tab's recording + database actions.
     let session: SessionController
@@ -15,28 +20,26 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gearshape") }
             AppearanceSettingsView()
                 .tabItem { Label("Appearance", systemImage: "textformat.size") }
             StatusBarSettingsView()
                 .tabItem { Label("Status Bar", systemImage: "chart.bar.xaxis") }
-            ConnectionSettingsView()
-                .tabItem { Label("Connection", systemImage: "network") }
-            LoggingSettingsView()
-                .tabItem { Label("Logging", systemImage: "doc.text") }
+            InputSettingsView()
+                .tabItem { Label("Input", systemImage: "keyboard") }
+            PanelsSettingsView()
+                .tabItem { Label("Panels", systemImage: "rectangle.3.group") }
+            SessionSettingsView()
+                .tabItem { Label("Session", systemImage: "network") }
             NotificationsSettingsView()
                 .tabItem { Label("Notifications", systemImage: "bell") }
-            DiagnosticsSettingsView()
-                .tabItem { Label("Diagnostics", systemImage: "ladybug") }
             DevelopmentSettingsView(session: session, map: map, snd: snd, pluginDBs: pluginDBs)
                 .tabItem { Label("Development", systemImage: "hammer") }
         }
         // A flexible frame (not a fixed width) so the Settings window is
-        // resizable AND can't collapse: short tabs like Diagnostics used to
-        // shrink the window to their intrinsic height, and a macOS Settings
-        // window has no resize control to recover. The minimum keeps every tab
-        // usable; tall tabs grow to the ideal/scroll within the Form.
+        // resizable AND can't collapse: short tabs used to shrink the window
+        // to their intrinsic height, and a macOS Settings window has no
+        // resize control to recover. The minimum keeps every tab usable;
+        // tall tabs grow to the ideal/scroll within the Form.
         .frame(
             minWidth: 520,
             idealWidth: 580,
@@ -48,64 +51,14 @@ struct SettingsView: View {
     }
 }
 
-/// Display + input behaviour.
-private struct GeneralSettingsView: View {
-    @AppStorage("omitBlankLines") private var omitBlankLines = false
-    @AppStorage("gagTagLines") private var gagTagLines = false
-    @AppStorage("commandSpellCheck") private var commandSpellCheck = false
-    @AppStorage("inputGhostHint") private var inputGhostHint = true
-    @AppStorage("chat.timestamps") private var chatTimestamps = false
-    @AppStorage("chat.timestampSeconds") private var chatTimestampSeconds = false
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Omit blank lines", isOn: $omitBlankLines)
-                Text("Hide completely empty lines from the game output.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Clean Aardwolf tag markers", isOn: $gagTagLines)
-                Text("Strip {rname}-style markers so the content shows, and "
-                    + "hide pure-data tags like {coords}. Display-only — "
-                    + "plugins still receive the raw lines.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("Command Input") {
-                Toggle("Suggest completions as you type", isOn: $inputGhostHint)
-                Text("Show a greyed hint after the caret for the best completion. "
-                    + "Press → or Tab to accept; Enter always sends exactly what you typed.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Check spelling as you type", isOn: $commandSpellCheck)
-                Text("Show spell-check squiggles in the command line. Visual only — "
-                    + "auto-correct and smart quotes stay off so commands like "
-                    + "cast 'armor' are never altered.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("Channels") {
-                Toggle("Show timestamps", isOn: $chatTimestamps)
-                Toggle("Include seconds", isOn: $chatTimestampSeconds)
-                    .disabled(!chatTimestamps)
-                Text("Prefix each Channels line with the time it arrived "
-                    + "(your system 12/24-hour format).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-/// Output appearance.
+/// What the game output looks like: theme, font, and the display-only
+/// clean-ups applied to incoming lines.
 private struct AppearanceSettingsView: View {
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
-    // Floating-panel translucency — read by FloatingMiniWindow (MudUI).
-    @AppStorage("floatingPanelTranslucent") private var floatingPanelTranslucent = false
-    @AppStorage("floatingPanelAlpha") private var floatingPanelAlpha = 0.7
+    @AppStorage("omitBlankLines") private var omitBlankLines = false
+    @AppStorage("gagTagLines") private var gagTagLines = false
 
     private var theme: Theme {
         Theme.with(id: themeID)
@@ -145,6 +98,7 @@ private struct AppearanceSettingsView: View {
                         Text(theme.name).tag(theme.id)
                     }
                 }
+                .help("The colour palette for game output and panels")
                 ThemePreview(theme: theme, fontSize: outputFontSize, fontName: outputFontName)
             }
             Section("Game Output") {
@@ -153,6 +107,7 @@ private struct AppearanceSettingsView: View {
                         Text(choice.label).tag(choice.name)
                     }
                 }
+                .help("The monospaced font for the game output")
                 LabeledContent("Size") {
                     HStack(spacing: 10) {
                         Slider(value: $outputFontSize, in: 9...24, step: 1)
@@ -169,21 +124,13 @@ private struct AppearanceSettingsView: View {
                     .truncationMode(.tail)
                     .foregroundStyle(.secondary)
             }
-            Section("Floating Panels") {
-                Toggle("Translucent floating panels", isOn: $floatingPanelTranslucent)
-                LabeledContent("Opacity") {
-                    HStack(spacing: 10) {
-                        Slider(value: $floatingPanelAlpha, in: 0.3...1.0)
-                            .frame(width: 180)
-                        Text("\(Int(floatingPanelAlpha * 100)) %")
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 40, alignment: .trailing)
-                    }
-                }
-                .disabled(!floatingPanelTranslucent)
-                Text("Lets game text show through floating panels like the "
-                    + "Text Map. Applies immediately.")
+            Section("Clean-ups") {
+                Toggle("Omit blank lines", isOn: $omitBlankLines)
+                    .help("Hide completely empty lines from the game output")
+                Toggle("Clean Aardwolf tag markers", isOn: $gagTagLines)
+                    .help("Strip {rname}-style markers; hide pure-data tags like {coords}")
+                Text("Display-only — plugins and triggers still receive the raw "
+                    + "lines. Also in the View menu.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -286,6 +233,7 @@ private struct StatusBarSettingsView: View {
             }
             Section("Marks") {
                 Toggle("Show 25 / 50 / 75% marks", isOn: $statusBarTicks)
+                    .help("Draw quarter marks across the bars")
                 Text("Draw quarter marks across the HP/MP/MV/XP/Enemy bars. The "
                     + "alignment bar has its own scale.")
                     .font(.caption)
@@ -328,24 +276,42 @@ private extension Color {
     }
 }
 
-/// Connection behaviour.
-private struct ConnectionSettingsView: View {
-    @AppStorage("autoReconnect") private var autoReconnect = true
-    @AppStorage("keepAlive") private var keepAlive = true
+/// The command line: completion, spelling, and keyboard navigation. (Keypad
+/// bindings and macros are content, not preferences — they live in Scripts.)
+private struct InputSettingsView: View {
+    @AppStorage("inputGhostHint") private var inputGhostHint = true
+    @AppStorage("commandSpellCheck") private var commandSpellCheck = false
+    @AppStorage("navigationMode") private var navigationMode = false
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Reconnect automatically", isOn: $autoReconnect)
-                Text("After a dropped connection, retry with increasing backoff. "
-                    + "Takes effect on the next disconnect.")
+            Section("Completion") {
+                Toggle("Suggest completions as you type", isOn: $inputGhostHint)
+                    .help("A greyed hint after the caret; → or Tab accepts it")
+                Text("Show a greyed hint after the caret for the best completion. "
+                    + "Press → or Tab to accept; Enter always sends exactly what you typed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section {
-                Toggle("Keep the connection alive when idle", isOn: $keepAlive)
-                Text("Send a silent keep-alive periodically so Aardwolf doesn't "
-                    + "disconnect a quiet session for being idle.")
+            Section("Spelling") {
+                Toggle("Check spelling as you type", isOn: $commandSpellCheck)
+                    .help("Visual squiggles only — commands are never auto-corrected")
+                Text("Show spell-check squiggles in the command line. Visual only — "
+                    + "auto-correct and smart quotes stay off so commands like "
+                    + "cast 'armor' are never altered.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Keyboard") {
+                Toggle("Navigation mode", isOn: $navigationMode)
+                    .help("Bare-key macros fire while the input line is empty (⌥⌘N)")
+                Text("While on, bare-key macros fire when the input line is empty "
+                    + "(keypad and modifier macros fire regardless). Also in the "
+                    + "View menu (⌥⌘N) — a NAV chip on the input shows it's active.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Keypad bindings, macros, and aliases are edited in "
+                    + "Tools ▸ Scripts (⇧⌘T).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -354,8 +320,54 @@ private struct ConnectionSettingsView: View {
     }
 }
 
-/// Readable session logs (distinct from the replayable recording).
-private struct LoggingSettingsView: View {
+/// The floating/docked panels around the game output.
+private struct PanelsSettingsView: View {
+    // Floating-panel translucency — read by FloatingMiniWindow (MudUI).
+    @AppStorage("floatingPanelTranslucent") private var floatingPanelTranslucent = false
+    @AppStorage("floatingPanelAlpha") private var floatingPanelAlpha = 0.7
+    @AppStorage("chat.timestamps") private var chatTimestamps = false
+    @AppStorage("chat.timestampSeconds") private var chatTimestampSeconds = false
+
+    var body: some View {
+        Form {
+            Section("Floating Panels") {
+                Toggle("Translucent floating panels", isOn: $floatingPanelTranslucent)
+                    .help("Fade the panel backdrop so game text shows through")
+                LabeledContent("Opacity") {
+                    HStack(spacing: 10) {
+                        Slider(value: $floatingPanelAlpha, in: 0.3...1.0)
+                            .frame(width: 180)
+                        Text("\(Int(floatingPanelAlpha * 100)) %")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+                .disabled(!floatingPanelTranslucent)
+                Text("Fades the panel background only — text stays at full "
+                    + "contrast. Applies immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Channels") {
+                Toggle("Show timestamps", isOn: $chatTimestamps)
+                    .help("Prefix each Channels line with its arrival time")
+                Toggle("Include seconds", isOn: $chatTimestampSeconds)
+                    .disabled(!chatTimestamps)
+                Text("Prefix each Channels line with the time it arrived "
+                    + "(your system 12/24-hour format).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// The wire and what's kept on disk: reconnect, keep-alive, session logs.
+private struct SessionSettingsView: View {
+    @AppStorage("autoReconnect") private var autoReconnect = true
+    @AppStorage("keepAlive") private var keepAlive = true
     @AppStorage("sessionLogging") private var sessionLogging = false
     @AppStorage("sessionLogFormat") private var sessionLogFormat = "text"
     @AppStorage("perWorldLogs") private var perWorldLogs = false
@@ -363,26 +375,41 @@ private struct LoggingSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Save a readable log of each session", isOn: $sessionLogging)
-                Text("Write a per-session log you can read later. Takes effect on the "
-                    + "next connection.")
+            Section("Connection") {
+                Toggle("Reconnect automatically", isOn: $autoReconnect)
+                    .help("Retry with increasing backoff after a dropped connection")
+                Text("After a dropped connection, retry with increasing backoff. "
+                    + "Takes effect on the next disconnect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Keep the connection alive when idle", isOn: $keepAlive)
+                    .help("A silent keep-alive stops Aardwolf's idle disconnect")
+                Text("Send a silent keep-alive periodically so Aardwolf doesn't "
+                    + "disconnect a quiet session for being idle.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("Format") {
+            Section("Session Logs") {
+                Toggle("Save a readable log of each session", isOn: $sessionLogging)
+                    .help("A per-session text/HTML log (distinct from the replayable recording)")
                 Picker("Log format", selection: $sessionLogFormat) {
                     Text("Plain text").tag("text")
                     Text("HTML (preserves colour)").tag("html")
                 }
                 .pickerStyle(.radioGroup)
+                .disabled(!sessionLogging)
+                Text("Write a per-session log you can read later. Takes effect on "
+                    + "the next connection. Passwords are never written to the log.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Organisation") {
                 Toggle("Separate logs per world", isOn: $perWorldLogs)
+                    .help("One subfolder per world")
                 Stepper("Keep the newest \(logRetention) logs", value: $logRetention, in: 5...500)
-                Text("Older session logs are deleted on connect. Per-world logs go in a "
-                    + "subfolder named for the world; the limit applies per folder. "
-                    + "Passwords are never written to the log.")
+                    .help("Older logs are deleted on connect")
+                Text("Older session logs are deleted on connect. Per-world logs go "
+                    + "in a subfolder named for the world; the limit applies per folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -411,6 +438,7 @@ private struct NotificationsSettingsView: View {
         Form {
             Section {
                 Toggle("Show notifications", isOn: $notificationsEnabled)
+                    .help("macOS notifications for important events while in the background")
                 Text("Post a macOS notification for important events while Proteles is "
                     + "in the background. You'll be asked for permission the first time.")
                     .font(.caption)
@@ -425,6 +453,7 @@ private struct NotificationsSettingsView: View {
                 .disabled(!notificationsEnabled)
             Section("Delivery") {
                 Toggle("Also notify while Proteles is in focus", isOn: $notifyWhenFocused)
+                    .help("By default notifications are suppressed while Proteles is active")
                 Text("By default, notifications are suppressed while Proteles is the "
                     + "active app. Turn this on to be notified even then.")
                     .font(.caption)
