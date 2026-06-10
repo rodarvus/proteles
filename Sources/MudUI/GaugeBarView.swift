@@ -34,6 +34,15 @@ public struct GaugeBarView: View {
                 .frame(width: 8, height: 8)
                 .help(connectionLabel)
 
+            // The Tick Timer module's readout. It lived only in the legacy
+            // StatusBarView, which the gauge bar replaced — so the countdown
+            // silently vanished from the UI (live report). Anchored by
+            // `.updateTick` (comm.tick); hides when ticks stop arriving
+            // (module disabled / disconnected).
+            if let lastTick = gmcp.lastTick {
+                tickReadout(lastTick)
+            }
+
             if config.isEmpty {
                 Spacer()
             } else if let vitals = gmcp.vitals, let max = gmcp.maxStats {
@@ -145,6 +154,22 @@ public struct GaugeBarView: View {
             )
         } else {
             AlignGauge(fraction: 0.5, tint: .gray.opacity(0.5), overlay: nil)
+        }
+    }
+
+    /// Live "tick N" countdown: `TimelineView` re-derives it every second
+    /// from the witnessed-tick anchor (no manual timer); each new `comm.tick`
+    /// re-anchors. Self-hides once the anchor goes stale.
+    private func tickReadout(_ lastTick: Date) -> some View {
+        TimelineView(.periodic(from: lastTick, by: 1)) { context in
+            let elapsed = context.date.timeIntervalSince(lastTick)
+            if elapsed < GMCPState.tickInterval * 2 {
+                Text("tick \(GMCPState.secondsToNextTick(lastTick: lastTick, now: context.date))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help("Seconds to the next Aardwolf tick (the Tick Timer module)")
+            }
         }
     }
 

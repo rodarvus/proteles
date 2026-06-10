@@ -30,6 +30,16 @@ extension SessionController {
             try await sendLine(command)
             return
         }
+        // Note mode (suspended automations): EVERY keystroke is note text.
+        // The engine already passes input through verbatim, but the native
+        // mapper and the S&D host don't observe engine suspension — so their
+        // interception below would eat note lines (any line matching one of
+        // S&D's ~100 aliases vanished into the hunt engine instead of the
+        // note — the "can't write notes" live report). Send verbatim FIRST.
+        if let scriptEngine, await scriptEngine.automationsSuspended {
+            try await sendLine(command)
+            return
+        }
         // `/lua …` — evaluate one-off Lua on the script engine (#41), not the MUD.
         if let code = Self.luaConsoleCode(command) {
             await runLuaConsole(code)

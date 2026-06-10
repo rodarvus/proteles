@@ -25,7 +25,9 @@ public actor ScriptEngine {
     var nativePlugins = NativePluginRegistry()
     /// When true, automations are paused: typed input is sent verbatim,
     /// incoming lines pass through, and timers don't fire (Note mode).
-    private var suspended = false
+    /// Internal (not private): the accessors live in `ScriptEngine+Console`
+    /// (file-length budget).
+    var suspended = false
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
     var loadedPluginIDs: [String] = []
@@ -191,12 +193,6 @@ public actor ScriptEngine {
     /// Fire `connect()` on enabled native plugins (on session connect).
     public func connectNativePlugins() -> [ScriptEffect] {
         nativePlugins.connect()
-    }
-
-    /// Pause/resume all automations (triggers/aliases/timers/native). While
-    /// suspended, input is sent verbatim and incoming lines pass through.
-    public func setSuspended(_ value: Bool) {
-        suspended = value
     }
 
     /// A native plugin's serialized state (for persistence).
