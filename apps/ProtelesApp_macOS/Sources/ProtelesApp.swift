@@ -342,6 +342,7 @@ struct ProtelesApp: App {
             await scriptEngine.registerNativePlugin(TextSubstitution())
             await scriptEngine.registerNativePlugin(ChatEcho())
             await scriptEngine.registerNativePlugin(AsciiMap())
+            await scriptEngine.registerNativePlugin(ContinentBigmap())
             await scriptEngine.registerNativePlugin(TickTimer())
             await scriptEngine.registerNativePlugin(URLLinkify())
             await scriptEngine.registerNativePlugin(InventorySerialsPlugin())

@@ -62,6 +62,33 @@ struct MapperDisplayTests {
         #expect(await reopened.useTextures == false)
     }
 
+    @Test("overland (coord.cont=1) halts the fan-out and carries the position")
+    func continentLayout() async throws {
+        let mapper = try makeMapper()
+        // A normal area room first — the graph draws.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":10,"name":"An Inn","zone":"z","exits":{},"coord":{"id":4,"x":3,"y":4,"cont":0}}"#
+        )
+        #expect(await mapper.currentLayout().continent == nil)
+        #expect(await mapper.currentLayout().rooms.isEmpty == false)
+        // Step overland: no placed rooms, position carried for the bigmap.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":11,"name":"On the Continent","zone":"mesolar","exits":{},"#
+                + #""coord":{"id":1,"x":5,"y":2,"cont":1}}"#
+        )
+        let overland = await mapper.currentLayout()
+        #expect(overland.continent == MapLayout.Continent(zone: 1, x: 5, y: 2))
+        #expect(overland.rooms.isEmpty)
+        // Back into an area: the graph resumes.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":10,"name":"An Inn","zone":"z","exits":{},"coord":{"id":4,"x":3,"y":4,"cont":0}}"#
+        )
+        #expect(await mapper.currentLayout().continent == nil)
+    }
+
     @Test("database reports the active database file (reference wording)")
     func databaseName() async throws {
         let mapper = try makeMapper()
