@@ -12,6 +12,14 @@ public struct InfoPanel: View {
     /// 1 except in a translucent floating miniwindow (see FloatingMiniWindow).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
+    /// Inside a translucent miniwindow the chrome's material is the one
+    /// backdrop — painting our theme fill on top of it COMPOUNDS opacity
+    /// (0.7 × 0.7 ≈ 0.91, so the panel barely faded — live report,
+    /// 2026-06-10). Drop the fill entirely there; keep it when docked.
+    private var fillOpacity: Double {
+        panelBackgroundOpacity < 1 ? 0 : 1
+    }
+
     public init(state: GMCPState) {
         self.state = state
     }
@@ -48,7 +56,7 @@ public struct InfoPanel: View {
             }
         }
         .padding(10)
-        .background(Color(palette.defaultBackground).opacity(panelBackgroundOpacity))
+        .background(Color(palette.defaultBackground).opacity(fillOpacity))
     }
 
     private var gap: some View {

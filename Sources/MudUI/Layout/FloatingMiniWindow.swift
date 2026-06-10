@@ -302,9 +302,11 @@ private extension FloatingAnchor {
 }
 
 public extension EnvironmentValues {
-    /// How opaque a panel's own background fill should be — 1 everywhere
-    /// except inside a translucent floating miniwindow, which fades content
-    /// backgrounds along with its chrome so underlying game text shows
-    /// through (the text drawn over them keeps full contrast).
+    /// The chrome's background opacity — 1 everywhere except inside a
+    /// translucent floating miniwindow. Panels that paint their own opaque
+    /// fill (Character, Channels, Group) should DROP that fill when this is
+    /// < 1 rather than fade it: the chrome material already provides the
+    /// backdrop, and stacking a faded fill on the faded material compounds
+    /// (0.7 × 0.7 ≈ 0.91 — the "Character doesn't fade" live report).
     @Entry var panelBackgroundOpacity: Double = 1
 }
