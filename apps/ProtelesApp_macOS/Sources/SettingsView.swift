@@ -3,14 +3,15 @@ import MudCore
 import MudUI
 import SwiftUI
 
-/// Preferences (⌘,) — seven tabs, each answering one question (#35 review):
+/// Preferences (⌘,) — eight tabs, each answering one question (#35 review):
 /// **Appearance** (what the output looks like), **Status Bar** (the vitals
 /// bars), **Input** (the command line), **Panels** (the floating/docked
 /// panels), **Session** (the wire + what's kept on disk), **Notifications**,
-/// and **Development** (recording, databases, crash diagnostics). There is
-/// deliberately no "General" grab-bag: every setting lives where you'd look
-/// for it. All controls apply live (they drive `@AppStorage` keys their
-/// consumers observe).
+/// **Audio** (event sounds #10 + text-to-speech #9), and **Development**
+/// (recording, databases, crash diagnostics). There is deliberately no
+/// "General" grab-bag: every setting lives where you'd look for it. All
+/// controls apply live (they drive `@AppStorage` keys their consumers
+/// observe; Audio edits its Settings JSON + reloads the owning plugin).
 struct SettingsView: View {
     // Models for the Development tab's recording + database actions.
     let session: SessionController
@@ -32,6 +33,8 @@ struct SettingsView: View {
                 .tabItem { Label("Session", systemImage: "network") }
             NotificationsSettingsView()
                 .tabItem { Label("Notifications", systemImage: "bell") }
+            AudioSettingsView(session: session)
+                .tabItem { Label("Audio", systemImage: "speaker.wave.2") }
             DevelopmentSettingsView(session: session, map: map, snd: snd, pluginDBs: pluginDBs)
                 .tabItem { Label("Development", systemImage: "hammer") }
         }

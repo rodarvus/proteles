@@ -92,6 +92,15 @@ public actor SessionController {
     /// compat shim, and the S&D host; the app's cue player subscribes + plays.
     public nonisolated let soundCues: AsyncStream<SoundCue>
     nonisolated let soundCuesContinuation: AsyncStream<SoundCue>.Continuation
+    /// Speech requests (#9) — spoken lines + control from the TTS pipeline;
+    /// the app's speech controller subscribes (AVSpeechSynthesizer/VoiceOver).
+    public nonisolated let speechRequests: AsyncStream<SpeechRequest>
+    nonisolated let speechRequestsContinuation: AsyncStream<SpeechRequest>.Continuation
+    /// Spoken-output mode (what displayed lines speak) — pushed by the
+    /// TextToSpeech plugin via `.setSpeechMode`. Off by default.
+    var speechMode: SpeechMode = .off
+    /// The last displayed (post-gag) line texts, for `tts last [n]`.
+    var recentDisplayedLines: [String] = []
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
@@ -370,6 +379,8 @@ public actor SessionController {
             AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
         (soundCues, soundCuesContinuation) =
             AsyncStream<SoundCue>.makeStream(bufferingPolicy: .bufferingNewest(16))
+        (speechRequests, speechRequestsContinuation) =
+            AsyncStream<SpeechRequest>.makeStream(bufferingPolicy: .bufferingNewest(32))
         self.autoRecord = autoRecord
         self.reconnectPolicy = reconnectPolicy
         self.autoRecordingURL = autoRecordingURL
