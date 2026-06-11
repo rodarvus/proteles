@@ -46,6 +46,50 @@ jobs:
       - name: Test (parallel)
         run: swift test --parallel
 
+  app-build:
+    # The macOS app target is XcodeGen-generated and NOT covered by
+    # `swift build` — app-side breakage (ContentView & friends) used to be
+    # caught only on a developer machine (#26). No signing on CI: the build
+    # verifies compilation, not distribution.
+    name: App Build (macOS)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Select Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE_PATH" ]; then
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache xcodebuild SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-xcodebuild-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-xcodebuild-spm-
+
+      - name: Generate project + build app
+        run: |
+          set -euo pipefail
+          cd apps/ProtelesApp_macOS
+          xcodegen generate
+          xcodebuild \
+            -project ProtelesApp_macOS.xcodeproj \
+            -scheme ProtelesApp_macOS \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            build
+
   lint:
     name: Lint & Format
     runs-on: macos-15
