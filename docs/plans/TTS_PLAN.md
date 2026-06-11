@@ -1,5 +1,11 @@
 # TTS / accessibility — plan + first implementation
 
+> **Status: SHIPPED (2026-06-11, D-110).** Implemented as `SpeechFilter` +
+> the `TextToSpeech` native plugin + the app's `SpeechController` (both
+> backends — app voice AND VoiceOver routing), with Settings ▸ Audio. Issue
+> #9 stays open for the deferred phase-3 items + VI-player validation.
+> Kept for the research + rationale below.
+
 > Plan deliverable (no code). Builds on the recorded design (D-41). Goal: make
 > Proteles usable by blind / visually-impaired (VI) Aardwolf players, and useful
 > for sighted players who want spoken alerts.

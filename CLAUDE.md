@@ -7,7 +7,7 @@ operating manual: how to work in the repo, the hard rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.6.0`** (tag + GitHub release, **notarized Developer-ID build**;
+**Shipped `v0.7.0`** (tag + GitHub release, **notarized Developer-ID build**;
 `scripts/release.sh` runs the build→sign→notarize→staple→verify flow). The
 build-out phases are **done**; we are **polishing + debugging from live play**.
 `v0.6.0` adds a **one-shot MUSHclient import** (`File ▸ Import from MUSHclient…`,
@@ -21,7 +21,9 @@ hand-editable `Settings/*.json`, per-character flat plugin DBs in `Databases/`),
 a **command-completion overhaul** (full 519-command verb base + aliases,
 kind-aware channel ghosting, per-verb argument completion — exits/spells/areas/
 items), and the **Sparkle auto-updater** (Phase 1 + seamless-resume Phase 2).
-~1356 tests, four gates green. See **PLAN.md §0** for what works and the
+~1530 tests, four gates green. Post-`v0.7.0` on `main`: the native
+soundpack engine (#10, D-109 — bundled CC0 cues, `Settings/soundpack.json`)
+and text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). See **PLAN.md §0** for what works and the
 **decision log (§12)** for history.
 
 ## Backlog — GitHub Issues are the source of truth
