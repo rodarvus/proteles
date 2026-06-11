@@ -124,7 +124,7 @@ public actor ScriptEngine {
     /// Atomically replace a timer (see ``updateTrigger(_:)`` for why).
     public func updateTimer(_ timer: MudTimer, now: Date = Date()) {
         timers.remove(id: timer.id)
-        try? timers.add(timer, now: now)
+        _ = try? timers.add(timer, now: now)
     }
 
     public func setTimerEnabled(_ enabled: Bool, id: UUID) {
@@ -223,7 +223,7 @@ public actor ScriptEngine {
             try? aliases.add(alias)
         }
         for timer in document.timers {
-            try? timers.add(timer, now: now)
+            _ = try? timers.add(timer, now: now)
         }
     }
 
@@ -276,7 +276,7 @@ public actor ScriptEngine {
             if let name = alias.name { aliasIDsByName[name] = alias.id }
         }
         for timer in plugin.timers {
-            try? timers.add(timer)
+            _ = try? timers.add(timer)
             automationOwners[timer.id] = plugin.id
             if let name = timer.label { timerIDsByName[name] = timer.id }
         }
@@ -587,7 +587,7 @@ public actor ScriptEngine {
         } catch {
             let message = "Script error: \(error)"
             let diagnostic = ScriptEffect.diagnostic(source: "user", message: message)
-            guard await runtime.errorNotesVisible else { return [diagnostic] }
+            guard runtime.errorNotesVisible else { return [diagnostic] }
             return [.note(text: message, foreground: "red", background: nil), diagnostic]
         }
     }

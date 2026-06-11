@@ -44,4 +44,33 @@ struct DatabaseImporterTests {
         let unknown = ImportManifest.DatabaseEntry(url: src, kind: .unknown, byteSize: 0)
         #expect(try DatabaseImporter.copy(unknown, character: "Hero", in: dbs) == nil)
     }
+
+    @Test("copy: overwrites an existing destination; a failed copy preserves it")
+    func safeReplace() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let dbs = tmp.appendingPathComponent("Databases")
+        let src = tmp.appendingPathComponent("Aardwolf.db")
+        try Data("new map".utf8).write(to: src)
+        let record = ImportManifest.DatabaseEntry(url: src, kind: .mapper, byteSize: 0)
+
+        // Seed an existing destination, then overwrite it.
+        let existing = dbs.appendingPathComponent("Aardwolf.db")
+        try FileManager.default.createDirectory(at: dbs, withIntermediateDirectories: true)
+        try Data("old map".utf8).write(to: existing)
+        _ = try DatabaseImporter.copy(record, character: "Hero", in: dbs)
+        #expect(try Data(contentsOf: existing) == Data("new map".utf8))
+
+        // A failing copy (missing source) must throw AND leave the existing
+        // destination intact — the audit found delete-before-copy destroyed
+        // the user's DB when the copy failed.
+        let missing = ImportManifest.DatabaseEntry(
+            url: tmp.appendingPathComponent("nope.db"), kind: .mapper, byteSize: 0
+        )
+        #expect(throws: DatabaseImporter.ImportError.self) {
+            try DatabaseImporter.copy(missing, character: "Hero", in: dbs)
+        }
+        #expect(try Data(contentsOf: existing) == Data("new map".utf8), "failed copy clobbered the DB")
+    }
 }

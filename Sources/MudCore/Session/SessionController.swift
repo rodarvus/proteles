@@ -437,6 +437,7 @@ public actor SessionController {
         sentHelpsTagOption = false
         helpCaptureActive = false
         helpCaptureBuffer = []
+        recentDisplayedLines = [] // a fresh connection's `tts last` never replays the old session
         await gmcpState.reset()
         latestGMCPByPackage.removeAll()
         await chatStore.reset()

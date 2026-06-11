@@ -49,10 +49,20 @@ public enum DatabaseImporter {
             try fileManager.createDirectory(
                 at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
             )
+            // Copy beside the destination, then swap — the first cut deleted
+            // the existing DB *before* copying, so a failed copy (disk full,
+            // source vanished) destroyed the user's data with nothing to
+            // replace it (2026-06 audit). The staging file lands in the same
+            // directory, so the swap never crosses volumes.
+            let staging = destination.deletingLastPathComponent()
+                .appendingPathComponent(".\(destination.lastPathComponent).importing")
+            try? fileManager.removeItem(at: staging)
+            try fileManager.copyItem(at: entry.url, to: staging)
             if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
+                _ = try fileManager.replaceItemAt(destination, withItemAt: staging)
+            } else {
+                try fileManager.moveItem(at: staging, to: destination)
             }
-            try fileManager.copyItem(at: entry.url, to: destination)
             return destination
         } catch {
             throw ImportError.copyFailed(

@@ -123,6 +123,17 @@ struct LevelDBInsightsTests {
         #expect(quests.successRate == 0.0)
     }
 
+    @Test("median: middle value for odd counts, mean of the middles for even")
+    func median() {
+        #expect(LevelDBStore.median([]) == nil)
+        #expect(LevelDBStore.median([7]) == 7)
+        #expect(LevelDBStore.median([1, 2, 3]) == 2)
+        // Even count: the audit found the first cut returned the upper-middle
+        // (3 here), biasing days-to-remort projections optimistic.
+        #expect(LevelDBStore.median([1, 2, 3, 4]) == 2.5)
+        #expect(LevelDBStore.median([4, 1, 3, 2]) == 2.5) // unsorted input
+    }
+
     @Test("records: bests, lifetime totals, streaks")
     func records() throws {
         let (store, url) = try makeStore()
