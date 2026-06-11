@@ -182,13 +182,37 @@ struct AudioEndToEndTests {
         #expect(stopped, "a typed command never cut stale speech")
 
         try await session.send("tts enter") // toggle the canon behaviour off
-        let baseline = await requests.values.count(where: { $0 == .stop })
+        // Settle before snapshotting: requests reach the collector through the
+        // async pump, so the .stop from the EARLIER "look" can still be in
+        // flight here — a naive read missed it, the late arrival inflated
+        // `after`, and the test flaked under parallel-suite load (2× on
+        // 2026-06-11). Stable-across-consecutive-ticks means the pump drained.
+        let baseline = await settledStopCount(in: requests)
         try await session.send("look")
-        try? await Task.sleep(for: .milliseconds(100))
-        let after = await requests.values.count(where: { $0 == .stop })
+        let after = await settledStopCount(in: requests)
         #expect(after == baseline, "enter still interrupted after tts enter off")
         pump.cancel()
         await session.disconnect()
+    }
+
+    /// The collector's `.stop` count once it has stopped changing (two
+    /// consecutive 20 ms ticks with no growth). Nothing else emits after the
+    /// pump drains, so a settled count can't be undercut by a late arrival.
+    private func settledStopCount(in collector: Collector<SpeechRequest>) async -> Int {
+        var last = await collector.values.count(where: { $0 == .stop })
+        var stableTicks = 0
+        for _ in 0..<100 {
+            try? await Task.sleep(for: .milliseconds(20))
+            let now = await collector.values.count(where: { $0 == .stop })
+            if now == last {
+                stableTicks += 1
+                if stableTicks >= 2 { return now }
+            } else {
+                last = now
+                stableTicks = 0
+            }
+        }
+        return last
     }
 
     @Test("tts mute: a muted channel's line displays but never speaks; review honors subst")
