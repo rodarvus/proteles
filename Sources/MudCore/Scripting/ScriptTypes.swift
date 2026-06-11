@@ -250,9 +250,10 @@ public enum ScriptEffect: Sendable, Equatable {
     case speak(text: String, interrupt: Bool)
     /// Stop speaking and flush the utterance queue (`tts stop`).
     case stopSpeaking
-    /// Set the session's spoken-output mode (what ``SpeechFilter`` passes) —
-    /// emitted by the TextToSpeech plugin's commands and its install.
-    case setSpeechMode(SpeechMode)
+    /// Set the session's speech policy (mode, prompt handling, quiet-while-
+    /// running, enter-interrupts) — emitted as one value by the TextToSpeech
+    /// plugin's commands and its install.
+    case setSpeechPolicy(SpeechPolicy)
     /// `Settings/speech.json` changed (rate/voice/routing) — the app's
     /// speech controller re-reads it.
     case speechConfigChanged

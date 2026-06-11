@@ -67,6 +67,13 @@ struct AudioSettingsView: View {
                         Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
                     }
                 }
+                Picker("Prompts", selection: promptSpeech) {
+                    Text("Silent (tts vitals on demand)").tag(PromptSpeechMode.off)
+                    Text("Speak changed vitals").tag(PromptSpeechMode.delta)
+                }
+                Toggle("Typed commands cut stale speech", isOn: speechBool(\.enterInterrupts))
+                Toggle("Quiet while speedwalking", isOn: speechBool(\.quietWhileRunning))
+                Toggle("Quiet when Proteles isn't frontmost", isOn: speechBool(\.quietWhenUnfocused))
                 Toggle("Route through VoiceOver", isOn: voiceOverRouting)
                 Text(voiceOverHint)
                     .font(.caption)
@@ -167,6 +174,29 @@ struct AudioSettingsView: View {
             get: { speech.voiceOverRouting },
             set: { value in
                 speech.voiceOverRouting = value
+                saveSpeech()
+                reloadSpeech()
+            }
+        )
+    }
+
+    private var promptSpeech: Binding<PromptSpeechMode> {
+        Binding(
+            get: { speech.promptSpeech },
+            set: { value in
+                speech.promptSpeech = value
+                saveSpeech()
+                reloadSpeech()
+            }
+        )
+    }
+
+    /// Write-through binding for one of the speech config's Bool flags.
+    private func speechBool(_ keyPath: WritableKeyPath<SpeechConfig, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { speech[keyPath: keyPath] },
+            set: { value in
+                speech[keyPath: keyPath] = value
                 saveSpeech()
                 reloadSpeech()
             }

@@ -117,7 +117,7 @@ struct TextToSpeechPluginTests {
     func installPushesMode() {
         var tts = plugin()
         let effects = tts.install()
-        #expect(effects.contains(.setSpeechMode(.off)))
+        #expect(effects.contains(.setSpeechPolicy(SpeechPolicy())))
         #expect(effects.contains(.speechConfigChanged))
     }
 
@@ -125,14 +125,14 @@ struct TextToSpeechPluginTests {
     func modeCommands() {
         var tts = plugin()
         let on = tts.handleCommand("tts on") ?? []
-        #expect(on.contains(.setSpeechMode(.everything)))
+        #expect(on.contains(.setSpeechPolicy(SpeechPolicy(mode: .everything))))
         #expect(tts.config.mode == .everything)
 
         let alerts = tts.handleCommand("tts alerts") ?? []
-        #expect(alerts.contains(.setSpeechMode(.alerts)))
+        #expect(alerts.contains(.setSpeechPolicy(SpeechPolicy(mode: .alerts))))
 
         let off = tts.handleCommand("tts off") ?? []
-        #expect(off.contains(.setSpeechMode(.off)))
+        #expect(off.contains(.setSpeechPolicy(SpeechPolicy(mode: .off))))
         #expect(off.contains(.stopSpeaking))
     }
 

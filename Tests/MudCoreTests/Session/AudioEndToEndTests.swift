@@ -110,8 +110,8 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
-    @Test("prompts speak only changed vitals; movement never (live-test round 2)")
-    func promptVitalsDelta() async throws {
+    @Test("prompts: silent by default (canon); delta mode speaks only changes, movement never")
+    func promptSpeech() async throws {
         let engine = try ScriptEngine()
         _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
@@ -125,6 +125,17 @@ struct AudioEndToEndTests {
         }
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("tts on")
+        // Default (community canon): prompts say NOTHING, even with changes.
+        conn.injectLine("999/1234hp 500/567mn 890/1000mv>")
+        conn.injectLine("Prompts default to silence.")
+        let defaulted = await SessionTestSupport.poll {
+            await requests.values.contains {
+                $0 == .speak(text: "Prompts default to silence.", interrupt: false)
+            }
+        }
+        #expect(defaulted)
+        // Opt in to the delta mode, then walk/rest/damage/cast.
+        try await session.send("tts prompts delta")
         conn.injectLine("1234/1234hp 567/567mn 890/1000mv>") // first prompt → baseline
         conn.injectLine("1234/1234hp 567/567mn 890/1000mv>") // identical → silent
         conn.injectLine("1234/1234hp 567/567mn 850/1000mv>") // walking: mv only → silent
@@ -141,7 +152,8 @@ struct AudioEndToEndTests {
         }
         #expect(spoken == [
             "Text to speech on", // the tts on confirmation utterance
-            "hp 1234, mana 567", // baseline orients once
+            "Prompts default to silence.", // the silent-prompt prose marker
+            "hp 1234, mana 567", // delta mode: baseline orients once
             "You sit down and rest.",
             "hp 1100", // damage says only hp
             "mana 520" // casting says only mana
@@ -150,7 +162,71 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
-    @Test("turning speech off via .setSpeechMode flushes the queue (Settings path)")
+    @Test("typed commands cut stale speech; tts enter turns that off")
+    func enterInterrupts() async throws {
+        let engine = try ScriptEngine()
+        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("tts on")
+        try await session.send("look") // typed command → .stop precedes it
+        let stopped = await SessionTestSupport.poll { await requests.values.contains(.stop) }
+        #expect(stopped, "a typed command never cut stale speech")
+
+        try await session.send("tts enter") // toggle the canon behaviour off
+        let baseline = await requests.values.count(where: { $0 == .stop })
+        try await session.send("look")
+        try? await Task.sleep(for: .milliseconds(100))
+        let after = await requests.values.count(where: { $0 == .stop })
+        #expect(after == baseline, "enter still interrupted after tts enter off")
+        pump.cancel()
+        await session.disconnect()
+    }
+
+    @Test("tts vitals speaks the GMCP stats on demand")
+    func vitalsOnDemand() async throws {
+        let engine = try ScriptEngine()
+        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
+            #"char.vitals {"hp":1180,"mana":600,"moves":950}"#
+        ))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
+            #"char.maxstats {"maxhp":1234,"maxmana":700,"maxmoves":1000}"#
+        ))
+        try? await Task.sleep(for: .milliseconds(100))
+        try await session.send("tts vitals")
+        let spoke = await SessionTestSupport.poll {
+            await requests.values.contains {
+                $0 == .speak(
+                    text: "hp 1180 of 1234, mana 600 of 700, moves 950 of 1000",
+                    interrupt: true
+                )
+            }
+        }
+        #expect(spoke, "tts vitals never spoke the cached stats")
+        pump.cancel()
+        await session.disconnect()
+    }
+
+    @Test("turning speech off via .setSpeechPolicy flushes the queue (Settings path)")
     func settingsOffFlushes() async throws {
         let engine = try ScriptEngine()
         _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
@@ -166,9 +242,9 @@ struct AudioEndToEndTests {
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("tts on")
         // The Settings ▸ Audio path reaches the session as a bare mode change
-        // (plugin reload → install → .setSpeechMode), with no explicit
+        // (plugin reload → install → .setSpeechPolicy), with no explicit
         // `tts off` — it must still stop the babbling backlog.
-        _ = await session.applySpeechEffect(.setSpeechMode(.off))
+        _ = await session.applySpeechEffect(.setSpeechPolicy(SpeechPolicy(mode: .off)))
         let stopped = await SessionTestSupport.poll { await requests.values.contains(.stop) }
         #expect(stopped, "mode .off never flushed the speech queue")
         pump.cancel()

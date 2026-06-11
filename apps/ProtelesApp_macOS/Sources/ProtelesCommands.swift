@@ -149,6 +149,16 @@ struct ProtelesCommands: Commands {
 
             Button("Game Help") { openWindow(id: ProtelesApp.helpWindowID) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
+
+            Divider()
+
+            // ⌥⎋ is macOS's own speak-selection start/stop convention; the
+            // package binds Ctrl+Space, which macOS reserves for input
+            // sources. Flushes the whole TTS queue (#9).
+            Button("Stop Speaking") {
+                Task { await session.stopSpeaking() }
+            }
+            .keyboardShortcut(.escape, modifiers: [.option])
         }
 
         // Panels live in the main-window tiled dock (not separate windows, which

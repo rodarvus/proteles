@@ -96,9 +96,13 @@ public actor SessionController {
     /// the app's speech controller subscribes (AVSpeechSynthesizer/VoiceOver).
     public nonisolated let speechRequests: AsyncStream<SpeechRequest>
     nonisolated let speechRequestsContinuation: AsyncStream<SpeechRequest>.Continuation
-    /// Spoken-output mode (what displayed lines speak) — pushed by the
-    /// TextToSpeech plugin via `.setSpeechMode`. Off by default.
-    var speechMode: SpeechMode = .off
+    /// The speech policy (mode, prompt handling, quiet-while-running,
+    /// enter-interrupts) — pushed by the TextToSpeech plugin via
+    /// `.setSpeechPolicy`. Everything off by default.
+    var speechPolicy = SpeechPolicy()
+    /// Whether the character is speedwalking (`char.status.state == 12`),
+    /// for the policy's quiet-while-running gate.
+    var charIsRunning = false
     /// The last displayed (post-gag) line texts, for `tts last [n]`.
     var recentDisplayedLines: [String] = []
     /// The last line-driven spoken text, for consecutive-repeat suppression
@@ -483,6 +487,9 @@ public actor SessionController {
     /// verbatim; `\r\n` appended). Tracks `quit` so the ensuing server close is
     /// a clean logout, not a dropped link that would autoreconnect.
     public func send(_ command: String) async throws {
+        // Typed input cuts stale speech (community canon, `tts enter` toggles)
+        // — including the bare "press Enter to shut it up" reflex.
+        interruptSpeechForTypedCommand()
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )

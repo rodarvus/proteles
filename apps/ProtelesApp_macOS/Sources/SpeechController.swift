@@ -58,6 +58,9 @@ final class SpeechController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func speak(_ text: String, interrupt: Bool) {
+        // The package's `tts focus`: drop utterances while Proteles isn't
+        // the active app (off by default).
+        if config.quietWhenUnfocused, !NSApp.isActive { return }
         if config.voiceOverRouting {
             announceViaVoiceOver(text, interrupt: interrupt)
             return
