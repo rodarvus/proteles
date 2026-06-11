@@ -43,7 +43,13 @@ struct ContentView: View {
     /// A resume note set at launch and flushed to the transcript on the first
     /// `.connected` (when the recorder is open), so resume is auditable (#42).
     @State var pendingResumeNote: String?
-    @State var gmcp = GMCPState()
+    /// Live GMCP snapshot, as an `@Observable` *reference* (#61): the task
+    /// below writes `gmcp.state` per update, but this body never reads it —
+    /// only the leaf views (gauge bar, Character/Group panels) do, so a
+    /// `char.vitals` per swing or `room.info` per room re-renders those
+    /// leaves instead of diffing the whole window (the measured cause of the
+    /// multi-second main-thread stalls during campaign play).
+    @State var gmcp = GMCPStateModel()
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
     @State var recentLines = RecentLineBuffer()
@@ -170,7 +176,7 @@ struct ContentView: View {
         .task { await monitorMainThreadStalls() }
         .task {
             for await snapshot in await session.gmcpState.subscribe() {
-                gmcp = snapshot
+                gmcp.state = snapshot
                 // Feed the mid-combat guard for background update checks (#42).
                 updater.safeToInterrupt = snapshot.status?.isSafeToInterrupt ?? true
             }

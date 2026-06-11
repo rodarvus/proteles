@@ -15,9 +15,9 @@ extension ContentView {
         // Player/people names — used both as context nouns and as the recipient
         // source for directed channels (`tell <who>`, #31).
         var players: [String] = []
-        if let members = gmcp.group?.members { players += members.map(\.name) }
+        if let members = gmcp.state.group?.members { players += members.map(\.name) }
         context += players
-        if let roomName = gmcp.room?.name {
+        if let roomName = gmcp.state.room?.name {
             context += InputCompletion.harvestWords(from: [roomName], minLength: 3)
         }
         // Union the bundled list with the user's alias verbs + installed plugins'
@@ -43,7 +43,7 @@ extension ContentView {
     /// mapper / skills list as those pipelines land.
     private func argumentSources() -> [CommandArgumentKind: [String]] {
         var sources: [CommandArgumentKind: [String]] = [:]
-        if let exits = gmcp.room?.exits, !exits.isEmpty {
+        if let exits = gmcp.state.room?.exits, !exits.isEmpty {
             sources[.exit] = exits.keys.map { Self.directionNames[$0.lowercased()] ?? $0 }
         }
         sources[.spell] = AardwolfSpells.all // `cast <spell>` (#32)

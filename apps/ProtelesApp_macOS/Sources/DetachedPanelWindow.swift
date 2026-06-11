@@ -24,7 +24,10 @@ struct DetachedPanelWindow: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.openWindow) private var openWindow
-    @State private var gmcp = GMCPState()
+    /// Reference model, like ContentView's (#61): the task writes `.state`,
+    /// only the Character/Group panel bodies read it — per-GMCP updates never
+    /// re-diff this window's root (toolbar, chrome, the other panel kinds).
+    @State private var gmcp = GMCPStateModel()
 
     var body: some View {
         content
@@ -53,7 +56,7 @@ struct DetachedPanelWindow: View {
             .task {
                 // Only the Character panel needs live GMCP; cheap to always run.
                 for await snapshot in await session.gmcpState.subscribe() {
-                    gmcp = snapshot
+                    gmcp.state = snapshot
                 }
             }
             .onChange(of: layout.isDetached(kind)) { _, stillDetached in

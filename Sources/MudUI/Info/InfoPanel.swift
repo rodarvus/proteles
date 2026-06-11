@@ -7,7 +7,13 @@ import SwiftUI
 /// bracketed, right-aligned values; hugs its content so it resizes neatly. Group
 /// members live in their own window now (GH #38), not here.
 public struct InfoPanel: View {
-    private let state: GMCPState
+    private let model: GMCPStateModel
+    /// Reads route through the model so per-GMCP updates re-render only this
+    /// panel, never the root that passed the reference (#61).
+    private var state: GMCPState {
+        model.state
+    }
+
     @AppStorage("themeID") private var themeID = Theme.default.id
     /// 1 except in a translucent floating miniwindow (see FloatingMiniWindow).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
@@ -20,8 +26,8 @@ public struct InfoPanel: View {
         panelBackgroundOpacity < 1 ? 0 : 1
     }
 
-    public init(state: GMCPState) {
-        self.state = state
+    public init(state: GMCPStateModel) {
+        model = state
     }
 
     private var palette: ColorPalette {

@@ -191,12 +191,19 @@ public struct SearchAndDestroyPanelView: View {
         return next
     }
 
-    /// The off-quest cooldown badge — a live-updating "Quest in N min" using the
-    /// next-requestable time. `.relative` ticks itself, no panel timer needed.
+    /// The off-quest cooldown badge — a live-updating "Quest in N min" from the
+    /// next-requestable time. A 30 s `TimelineView` (the tick-readout pattern)
+    /// re-derives the label, NOT `Text(_, style: .relative)`: relative text
+    /// keeps SwiftUI's time-formatting machinery resolving continuously, which
+    /// showed up in the #61 main-thread samples whenever this panel was open.
     private func questCooldownBadge(_ unixTime: Double) -> some View {
         HStack(spacing: 3) {
             Image(systemName: "hourglass")
-            Text("Quest ") + Text(Date(timeIntervalSince1970: unixTime), style: .relative)
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let remaining = unixTime - context.date.timeIntervalSince1970
+                let minutes = Swift.max(0, Int((remaining / 60).rounded(.up)))
+                Text(minutes > 0 ? "Quest in \(minutes)m" : "Quest soon")
+            }
         }
         .font(.system(size: 9, weight: .bold))
         .lineLimit(1)
