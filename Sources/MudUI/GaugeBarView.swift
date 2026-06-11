@@ -14,16 +14,23 @@ import SwiftUI
 /// (good/evil/neutral) with boundary ticks, not a single fill.
 public struct GaugeBarView: View {
     private let state: StatusBarView.ConnectionState
-    private let gmcp: GMCPState
+    private let model: GMCPStateModel
     private let config: StatusBarConfig
+
+    /// Every read goes through the model so Observation registers the
+    /// dependency *here*, not in the root view that passed the reference
+    /// (#61 — per-GMCP updates re-render only this bar).
+    private var gmcp: GMCPState {
+        model.state
+    }
 
     public init(
         state: StatusBarView.ConnectionState,
-        gmcp: GMCPState,
+        gmcp: GMCPStateModel,
         config: StatusBarConfig = StatusBarConfig()
     ) {
         self.state = state
-        self.gmcp = gmcp
+        model = gmcp
         self.config = config
     }
 
@@ -367,7 +374,7 @@ public extension Color {
         Color.black.frame(maxWidth: .infinity, maxHeight: .infinity)
         GaugeBarView(
             state: .connected,
-            gmcp: state,
+            gmcp: GMCPStateModel(state: state),
             config: StatusBarConfig(numberMode: .number)
         )
     }

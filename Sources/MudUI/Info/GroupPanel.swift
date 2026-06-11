@@ -7,7 +7,13 @@ import SwiftUI
 /// content so the window stays as narrow as the data needs. Driven by GMCP group
 /// state; members can be room-only filtered + sorted via the header menu.
 public struct GroupPanel: View {
-    private let state: GMCPState
+    private let model: GMCPStateModel
+    /// Reads route through the model so per-GMCP updates re-render only this
+    /// panel, never the root that passed the reference (#61).
+    private var state: GMCPState {
+        model.state
+    }
+
     @AppStorage("group.roomOnly") private var roomOnly = false
     @AppStorage("group.sort") private var sortRaw = GroupMemberSort.standard.rawValue
     /// 1 except in a translucent floating miniwindow, whose chrome material is
@@ -15,8 +21,8 @@ public struct GroupPanel: View {
     /// (the Character-panel live report, 2026-06-10).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
-    public init(state: GMCPState) {
-        self.state = state
+    public init(state: GMCPStateModel) {
+        model = state
     }
 
     private var sort: GroupMemberSort {
