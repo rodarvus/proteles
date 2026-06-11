@@ -105,6 +105,9 @@ extension SessionController {
     func dispatchGMCP(_ message: GMCPMessage) async {
         logTranscript(.gmcp, "\(message.package) \(message.json)")
         latestGMCPByPackage[message.package.lowercased()] = message.json
+        if message.package.lowercased() == "char.status" {
+            updateRunningState(fromCharStatus: message.json) // speech quiet-while-running
+        }
         await gmcpState.apply(message)
         if let chatLine = await chatStore.ingest(message) { await notifyForChat(chatLine) }
         // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals

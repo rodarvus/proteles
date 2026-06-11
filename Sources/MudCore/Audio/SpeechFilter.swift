@@ -17,6 +17,41 @@ public enum SpeechMode: String, Codable, Sendable {
     case everything
 }
 
+/// How prompt lines speak. Community canon (#9 research: Aardwolf VI page,
+/// MUSH-Z, fastfinge's blueprint) is **silent** — VI players turn the prompt
+/// off and query vitals on demand (`tts vitals`); the delta mode (speak only
+/// changed hp/mana) is kept as an opt-in middle ground.
+public enum PromptSpeechMode: String, Codable, Sendable {
+    case off
+    case delta
+}
+
+/// The session-side speech policy, pushed as one value by the TextToSpeech
+/// plugin (its commands and `Settings/speech.json` are the source of truth;
+/// the session just applies it on the displayed-line path).
+public struct SpeechPolicy: Sendable, Equatable {
+    public var mode: SpeechMode = .off
+    public var promptSpeech: PromptSpeechMode = .off
+    /// Quiet while speedwalking (`char.status.state == 12`) — the package's
+    /// `tts running` toggle. Off by default, as upstream.
+    public var quietWhileRunning = false
+    /// Sending a command cuts stale speech (mudlet-reader/MUSH-Z/NVDA canon;
+    /// toggleable because MUSH-Z makes it so). On by default.
+    public var enterInterrupts = true
+
+    public init(
+        mode: SpeechMode = .off,
+        promptSpeech: PromptSpeechMode = .off,
+        quietWhileRunning: Bool = false,
+        enterInterrupts: Bool = true
+    ) {
+        self.mode = mode
+        self.promptSpeech = promptSpeech
+        self.quietWhileRunning = quietWhileRunning
+        self.enterInterrupts = enterInterrupts
+    }
+}
+
 /// One speech request bound for the app's `SpeechController`, published on
 /// ``SessionController/speechRequests``.
 public enum SpeechRequest: Sendable, Equatable {
@@ -204,6 +239,15 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
     /// speaks *and* brailles via the user's assistive settings (rate/voice
     /// are then owned by VoiceOver, not us).
     public var voiceOverRouting = false
+    /// Prompt lines: silent by default (community canon — query vitals on
+    /// demand instead); `delta` speaks only the changed hp/mana.
+    public var promptSpeech: PromptSpeechMode = .off
+    /// Quiet while speedwalking (the package's `tts running`).
+    public var quietWhileRunning = false
+    /// Sending a command cuts stale speech (`tts enter` toggles).
+    public var enterInterrupts = true
+    /// Quiet while Proteles isn't the active app (the package's `tts focus`).
+    public var quietWhenUnfocused = false
 
     public init() {}
 
@@ -213,6 +257,23 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
         wordsPerMinute = try container.decodeIfPresent(Int.self, forKey: .wordsPerMinute) ?? 175
         voice = try container.decodeIfPresent(String.self, forKey: .voice)
         voiceOverRouting = try container.decodeIfPresent(Bool.self, forKey: .voiceOverRouting) ?? false
+        promptSpeech = try container.decodeIfPresent(
+            PromptSpeechMode.self, forKey: .promptSpeech
+        ) ?? .off
+        quietWhileRunning = try container.decodeIfPresent(Bool.self, forKey: .quietWhileRunning) ?? false
+        enterInterrupts = try container.decodeIfPresent(Bool.self, forKey: .enterInterrupts) ?? true
+        quietWhenUnfocused = try container.decodeIfPresent(Bool.self, forKey: .quietWhenUnfocused) ?? false
+    }
+
+    /// The session-relevant slice of this config (the rest — rate, voice,
+    /// routing, focus quieting — is the app controller's).
+    public var policy: SpeechPolicy {
+        SpeechPolicy(
+            mode: mode,
+            promptSpeech: promptSpeech,
+            quietWhileRunning: quietWhileRunning,
+            enterInterrupts: enterInterrupts
+        )
     }
 
     /// `Settings/speech.json`.
