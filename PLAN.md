@@ -5,7 +5,7 @@
 > **Decision Log** (§12) is the append-only history (condensed for readability,
 > but never silently reversed — superseded decisions are marked).
 
-**Last rewritten:** 2026-06-09 · **Latest release:** `v0.6.0` (notarized).
+**Last rewritten:** 2026-06-09 · **Latest release:** `v0.7.0` (notarized).
 
 Proteles is a **working, daily-usable** native Aardwolf client. The build-out
 phases are **done** — connect/telnet/MCCP2/ANSI, GMCP + HUD, scripting
@@ -24,7 +24,14 @@ base + aliases, kind-aware channels, per-verb argument completion). `v0.6.0` add
 a **one-shot MUSHclient import** (D-101): `File ▸ Import from MUSHclient…` brings a
 whole install over — connection + autologin, aliases/triggers/timers/macros/keypad,
 third-party plugins (with the same compatibility due-diligence as a manual add),
-and the mapper/S&D/dinv/leveldb databases. The remaining
+and the mapper/S&D/dinv/leveldb databases. `v0.7.0` landed
+the **Scripts/Commands/Plugins window overhaul** (#35, D-105–D-107), **⌘F
+find-in-scrollback** (D-104), the **S&D context/persistence fixes**
+(D-108, #52/#53), and the **Levels redesign** (Days/Insights/Records, #12);
+since then the **native soundpack** (#10, D-109 — bundled CC0 cue set, the
+`spset` surface, S&D's cues un-silenced) and **text-to-speech** (#9, D-110 —
+SpeechFilter + `tts` commands + VoiceOver routing, Settings ▸ Audio) have
+landed on `main`. The remaining
 gate to a **1.0** is now mostly **UI/UX polish** — see
 **[docs/DESIGN.md](docs/DESIGN.md)**, the design north-star, with the polish
 backlog tracked under the GitHub `ux` label.
@@ -88,7 +95,7 @@ download. Ongoing: live-play polish + debugging. **All pending work is tracked i
 [GitHub Issues](https://github.com/rodarvus/proteles/issues)** (`gh issue list`) —
 the backlog source of truth (see §9a).
 
-~1356 tests across ~299 suites; four gates green (`swift build`,
+~1530 tests across ~335 suites; four gates green (`swift build`,
 `swift test --parallel`, `swiftformat --lint`, `swiftlint --strict`).
 
 ---

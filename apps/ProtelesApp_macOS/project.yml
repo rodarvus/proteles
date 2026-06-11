@@ -47,7 +47,10 @@ targets:
         ATSApplicationFontsPath: Fonts
         CFBundleShortVersionString: "0.7.0"
         CFBundleVersion: "44"
-        LSMinimumSystemVersion: "14.0"
+        # Must match deploymentTarget (D-103 raised the floor to 15.0): with
+        # this at 14.0, Gatekeeper would happily launch a 15-compiled binary
+        # on macOS 14 (2026-06 audit).
+        LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: ""
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: true

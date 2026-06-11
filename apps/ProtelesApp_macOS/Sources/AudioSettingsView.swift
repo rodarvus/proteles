@@ -27,7 +27,10 @@ struct AudioSettingsView: View {
                     .foregroundStyle(.secondary)
                 LabeledContent("Volume") {
                     Slider(value: globalVolume, in: 0...100, step: 5) { editing in
-                        if !editing { reloadSoundpack() }
+                        if !editing {
+                            saveSoundpack()
+                            reloadSoundpack()
+                        }
                     }
                     .frame(maxWidth: 220)
                 }
@@ -51,7 +54,10 @@ struct AudioSettingsView: View {
                     .foregroundStyle(.secondary)
                 LabeledContent("Rate: \(speech.wordsPerMinute) wpm") {
                     Slider(value: wordsPerMinute, in: 80...600, step: 10) { editing in
-                        if !editing { reloadSpeech() }
+                        if !editing {
+                            saveSpeech()
+                            reloadSpeech()
+                        }
                     }
                     .frame(maxWidth: 220)
                 }
@@ -100,13 +106,13 @@ struct AudioSettingsView: View {
         )
     }
 
+    /// Sliders mutate only in-memory state per tick; the JSON write + plugin
+    /// reload happen on release (`onEditingChanged false`) — a drag used to
+    /// write soundpack.json 10–20×/second (2026-06 audit).
     private var globalVolume: Binding<Double> {
         Binding(
             get: { Double(soundpack.globalVolume) },
-            set: { value in
-                soundpack.globalVolume = Int(value)
-                saveSoundpack()
-            }
+            set: { value in soundpack.globalVolume = Int(value) }
         )
     }
 
@@ -135,10 +141,7 @@ struct AudioSettingsView: View {
     private var wordsPerMinute: Binding<Double> {
         Binding(
             get: { Double(speech.wordsPerMinute) },
-            set: { value in
-                speech.wordsPerMinute = Int(value)
-                saveSpeech()
-            }
+            set: { value in speech.wordsPerMinute = Int(value) }
         )
     }
 
