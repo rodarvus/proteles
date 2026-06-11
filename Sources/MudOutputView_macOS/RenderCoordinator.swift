@@ -2,6 +2,7 @@
     import AppKit
     import Collections
     import MudCore
+    import os
 
     /// Bridges a ``ScrollbackStore`` to an `NSTextView`'s `NSTextStorage`
     /// with **render coalescing** and **eviction propagation**.
@@ -195,11 +196,21 @@
             tailTextView?.scrollToEndOfDocument(nil)
         }
 
+        /// `render-flush` intervals for Instruments (#59 B5): the same window
+        /// `RenderFrameStats.flushDuration` measures, visible on the
+        /// timeline so flush stacking under burst load is observable on a
+        /// live session. Free when nothing is recording.
+        private static let signposter = OSSignposter(
+            subsystem: "com.proteles", category: "render"
+        )
+
         private func flushPending() {
             guard !pendingEvents.isEmpty,
                   let textView,
                   let storage = textView.textStorage
             else { return }
+            let signpostState = Self.signposter.beginInterval("render-flush")
+            defer { Self.signposter.endInterval("render-flush", signpostState) }
 
             let toApply = pendingEvents
             pendingEvents.removeAll(keepingCapacity: true)
