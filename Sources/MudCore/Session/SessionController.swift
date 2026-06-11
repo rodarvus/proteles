@@ -65,6 +65,14 @@ public actor SessionController {
     /// the UI. The underlying ``NetworkConnection`` is *one-shot* (recreated per
     /// ``connect(to:autologin:)``), so its own state stream can't be observed
     /// across reconnects; the controller re-publishes each here as one stream.
+    ///
+    /// Lifetime note (#58): none of the controller's stream continuations
+    /// (this one through `speechRequestsContinuation`) is ever `finish()`ed —
+    /// deliberately. The controller is an app-lifetime singleton, so the
+    /// streams end with the process and subscribers never need a completion
+    /// signal. If sessions ever become per-world objects that come and go, add
+    /// a `teardown()` that finishes all of them (and is called from the app's
+    /// session-close path) so `for await` consumers unwind instead of leaking.
     public nonisolated let connectionStates: AsyncStream<State>
     /// Internal (not private) so `updateState` in `SessionController+ConnectionState`
     /// can publish onto the stream.

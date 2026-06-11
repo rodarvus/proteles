@@ -12,7 +12,7 @@ import Foundation
 /// `sp_global_volume` (a 0–100 cap applied over per-event volumes), and each
 /// event override carries `volume` (0 disables the event), `pan` (−100…100),
 /// and/or a custom `file`.
-public struct SoundpackConfig: Codable, Sendable, Equatable {
+public struct SoundpackConfig: SettingsFileBacked, Equatable {
     /// One event's deviations from the defaults (volume 100, pan 0, the
     /// reference wav). All-nil overrides are pruned on save.
     public struct EventOverride: Codable, Sendable, Equatable {
@@ -80,30 +80,7 @@ public struct SoundpackConfig: Codable, Sendable, Equatable {
 
     // MARK: - Disk
 
-    /// `Settings/soundpack.json`.
-    public static func defaultURL() throws -> URL {
-        try ProtelesPaths.settingsDirectory().appendingPathComponent("soundpack.json")
-    }
-
-    /// Load from `url`; a missing or malformed file is the defaults (the
-    /// malformed case is surfaced by the plugin's `spdebug`, not an error —
-    /// a hand-edit must never brick the soundpack).
-    public static func load(from url: URL?) -> SoundpackConfig {
-        guard let url, let data = FileManager.default.contents(atPath: url.path),
-              let decoded = try? JSONDecoder().decode(SoundpackConfig.self, from: data)
-        else { return SoundpackConfig() }
-        return decoded
-    }
-
-    /// Persist to `url` (pretty + sorted, like every Settings/*.json).
-    public func save(to url: URL?) {
-        guard let url else { return }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(self) else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        try? data.write(to: url, options: .atomic)
-    }
+    /// Load/save via `SettingsFileBacked`; a malformed file is the defaults,
+    /// surfaced by the plugin's `spdebug` rather than an error.
+    public static let settingsFileName = "soundpack.json"
 }

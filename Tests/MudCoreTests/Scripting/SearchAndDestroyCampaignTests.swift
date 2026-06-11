@@ -397,15 +397,21 @@ struct SearchAndDestroyCampaignTests {
         #expect(await host.evaluate(#"tostring(tonumber(gmcp("char.status.level")))"#) == "201")
     }
 
-    @Test("os.clock is sub-second wall time (so the cp-check debounce doesn't misfire)")
+    @Test("os.clock is sub-second monotonic time (so the cp-check debounce doesn't misfire)")
     func osClockIsWallTime() async throws {
         let host = try SearchAndDestroyHost()
         try await host.load()
         // macOS Lua's os.clock is CPU time (~0 in an idle test); the override
-        // makes it wall seconds, so S&D's `last_cp_check` 1s debounce behaves.
+        // makes it elapsed seconds, so S&D's `last_cp_check` 1s debounce
+        // behaves. Since #58 it's ContinuousClock (process-relative, never
+        // steps under NTP) — small non-negative values, never CPU-time zero
+        // forever and never the old epoch billions.
         let clock = await host.evaluate("tostring(os.clock())")
-        let value = Double(clock ?? "0") ?? 0
-        #expect(value > 1_000_000_000, "os.clock should be wall-clock epoch seconds, got \(clock ?? "nil")")
+        let value = Double(clock ?? "-1") ?? -1
+        #expect(value >= 0, "os.clock should be elapsed seconds, got \(clock ?? "nil")")
+        // Two readings must never go backwards (the debounce subtracts them).
+        let delta = await host.evaluate("tostring(os.clock() - os.clock())")
+        #expect((Double(delta ?? "1") ?? 1) <= 0)
         // Crucially it must be SUB-SECOND, not integer `os.time()` seconds.
         // Integer resolution let a stray `do_cp_check` ~0.3s later read a full
         // second on and escape the 1s debounce, resetting `cp_check_list`
