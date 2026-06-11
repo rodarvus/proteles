@@ -1,3 +1,4 @@
+import Foundation
 @testable import MudCore
 import Testing
 
@@ -54,7 +55,45 @@ struct WebSocketFramingTests {
     @Test("inbound frame: base64 → raw-deflate → telnet bytes")
     func inboundRoundTrip() throws {
         let inflater = try Inflater(raw: true)
-        let out = WebSocketFraming.inboundBytes(
+        let out = try WebSocketFraming.inboundBytes(
+            fromBase64: "C0/NSc7PTVUoyVdwTCxKKc/PSQMA",
+            inflater: inflater
+        )
+        #expect(String(bytes: out, encoding: .utf8) == "Welcome to Aardwolf")
+    }
+
+    // MARK: - Corrupt frames are loud, not silent (#46 audit A4)
+
+    @Test("a non-base64 frame throws (was: silently dropped)")
+    func nonBase64FrameThrows() throws {
+        let inflater = try Inflater(raw: true)
+        #expect(throws: WebSocketFraming.FrameError.notBase64) {
+            try WebSocketFraming.inboundBytes(fromBase64: "not!!base64@@", inflater: inflater)
+        }
+    }
+
+    @Test("a corrupt deflate stream throws (was: silent garbage/loss)")
+    func corruptDeflateThrows() throws {
+        let inflater = try Inflater(raw: true)
+        // Valid base64 of bytes that are NOT a raw-deflate stream.
+        let corrupt = Data([0xFF, 0xFE, 0xFD, 0xFC, 0x00, 0x01, 0x02]).base64EncodedString()
+        #expect {
+            try WebSocketFraming.inboundBytes(fromBase64: corrupt, inflater: inflater)
+        } throws: { error in
+            if case WebSocketFraming.FrameError.corruptDeflate = error { return true }
+            return false
+        }
+    }
+
+    @Test("a corrupt frame doesn't poison the next frame's decode")
+    func inflaterRecoversAfterCorruptFrame() throws {
+        let inflater = try Inflater(raw: true)
+        let corrupt = Data([0xFF, 0xFE, 0xFD, 0xFC]).base64EncodedString()
+        _ = try? WebSocketFraming.inboundBytes(fromBase64: corrupt, inflater: inflater)
+        // The per-frame reset means a subsequent good frame still decodes —
+        // the connection layer chooses to disconnect anyway (the corrupt
+        // frame's CONTENT is lost), but the framing layer itself recovers.
+        let out = try WebSocketFraming.inboundBytes(
             fromBase64: "C0/NSc7PTVUoyVdwTCxKKc/PSQMA",
             inflater: inflater
         )

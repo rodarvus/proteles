@@ -119,26 +119,69 @@ public final class WebSocketConnection: NSObject, MudConnection, @unchecked Send
     }
 
     private func handleInbound(_ frame: String) {
-        let step: InboundStep? = lock.withLock {
+        let step: Result<InboundStep, WebSocketFraming.FrameError>? = lock.withLock {
             guard let inflater else { return nil }
-            let out = WebSocketFraming.inboundBytes(fromBase64: frame, inflater: inflater)
-            if bridgeReady { return InboundStep(bytes: out, firstFrame: false, flush: []) }
+            let out: [UInt8]
+            do {
+                out = try WebSocketFraming.inboundBytes(fromBase64: frame, inflater: inflater)
+            } catch let error as WebSocketFraming.FrameError {
+                return .failure(error)
+            } catch {
+                return .failure(.corruptDeflate(String(describing: error)))
+            }
+            if bridgeReady { return .success(InboundStep(bytes: out, firstFrame: false, flush: [])) }
             bridgeReady = true
             let flush = queued
             queued = []
             let cont = pendingConnect
             pendingConnect = nil
-            return InboundStep(bytes: out, firstFrame: true, flush: flush, connectContinuation: cont)
+            return .success(
+                InboundStep(bytes: out, firstFrame: true, flush: flush, connectContinuation: cont)
+            )
         }
-        guard let step else { return }
-        if step.firstFrame {
-            transition(to: .connected)
-            step.connectContinuation?.resume()
-            for frame in step.flush {
-                Task { await self.transmit(frame) }
+        switch step {
+        case nil:
+            return
+        case .failure(let error):
+            failOnCorruptFrame(error)
+        case .success(let step):
+            if step.firstFrame {
+                transition(to: .connected)
+                step.connectContinuation?.resume()
+                for frame in step.flush {
+                    Task { await self.transmit(frame) }
+                }
             }
+            if !step.bytes.isEmpty { bytesContinuation.yield(step.bytes) }
         }
-        if !step.bytes.isEmpty { bytesContinuation.yield(step.bytes) }
+    }
+
+    /// A frame that didn't decode means the telnet stream now has a hole of
+    /// unknown content — it may have ended mid-line or mid-IAC, so continuing
+    /// risks silent loss and protocol desync. Fail LOUDLY (#46 audit A4): a
+    /// visible notice flows through the normal output path (scrollback +
+    /// transcript, at the exact point the stream died), then the connection
+    /// tears down — the session's reconnect policy turns that into a clean
+    /// reconnect with a fresh gateway bridge.
+    private func failOnCorruptFrame(_ error: WebSocketFraming.FrameError) {
+        let task = lock.withLock { () -> URLSessionWebSocketTask? in
+            let task = self.task
+            self.task = nil
+            self.session = nil
+            self.inflater = nil
+            return task
+        }
+        let reason = switch error {
+        case .notBase64: "non-base64 frame"
+        case .corruptDeflate(let detail): "corrupt deflate (\(detail))"
+        }
+        bytesContinuation.yield(
+            Array("\r\n[Proteles] WebSocket gateway frame corrupt — \(reason); disconnecting.\r\n".utf8)
+        )
+        task?.cancel(with: .protocolError, reason: nil)
+        failConnect(.connectionFailed("corrupt gateway frame: \(reason)"))
+        transition(to: .disconnected)
+        finish()
     }
 
     // MARK: - Send
