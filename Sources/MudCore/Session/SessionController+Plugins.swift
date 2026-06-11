@@ -59,6 +59,7 @@ public extension SessionController {
                 stateDirectory: dataPath
             )
             await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+            await logPluginCensus(plugin, engine: scriptEngine)
         }
         loadedPluginPaths = paths
         // OnPluginInstall may have set variables; persist them.
@@ -130,7 +131,17 @@ public extension SessionController {
             stateDirectory: dataPath
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        await logPluginCensus(plugin, engine: scriptEngine)
         if fireConnect { await applyScriptEffects(scriptEngine.connectPlugin(plugin.id)) }
+    }
+
+    /// One transcript line per plugin load with the rules the engines actually
+    /// hold for it (#63) — transcript-only (no main-output noise; plugins
+    /// print their own banners). A post-mortem on an "env alive, rules dead"
+    /// session reads this to tell never-registered from registered-but-disabled.
+    private func logPluginCensus(_ plugin: MUSHclientPlugin, engine: ScriptEngine) async {
+        let census = await engine.ruleCensus(forPlugin: plugin.id)
+        logTranscript(.note, "[plugins] \(plugin.name): \(census.summary)")
     }
 
     /// The flat per-character `Databases/<character>/` path (trailing slash)
