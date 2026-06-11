@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Mirroring S&D's shim-readable state into the shared (shim) runtime.
 ///
@@ -64,11 +65,20 @@ extension SearchAndDestroyHost {
     end)()
     """
 
+    /// `snd-shim-probe` intervals for Instruments (#59 B2): the probe's real
+    /// cost — 3 Lua accessor calls + the canonicalising compare — measured on
+    /// a live combat session. Free when nothing is recording.
+    private static let signposter = OSSignposter(
+        subsystem: "com.proteles", category: "search-and-destroy"
+    )
+
     /// Probe the accessors and, if their combined value changed since the
     /// last push, append a `.searchAndDestroyState` effect to `effects`.
     /// Called by every host entry point that ran Lua (a non-firing line skips
     /// it — nothing can have changed). A failed probe changes nothing.
     func appendingShimState(to effects: [ScriptEffect]) async -> [ScriptEffect] {
+        let signpostState = Self.signposter.beginInterval("snd-shim-probe")
+        defer { Self.signposter.endInterval("snd-shim-probe", signpostState) }
         guard let snapshot = await evaluate(Self.shimStateProbe) else { return effects }
         let canonical = Self.canonical(snapshot)
         guard canonical != lastShimStateSnapshot else { return effects }
