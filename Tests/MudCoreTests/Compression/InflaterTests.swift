@@ -148,6 +148,55 @@ struct InflaterErrorTests {
         #expect(inflater.leftover.isEmpty)
     }
 
+    @Test("output larger than the scratch buffer is fully drained in one call (#56)")
+    func drainsPendingOutputPastScratchCapacity() throws {
+        // The audit's Z_BUF_ERROR corner (#56): highly compressible input
+        // means zlib consumes ALL input bytes early, then generates output
+        // from its window over several buffer-fulls. A drain loop gated only
+        // on `avail_in > 0` exits after the first full scratch buffer and
+        // strands the rest inside zlib until the next network packet — on a
+        // quiet line, indefinitely.
+        let plain = [UInt8](repeating: UInt8(ascii: "A"), count: 4096)
+        let deflater = try Deflater()
+        let compressed = try deflater.deflate(plain, flush: .sync)
+
+        let inflater = try Inflater(scratchCapacity: 64)
+        let recovered = try inflater.inflate(compressed)
+        #expect(recovered == plain)
+    }
+
+    @Test("pathological split: tail chunk that expands past scratch still drains (#56)")
+    func drainsPendingOutputAcrossSplitChunks() throws {
+        let plain = [UInt8](repeating: UInt8(ascii: "B"), count: 8192)
+        let deflater = try Deflater()
+        let compressed = try deflater.deflate(plain, flush: .sync)
+
+        // Split mid-stream so the final chunk carries the bulk of the
+        // expansion; each call must still return everything available.
+        let inflater = try Inflater(scratchCapacity: 64)
+        let mid = compressed.count / 2
+        var recovered = try inflater.inflate(Array(compressed[0..<mid]))
+        recovered += try inflater.inflate(Array(compressed[mid...]))
+        #expect(recovered == plain)
+    }
+
+    @Test("worst case: byte-by-byte input through an 8-byte scratch buffer (#56)")
+    func drainsByteByByteThroughTinyScratch() throws {
+        // Every inflate() call has at most one input byte and an output
+        // buffer 512× smaller than the expansion — maximal pressure on the
+        // drain loop's exit condition.
+        let plain = [UInt8](repeating: UInt8(ascii: "C"), count: 4096)
+        let deflater = try Deflater()
+        let compressed = try deflater.deflate(plain, flush: .sync)
+
+        let inflater = try Inflater(scratchCapacity: 8)
+        var recovered: [UInt8] = []
+        for byte in compressed {
+            recovered += try inflater.inflate([byte])
+        }
+        #expect(recovered == plain)
+    }
+
     @Test("reset() returns the inflater to a fresh state")
     func resetAllowsReuse() throws {
         let plain = Array("first session".utf8)
