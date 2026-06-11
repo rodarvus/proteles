@@ -261,6 +261,14 @@ public enum ScriptEffect: Sendable, Equatable {
     /// session's recent-output buffer (only the session sees post-gag
     /// display lines; the plugin can't).
     case speakRecentOutput(count: Int)
+    /// Speak the last `count` captured chat lines (`tts review [channel]`),
+    /// from the session's ChatStore — the review-buffer pattern (#9), by
+    /// category. `nil` channel = all channels.
+    case speakChatReview(channel: String?, count: Int)
+    /// The soundpack's master mute changed — the session gates every
+    /// `.playSound` cue on it (so Settings' "Play event sounds: off" also
+    /// silences S&D's direct cues and any shim plugin's PlaySound).
+    case setSoundCuesMuted(Bool)
 }
 
 /// An outbound HTTP request a plugin's `async` helper asked for (the network

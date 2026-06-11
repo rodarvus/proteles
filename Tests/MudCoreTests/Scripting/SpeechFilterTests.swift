@@ -208,6 +208,56 @@ struct TextToSpeechPluginTests {
         #expect(tts.handleCommand("ttsx") == nil)
         #expect(tts.handleCommand("look") == nil)
     }
+
+    @Test("tts subst: add/del/list, !skip marker, policy pushed")
+    func substitutions() {
+        var tts = plugin()
+        let added = tts.handleCommand("tts subst add gtell==G tell") ?? []
+        #expect(tts.config.substitutions == [SpeechSubstitution(find: "gtell", replace: "G tell")])
+        #expect(added.contains { if case .setSpeechPolicy = $0 { true } else { false } })
+        // Re-adding the same find replaces, not duplicates.
+        _ = tts.handleCommand("tts subst add gtell==grouptell")
+        #expect(tts.config.substitutions.count == 1)
+        #expect(tts.config.substitutions.first?.replace == "grouptell")
+        _ = tts.handleCommand("tts subst add spammy line==!skip")
+        #expect(tts.config.substitutions.count == 2)
+        #expect(tts.handleCommand("tts subst") != nil) // listing
+        _ = tts.handleCommand("tts subst del gtell")
+        #expect(tts.config.substitutions.count == 1)
+        // The policy carries them to the session.
+        #expect(tts.config.policy.spokenText("a SPAMMY LINE here") == nil) // !skip, case-insensitive
+    }
+
+    @Test("tts mute/unmute manage speech-muted channels")
+    func channelMutes() {
+        var tts = plugin()
+        _ = tts.handleCommand("tts mute Gossip")
+        #expect(tts.config.mutedChannels == ["gossip"])
+        #expect(tts.config.policy.mutedChannels.contains("gossip"))
+        #expect(tts.handleCommand("tts mute gossip")?.count == 1) // already muted → note only
+        _ = tts.handleCommand("tts unmute gossip")
+        #expect(tts.config.mutedChannels.isEmpty)
+    }
+
+    @Test("tts review parses channel + count in either order")
+    func reviewParsing() {
+        var tts = plugin()
+        #expect(tts.handleCommand("tts review") == [.speakChatReview(channel: nil, count: 5)])
+        #expect(tts.handleCommand("tts review tell") == [.speakChatReview(channel: "tell", count: 5)])
+        #expect(tts.handleCommand("tts review tell 3") == [.speakChatReview(channel: "tell", count: 3)])
+        #expect(tts.handleCommand("tts review 7") == [.speakChatReview(channel: nil, count: 7)])
+    }
+
+    @Test("spokenText applies pronunciation fixes in order")
+    func spokenText() {
+        var policy = SpeechPolicy()
+        policy.substitutions = [
+            SpeechSubstitution(find: "gtell", replace: "G tell"),
+            SpeechSubstitution(find: "Aylor", replace: "ay lor")
+        ]
+        #expect(policy.spokenText("Your gtell echoes across Aylor") == "Your G tell echoes across ay lor")
+        #expect(policy.spokenText("untouched") == "untouched")
+    }
 }
 
 /// proteles.speak across the compat shim (#9).

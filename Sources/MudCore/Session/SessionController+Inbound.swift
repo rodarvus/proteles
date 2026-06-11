@@ -109,7 +109,10 @@ extension SessionController {
             updateRunningState(fromCharStatus: message.json) // speech quiet-while-running
         }
         await gmcpState.apply(message)
-        if let chatLine = await chatStore.ingest(message) { await notifyForChat(chatLine) }
+        if let chatLine = await chatStore.ingest(message) {
+            recordChannelLine(chatLine) // speech-mute matching (tts mute)
+            await notifyForChat(chatLine)
+        }
         // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals
         // update) + quest-ready (comm.quest). Self-gates on the relevant rules,
         // so it's a cheap no-op when none exist.

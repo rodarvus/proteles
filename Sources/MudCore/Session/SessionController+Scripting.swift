@@ -201,6 +201,7 @@ public extension SessionController {
     private func applyControlEffect(_ effect: ScriptEffect) async {
         if await applyStoreEffect(effect) { return }
         if applySpeechEffect(effect) { return }
+        if await applyAudioEffect(effect) { return }
         switch effect {
         case .setAutomationsSuspended(let suspended):
             await scriptEngine?.setSuspended(suspended)
@@ -214,11 +215,32 @@ public extension SessionController {
             publishedModelsContinuation.yield(json)
         case .httpRequest(let request):
             performHTTPRequest(request)
-        case .playSound(let file, let volume, let pan):
-            soundCuesContinuation.yield(SoundCue(file: file, volume: volume, pan: pan))
         default:
             await applyInboundControlEffect(effect)
         }
+    }
+
+    /// The audio effects (sound cues + chat review — the review needs the
+    /// async ChatStore, so it can't live in the sync speech handler).
+    /// Returns true when handled.
+    private func applyAudioEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .playSound(let file, let volume, let pan):
+            // The soundpack's mute gates every cue source (its own events
+            // already self-gate; this catches S&D's direct PlaySound and
+            // shim plugins) — except the soundpack's own settings-change
+            // confirmation, which it orders BEFORE the mute flag flips.
+            if !soundCuesMuted {
+                soundCuesContinuation.yield(SoundCue(file: file, volume: volume, pan: pan))
+            }
+        case .setSoundCuesMuted(let muted):
+            soundCuesMuted = muted
+        case .speakChatReview(let channel, let count):
+            await speakChatReview(channel: channel, count: count)
+        default:
+            return false
+        }
+        return true
     }
 
     /// Effects that just feed a UI store (the captured maps, the tick anchor,

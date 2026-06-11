@@ -110,7 +110,7 @@ struct ProtelesApp: App {
 
         // Register the built-in native plugins (ported from the Aardwolf
         // package). Registration is quick and completes well before connect.
-        if let scriptEngine { Self.registerNativePlugins(on: scriptEngine) }
+        if let scriptEngine { Self.registerNativePlugins(on: scriptEngine, session: session) }
 
         // Profile store → WorldsModel. defaultStoreURL only fails if
         // Application Support is unavailable (effectively never on
@@ -342,21 +342,25 @@ struct ProtelesApp: App {
     /// old logs to the retention limit first. Called by the session on connect.
     ///
     /// Register the built-in native plugins + the dialog/clipboard providers
-    /// (split from `init` for its body-length budget).
-    private static func registerNativePlugins(on scriptEngine: ScriptEngine) {
+    /// (split from `init` for its body-length budget). Registration goes
+    /// through the SESSION so each plugin's `install()` effects apply —
+    /// engine-direct registration dropped them, which meant a launch with
+    /// TTS enabled never pushed the speech policy and the soundpack's
+    /// master mute never reached the cue gate (2026-06-11 regression).
+    private static func registerNativePlugins(on scriptEngine: ScriptEngine, session: SessionController) {
         Task {
-            await scriptEngine.registerNativePlugin(AardGMCPHandler())
-            await scriptEngine.registerNativePlugin(VitalShortcuts())
-            await scriptEngine.registerNativePlugin(NoteMode())
-            await scriptEngine.registerNativePlugin(TextSubstitution())
-            await scriptEngine.registerNativePlugin(ChatEcho())
-            await scriptEngine.registerNativePlugin(Soundpack())
-            await scriptEngine.registerNativePlugin(TextToSpeech())
-            await scriptEngine.registerNativePlugin(AsciiMap())
-            await scriptEngine.registerNativePlugin(ContinentBigmap())
-            await scriptEngine.registerNativePlugin(TickTimer())
-            await scriptEngine.registerNativePlugin(URLLinkify())
-            await scriptEngine.registerNativePlugin(InventorySerialsPlugin())
+            await session.registerNativePlugin(AardGMCPHandler())
+            await session.registerNativePlugin(VitalShortcuts())
+            await session.registerNativePlugin(NoteMode())
+            await session.registerNativePlugin(TextSubstitution())
+            await session.registerNativePlugin(ChatEcho())
+            await session.registerNativePlugin(Soundpack())
+            await session.registerNativePlugin(TextToSpeech())
+            await session.registerNativePlugin(AsciiMap())
+            await session.registerNativePlugin(ContinentBigmap())
+            await session.registerNativePlugin(TickTimer())
+            await session.registerNativePlugin(URLLinkify())
+            await session.registerNativePlugin(InventorySerialsPlugin())
             // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
             // pickers) for shim plugins that pop a dialog.
             await scriptEngine.setDialogProvider(makeScriptDialogProvider())

@@ -41,8 +41,11 @@ public struct TextToSpeech: NativePlugin {
                 .init(syntax: "tts off", summary: "Stop speaking lines"),
                 .init(syntax: "tts vitals", summary: "Speak hp/mana/moves now (from GMCP)"),
                 .init(syntax: "tts last [n]", summary: "Re-read the last line(s) of output"),
+                .init(syntax: "tts review [channel] [n]", summary: "Re-read captured chat, by channel"),
                 .init(syntax: "tts say <text>", summary: "Speak something now (jumps the queue)"),
                 .init(syntax: "tts stop", summary: "Stop talking and flush the queue"),
+                .init(syntax: "tts mute <channel>", summary: "Speech-mute a channel (text stays visible)"),
+                .init(syntax: "tts subst add <x>==<y>", summary: "Pronounce x as y; y of !skip never speaks"),
                 .init(syntax: "tts enter", summary: "Toggle: typed commands cut stale speech"),
                 .init(syntax: "tts running", summary: "Toggle: quiet while speedwalking"),
                 .init(syntax: "tts focus", summary: "Toggle: quiet when Proteles isn't frontmost"),
@@ -136,8 +139,10 @@ public struct TextToSpeech: NativePlugin {
         if let mode = Self.mode(forSubcommand: parts[0], argument: argument) {
             return setMode(mode)
         }
-        return dispatch(subcommand: parts[0].lowercased(), argument: argument)
-            ?? dispatchSettings(subcommand: parts[0].lowercased(), argument: argument)
+        let subcommand = parts[0].lowercased()
+        return dispatch(subcommand: subcommand, argument: argument)
+            ?? dispatchFilters(subcommand: subcommand, argument: argument)
+            ?? dispatchSettings(subcommand: subcommand, argument: argument)
     }
 
     /// The speak-now / review subcommands. Nil falls through to the
@@ -146,10 +151,22 @@ public struct TextToSpeech: NativePlugin {
         switch subcommand {
         case "say": argument.isEmpty ? usage() : [.speak(text: argument, interrupt: true)]
         case "last": speakLast(argument.isEmpty ? "1" : argument)
+        case "review", "rev": speakReview(argument)
         case "vitals", "vit": speakVitals()
         case "stop": [.stopSpeaking]
         case "help": helpNotes()
         case "setup": setupNotes()
+        default: nil
+        }
+    }
+
+    /// The speech-filter subcommands (substitutions + channel mutes). Nil
+    /// falls through to the settings dispatch (complexity budget).
+    private mutating func dispatchFilters(subcommand: String, argument: String) -> [ScriptEffect]? {
+        switch subcommand {
+        case "subst", "sub": handleSubst(argument)
+        case "mute": muteChannel(argument, mute: true)
+        case "unmute": muteChannel(argument, mute: false)
         default: nil
         }
     }
@@ -165,6 +182,98 @@ public struct TextToSpeech: NativePlugin {
         case "focus": toggleQuietWhenUnfocused()
         default: usage()
         }
+    }
+
+    // MARK: - Review / substitutions / channel mutes
+
+    /// `tts review [channel] [n]` — re-read captured chat by category (the
+    /// review-buffer pattern, over the Chat window's existing capture).
+    private func speakReview(_ argument: String) -> [ScriptEffect] {
+        let parts = argument.split(separator: " ").map(String.init)
+        var channel: String?
+        var count = 5
+        for part in parts {
+            if let number = Int(part) {
+                count = min(max(number, 1), 50)
+            } else {
+                channel = part.lowercased()
+            }
+        }
+        return [.speakChatReview(channel: channel, count: count)]
+    }
+
+    /// `tts subst add <find>==<replace>` / `del <find>` / bare list — the
+    /// MUSH-Z pronunciation dictionary; `!skip` as the replacement
+    /// speech-gags matching lines (text stays visible).
+    private mutating func handleSubst(_ argument: String) -> [ScriptEffect] {
+        let parts = argument.split(separator: " ", maxSplits: 1).map(String.init)
+        switch parts.first?.lowercased() {
+        case "add" where parts.count == 2:
+            let rule = parts[1].components(separatedBy: "==")
+            guard rule.count == 2, !rule[0].isEmpty, !rule[1].isEmpty else {
+                return [Self.note("Usage: tts subst add <text>==<spoken as> (or ==!skip to never speak)")]
+            }
+            config.substitutions.removeAll { $0.find.lowercased() == rule[0].lowercased() }
+            config.substitutions.append(SpeechSubstitution(find: rule[0], replace: rule[1]))
+            config.save(to: configURL)
+            let what = rule[1] == SpeechSubstitution.skipMarker
+                ? "lines containing \"\(rule[0])\" will not be spoken"
+                : "\"\(rule[0])\" will be spoken as \"\(rule[1])\""
+            return [.setSpeechPolicy(config.policy), Self.note("Added: \(what).")]
+        case "del", "delete", "remove":
+            guard parts.count == 2 else { return [Self.note("Usage: tts subst del <text>")] }
+            let before = config.substitutions.count
+            config.substitutions.removeAll { $0.find.lowercased() == parts[1].lowercased() }
+            guard config.substitutions.count != before else {
+                return [Self.note("No substitution for \"\(parts[1])\".")]
+            }
+            config.save(to: configURL)
+            return [.setSpeechPolicy(config.policy), Self.note("Removed \"\(parts[1])\".")]
+        case nil:
+            guard !config.substitutions.isEmpty else {
+                return [Self.note("No speech substitutions. Add: tts subst add gtell==G tell")]
+            }
+            var effects = [Self.note("Speech substitutions:")]
+            for substitution in config.substitutions {
+                let target = substitution.replace == SpeechSubstitution.skipMarker
+                    ? "(never spoken)" : "→ \"\(substitution.replace)\""
+                effects.append(Self.note("  \"\(substitution.find)\" \(target)"))
+            }
+            return effects
+        default:
+            return [Self.note("Usage: tts subst [add <x>==<y> | del <x>]")]
+        }
+    }
+
+    /// `tts mute <channel>` / `tts unmute <channel>` / bare `tts mute` list:
+    /// speech-mute a channel — the line still displays and the Chat window
+    /// still captures it (VIPMud's TALKER MUTE).
+    private mutating func muteChannel(_ argument: String, mute: Bool) -> [ScriptEffect] {
+        let channel = argument.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !channel.isEmpty else {
+            if mute, !config.mutedChannels.isEmpty {
+                return [Self
+                    .note("Speech-muted channels: \(config.mutedChannels.sorted().joined(separator: ", "))")]
+            }
+            return [Self.note(mute
+                    ? "No channels are speech-muted. Usage: tts mute <channel>"
+                    : "Usage: tts unmute <channel>")]
+        }
+        if mute {
+            guard !config.mutedChannels.contains(channel) else {
+                return [Self.note("\(channel) is already speech-muted.")]
+            }
+            config.mutedChannels.append(channel)
+        } else {
+            guard config.mutedChannels.contains(channel) else {
+                return [Self.note("\(channel) isn't speech-muted.")]
+            }
+            config.mutedChannels.removeAll { $0 == channel }
+        }
+        config.save(to: configURL)
+        return [.setSpeechPolicy(config.policy), Self.note(mute
+                ? "\(channel) is speech-muted — still visible and in the Chat window."
+                : "\(channel) speaks again.")]
     }
 
     /// `tts on|alerts|off` (and `tts mode <x>`) → the target mode, nil for
@@ -323,8 +432,9 @@ public struct TextToSpeech: NativePlugin {
     }
 
     private func usage() -> [ScriptEffect] {
-        [Self.note("Usage: tts on|alerts|off | vitals | last [n] | say <text> | stop | "
-                + "enter | running | focus | prompts off|delta | rate <wpm> | voice <name> | setup")]
+        [Self.note("Usage: tts on|alerts|off | vitals | last [n] | review [chan] [n] | say <text> "
+                + "| stop | mute <chan> | subst … | enter | running | focus | prompts off|delta "
+                + "| rate <wpm> | voice <name> | setup — see `tts help`.")]
     }
 
     private func helpNotes() -> [ScriptEffect] {

@@ -67,10 +67,12 @@ public struct Soundpack: NativePlugin {
     }
 
     /// Re-read config on (re-)enable, so hand-edits to soundpack.json land
-    /// on plugin toggle without an app restart.
+    /// on plugin toggle without an app restart. Mirrors the master mute to
+    /// the session, which gates EVERY `.playSound` cue on it — so "Play
+    /// event sounds: off" also silences S&D's direct cues and shim plugins.
     public mutating func install() -> [ScriptEffect] {
         config = SoundpackConfig.load(from: configURL)
-        return []
+        return [.setSoundCuesMuted(config.muted)]
     }
 
     // MARK: - Event sources

@@ -27,6 +27,10 @@ public extension SessionController {
             if speechPolicy.promptSpeech == .delta { speakVitalsDelta(vitals) }
             return
         }
+        // Speech-muted channels (`tts mute <name>`): a line we hold recent
+        // comm.channel GMCP for, whose channel is muted, displays but never
+        // speaks — VIPMud's "gagged from speech, still on screen".
+        if !speechPolicy.mutedChannels.isEmpty, isFromMutedChannel(text) { return }
         guard let decision = SpeechFilter.decision(forDisplayedLine: text, mode: speechPolicy.mode)
         else { return }
         // Consecutive-repeat suppression (screen-reader style): an identical
@@ -34,7 +38,50 @@ public extension SessionController {
         // resets, so alternating combat lines still all speak.
         guard decision.text != lastSpokenLineText else { return }
         lastSpokenLineText = decision.text
-        speechRequestsContinuation.yield(.speak(text: decision.text, interrupt: decision.interrupt))
+        // Pronunciation fixes + !skip speech-gags, last (on final spoken text).
+        guard let spoken = speechPolicy.spokenText(decision.text) else { return }
+        speechRequestsContinuation.yield(.speak(text: spoken, interrupt: decision.interrupt))
+    }
+
+    /// Whether `text` matches a recent channel message whose channel the
+    /// user speech-muted (the ChatEcho recent-buffer matching approach).
+    private func isFromMutedChannel(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        return recentChannelLines.contains {
+            $0.text == trimmed && speechPolicy.mutedChannels.contains($0.channel)
+        }
+    }
+
+    /// Remember one captured chat line (display text → channel) for the
+    /// speech-mute check; bounded like ChatEcho's recent buffer.
+    internal func recordChannelLine(_ chatLine: ChatLine) {
+        let text = chatLine.line.text.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        recentChannelLines.append((text: text, channel: chatLine.channel.lowercased()))
+        if recentChannelLines.count > 40 {
+            recentChannelLines.removeFirst(recentChannelLines.count - 40)
+        }
+    }
+
+    /// Speak the last `count` captured chat lines, optionally one channel's
+    /// (`tts review [channel] [n]`) — the review-buffer pattern, reading
+    /// from the Chat window's existing capture instead of a parallel store.
+    func speakChatReview(channel: String?, count: Int) async {
+        let wanted = channel?.lowercased()
+        let lines = await chatStore.snapshot()
+            .filter { wanted == nil || $0.channel.lowercased() == wanted }
+            .suffix(max(count, 1))
+            .compactMap { speechPolicy.spokenText(SpeechFilter.normalized($0.line.text)) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else {
+            let scope = channel.map { "No \($0) messages yet." } ?? "No chat captured yet."
+            speechRequestsContinuation.yield(.speak(text: scope, interrupt: true))
+            return
+        }
+        for (index, line) in lines.enumerated() {
+            speechRequestsContinuation.yield(.speak(text: line, interrupt: index == 0))
+        }
     }
 
     /// Sending a command cuts whatever speech is stale (mudlet-reader /
@@ -85,8 +132,8 @@ public extension SessionController {
     internal func applySpeechEffect(_ effect: ScriptEffect) -> Bool {
         switch effect {
         case .speak(let text, let interrupt):
-            let spoken = SpeechFilter.normalized(text)
-            if !spoken.isEmpty {
+            let normalized = SpeechFilter.normalized(text)
+            if !normalized.isEmpty, let spoken = speechPolicy.spokenText(normalized) {
                 speechRequestsContinuation.yield(.speak(text: spoken, interrupt: interrupt))
             }
         case .stopSpeaking:
@@ -106,7 +153,7 @@ public extension SessionController {
             // Most recent last, so playback reads in display order. Skip
             // blank/decoration-only lines — "blank" is useless review.
             let lines = recentDisplayedLines.suffix(max(count, 1))
-                .map { SpeechFilter.normalized($0) }
+                .compactMap { speechPolicy.spokenText(SpeechFilter.normalized($0)) }
                 .filter { !$0.isEmpty }
             guard !lines.isEmpty else {
                 speechRequestsContinuation.yield(.speak(text: "No recent output.", interrupt: true))
@@ -127,5 +174,17 @@ public extension SessionController {
     /// plugin re-reads it without an app restart.
     func reloadNativePluginConfig(id: String) async {
         await applyScriptEffects([.reloadPlugin(id: id)])
+    }
+
+    /// Register a native plugin AND apply its `install()` effects. The
+    /// engine-level `registerNativePlugin` returns those effects to its
+    /// caller; registering through the engine directly silently dropped
+    /// them — so a launch with TTS already enabled never pushed the speech
+    /// policy, and the soundpack's master mute never reached the session
+    /// (found by the master-mute regression test, 2026-06-11). The app
+    /// registers its built-in set through here.
+    func registerNativePlugin(_ plugin: any NativePlugin) async {
+        guard let scriptEngine else { return }
+        await applyScriptEffects(scriptEngine.registerNativePlugin(plugin))
     }
 }

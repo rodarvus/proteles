@@ -111,6 +111,13 @@ public actor SessionController {
     /// The vitals last spoken from a prompt — prompts speak only the
     /// components that changed (and movement never; live-test round 2).
     var lastSpokenVitals: PromptVitals?
+    /// The soundpack's master mute, mirrored here so EVERY `.playSound` cue
+    /// (S&D's direct calls, shim plugins) honours Settings' "Play event
+    /// sounds: off" — not just the soundpack's own events.
+    var soundCuesMuted = false
+    /// Recent channel messages (display text → channel), so speech can skip
+    /// lines from `tts mute`d channels — the text itself stays visible.
+    var recentChannelLines: [(text: String, channel: String)] = []
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
