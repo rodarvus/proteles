@@ -229,11 +229,18 @@ public enum LevelDBFormat {
         }
     }
 
-    /// Full grouped integer: 1234567 → "1,234,567".
-    public static func grouped(_ value: Int) -> String {
+    /// Shared grouped-integer formatter — building one per call put a
+    /// NumberFormatter allocation in every table cell render (2026-06
+    /// audit). NSFormatter is documented thread-safe for formatting.
+    private static let groupedFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        return formatter
+    }()
+
+    /// Full grouped integer: 1234567 → "1,234,567".
+    public static func grouped(_ value: Int) -> String {
+        groupedFormatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
     public static func decimal(_ value: Double, places: Int = 1) -> String {
