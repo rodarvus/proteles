@@ -110,8 +110,8 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
-    @Test("an unchanged prompt re-sent in sequence speaks once (live report)")
-    func promptDedup() async throws {
+    @Test("prompts speak only changed vitals; movement never (live-test round 2)")
+    func promptVitalsDelta() async throws {
         let engine = try ScriptEngine()
         _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
@@ -125,25 +125,27 @@ struct AudioEndToEndTests {
         }
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("tts on")
-        let prompt = "1234hp 567mn 890mv>"
-        conn.injectLine(prompt)
-        conn.injectLine(prompt)
-        conn.injectLine(prompt)
+        conn.injectLine("1234/1234hp 567/567mn 890/1000mv>") // first prompt → baseline
+        conn.injectLine("1234/1234hp 567/567mn 890/1000mv>") // identical → silent
+        conn.injectLine("1234/1234hp 567/567mn 850/1000mv>") // walking: mv only → silent
         conn.injectLine("You sit down and rest.")
-        conn.injectLine(prompt)
+        conn.injectLine("1234/1234hp 567/567mn 850/1000mv>") // still unchanged → silent
+        conn.injectLine("1100/1234hp 567/567mn 850/1000mv>") // took damage → hp only
+        conn.injectLine("1100/1234hp 520/567mn 850/1000mv>") // cast → mana only
         let settled = await SessionTestSupport.poll {
-            let values = await requests.values
-            return values.contains { $0 == .speak(text: prompt, interrupt: false) }
-                && values.contains { $0 == .speak(text: "You sit down and rest.", interrupt: false) }
+            await requests.values.contains { $0 == .speak(text: "mana 520", interrupt: false) }
         }
         #expect(settled)
-        try? await Task.sleep(for: .milliseconds(100))
-        let promptSpeaks = await requests.values.count(where: {
-            $0 == .speak(text: prompt, interrupt: false)
-        })
-        // Three identical in a row collapse to one; the re-send after a
-        // different line speaks again.
-        #expect(promptSpeaks == 2, "expected 2 prompt utterances, got \(promptSpeaks)")
+        let spoken = await requests.values.compactMap { request -> String? in
+            if case .speak(let text, _) = request { return text } else { return nil }
+        }
+        #expect(spoken == [
+            "Text to speech on", // the tts on confirmation utterance
+            "hp 1234, mana 567", // baseline orients once
+            "You sit down and rest.",
+            "hp 1100", // damage says only hp
+            "mana 520" // casting says only mana
+        ], "unexpected spoken sequence: \(spoken)")
         pump.cancel()
         await session.disconnect()
     }

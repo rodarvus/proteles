@@ -13,16 +13,36 @@ public extension SessionController {
         if recentDisplayedLines.count > Self.recentDisplayedLimit {
             recentDisplayedLines.removeFirst(recentDisplayedLines.count - Self.recentDisplayedLimit)
         }
-        guard speechMode != .off,
-              let decision = SpeechFilter.decision(forDisplayedLine: text, mode: speechMode)
+        guard speechMode != .off else { return }
+        // Prompts are status, not prose (live-test round 2): instead of
+        // reading the whole prompt line, speak only the vitals that CHANGED —
+        // hp first, then mana; movement never ("almost never a concern").
+        // Walking rooms with stable hp/mana is therefore silent.
+        if speechMode == .everything, let vitals = SpeechFilter.promptVitals(in: text) {
+            speakVitalsDelta(vitals)
+            return
+        }
+        guard let decision = SpeechFilter.decision(forDisplayedLine: text, mode: speechMode)
         else { return }
         // Consecutive-repeat suppression (screen-reader style): an identical
-        // line right after itself — the unchanged prompt Aardwolf re-sends on
-        // every bare Enter — reads once. Any different line in between
+        // line right after itself reads once. Any different line in between
         // resets, so alternating combat lines still all speak.
         guard decision.text != lastSpokenLineText else { return }
         lastSpokenLineText = decision.text
         speechRequestsContinuation.yield(.speak(text: decision.text, interrupt: decision.interrupt))
+    }
+
+    /// Speak a prompt's changed vitals: the very first prompt orients with
+    /// hp + mana; after that, only components that differ from the last
+    /// SPOKEN values are read ("hp 1180", "mana 540", or both). A prompt
+    /// whose only difference is movement says nothing.
+    private func speakVitalsDelta(_ vitals: PromptVitals) {
+        var parts: [String] = []
+        if let hp = vitals.hp, hp != lastSpokenVitals?.hp { parts.append("hp \(hp)") }
+        if let mana = vitals.mana, mana != lastSpokenVitals?.mana { parts.append("mana \(mana)") }
+        lastSpokenVitals = vitals
+        guard !parts.isEmpty else { return }
+        speechRequestsContinuation.yield(.speak(text: parts.joined(separator: ", "), interrupt: false))
     }
 
     internal static var recentDisplayedLimit: Int {
@@ -48,6 +68,7 @@ public extension SessionController {
             // leave a minute of backlog babbling on — live report).
             if mode == .off { speechRequestsContinuation.yield(.stop) }
             lastSpokenLineText = nil
+            lastSpokenVitals = nil // re-enable re-orients with a fresh baseline
         case .speechConfigChanged:
             speechRequestsContinuation.yield(.reloadConfig)
         case .speakRecentOutput(let count):
