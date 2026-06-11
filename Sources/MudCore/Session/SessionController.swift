@@ -315,19 +315,9 @@ public actor SessionController {
 
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
-    /// when autologin is not configured or has completed.
+    /// when autologin is not configured or has completed. (The state type
+    /// lives in `SessionController+Autologin.swift`.)
     var autologin: AutologinState?
-
-    struct AutologinState {
-        var plan: AutologinPlan
-        var phase: Phase
-
-        enum Phase {
-            case awaitingUsername
-            case awaitingPassword
-            case done
-        }
-    }
 
     /// When true, ``connect(to:)`` opens a fresh recording at
     /// ``autoRecordingURL`` from the first byte (Aardwolf finishes the MCCP2
@@ -497,6 +487,13 @@ public actor SessionController {
         // Typed input cuts stale speech (community canon, `tts enter` toggles)
         // — including the bare "press Enter to shut it up" reflex.
         interruptSpeechForTypedCommand()
+        // A bare Enter means nothing at the login prompts but restarts
+        // Aardwolf's name flow and strands autologin (the 2026-06-11 resume
+        // incident: stray empties dead-ended the login). Drop empties while
+        // autologin is mid-flight; the MOTD's "Press Return" comes after.
+        if autologin != nil, command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
+        }
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )

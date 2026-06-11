@@ -62,21 +62,23 @@ public final class ScrollbackDatabase: Sendable {
     public func insert(_ line: PersistedLine) throws {
         do {
             try dbQueue.write { db in
-                try line.insert(db, onConflict: .replace)
+                try line.insert(db)
             }
         } catch {
             throw DatabaseError.writeFailed(error.localizedDescription)
         }
     }
 
-    /// Insert many lines in a single transaction. Lines with IDs that
-    /// already exist are replaced (`ON CONFLICT REPLACE` semantics).
+    /// Insert many lines in a single transaction. Ids are assigned by the
+    /// database (append-only) — the first cut used the per-launch LineID
+    /// with REPLACE semantics, which made every relaunch overwrite prior
+    /// history from id 0 (the 2026-06-11 stale-resume incident).
     public func insertBatch(_ lines: [PersistedLine]) throws {
         guard !lines.isEmpty else { return }
         do {
             try dbQueue.write { db in
                 for line in lines {
-                    try line.insert(db, onConflict: .replace)
+                    try line.insert(db)
                 }
             }
         } catch {
@@ -168,6 +170,49 @@ public final class ScrollbackDatabase: Sendable {
                 fts.tokenizer = .unicode61()
                 fts.column("text")
             }
+        }
+
+        // v1 keyed rows by the in-memory LineID (restarts at 0 per launch)
+        // with REPLACE semantics: every relaunch overwrote prior history
+        // from id 0, and the surviving rows' id order interleaved sessions —
+        // so mostRecent (id DESC) returned the OLDEST surviving session.
+        // That's how a session resume restored ten-hour-old backlog
+        // (2026-06-11). Rebuild with fresh database-assigned ids in
+        // timestamp order; ids are append-only from here on.
+        migrator.registerMigration("v2.rekey_by_timestamp") { db in
+            try db.execute(sql: "DROP TABLE scrollback_lines_fts")
+            try db.execute(sql: """
+            CREATE TABLE scrollback_lines_new (
+                id INTEGER PRIMARY KEY,
+                timestamp DATETIME NOT NULL,
+                text TEXT NOT NULL,
+                runs_json TEXT
+            )
+            """)
+            try db.execute(sql: """
+            INSERT INTO scrollback_lines_new (timestamp, text, runs_json)
+            SELECT timestamp, text, runs_json FROM scrollback_lines
+            ORDER BY timestamp, id
+            """)
+            // Dropping the old table also drops its FTS-sync triggers.
+            try db.execute(sql: "DROP TABLE scrollback_lines")
+            try db.execute(sql: "ALTER TABLE scrollback_lines_new RENAME TO scrollback_lines")
+            try db.execute(sql: """
+            CREATE INDEX scrollback_lines_on_timestamp ON scrollback_lines("timestamp")
+            """)
+            try db.create(
+                virtualTable: "scrollback_lines_fts",
+                using: FTS5()
+            ) { fts in
+                fts.synchronize(withTable: "scrollback_lines")
+                fts.tokenizer = .unicode61()
+                fts.column("text")
+            }
+            // synchronize() backfills from existing content, but make the
+            // index state explicit + verifiable either way.
+            try db.execute(
+                sql: "INSERT INTO scrollback_lines_fts(scrollback_lines_fts) VALUES('rebuild')"
+            )
         }
 
         return migrator

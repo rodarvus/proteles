@@ -82,6 +82,88 @@ struct SessionControllerAutologinTests {
         drainTask.cancel()
     }
 
+    @Test("Re-sends the username when the name prompt re-appears (login restarted)")
+    func namePromptReprompt() async throws {
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+        let sink = ByteSink()
+        let drainTask = drain(listener, into: sink)
+
+        let controller = SessionController()
+        try await controller.connect(
+            to: .init(host: "127.0.0.1", port: port),
+            autologin: AutologinPlan(username: "Conan", password: "cimmeria")
+        )
+        await listener.waitForConnection()
+
+        try await listener.send(Array("What be thy name, adventurer? ".utf8))
+        _ = await waitFor("Conan\r\n", in: sink)
+
+        // The 2026-06-11 resume incident: stray input at the login screen
+        // made Aardwolf restart the name flow — the name prompt re-appears
+        // while we're awaiting the password. The old machine ignored it and
+        // the login dead-ended; it must re-send the name.
+        try await listener.send(Array(
+            "\r\nWhat be thy name, adventurer? Please enter a character name. ".utf8
+        ))
+        let afterReprompt = await waitFor("Conan\r\nConan\r\n", in: sink)
+        #expect(afterReprompt.contains(subsequence: Array("Conan\r\nConan\r\n".utf8)))
+
+        // The flow then proceeds normally.
+        try await listener.send(Array("\r\nPassword: ".utf8))
+        let afterPass = await waitFor("cimmeria\r\n", in: sink)
+        #expect(afterPass.contains(subsequence: Array("cimmeria\r\n".utf8)))
+
+        await controller.disconnect()
+        await listener.stop()
+        drainTask.cancel()
+    }
+
+    @Test("Empty typed sends are dropped while autologin is mid-flight")
+    func emptySendsDroppedDuringLogin() async throws {
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+        let sink = ByteSink()
+        let drainTask = drain(listener, into: sink)
+
+        let controller = SessionController()
+        try await controller.connect(
+            to: .init(host: "127.0.0.1", port: port),
+            autologin: AutologinPlan(username: "Conan", password: "cimmeria")
+        )
+        await listener.waitForConnection()
+
+        // Stray empty sends before/at the name prompt (the resume incident:
+        // three of them restarted Aardwolf's name flow and stranded the
+        // login). They must not reach the wire while autologin is live.
+        try await controller.send("")
+        try await controller.send("")
+        try await listener.send(Array("What be thy name, adventurer? ".utf8))
+        let afterName = await waitFor("Conan\r\n", in: sink)
+        #expect(
+            !afterName.contains(subsequence: Array("\r\n\r\n".utf8)),
+            "an empty send leaked to the wire during login"
+        )
+        #expect(
+            afterName.firstRange(of: Array("Conan\r\n".utf8))?.lowerBound == afterName.startIndex,
+            "the username should be the FIRST thing on the wire"
+        )
+
+        // Once login completes, a bare Enter (prompt nudge) passes again.
+        try await listener.send(Array("\r\nPassword: ".utf8))
+        _ = await waitFor("cimmeria\r\n", in: sink)
+        try await controller.send("")
+        let afterNudge = await waitFor("cimmeria\r\n\r\n", in: sink)
+        #expect(
+            afterNudge.contains(subsequence: Array("cimmeria\r\n\r\n".utf8)),
+            "post-login bare Enter must still pass (MOTD nudges)"
+        )
+
+        await controller.disconnect()
+        await listener.stop()
+        drainTask.cancel()
+    }
+
     @Test("With no password, sends the username but never a password")
     func usernameOnly() async throws {
         let listener = LoopbackListener()
