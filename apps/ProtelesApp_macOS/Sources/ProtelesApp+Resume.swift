@@ -13,24 +13,46 @@ extension ProtelesApp {
     /// resume can't re-fire on a later launch.
     static func resumeOnLaunch(
         persistence: ScrollbackPersistence?,
-        store: ScrollbackStore
+        store: ScrollbackStore,
+        chatPersistence: ChatPersistence? = nil,
+        chatStore: ChatStore? = nil
     ) -> (store: ResumeTokenStore?, token: ResumeToken?) {
         let resumeStore = (try? ResumeTokenStore.defaultURL()).map(ResumeTokenStore.init(url:))
         let token = resumeStore?.take().flatMap { $0.isFresh(now: Date()) ? $0 : nil }
-
-        guard let persistence else { return (resumeStore, token) }
         let resuming = token != nil
-        Task {
-            // Seed the restored tail BEFORE attaching persistence so it isn't
-            // written to the DB again (it's already there).
-            let tail = await resuming ? ((try? persistence.loadTail(limit: 400)) ?? []) : []
-            for line in tail {
-                await store.append(text: line.text, runs: line.runs)
+
+        if let persistence {
+            Task {
+                // Seed the restored tail BEFORE attaching persistence so it isn't
+                // written to the DB again (it's already there).
+                let tail = await resuming ? ((try? persistence.loadTail(limit: 400)) ?? []) : []
+                for line in tail {
+                    await store.append(text: line.text, runs: line.runs)
+                }
+                if !tail.isEmpty {
+                    await store.append(text: "") // blank divider before the fresh session
+                }
+                await persistence.attach(to: store)
             }
-            if !tail.isEmpty {
-                await store.append(text: "") // blank divider before the fresh session
+        }
+
+        // Chat window resume (#57): same dance — seed, then attach. Unlike
+        // scrollback the Chat window has no divider concept; restored lines
+        // keep their original timestamps, which the window already shows.
+        if let chatPersistence, let chatStore {
+            Task {
+                let tail = await resuming ? ((try? chatPersistence.loadTail(limit: 500)) ?? []) : []
+                for row in tail {
+                    guard let line = try? row.toLine() else { continue }
+                    await chatStore.restore(
+                        timestamp: row.timestamp,
+                        channel: row.channel,
+                        player: row.player,
+                        line: line
+                    )
+                }
+                await chatPersistence.attach(to: chatStore)
             }
-            await persistence.attach(to: store)
         }
         return (resumeStore, token)
     }

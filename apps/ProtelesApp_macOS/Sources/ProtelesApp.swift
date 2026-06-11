@@ -29,6 +29,10 @@ struct ProtelesApp: App {
     /// `~/Library/Application Support/com.proteles.ProtelesApp/`.
     private let persistence: ScrollbackPersistence?
 
+    /// On-disk chat-capture log (#57) — the Chat window's history survives
+    /// crashes/updates like scrollback does. `State/chat.sqlite`.
+    private let chatPersistence: ChatPersistence?
+
     /// Session-resume (#42): the breadcrumb store, and the fresh token consumed
     /// at launch (non-nil only when the last run was connected and the process
     /// just restarted — Sparkle update, crash, or quick relaunch).
@@ -96,6 +100,17 @@ struct ProtelesApp: App {
         }
         self.persistence = persistence
 
+        // Chat persistence (#57): same shape, its own database + retention.
+        let chatPersistence: ChatPersistence?
+        do {
+            let chatDatabase = try ChatDatabase(url: ChatDatabase.defaultLocation())
+            chatPersistence = ChatPersistence(database: chatDatabase)
+        } catch {
+            NSLog("[Proteles] chat persistence init failed: \(error)")
+            chatPersistence = nil
+        }
+        self.chatPersistence = chatPersistence
+
         // Scripting engine → session. A failed Lua init disables scripting
         // but must not stop the app launching.
         let scriptEngine = try? ScriptEngine()
@@ -134,7 +149,9 @@ struct ProtelesApp: App {
         // ProtelesApp+Resume.swift), then attach persistence for the new session.
         let resumed = ProtelesApp.resumeOnLaunch(
             persistence: persistence,
-            store: session.scrollbackStore
+            store: session.scrollbackStore,
+            chatPersistence: chatPersistence,
+            chatStore: session.chatStore
         )
         resumeStore = resumed.store
         resumeToken = resumed.token

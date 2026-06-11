@@ -82,6 +82,30 @@ public actor ChatStore {
         return chatLine
     }
 
+    /// Re-seed one previously-persisted line (session resume, #57): the
+    /// styled `line` is stored as-is — no `@`-code re-parse — under a fresh
+    /// monotonic id, preserving its original timestamp. Subscribers are
+    /// notified like any append. Call this **before** ``ChatPersistence``
+    /// attaches, or the restored backlog would be written to disk again.
+    @discardableResult
+    public func restore(
+        timestamp: Date, channel: String, player: String, line: Line
+    ) -> ChatLine {
+        let id = nextID
+        nextID += 1
+        let chatLine = ChatLine(
+            id: id, timestamp: timestamp, channel: channel, player: player, line: line
+        )
+        lines.append(chatLine)
+        if lines.count > maxLines {
+            lines.removeFirst(lines.count - maxLines)
+        }
+        for continuation in subscribers.values {
+            continuation.yield(chatLine)
+        }
+        return chatLine
+    }
+
     /// All distinct channel names seen so far, sorted.
     public func channels() -> [String] {
         Set(lines.map(\.channel)).sorted()

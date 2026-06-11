@@ -151,8 +151,10 @@ public actor SessionController {
     public internal(set) var state: State = .disconnected
 
     var pipeline = LinePipeline()
-    private var processTask: Task<Void, Never>?
-    private var stateForwardTask: Task<Void, Never>?
+    // Internal (not private): the lifecycle methods that drive these live in
+    // SessionController+Lifecycle.swift (the 600-line budget split).
+    var processTask: Task<Void, Never>?
+    var stateForwardTask: Task<Void, Never>?
     /// Drives the script timers (sleep→fire→loop); restarted when timers change.
     var timerTask: Task<Void, Never>?
     /// Drains the mapper's system-note stream (delayed cexit results) to output.
@@ -457,7 +459,9 @@ public actor SessionController {
         lastSpokenVitals = nil
         await gmcpState.reset()
         latestGMCPByPackage.removeAll()
-        await chatStore.reset()
+        // chatStore deliberately NOT reset: chat history is persistent (#57),
+        // so like scrollback it spans reconnects — wiping it here would also
+        // discard a freshly-restored resume backlog on the first connect.
         await mapStore.reset()
 
         let conn = makeConnection()
@@ -551,49 +555,5 @@ public actor SessionController {
                 throw SessionError.sendFailed(error.localizedDescription)
             }
         }
-    }
-
-    // MARK: - Private
-
-    private func startProcessingLoop(on conn: any MudConnection) {
-        processTask?.cancel()
-        let bytesStream = conn.bytes
-        processTask = Task { [weak self] in
-            for await chunk in bytesStream {
-                await self?.processChunk(chunk)
-            }
-            // The byte stream finishing means the peer closed (or the
-            // connection failed): wind the session down. A local
-            // ``disconnect()`` cancels this task first, so this path only
-            // fires for remote-initiated closes.
-            await self?.handleByteStreamEnded()
-        }
-    }
-
-    /// Cancel the per-session tasks and drop the connection so the next
-    /// ``connect(to:autologin:)`` starts clean. Idempotent. Does *not*
-    /// emit a state transition — callers do that explicitly.
-    func teardownSession() {
-        processTask?.cancel()
-        processTask = nil
-        stateForwardTask?.cancel()
-        stateForwardTask = nil
-        // Stop the timer loop so recurring plugin/S&D timers don't keep firing
-        // on a dropped session (re-armed by updateState on the next connect).
-        timerTask?.cancel()
-        timerTask = nil
-        keepAliveTask?.cancel()
-        keepAliveTask = nil
-        pluginActivationFallbackTask?.cancel()
-        pluginActivationFallbackTask = nil
-        recorder?.close()
-        recorder = nil
-        transcript?.close()
-        transcript = nil
-        stopSessionLog()
-        autologin = nil
-        connection = nil
-        dinvLoaded = false // reloads on the next active char.status (e.g. reconnect)
-        seenCharInGame = false // re-gate char.status plugin broadcasts until in-game
     }
 }
