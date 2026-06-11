@@ -262,4 +262,58 @@ struct SoundpackPluginTests {
         #expect(hasDebugNote)
         #expect(cues(disposition.effects).map(\.file) == ["death.wav"])
     }
+
+    // MARK: - Chat Echo mute integration (#55)
+
+    /// The full registry path the live session takes: ChatEcho + Soundpack
+    /// registered together, the registry pre-answering `checkIfMuted` per
+    /// `comm.channel` dispatch (the reference soundpack's `CallPlugin` into
+    /// the chat plugin before any cue).
+    /// Registry with both plugins, soundpack unmuted THROUGH the registry —
+    /// registration re-runs `install()`, which re-reads config and would wipe
+    /// a pre-registration unmute (the launch-order bug #9 already hit once).
+    private func chatAndSound() -> NativePluginRegistry {
+        var registry = NativePluginRegistry()
+        registry.register(ChatEcho())
+        registry.register(Soundpack(configURL: nil))
+        _ = registry.handleCommand("spmute")
+        return registry
+    }
+
+    @Test("a Chat Echo-muted speaker's channel line plays no cue; unmuting restores it")
+    func chatEchoMuteSuppressesCues() {
+        var registry = chatAndSound()
+
+        let gossip = #"{"chan":"gossip","msg":"Villain gossips hi","player":"Villain"}"#
+        #expect(!cues(registry.onGMCP(package: "comm.channel", json: gossip)).isEmpty)
+
+        _ = registry.handleCommand("chats mute Villain")
+        #expect(cues(registry.onGMCP(package: "comm.channel", json: gossip)).isEmpty)
+
+        // Another speaker on the same channel still cues.
+        let friendly = #"{"chan":"gossip","msg":"Friend gossips yo","player":"Friend"}"#
+        #expect(!cues(registry.onGMCP(package: "comm.channel", json: friendly)).isEmpty)
+
+        _ = registry.handleCommand("chats unmute Villain")
+        #expect(!cues(registry.onGMCP(package: "comm.channel", json: gossip)).isEmpty)
+    }
+
+    @Test("a muted speaker's inline !!SOUND is suppressed too (reference early-return)")
+    func chatEchoMuteSuppressesInlineSound() {
+        var registry = chatAndSound()
+        _ = registry.handleCommand("chats mute Villain")
+
+        let inline = #"{"chan":"gossip","msg":"hey !!SOUND(alarm.wav)","player":"Villain"}"#
+        #expect(cues(registry.onGMCP(package: "comm.channel", json: inline)).isEmpty)
+    }
+
+    @Test("Chat Echo disabled = nobody is muted (CallPlugin-to-missing-plugin semantics)")
+    func disabledChatEchoMutesNothing() {
+        var registry = chatAndSound()
+        _ = registry.handleCommand("chats mute Villain")
+        registry.setEnabled(false, id: ChatEcho.pluginID)
+
+        let gossip = #"{"chan":"gossip","msg":"Villain gossips hi","player":"Villain"}"#
+        #expect(!cues(registry.onGMCP(package: "comm.channel", json: gossip)).isEmpty)
+    }
 }

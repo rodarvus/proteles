@@ -100,6 +100,22 @@ struct ChatEchoTests {
         #expect(plugin.handleCommand("chat hello") == nil) // the real channel command
     }
 
+    @Test("checkIfMuted call surface answers mutes, re-validating expiry (#55)")
+    func checkIfMutedCallSurface() {
+        var plugin = ChatEcho()
+        _ = plugin.handleCommand("chats mute Villain")
+        #expect(plugin.call("checkIfMuted", [.string("Villain")]) == [.boolean(true)])
+        #expect(plugin.call("checkIfMuted", [.string("villain")]) == [.boolean(true)])
+        #expect(plugin.call("checkIfMuted", [.string("Friend")]) == [.boolean(false)])
+        // Unknown functions and missing arguments answer nothing.
+        #expect(plugin.call("somethingElse", [.string("Villain")]).isEmpty)
+        #expect(plugin.call("checkIfMuted", []).isEmpty)
+
+        // A timed mute that has expired answers false at call time.
+        _ = plugin.handleCommand("chats mute Brief 0")
+        #expect(plugin.call("checkIfMuted", [.string("Brief")]) == [.boolean(false)])
+    }
+
     @Test("State round-trips through persistentState/restore")
     func persistence() {
         var source = ChatEcho()

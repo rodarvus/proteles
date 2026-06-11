@@ -64,6 +64,24 @@ public struct NativePluginInfo: Sendable, Equatable {
     public let enabled: Bool
 }
 
+/// Cross-plugin facts the registry pre-answers once per GMCP dispatch and
+/// hands to every plugin (#55). Native plugins are value types folded in
+/// registration order — one plugin can't query another mid-fold — so facts
+/// that *would* be a `CallPlugin` in MUSHclient (the reference soundpack asks
+/// the chat plugin `checkIfMuted(player)` before playing a channel cue) are
+/// answered up front by the registry via the same ``NativePlugin/call(_:_:)``
+/// surface and passed in here.
+public struct GMCPDispatchContext: Sendable, Equatable {
+    /// `comm.channel` only: Chat Echo has the sending player muted, so
+    /// sound/speech consumers should suppress their cues exactly like the
+    /// echo itself is suppressed. Always false for other packages.
+    public var speakerMuted: Bool
+
+    public init(speakerMuted: Bool = false) {
+        self.speakerMuted = speakerMuted
+    }
+}
+
 /// A self-contained, *native* (Swift) Proteles plugin: a value-type reducer
 /// that participates in the same effect pipeline as Lua plugins (PLAN.md
 /// §7.6). It owns commands, reacts to incoming lines and GMCP, and exposes
@@ -112,6 +130,14 @@ public protocol NativePlugin: Sendable {
     /// `json` its decoded payload). Default: no effects.
     mutating func onGMCP(package: String, json: String) -> [ScriptEffect]
 
+    /// Context-aware variant of ``onGMCP(package:json:)``: `context` carries
+    /// the registry's pre-answered cross-plugin facts (e.g. "this channel
+    /// line's speaker is muted"). Default: delegates to the plain variant, so
+    /// plugins that don't care implement only that one.
+    mutating func onGMCP(
+        package: String, json: String, context: GMCPDispatchContext
+    ) -> [ScriptEffect]
+
     /// Synchronous callable entry points for `CallPlugin(id, fn, …)` from
     /// other plugins (the "usable by other plugins" surface). Default: none.
     func call(_ function: String, _ arguments: [LuaValue]) -> [LuaValue]
@@ -148,6 +174,12 @@ public extension NativePlugin {
 
     mutating func onGMCP(package _: String, json _: String) -> [ScriptEffect] {
         []
+    }
+
+    mutating func onGMCP(
+        package: String, json: String, context _: GMCPDispatchContext
+    ) -> [ScriptEffect] {
+        onGMCP(package: package, json: json)
     }
 
     func call(_: String, _: [LuaValue]) -> [LuaValue] {
@@ -236,13 +268,36 @@ public struct NativePluginRegistry: Sendable {
         return disposition
     }
 
-    /// Fan a GMCP update to every enabled plugin, concatenating effects.
+    /// Fan a GMCP update to every enabled plugin, concatenating effects. The
+    /// dispatch context is pre-answered once (cross-plugin facts — see
+    /// ``GMCPDispatchContext``) and handed to every plugin.
     public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {
+        let context = dispatchContext(package: package, json: json)
         var effects: [ScriptEffect] = []
         for index in entries.indices where entries[index].enabled {
-            effects.append(contentsOf: entries[index].plugin.onGMCP(package: package, json: json))
+            effects.append(
+                contentsOf: entries[index].plugin
+                    .onGMCP(package: package, json: json, context: context)
+            )
         }
         return effects
+    }
+
+    /// Pre-answer the cross-plugin facts for one GMCP dispatch: for a
+    /// `comm.channel` line, ask Chat Echo whether the speaker is muted (the
+    /// reference soundpack's `CallPlugin(chat, "checkIfMuted", player)`,
+    /// answered through the same ``NativePlugin/call(_:_:)`` surface). A
+    /// disabled/absent Chat Echo answers nothing → not muted, exactly like
+    /// the reference's non-zero `CallPlugin` rc.
+    private func dispatchContext(package: String, json: String) -> GMCPDispatchContext {
+        guard package.lowercased() == "comm.channel",
+              let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8)),
+              !comm.player.isEmpty
+        else { return GMCPDispatchContext() }
+        let verdict = call(
+            id: ChatEcho.pluginID, function: "checkIfMuted", arguments: [.string(comm.player)]
+        )
+        return GMCPDispatchContext(speakerMuted: verdict.first == .boolean(true))
     }
 
     /// Route a `CallPlugin`-style call to an enabled plugin by id. Returns
