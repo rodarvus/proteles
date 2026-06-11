@@ -26,6 +26,24 @@ public enum PromptSpeechMode: String, Codable, Sendable {
     case delta
 }
 
+/// One spoken-text substitution (MUSH-Z's `subst add text==substitution`):
+/// a case-insensitive literal find/replace applied to everything spoken —
+/// the pronunciation fix ("gtell" → "G tell"). The replacement `!skip`
+/// speech-gags any line containing `find` outright; per the ecosystem credo
+/// the text stays VISIBLE — only speech skips it.
+public struct SpeechSubstitution: Codable, Sendable, Equatable {
+    public var find: String
+    public var replace: String
+
+    public init(find: String, replace: String) {
+        self.find = find
+        self.replace = replace
+    }
+
+    /// The never-speak marker (MUSH-Z's `!skip`).
+    public static let skipMarker = "!skip"
+}
+
 /// The session-side speech policy, pushed as one value by the TextToSpeech
 /// plugin (its commands and `Settings/speech.json` are the source of truth;
 /// the session just applies it on the displayed-line path).
@@ -38,17 +56,45 @@ public struct SpeechPolicy: Sendable, Equatable {
     /// Sending a command cuts stale speech (mudlet-reader/MUSH-Z/NVDA canon;
     /// toggleable because MUSH-Z makes it so). On by default.
     public var enterInterrupts = true
+    /// Pronunciation fixes + `!skip` speech-gags, applied in order.
+    public var substitutions: [SpeechSubstitution] = []
+    /// Channels whose lines are speech-muted (lowercased; VIPMud's
+    /// `TALKER MUTE` — the text stays visible and in the Chat window).
+    public var mutedChannels: Set<String> = []
 
     public init(
         mode: SpeechMode = .off,
         promptSpeech: PromptSpeechMode = .off,
         quietWhileRunning: Bool = false,
-        enterInterrupts: Bool = true
+        enterInterrupts: Bool = true,
+        substitutions: [SpeechSubstitution] = [],
+        mutedChannels: Set<String> = []
     ) {
         self.mode = mode
         self.promptSpeech = promptSpeech
         self.quietWhileRunning = quietWhileRunning
         self.enterInterrupts = enterInterrupts
+        self.substitutions = substitutions
+        self.mutedChannels = mutedChannels
+    }
+
+    /// Apply the substitutions to text bound for the synthesizer: `nil`
+    /// means a `!skip` rule matched (speech-gag); otherwise the text with
+    /// every pronunciation fix applied (case-insensitive literal replaces).
+    public func spokenText(_ text: String) -> String? {
+        var result = text
+        for substitution in substitutions {
+            if substitution.replace == SpeechSubstitution.skipMarker {
+                if result.range(of: substitution.find, options: [.caseInsensitive]) != nil {
+                    return nil
+                }
+            } else {
+                result = result.replacingOccurrences(
+                    of: substitution.find, with: substitution.replace, options: [.caseInsensitive]
+                )
+            }
+        }
+        return result
     }
 }
 
@@ -248,6 +294,10 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
     public var enterInterrupts = true
     /// Quiet while Proteles isn't the active app (the package's `tts focus`).
     public var quietWhenUnfocused = false
+    /// Pronunciation fixes + `!skip` speech-gags (`tts subst`).
+    public var substitutions: [SpeechSubstitution] = []
+    /// Speech-muted channels (`tts mute <channel>`), lowercased.
+    public var mutedChannels: [String] = []
 
     public init() {}
 
@@ -263,6 +313,10 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
         quietWhileRunning = try container.decodeIfPresent(Bool.self, forKey: .quietWhileRunning) ?? false
         enterInterrupts = try container.decodeIfPresent(Bool.self, forKey: .enterInterrupts) ?? true
         quietWhenUnfocused = try container.decodeIfPresent(Bool.self, forKey: .quietWhenUnfocused) ?? false
+        substitutions = try container.decodeIfPresent(
+            [SpeechSubstitution].self, forKey: .substitutions
+        ) ?? []
+        mutedChannels = try container.decodeIfPresent([String].self, forKey: .mutedChannels) ?? []
     }
 
     /// The session-relevant slice of this config (the rest — rate, voice,
@@ -272,7 +326,9 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
             mode: mode,
             promptSpeech: promptSpeech,
             quietWhileRunning: quietWhileRunning,
-            enterInterrupts: enterInterrupts
+            enterInterrupts: enterInterrupts,
+            substitutions: substitutions,
+            mutedChannels: Set(mutedChannels.map { $0.lowercased() })
         )
     }
 

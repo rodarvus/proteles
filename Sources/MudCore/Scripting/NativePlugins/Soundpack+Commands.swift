@@ -192,15 +192,19 @@ public extension Soundpack {
         saveConfig()
         let state = config.muted ? "Disabled" : "Enabled"
         let color = config.muted ? "#FF0000" : "#32CD32"
-        return [
-            .colourNote([
-                NoteSegment(text: "[", foreground: "#4682B4"),
-                NoteSegment(text: "Soundpack", foreground: "#3CB371"),
-                NoteSegment(text: "] Soundpack has been: ", foreground: "#4682B4"),
-                NoteSegment(text: state, foreground: color)
-            ]),
-            confirmationCue()
-        ]
+        let note = ScriptEffect.colourNote([
+            NoteSegment(text: "[", foreground: "#4682B4"),
+            NoteSegment(text: "Soundpack", foreground: "#3CB371"),
+            NoteSegment(text: "] Soundpack has been: ", foreground: "#4682B4"),
+            NoteSegment(text: state, foreground: color)
+        ])
+        // Effect order matters: the session's master gate applies in
+        // sequence, so unmuting opens the gate BEFORE the confirmation cue,
+        // and muting closes it AFTER — the reference plays audible feedback
+        // on disable too (PlaySettingChanged bypasses its own mute).
+        return config.muted
+            ? [note, confirmationCue(), .setSoundCuesMuted(true)]
+            : [.setSoundCuesMuted(false), note, confirmationCue()]
     }
 
     private mutating func handleSpdebug() -> [ScriptEffect] {

@@ -19,9 +19,9 @@ struct AudioEndToEndTests {
     @Test("comm.channel GMCP → a .playSound cue on the session's sound stream")
     func channelSoundCue() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(Soundpack(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(Soundpack(configURL: nil))
 
         let cues = Collector<SoundCue>()
         let pump = Task {
@@ -45,9 +45,9 @@ struct AudioEndToEndTests {
     @Test("a level-up line through the pipeline plays level_up.wav")
     func lineSoundCue() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(Soundpack(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(Soundpack(configURL: nil))
 
         let cues = Collector<SoundCue>()
         let pump = Task {
@@ -69,10 +69,10 @@ struct AudioEndToEndTests {
     @Test("tts on speaks displayed lines; gagged lines stay silent; tts stop flushes")
     func speechPipeline() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(ChatEcho()) // gags inline channel dupes
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(ChatEcho()) // gags inline channel dupes
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
@@ -113,9 +113,9 @@ struct AudioEndToEndTests {
     @Test("prompts: silent by default (canon); delta mode speaks only changes, movement never")
     func promptSpeech() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
@@ -165,9 +165,9 @@ struct AudioEndToEndTests {
     @Test("typed commands cut stale speech; tts enter turns that off")
     func enterInterrupts() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
@@ -191,12 +191,139 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
+    @Test("tts mute: a muted channel's line displays but never speaks; review honors subst")
+    func channelSpeechMuteAndReview() async throws {
+        let engine = try ScriptEngine()
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("tts on")
+        try await session.send("tts mute gossip")
+        // The channel arrives as GMCP (captured + remembered) AND as the
+        // inline display line — the muted channel's line must not speak.
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
+            #"comm.channel {"chan":"gossip","msg":"Eketra gossips 'big spam'","player":"Eketra"}"#
+        ))
+        conn.injectLine("Eketra gossips 'big spam'")
+        conn.injectLine("A quiet room.")
+        let settled = await SessionTestSupport.poll {
+            await requests.values.contains { $0 == .speak(text: "A quiet room.", interrupt: false) }
+        }
+        #expect(settled)
+        let spokeGossip = await requests.values.contains {
+            if case .speak(let text, _) = $0 { text.contains("big spam") } else { false }
+        }
+        #expect(!spokeGossip, "a speech-muted channel line was spoken")
+        // The line still displayed (speech-gag ≠ display-gag).
+        let displayed = await session.scrollbackStore.snapshot()
+            .contains { $0.text.contains("big spam") }
+        #expect(displayed, "the muted channel line should still display")
+
+        // tts review replays the captured chat for the muted channel too —
+        // muting live speech doesn't hide history (review is explicit).
+        try await session.send("tts review gossip 1")
+        let reviewed = await SessionTestSupport.poll {
+            await requests.values.contains {
+                if case .speak(let text, true) = $0 { text.contains("big spam") } else { false }
+            }
+        }
+        #expect(reviewed, "tts review never replayed the captured channel line")
+        pump.cancel()
+        await session.disconnect()
+    }
+
+    @Test("!skip substitution speech-gags a line that still displays")
+    func skipSubstitution() async throws {
+        let engine = try ScriptEngine()
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("tts on")
+        try await session.send("tts subst add utters the words==!skip")
+        try await session.send("tts subst add Aylor==ay lor")
+        conn.injectLine("Eketra utters the words, 'judicandus'.") // spellcast spam → skipped
+        conn.injectLine("Welcome to Aylor!") // pronunciation fix applies
+        let settled = await SessionTestSupport.poll {
+            await requests.values.contains { $0 == .speak(text: "Welcome to ay lor!", interrupt: false) }
+        }
+        #expect(settled, "the pronunciation fix never applied")
+        let spokeSkipped = await requests.values.contains {
+            if case .speak(let text, _) = $0 { text.contains("judicandus") } else { false }
+        }
+        #expect(!spokeSkipped, "a !skip line was spoken")
+        let displayed = await session.scrollbackStore.snapshot()
+            .contains { $0.text.contains("judicandus") }
+        #expect(displayed, "the !skip line should still display")
+        pump.cancel()
+        await session.disconnect()
+    }
+
+    @Test("the soundpack mute gates S&D-style direct cues; confirmation order holds")
+    func muteGatesAllCues() async throws {
+        let engine = try ScriptEngine()
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(Soundpack(configURL: nil))
+
+        let cues = Collector<SoundCue>()
+        let pump = Task {
+            for await cue in session.soundCues {
+                await cues.append(cue)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        // Muted by default: a direct .playSound (S&D's PlaySound path) is gated.
+        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await cues.values.isEmpty, "a direct cue escaped the default mute")
+
+        // Unmute → the same cue plays; the spmute confirmation also played.
+        try await session.send("spmute")
+        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        let played = await SessionTestSupport.poll {
+            await cues.values.contains { $0.file == "target_nearby.wav" }
+        }
+        #expect(played)
+        #expect(await cues.values.contains { $0.file == "channel_on.wav" }, "no unmute confirmation")
+
+        // Re-mute: the confirmation cue still sounds (ordered before the
+        // gate closes — the reference plays feedback on disable too), but
+        // nothing after it does.
+        let beforeMute = await cues.values.count
+        try await session.send("spmute")
+        try? await Task.sleep(for: .milliseconds(150))
+        let afterMute = await cues.values
+        #expect(afterMute.count == beforeMute + 1, "expected exactly the disable confirmation")
+        #expect(afterMute.last?.file == "channel_on.wav")
+        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await cues.values.count == afterMute.count, "a cue escaped after re-mute")
+        pump.cancel()
+        await session.disconnect()
+    }
+
     @Test("tts vitals speaks the GMCP stats on demand")
     func vitalsOnDemand() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
@@ -229,9 +356,9 @@ struct AudioEndToEndTests {
     @Test("turning speech off via .setSpeechPolicy flushes the queue (Settings path)")
     func settingsOffFlushes() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
@@ -254,9 +381,9 @@ struct AudioEndToEndTests {
     @Test("tts last re-reads recent displayed output, newest batch in order")
     func speakLast() async throws {
         let engine = try ScriptEngine()
-        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(TextToSpeech(configURL: nil))
 
         let requests = Collector<SpeechRequest>()
         let pump = Task {
