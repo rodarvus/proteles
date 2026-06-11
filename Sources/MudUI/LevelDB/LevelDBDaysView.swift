@@ -159,10 +159,17 @@ struct LevelDBDaysView: View {
 
 /// "2026-06-10" → "Tue, Jun 10" (today/yesterday get words).
 enum LevelDBDayLabel {
-    static func title(_ day: String) -> String {
+    /// Shared parser — a fresh DateFormatter per row was a measurable
+    /// allocation in the Days list render (2026-06 audit); NSFormatter is
+    /// documented thread-safe for parsing/formatting.
+    private static let dayParser: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: day) else { return day }
+        return formatter
+    }()
+
+    static func title(_ day: String) -> String {
+        guard let date = dayParser.date(from: day) else { return day }
         if Calendar.current.isDateInToday(date) { return "Today" }
         if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
         return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
