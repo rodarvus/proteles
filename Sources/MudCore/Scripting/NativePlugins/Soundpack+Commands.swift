@@ -17,8 +17,20 @@ public extension Soundpack {
         case "spmute" where parts.count == 1: return handleSpmute()
         case "spdebug" where parts.count == 1: return handleSpdebug()
         case "sphelp" where parts.count == 1: return handleSphelp()
+        case "spfire" where parts.count == 2: return handleSpfire(parts[1].lowercased())
         default: return nil
         }
+    }
+
+    /// Plumbing, not a user command: fire one soundpack event through the
+    /// user's config (volume/pan/custom wav, mute respected). This is how
+    /// another plugin asks for an event cue — the reference's
+    /// `CallPlugin(<soundpack>, "TriggerEvent", event)`; the S&D host routes
+    /// its same-room target cue here. Always consumed (never reaches the
+    /// MUD); unknown events are silently ignored like the reference.
+    private mutating func handleSpfire(_ event: String) -> [ScriptEffect] {
+        guard !config.muted, SoundEventClassifier.defaults[event] != nil else { return [] }
+        return cueEffects(for: event)
     }
 
     // MARK: - spset

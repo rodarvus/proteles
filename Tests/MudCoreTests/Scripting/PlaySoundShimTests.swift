@@ -97,6 +97,34 @@ struct PlaySoundShimTests {
 
     // MARK: - S&D host (dedicated runtime, curated bindings)
 
+    @Test("S&D sounds default ON and TriggerEvent bridges to spfire (live-test fix)")
+    func sndSoundLayers() async throws {
+        try #require(SnDFixture.install(), "S&D test fixture missing")
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        // Layer 1: with no saved variable, the sound default resolves "on"
+        // because the native Soundpack answers as the installed+enabled
+        // MUSHclient soundpack (all three layers were dead against the
+        // all-false IsPluginInstalled stub — 2026-06-11 live test).
+        #expect(await host.evaluate("tostring(is_sound_enabled())") == "true")
+        // Layer 2: `xset sound` can actually toggle — download_sounds reports
+        // success for our local cues (the first-cut no-op never called back,
+        // so enabling was silently impossible).
+        // (The Lua assert is the check; run() also appends the host's
+        // shim-state probe effect, so the effect list isn't empty.)
+        _ = try await host.run("""
+        local ok = nil
+        download_sounds(function(success) ok = success end)
+        assert(ok == true, "download_sounds never called back")
+        """)
+        // Layer 3: the same-room cue (CallPlugin TriggerEvent) routes to the
+        // native Soundpack's plumbing command.
+        let bridged = try await host.run(
+            "CallPlugin('23832d1089f727f5f34abad8', 'TriggerEvent', 'quest_target_found')"
+        )
+        #expect(bridged.contains(.execute("spfire quest_target_found")))
+    }
+
     @Test("S&D's target-nearby PlaySound idiom emits a full-volume cue")
     func sndPlaySound() async throws {
         try #require(SnDFixture.install(), "S&D test fixture missing")

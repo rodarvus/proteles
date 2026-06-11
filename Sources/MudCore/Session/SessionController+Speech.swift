@@ -16,6 +16,12 @@ public extension SessionController {
         guard speechMode != .off,
               let decision = SpeechFilter.decision(forDisplayedLine: text, mode: speechMode)
         else { return }
+        // Consecutive-repeat suppression (screen-reader style): an identical
+        // line right after itself — the unchanged prompt Aardwolf re-sends on
+        // every bare Enter — reads once. Any different line in between
+        // resets, so alternating combat lines still all speak.
+        guard decision.text != lastSpokenLineText else { return }
+        lastSpokenLineText = decision.text
         speechRequestsContinuation.yield(.speak(text: decision.text, interrupt: decision.interrupt))
     }
 
@@ -36,6 +42,12 @@ public extension SessionController {
             speechRequestsContinuation.yield(.stop)
         case .setSpeechMode(let mode):
             speechMode = mode
+            // Turning speech off flushes whatever is still queued —
+            // regardless of the path (the `tts off` command already stops;
+            // the Settings toggle reaches here via plugin reload and used to
+            // leave a minute of backlog babbling on — live report).
+            if mode == .off { speechRequestsContinuation.yield(.stop) }
+            lastSpokenLineText = nil
         case .speechConfigChanged:
             speechRequestsContinuation.yield(.reloadConfig)
         case .speakRecentOutput(let count):

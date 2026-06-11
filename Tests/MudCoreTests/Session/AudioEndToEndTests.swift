@@ -110,6 +110,69 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
+    @Test("an unchanged prompt re-sent in sequence speaks once (live report)")
+    func promptDedup() async throws {
+        let engine = try ScriptEngine()
+        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("tts on")
+        let prompt = "1234hp 567mn 890mv>"
+        conn.injectLine(prompt)
+        conn.injectLine(prompt)
+        conn.injectLine(prompt)
+        conn.injectLine("You sit down and rest.")
+        conn.injectLine(prompt)
+        let settled = await SessionTestSupport.poll {
+            let values = await requests.values
+            return values.contains { $0 == .speak(text: prompt, interrupt: false) }
+                && values.contains { $0 == .speak(text: "You sit down and rest.", interrupt: false) }
+        }
+        #expect(settled)
+        try? await Task.sleep(for: .milliseconds(100))
+        let promptSpeaks = await requests.values.count(where: {
+            $0 == .speak(text: prompt, interrupt: false)
+        })
+        // Three identical in a row collapse to one; the re-send after a
+        // different line speaks again.
+        #expect(promptSpeaks == 2, "expected 2 prompt utterances, got \(promptSpeaks)")
+        pump.cancel()
+        await session.disconnect()
+    }
+
+    @Test("turning speech off via .setSpeechMode flushes the queue (Settings path)")
+    func settingsOffFlushes() async throws {
+        let engine = try ScriptEngine()
+        _ = await engine.registerNativePlugin(TextToSpeech(configURL: nil))
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+
+        let requests = Collector<SpeechRequest>()
+        let pump = Task {
+            for await request in session.speechRequests {
+                await requests.append(request)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("tts on")
+        // The Settings ▸ Audio path reaches the session as a bare mode change
+        // (plugin reload → install → .setSpeechMode), with no explicit
+        // `tts off` — it must still stop the babbling backlog.
+        _ = await session.applySpeechEffect(.setSpeechMode(.off))
+        let stopped = await SessionTestSupport.poll { await requests.values.contains(.stop) }
+        #expect(stopped, "mode .off never flushed the speech queue")
+        pump.cancel()
+        await session.disconnect()
+    }
+
     @Test("tts last re-reads recent displayed output, newest batch in order")
     func speakLast() async throws {
         let engine = try ScriptEngine()
