@@ -87,13 +87,22 @@ public struct Soundpack: NativePlugin {
     }
 
     public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {
+        onGMCP(package: package, json: json, context: GMCPDispatchContext())
+    }
+
+    public mutating func onGMCP(
+        package: String, json: String, context: GMCPDispatchContext
+    ) -> [ScriptEffect] {
         switch package.lowercased() {
         case "char.base":
             // Track own name even while muted, so unmuting works mid-session.
             if let name = Self.baseName(in: json) { selfName = name }
             return []
         case "comm.channel":
-            guard !config.muted,
+            // A Chat Echo-muted speaker plays nothing — neither the channel
+            // cue nor an inline !!SOUND — exactly the reference's early
+            // return after `CallPlugin(chat, "checkIfMuted", player)` (#55).
+            guard !config.muted, !context.speakerMuted,
                   let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8))
             else { return [] }
             var effects = inlineSoundEffects(in: comm)

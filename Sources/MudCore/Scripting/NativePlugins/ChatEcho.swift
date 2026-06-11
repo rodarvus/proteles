@@ -13,8 +13,12 @@ import Foundation
 /// shows. Echo off / muted speakers are suppressed (no echo, inline still gagged).
 /// State persists per world.
 public struct ChatEcho: NativePlugin {
+    /// Stable id other plugins (and the registry's GMCP pre-answer, #55)
+    /// target with `CallPlugin`-style queries.
+    public static let pluginID = "com.proteles.chatecho"
+
     public let metadata = NativePluginMetadata(
-        id: "com.proteles.chatecho",
+        id: pluginID,
         name: "Chat Echo",
         author: "Proteles",
         version: "1.0",
@@ -114,6 +118,16 @@ public struct ChatEcho: NativePlugin {
         }
         if let expiry = mute.expiry, expiry <= now { return false }
         return true
+    }
+
+    /// The reference chat plugin's `checkIfMuted(player)` — the entry point
+    /// the soundpack consults before playing a channel cue (#55). Re-validates
+    /// time-limited mutes at call time, so an expired mute answers false.
+    public func call(_ function: String, _ arguments: [LuaValue]) -> [LuaValue] {
+        guard function == "checkIfMuted", let player = arguments.first?.stringValue else {
+            return []
+        }
+        return [.boolean(isMuted(player, now: Date()))]
     }
 
     // MARK: - Commands
