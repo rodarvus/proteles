@@ -140,7 +140,14 @@ public actor SearchAndDestroyHost {
     if type(download_file) == "function" then download_file = function() end end
     if type(check_for_updates) == "function" then check_for_updates = function() end end
     if type(force_update_check) == "function" then force_update_check = function() end end
-    if type(download_sounds) == "function" then download_sounds = function() end end
+    -- download_sounds gates `xset sound` turning ON: the original HTTP-fetches
+    -- its two wavs if missing, then reports via callback. Our cues are local
+    -- (the user's Sounds/ or the bundled set), so report success — the
+    -- first-cut no-op never invoked the callback, which made `xset sound`
+    -- silently impossible to enable (2026-06-11 live test).
+    if type(download_sounds) == "function" then
+      download_sounds = function(callback) if callback then callback(true) end end
+    end
 
     -- Auto-detect an already-running campaign. `setup_scan_con_triggers()` runs
     -- exactly once, when init finishes (`init_called == 2`), so wrapping it is a

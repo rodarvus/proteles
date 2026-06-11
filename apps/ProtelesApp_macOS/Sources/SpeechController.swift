@@ -18,22 +18,43 @@ import os
 /// running, a once-per-launch os_log warning fires (the Audio settings pane
 /// shows the visible hint).
 @MainActor
-final class SpeechController {
+final class SpeechController: NSObject, AVSpeechSynthesizerDelegate {
     private static let log = Logger(subsystem: "com.proteles", category: "Speech")
+
+    /// When this many utterances are waiting, speech has fallen hopelessly
+    /// behind the game — flush and catch up to the newest line instead of
+    /// narrating the past (the live report: "still babbling a minute after I
+    /// turned it off"). Screen readers behave the same way under flooding.
+    private static let queueCatchUpThreshold = 10
 
     private let synthesizer = AVSpeechSynthesizer()
     private var config = SpeechConfig.load(from: try? SpeechConfig.defaultURL())
     private var warnedAboutVoiceOver = false
+    /// Utterances handed to the synthesizer and not yet finished/cancelled,
+    /// tracked by identity so a flush can't be undercounted by the cancelled
+    /// batch's late delegate callbacks.
+    private var pendingUtterances: Set<ObjectIdentifier> = []
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
 
     func handle(_ request: SpeechRequest) {
         switch request {
         case .speak(let text, let interrupt):
             speak(text, interrupt: interrupt)
         case .stop:
-            synthesizer.stopSpeaking(at: .immediate)
+            flush()
         case .reloadConfig:
             config = SpeechConfig.load(from: try? SpeechConfig.defaultURL())
         }
+    }
+
+    /// Stop the current utterance AND everything queued behind it.
+    private func flush() {
+        synthesizer.stopSpeaking(at: .immediate)
+        pendingUtterances.removeAll()
     }
 
     private func speak(_ text: String, interrupt: Bool) {
@@ -46,14 +67,36 @@ final class SpeechController {
             Self.log.warning("app voice speaking while VoiceOver runs — voiceOverRouting avoids double-speak")
         }
         if interrupt, synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+            flush()
+        } else if pendingUtterances.count >= Self.queueCatchUpThreshold {
+            // Too far behind reality: drop the backlog, speak the newest.
+            flush()
         }
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = Self.rate(forWordsPerMinute: config.wordsPerMinute)
         if let voice = Self.resolveVoice(config.voice) {
             utterance.voice = voice
         }
+        pendingUtterances.insert(ObjectIdentifier(utterance))
         synthesizer.speak(utterance)
+    }
+
+    nonisolated func speechSynthesizer(
+        _: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance
+    ) {
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in
+            self.pendingUtterances.remove(id)
+        }
+    }
+
+    nonisolated func speechSynthesizer(
+        _: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance
+    ) {
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in
+            self.pendingUtterances.remove(id)
+        }
     }
 
     /// VoiceOver announcement: speaks + brailles per the user's AT settings.

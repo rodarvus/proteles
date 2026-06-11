@@ -111,6 +111,10 @@ extension SearchAndDestroyHost {
     function GetInfo(n) return proteles.info(n) end
     function WorldName() return proteles.info(2) or "Aardwolf" end
     function GetPluginInfo(id, n)
+      -- The native Soundpack answers as the MUSHclient soundpack plugin:
+      -- S&D reads GetPluginInfo(<soundpack>, 17) (enabled flag) to decide
+      -- its sound default ("Defaults on if soundpack is enabled").
+      if id == "23832d1089f727f5f34abad8" and n == 17 then return true end
       if n == 1 then return "Search_and_Destroy"
       elseif n == 19 then return "5.99"
       elseif n == 20 then return proteles.info(60)
@@ -176,6 +180,17 @@ extension SearchAndDestroyHost {
       if id == "3e7dedbe37e44942dd46d264" then  -- GMCP handler
         if fn == "gmcpdata_as_string" then return 0, gmcpdata_as_string(...) end
         if fn == "Send_GMCP_Packet" then return Send_GMCP_Packet(...) end
+        return 0
+      end
+      if id == "23832d1089f727f5f34abad8" then  -- soundpack: TriggerEvent(event)
+        -- Route to the native Soundpack via its plumbing command (spfire is
+        -- always consumed by the plugin, so it never reaches the MUD); the
+        -- event plays with the user's per-event config + mute, exactly as
+        -- the reference's TriggerEvent would.
+        if fn == "TriggerEvent" then
+          local event = select(1, ...)
+          if event ~= nil then proteles.execute("spfire " .. tostring(event)) end
+        end
         return 0
       end
       return 0, proteles.call(fn, ...)
@@ -266,8 +281,12 @@ extension SearchAndDestroyHost {
     function PickColour(...) return -1 end
     function ReloadPlugin(...) return 0 end
 
-    -- Plugin discovery / misc (stubs — single-plugin curated runtime) --------
-    function IsPluginInstalled(id) return false end
+    -- Plugin discovery / misc (stubs — single-plugin curated runtime, except
+    -- the soundpack: the native Soundpack answers as the MUSHclient plugin so
+    -- S&D's sound default resolves to "on" and its same-room target cue
+    -- (CallPlugin TriggerEvent) fires — the 2026-06-11 live test found all
+    -- three S&D sound layers dead against the all-false stub).
+    function IsPluginInstalled(id) return id == "23832d1089f727f5f34abad8" end
     function PluginSupports(id, fn) return false end
     function GetPluginList() return {} end
     function EnablePlugin(id, flag) return 0 end

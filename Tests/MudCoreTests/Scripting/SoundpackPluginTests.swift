@@ -201,6 +201,22 @@ struct SoundpackPluginTests {
         #expect(cues(silent.effects).isEmpty)
     }
 
+    @Test("spfire fires an event through config (the S&D TriggerEvent bridge)")
+    func spfire() {
+        var plugin = unmuted()
+        let fired = plugin.handleCommand("spfire quest_target_found") ?? []
+        #expect(cues(fired) == [SoundCue(file: "quest_target_found.wav", volume: 1, pan: 0)])
+        // Respects per-event config…
+        _ = plugin.handleCommand("spset quest_target_found volume 0")
+        #expect(cues(plugin.handleCommand("spfire quest_target_found") ?? []).isEmpty)
+        // …and the master mute; unknown events are consumed silently (never
+        // leak to the MUD as a bogus command).
+        // `?.isEmpty == true` (not nil): consumed-with-no-cue, never sent on.
+        var muted = Soundpack(configURL: nil)
+        #expect(muted.handleCommand("spfire tell")?.isEmpty == true)
+        #expect(plugin.handleCommand("spfire nosuchevent")?.isEmpty == true)
+    }
+
     @Test("config round-trips through soundpack.json (deviations only)")
     func configPersistence() {
         let url = FileManager.default.temporaryDirectory
