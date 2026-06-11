@@ -104,6 +104,9 @@ public actor SessionController {
     /// The last line-driven spoken text, for consecutive-repeat suppression
     /// (an unchanged prompt re-sent five times reads once — live report).
     var lastSpokenLineText: String?
+    /// The vitals last spoken from a prompt — prompts speak only the
+    /// components that changed (and movement never; live-test round 2).
+    var lastSpokenVitals: PromptVitals?
     /// Notifications master toggle (off by default) + which built-in rules fire.
     public var notificationsEnabled = false
     public var notificationMatcher = NotificationMatcher()
@@ -442,6 +445,7 @@ public actor SessionController {
         helpCaptureBuffer = []
         recentDisplayedLines = [] // a fresh connection's `tts last` never replays the old session
         lastSpokenLineText = nil
+        lastSpokenVitals = nil
         await gmcpState.reset()
         latestGMCPByPackage.removeAll()
         await chatStore.reset()

@@ -129,6 +129,66 @@ public enum SpeechFilter {
     private static let decorationScalars = Set<Unicode.Scalar>("*=|-_~#+<>/\\^.'`\"".unicodeScalars)
 }
 
+/// Current vitals parsed out of a prompt line (#9 live-test round 2):
+/// prompts are status, not prose — instead of reading the whole line every
+/// time, the session speaks only the components that *changed*. Movement is
+/// deliberately absent from speech ("in practice almost never a concern" —
+/// the user's words) but still parsed so a moves-only change is recognised
+/// as "nothing worth saying".
+public struct PromptVitals: Sendable, Equatable {
+    public var hp: Int?
+    public var mana: Int?
+    public var moves: Int?
+
+    public init(hp: Int? = nil, mana: Int? = nil, moves: Int? = nil) {
+        self.hp = hp
+        self.mana = mana
+        self.moves = moves
+    }
+}
+
+public extension SpeechFilter {
+    /// Parse an Aardwolf-style prompt ("1180/1180hp 600/600mn 1000/1000mv …",
+    /// slashes and spacing optional, any order). A line counts as a prompt
+    /// only when it carries **hp plus at least one of mana/moves** — prose
+    /// like "You gain 50 hp." never qualifies. Returns nil for non-prompts.
+    static func promptVitals(in text: String) -> PromptVitals? {
+        // Cheap prefilter before any regex: every vitals prompt contains "hp".
+        guard text.range(of: "hp", options: [.caseInsensitive]) != nil,
+              let hp = vitalValue(in: text, matcherIndex: 0)
+        else { return nil }
+        let mana = vitalValue(in: text, matcherIndex: 1)
+        let moves = vitalValue(in: text, matcherIndex: 2)
+        guard mana != nil || moves != nil else { return nil }
+        return PromptVitals(hp: hp, mana: mana, moves: moves)
+    }
+
+    /// Compiled once — this parser runs on every displayed line while
+    /// speech is on. NSRegularExpression is immutable + thread-safe.
+    private static let vitalMatchers: [[NSRegularExpression]] = {
+        func compile(_ units: [String]) -> [NSRegularExpression] {
+            units.compactMap {
+                try? NSRegularExpression(
+                    pattern: #"(\d+)(?:/\d+)?\s?"# + $0 + #"\b"#,
+                    options: [.caseInsensitive]
+                )
+            }
+        }
+        return [compile(["hp"]), compile(["mn", "mana", "ma"]), compile(["mv", "mov", "moves"])]
+    }()
+
+    /// The *current* value before a vitals unit: `1180hp`, `1180/1180hp`,
+    /// `1180 hp` all yield 1180. First matcher wins; nil when absent.
+    private static func vitalValue(in text: String, matcherIndex: Int) -> Int? {
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        for regex in vitalMatchers[matcherIndex] {
+            guard let match = regex.firstMatch(in: text, range: range) else { continue }
+            return Int((text as NSString).substring(with: match.range(at: 1)))
+        }
+        return nil
+    }
+}
+
 /// The TTS configuration (#9), stored hand-editably in
 /// `Settings/speech.json` (the soundpack.json pattern: defaults in code,
 /// tolerant decode, global across worlds).

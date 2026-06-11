@@ -60,6 +60,28 @@ struct SpeechFilterTests {
         #expect(line?.interrupt == false)
     }
 
+    // MARK: - Prompt vitals (live-test round 2)
+
+    @Test("promptVitals parses Aardwolf-style prompts in their variants")
+    func promptParsing() {
+        let full = SpeechFilter.promptVitals(in: "1180/1180hp 600/600mn 1000/1000mv 1300tnl> ")
+        #expect(full == PromptVitals(hp: 1180, mana: 600, moves: 1000))
+        let bare = SpeechFilter.promptVitals(in: "1234hp 567mn 890mv>")
+        #expect(bare == PromptVitals(hp: 1234, mana: 567, moves: 890))
+        let spaced = SpeechFilter.promptVitals(in: "[1180 hp 600 mana 950 mv]")
+        #expect(spaced == PromptVitals(hp: 1180, mana: 600, moves: 950))
+        let hpMoves = SpeechFilter.promptVitals(in: "1180hp 950mv>")
+        #expect(hpMoves == PromptVitals(hp: 1180, mana: nil, moves: 950))
+    }
+
+    @Test("prose with hp mentions is not a prompt")
+    func promptProse() {
+        #expect(SpeechFilter.promptVitals(in: "You gain 50 hp.") == nil)
+        #expect(SpeechFilter.promptVitals(in: "Your heal restores 120hp!") == nil)
+        #expect(SpeechFilter.promptVitals(in: "The Grand City of Aylor") == nil)
+        #expect(SpeechFilter.promptVitals(in: "") == nil)
+    }
+
     // MARK: - Config
 
     @Test("speech.json round-trips; partial hand-edits keep defaults")
