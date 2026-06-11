@@ -20,10 +20,17 @@ enum SnDFixture {
     /// somehow absent, so suites can skip rather than hard-fail). Sets the
     /// shared global — only suites that exercise the global accessors (e.g. the
     /// host) need this; prefer ``directory`` + the `in:` accessors otherwise.
+    /// One-shot via a static let: parallel suites used to race idempotent
+    /// writes into the `nonisolated(unsafe)` global (2026-06 audit) — static
+    /// initialization is dispatch_once'd, so the write happens exactly once.
     @discardableResult
     static func install() -> Bool {
+        installed
+    }
+
+    private static let installed: Bool = {
         guard let dir = directory else { return false }
         SearchAndDestroyAssets.installDirectory = dir
         return true
-    }
+    }()
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 
 /// Runs the vendored Search-and-Destroy *logic* on a dedicated, sandboxed
 /// ``LuaRuntime`` with a **curated** host binding — exactly the MUSHclient
@@ -109,6 +110,14 @@ public actor SearchAndDestroyHost {
         // The shim accessors (`targets_as_json`/`goto_list_count`) append the
         // same way — see SearchAndDestroyHost+ShimState.
         let source = Self.appendingShimAccessors(to: Self.injectingBridge(into: raw))
+        if !source.contains("[Proteles bridge]") {
+            // The anchor (`function xg_draw_window()`) vanished from this
+            // S&D source: the plugin still runs, but the native panel will
+            // sit empty with no other hint — say so loudly in the log
+            // (2026-06 audit: this failure was fully silent).
+            Logger(label: "\(MudCore.loggerLabel).snd")
+                .warning("S&D bridge anchor not found; the native panel will not update")
+        }
 
         // S&D's `require`/`dofile` targets resolve from these modules (the
         // loader falls back to a module by basename for dofile): its own data
