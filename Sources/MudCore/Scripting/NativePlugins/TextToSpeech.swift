@@ -57,6 +57,9 @@ public struct TextToSpeech: NativePlugin {
 
     public internal(set) var config: SpeechConfig
     let configURL: URL?
+    /// Whether install() has run before, so re-installs (Settings edits
+    /// reload the plugin) can tell a mode CHANGE from a rate tweak.
+    var hasInstalled = false
     /// Cached GMCP vitals for `tts vitals` (the MUSH-Z alt+h/m/v pattern:
     /// on-demand stat queries instead of a spoken prompt). Reuses the
     /// prompt-vitals value type — same three components.
@@ -70,9 +73,23 @@ public struct TextToSpeech: NativePlugin {
 
     /// Re-read config and push the policy + a config reload — runs on
     /// register and re-enable, so Settings edits land via plugin reload.
+    /// Speaks a confirmation when speech comes up enabled (app launch) or a
+    /// Settings change flips the mode — the command path already confirms,
+    /// and a VI user toggling a control they can't see needs the same
+    /// feedback (upstream's plugin announces on install). Rate/voice-only
+    /// reloads stay quiet.
     public mutating func install() -> [ScriptEffect] {
+        let previousMode: SpeechMode? = hasInstalled ? config.mode : nil
+        hasInstalled = true
         config = SpeechConfig.load(from: configURL)
-        return [.setSpeechPolicy(config.policy), .speechConfigChanged]
+        var effects: [ScriptEffect] = [.setSpeechPolicy(config.policy), .speechConfigChanged]
+        if config.mode != .off, previousMode != config.mode {
+            effects.append(.speak(
+                text: "Text to speech \(config.mode == .alerts ? "alerts" : "on")",
+                interrupt: true
+            ))
+        }
+        return effects
     }
 
     public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {

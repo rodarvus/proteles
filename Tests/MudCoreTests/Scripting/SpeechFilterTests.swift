@@ -119,6 +119,40 @@ struct TextToSpeechPluginTests {
         let effects = tts.install()
         #expect(effects.contains(.setSpeechPolicy(SpeechPolicy())))
         #expect(effects.contains(.speechConfigChanged))
+        // Off → no spoken confirmation at launch.
+        #expect(!effects.contains { if case .speak = $0 { true } else { false } })
+    }
+
+    @Test("install announces when speech comes up enabled or the mode flips (Settings path)")
+    func installAnnounces() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("speech-announce-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var enabled = SpeechConfig()
+        enabled.mode = .everything
+        enabled.save(to: url)
+
+        // Launch with speech enabled → orient audibly (upstream announces
+        // on install; a VI user needs to know speech is live).
+        var tts = TextToSpeech(configURL: url)
+        let launch = tts.install()
+        #expect(launch.contains(.speak(text: "Text to speech on", interrupt: true)))
+
+        // A rate-only Settings tweak reloads the plugin — no mode change, no
+        // re-announcement.
+        enabled.wordsPerMinute = 350
+        enabled.save(to: url)
+        let rateOnly = tts.install()
+        #expect(!rateOnly.contains { if case .speak = $0 { true } else { false } })
+
+        // Flipping the mode via Settings (off → alerts) confirms audibly.
+        enabled.mode = .off
+        enabled.save(to: url)
+        _ = tts.install()
+        enabled.mode = .alerts
+        enabled.save(to: url)
+        let flipped = tts.install()
+        #expect(flipped.contains(.speak(text: "Text to speech alerts", interrupt: true)))
     }
 
     @Test("tts on/alerts/off set the mode and push it to the session")
