@@ -112,15 +112,28 @@ public enum WebSocketFraming {
         return "{" + fields.map { "\"\($0.0)\":\($0.1)" }.joined(separator: ",") + "}"
     }
 
+    /// An inbound frame that can't be decoded — the telnet stream now has a
+    /// hole of unknown content (it may end mid-line or mid-IAC), so callers
+    /// must treat this as a connection-level failure, not skip the frame
+    /// (#46 audit A4: the old `try?` degraded corruption to silent loss).
+    public enum FrameError: Error, Equatable {
+        case notBase64
+        case corruptDeflate(String)
+    }
+
     /// Decode one inbound WS text frame: base64 → raw-deflate → telnet bytes.
     /// Each frame is its **own** complete deflate stream, so the inflater is reset
     /// first (carrying state across frames leaves the second frame undecodable —
-    /// which silently swallowed the `Password:` prompt and broke login). Returns
-    /// `[]` on a non-base64 frame.
-    public static func inboundBytes(fromBase64 frame: String, inflater: Inflater) -> [UInt8] {
+    /// which silently swallowed the `Password:` prompt and broke login). Throws
+    /// ``FrameError`` on a non-base64 or corrupt-deflate frame.
+    public static func inboundBytes(fromBase64 frame: String, inflater: Inflater) throws -> [UInt8] {
         let trimmed = frame.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = Data(base64Encoded: trimmed) else { return [] }
-        try? inflater.reset()
-        return (try? inflater.inflate([UInt8](data))) ?? []
+        guard let data = Data(base64Encoded: trimmed) else { throw FrameError.notBase64 }
+        do {
+            try inflater.reset()
+            return try inflater.inflate([UInt8](data))
+        } catch {
+            throw FrameError.corruptDeflate(String(describing: error))
+        }
     }
 }

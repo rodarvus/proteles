@@ -22,8 +22,8 @@ struct WebSocketMultiFrameTests {
     @Test("consecutive frames each decode through one reused inflater")
     func twoFramesDecode() throws {
         let inflater = try Inflater(raw: true)
-        let first = WebSocketFraming.inboundBytes(fromBase64: Self.banner, inflater: inflater)
-        let second = WebSocketFraming.inboundBytes(fromBase64: Self.passwordFrame, inflater: inflater)
+        let first = try WebSocketFraming.inboundBytes(fromBase64: Self.banner, inflater: inflater)
+        let second = try WebSocketFraming.inboundBytes(fromBase64: Self.passwordFrame, inflater: inflater)
         #expect(String(bytes: first, encoding: .isoLatin1)?.contains("Aardwolf") == true)
         // The bug: this was empty (continuous inflater couldn't decode frame 2).
         #expect(String(bytes: second, encoding: .isoLatin1)?.contains("Password:") == true)
