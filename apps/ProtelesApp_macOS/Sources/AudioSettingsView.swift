@@ -49,7 +49,10 @@ struct AudioSettingsView: View {
                 }
                 Text("Text-to-speech for game output: 'every line' is the screen-reader "
                     + "experience (symbol art stripped, hidden lines never spoken); 'alerts' "
-                    + "speaks tells and event-worthy lines only. Also: `tts` commands.")
+                    + "speaks tells and event-worthy lines only. In-game: `tts help` lists "
+                    + "the commands (read stats with `tts vitals`, re-read output with "
+                    + "`tts last`), and `tts setup` recommends Aardwolf server settings "
+                    + "that make speech play far less spammy.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 LabeledContent("Rate: \(speech.wordsPerMinute) wpm") {
