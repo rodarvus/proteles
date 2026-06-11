@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 @testable import MudCore
 import Testing
 
@@ -57,7 +58,12 @@ struct ScrollbackDatabaseRoundTripTests {
 
         let fetched = try db.mostRecent(limit: 1)
         let restored = try fetched[0].toLine()
-        #expect(restored == line)
+        // Content round-trips exactly; the id deliberately does NOT (the
+        // database assigns row ids — per-launch LineIDs are not keys, and
+        // ScrollbackStore re-assigns ids on restore anyway).
+        #expect(restored.text == line.text)
+        #expect(restored.timestamp == line.timestamp)
+        #expect(restored.runs == line.runs)
         try cleanup(db)
     }
 
@@ -174,6 +180,100 @@ struct ScrollbackDatabaseDurabilityTests {
         let db = try ScrollbackDatabase(url: url)
         let recent = try db.mostRecent(limit: 5)
         #expect(recent.map(\.text) == ["first session"])
+        try cleanup(db)
+    }
+}
+
+/// The 2026-06-11 stale-resume incident: v1 keyed rows by the per-launch
+/// LineID with REPLACE semantics, so every relaunch overwrote history from
+/// id 0 and `mostRecent` (id DESC) returned the OLDEST surviving session.
+@Suite("ScrollbackDatabase — append-only across relaunches")
+struct ScrollbackDatabaseRelaunchTests {
+    private func line(_ id: UInt64, _ text: String, at seconds: TimeInterval) -> Line {
+        Line(id: LineID(id), timestamp: Date(timeIntervalSince1970: seconds), text: text)
+    }
+
+    @Test("a second launch's lines append instead of overwriting the first's")
+    func relaunchAppends() throws {
+        let db = try ScrollbackDatabase(url: temporaryDatabaseURL())
+        // Launch 1: in-memory LineIDs 0..9.
+        let first = try (0..<10).map {
+            try PersistedLine(line(UInt64($0), "first-\($0)", at: 1_700_000_000 + Double($0)))
+        }
+        try db.insertBatch(first)
+        // Launch 2 (process restart): LineIDs start at 0 AGAIN. With the v1
+        // keying these REPLACED rows 0..4; they must append.
+        let second = try (0..<5).map {
+            try PersistedLine(line(UInt64($0), "second-\($0)", at: 1_700_001_000 + Double($0)))
+        }
+        try db.insertBatch(second)
+
+        #expect(try db.count() == 15, "the relaunch overwrote instead of appending")
+        let recent = try db.mostRecent(limit: 5)
+        #expect(
+            recent.map(\.text) == ["second-0", "second-1", "second-2", "second-3", "second-4"],
+            "mostRecent must return the NEWEST session's lines"
+        )
+        try cleanup(db)
+    }
+
+    @Test("v2 migration rekeys a v1 database so mostRecent follows time again")
+    func v2MigrationRekeys() throws {
+        let url = temporaryDatabaseURL()
+        // Hand-build the v1 shape: v1 DDL + the v1 migration marker + rows
+        // whose id order interleaves sessions (newest TIMESTAMPS on LOW ids,
+        // exactly what REPLACE left behind in the live incident).
+        let queue = try DatabaseQueue(path: url.path)
+        try queue.write { db in
+            try db.execute(sql: """
+            CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)
+            """)
+            try db.execute(sql: "INSERT INTO grdb_migrations VALUES ('v1.scrollback_lines')")
+            try db.execute(sql: """
+            CREATE TABLE scrollback_lines (
+                id INTEGER PRIMARY KEY,
+                timestamp DATETIME NOT NULL,
+                text TEXT NOT NULL,
+                runs_json TEXT
+            )
+            """)
+            try db.execute(sql: """
+            CREATE INDEX scrollback_lines_on_timestamp ON scrollback_lines("timestamp")
+            """)
+            try db.create(virtualTable: "scrollback_lines_fts", using: FTS5()) { fts in
+                fts.synchronize(withTable: "scrollback_lines")
+                fts.tokenizer = .unicode61()
+                fts.column("text")
+            }
+            // ids 0..2 = TODAY's session (overwrote an older one); ids 10..12
+            // = YESTERDAY's surviving rows (the highest ids!).
+            for (id, stamp, text) in [
+                (0, "2026-06-11 10:00:00", "today-0"),
+                (1, "2026-06-11 10:00:01", "today-1"),
+                (2, "2026-06-11 10:00:02", "today-2"),
+                (10, "2026-06-10 22:00:00", "yesterday-0"),
+                (11, "2026-06-10 22:00:01", "yesterday-1"),
+                (12, "2026-06-10 22:00:02", "yesterday-2")
+            ] {
+                try db.execute(
+                    sql: "INSERT INTO scrollback_lines (id, timestamp, text) VALUES (?, ?, ?)",
+                    arguments: [id, stamp, text]
+                )
+            }
+        }
+
+        // Opening through ScrollbackDatabase runs the v2 migration.
+        let db = try ScrollbackDatabase(url: url)
+        #expect(try db.count() == 6)
+        // v1 behaviour returned yesterday-* here (highest ids). After the
+        // rekey, the newest TIMESTAMPS are the newest ids.
+        let recent = try db.mostRecent(limit: 3)
+        #expect(recent.map(\.text) == ["today-0", "today-1", "today-2"])
+        // FTS was rebuilt over the rekeyed table.
+        #expect(try db.search("yesterday", limit: 10).count == 3)
+        // And new inserts append after everything.
+        try db.insert(PersistedLine(timestamp: Date(), text: "fresh"))
+        #expect(try db.mostRecent(limit: 1).first?.text == "fresh")
         try cleanup(db)
     }
 }
