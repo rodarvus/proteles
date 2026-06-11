@@ -114,11 +114,26 @@ public struct SubstitutionEngine: Sendable {
         return regex.firstMatch(in: text, range: range) != nil
     }
 
+    /// Compiled-pattern cache. `apply(to:)` runs per incoming line and used
+    /// to recompile every enabled rule's regex twice per line (gag check +
+    /// substitute) — O(rules × lines) compile churn on the hot path (2026-06
+    /// audit). Keyed by the full compile inputs, so editing a rule simply
+    /// misses into a fresh entry; `NSCache` is documented thread-safe and
+    /// evicts under memory pressure, hence `nonisolated(unsafe)` is sound.
+    private nonisolated(unsafe) static let compiledPatterns =
+        NSCache<NSString, NSRegularExpression>()
+
     fileprivate static func regularExpression(for rule: SubstitutionRule) -> NSRegularExpression? {
         var pattern = rule.regex ? rule.pattern : NSRegularExpression.escapedPattern(for: rule.pattern)
         if rule.wholeWord { pattern = "\\b" + pattern + "\\b" }
         let options: NSRegularExpression.Options = rule.caseSensitive ? [] : [.caseInsensitive]
-        return try? NSRegularExpression(pattern: pattern, options: options)
+        let key = "\(options.rawValue):\(pattern)" as NSString
+        if let cached = compiledPatterns.object(forKey: key) { return cached }
+        guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else {
+            return nil
+        }
+        compiledPatterns.setObject(compiled, forKey: key)
+        return compiled
     }
 }
 

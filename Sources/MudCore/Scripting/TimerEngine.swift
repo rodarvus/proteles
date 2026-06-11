@@ -233,7 +233,9 @@ public struct TimerEngine {
         case .atTimeOfDay(let hour, let minute, let second):
             guard (0...23).contains(hour) else { throw TimerError.invalidSchedule("hour 0-23") }
             guard (0...59).contains(minute) else { throw TimerError.invalidSchedule("minute 0-59") }
-            guard (0..<60).contains(second) else { throw TimerError.invalidSchedule("second 0-60") }
+            guard (0..<60).contains(second) else {
+                throw TimerError.invalidSchedule("second must be in [0, 60) — fractions allowed")
+            }
         }
     }
 }

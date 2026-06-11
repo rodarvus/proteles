@@ -8,11 +8,6 @@ import Testing
 /// wire-framed GMCP, the inbound task loop) to find where the wiring drops.
 @Suite("native modules — end-to-end through the session", .serialized)
 struct NativeModulesEndToEndTests {
-    /// Frame a GMCP message as Aardwolf sends it (IAC SB 201 <payload> IAC SE).
-    private func gmcpBytes(_ payload: String) -> [UInt8] {
-        [255, 250, 201] + Array(payload.utf8) + [255, 240]
-    }
-
     /// The app's full native-plugin set, in ProtelesApp registration order.
     private func registerAll(on engine: ScriptEngine) async {
         _ = await engine.registerNativePlugin(AardGMCPHandler())
@@ -27,14 +22,6 @@ struct NativeModulesEndToEndTests {
         _ = await engine.registerNativePlugin(InventorySerialsPlugin())
     }
 
-    private func poll(_ check: () async -> Bool) async -> Bool {
-        for _ in 0..<100 {
-            if await check() { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return await check()
-    }
-
     @Test("tick countdown: comm.tick anchors gmcpState.lastTick")
     func tickAnchors() async throws {
         let engine = try ScriptEngine()
@@ -42,9 +29,9 @@ struct NativeModulesEndToEndTests {
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
         try await session.connect(to: .init(host: "test.invalid", port: 23))
-        conn.injectInbound(gmcpBytes(#"char.status { "state": 3 }"#))
-        conn.injectInbound(gmcpBytes(#"comm.tick {"ctime" : 1781104511}"#))
-        let anchored = await poll { await session.gmcpState.state.lastTick != nil }
+        conn.injectInbound(SessionTestSupport.gmcpBytes(#"char.status { "state": 3 }"#))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(#"comm.tick {"ctime" : 1781104511}"#))
+        let anchored = await SessionTestSupport.poll { await session.gmcpState.state.lastTick != nil }
         #expect(anchored, "comm.tick never anchored the tick countdown")
         await session.disconnect()
     }
@@ -56,16 +43,16 @@ struct NativeModulesEndToEndTests {
         let conn = InMemoryConnection()
         let session = SessionController(scriptEngine: engine, makeConnection: { conn })
         try await session.connect(to: .init(host: "test.invalid", port: 23))
-        conn.injectInbound(gmcpBytes(#"char.status { "state": 3 }"#))
-        conn.injectInbound(gmcpBytes(#"char.status { "state": 5 }"#))
-        let suspended = await poll { await engine.automationsSuspended }
+        conn.injectInbound(SessionTestSupport.gmcpBytes(#"char.status { "state": 3 }"#))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(#"char.status { "state": 5 }"#))
+        let suspended = await SessionTestSupport.poll { await engine.automationsSuspended }
         #expect(suspended, "state 5 never suspended automations")
-        let announced = await poll {
+        let announced = await SessionTestSupport.poll {
             await session.scrollbackStore.snapshot().contains { $0.text.contains("Note mode") }
         }
         #expect(announced, "the pause never announced")
-        conn.injectInbound(gmcpBytes(#"char.status { "state": 3 }"#))
-        let resumed = await poll { await !engine.automationsSuspended }
+        conn.injectInbound(SessionTestSupport.gmcpBytes(#"char.status { "state": 3 }"#))
+        let resumed = await SessionTestSupport.poll { await !engine.automationsSuspended }
         #expect(resumed, "state 3 never resumed automations")
         await session.disconnect()
     }
@@ -82,7 +69,7 @@ struct NativeModulesEndToEndTests {
         await session.setRichExitsEnabled(true)
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         conn.injectLine("Vote at https://aardmud.org/vote today!")
-        let linked = await poll {
+        let linked = await SessionTestSupport.poll {
             await session.scrollbackStore.snapshot().contains { line in
                 line.runs.contains { $0.link != nil }
             }
@@ -104,7 +91,7 @@ struct NativeModulesEndToEndTests {
         await session.attachSearchAndDestroy(host)
         conn.injectInbound([255, 250, 201] + Array(#"char.status { "state": 3 }"#.utf8) + [255, 240])
         conn.injectInbound([255, 250, 201] + Array(#"char.status { "state": 5 }"#.utf8) + [255, 240])
-        _ = await poll { await engine.automationsSuspended }
+        _ = await SessionTestSupport.poll { await engine.automationsSuspended }
 
         // While writing a note, a body line that happens to match an S&D
         // alias (or starts "mapper ...") must reach the wire as note text —
@@ -116,7 +103,7 @@ struct NativeModulesEndToEndTests {
 
         // Resume: interception returns (the S&D alias answers locally again).
         conn.injectInbound([255, 250, 201] + Array(#"char.status { "state": 3 }"#.utf8) + [255, 240])
-        _ = await poll { await !engine.automationsSuspended }
+        _ = await SessionTestSupport.poll { await !engine.automationsSuspended }
         let before = conn.sentLines.count
         try await session.send("xset autonav")
         try? await Task.sleep(for: .milliseconds(100))

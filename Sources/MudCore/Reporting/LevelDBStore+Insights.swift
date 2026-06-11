@@ -325,10 +325,14 @@ public extension LevelDBStore {
         }
     }
 
+    /// True median: the middle value, or the mean of the two middles for an
+    /// even count. (The first cut returned the upper-middle, biasing the
+    /// level-pace projection optimistic on even-length samples.)
     static func median(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         let sorted = values.sorted()
-        return sorted[sorted.count / 2]
+        let mid = sorted.count / 2
+        return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
     // MARK: - Economics

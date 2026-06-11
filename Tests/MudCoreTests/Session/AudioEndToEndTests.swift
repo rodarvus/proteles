@@ -8,18 +8,6 @@ import Testing
 /// players consume.
 @Suite("audio — end-to-end through the session", .serialized)
 struct AudioEndToEndTests {
-    private func gmcpBytes(_ payload: String) -> [UInt8] {
-        [255, 250, 201] + Array(payload.utf8) + [255, 240]
-    }
-
-    private func poll(_ check: () async -> Bool) async -> Bool {
-        for _ in 0..<100 {
-            if await check() { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return await check()
-    }
-
     /// An actor collecting stream values so polls can read them safely.
     private actor Collector<Value: Sendable> {
         var values: [Value] = []
@@ -43,10 +31,10 @@ struct AudioEndToEndTests {
         }
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("spmute") // unmute (muted by default)
-        conn.injectInbound(gmcpBytes(
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
             #"comm.channel {"chan":"tell","msg":"Eketra tells you 'hi'","player":"Eketra"}"#
         ))
-        let played = await poll {
+        let played = await SessionTestSupport.poll {
             await cues.values.contains { $0.file == "tell.wav" && $0.volume == 1 }
         }
         #expect(played, "the tell channel never produced its cue")
@@ -70,7 +58,7 @@ struct AudioEndToEndTests {
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("spmute") // unmute (muted by default)
         conn.injectLine("You raise a level! You are now level 142.")
-        let played = await poll {
+        let played = await SessionTestSupport.poll {
             await cues.values.contains { $0.file == "level_up.wav" }
         }
         #expect(played, "the level-up line never produced its cue")
@@ -95,7 +83,7 @@ struct AudioEndToEndTests {
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         try await session.send("tts on") // the plugin consumes it
         conn.injectLine("The Grand City of Aylor stretches before you.")
-        let spoke = await poll {
+        let spoke = await SessionTestSupport.poll {
             await requests.values.contains {
                 $0 == .speak(text: "The Grand City of Aylor stretches before you.", interrupt: false)
             }
@@ -103,7 +91,7 @@ struct AudioEndToEndTests {
         #expect(spoke, "the displayed line was never spoken")
 
         // A gagged line (ChatEcho's inline channel dupe) must NOT speak.
-        conn.injectInbound(gmcpBytes(
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
             #"comm.channel {"chan":"gossip","msg":"Eketra gossips 'spam'","player":"Eketra"}"#
         ))
         conn.injectLine("Eketra gossips 'spam'")
@@ -116,7 +104,7 @@ struct AudioEndToEndTests {
         #expect(spokenTexts.count(where: { $0.contains("spam") }) <= 1, "the gagged dupe spoke too")
 
         try await session.send("tts stop")
-        let stopped = await poll { await requests.values.contains(.stop) }
+        let stopped = await SessionTestSupport.poll { await requests.values.contains(.stop) }
         #expect(stopped, "tts stop never reached the stream")
         pump.cancel()
         await session.disconnect()
@@ -138,12 +126,12 @@ struct AudioEndToEndTests {
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         conn.injectLine("First line of prose.")
         conn.injectLine("Second line of prose.")
-        let buffered = await poll {
+        let buffered = await SessionTestSupport.poll {
             await session.scrollbackStore.snapshot().count >= 2
         }
         #expect(buffered)
         try await session.send("tts last 2")
-        let reread = await poll {
+        let reread = await SessionTestSupport.poll {
             await requests.values.contains { $0 == .speak(text: "Second line of prose.", interrupt: false) }
         }
         #expect(reread, "tts last never re-read the buffer")
