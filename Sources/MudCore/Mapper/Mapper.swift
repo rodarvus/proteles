@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 
 /// The live map: an in-memory ``RoomGraph`` kept warm for pathfinding and
 /// rendering, fed by Aardwolf GMCP and written through to a ``MapperStore``
@@ -110,23 +111,14 @@ public actor Mapper {
     /// Subscribers to one-off system notes the mapper pushes outside the GMCP
     /// flow (e.g. a delayed cexit confirmation/failure). The session echoes
     /// these to the output view.
-    private var noteSubscribers: [UUID: AsyncStream<String>.Continuation] = [:]
+    var noteSubscribers: [UUID: AsyncStream<String>.Continuation] = [:]
 
-    /// Subscribe to mapper system notes. The session drains this and echoes
-    /// each note; no backfill.
-    public func subscribeNotes() -> AsyncStream<String> {
-        let id = UUID()
-        let (stream, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .unbounded)
-        noteSubscribers[id] = continuation
-        continuation.onTermination = { [weak self] _ in
-            Task { await self?.removeNoteSubscriber(id) }
-        }
-        return stream
-    }
-
-    private func removeNoteSubscriber(_ id: UUID) {
-        noteSubscribers[id] = nil
-    }
+    let logger = Logger(label: "\(MudCore.loggerLabel).mapper")
+    /// One user-facing note per session about failing map-DB writes; every
+    /// failure still logs (2026-06 audit: `try?` on the upserts let the
+    /// in-memory graph silently diverge from Aardwolf.db, so rooms "vanished"
+    /// on the next launch with no hint why).
+    var reportedWriteFailure = false
 
     /// Push a system note to subscribers (the session echoes it).
     func emitNote(_ text: String) {
@@ -168,7 +160,12 @@ public actor Mapper {
             emitNote("CEXIT FAILED: Custom Exit \(pending.dir) leads back here!")
             return
         }
-        try? store.addCustomExit(dir: pending.dir, from: pending.from, to: dest, level: 0)
+        persist("custom exit") { try store.addCustomExit(
+            dir: pending.dir,
+            from: pending.from,
+            to: dest,
+            level: 0
+        ) }
         if var room = graph[pending.from] {
             room.exits[pending.dir] = Exit(dir: pending.dir, to: dest)
             graph[pending.from] = room
@@ -416,8 +413,8 @@ public actor Mapper {
         let changed = existing == nil || !Self.sameRoom(existing!, room)
         graph[uid] = room
         if changed {
-            try? store.upsert(room)
-            try? store.saveExits(from: uid, exits: exits)
+            persist("room") { try store.upsert(room) }
+            persist("exits") { try store.saveExits(from: uid, exits: exits) }
         }
 
         // Surface a room's player note on arrival, like the reference's
@@ -433,7 +430,7 @@ public actor Mapper {
             if graph.areas[zone] == nil {
                 let stub = Area(uid: zone)
                 graph.areas[zone] = stub
-                try? store.upsert(stub)
+                persist("area stub") { try store.upsert(stub) }
             }
             if graph.areas[zone]?.name == nil, !requestedAreas.contains(zone) {
                 requestedAreas.insert(zone)
@@ -489,7 +486,7 @@ public actor Mapper {
             flags: payload.flags ?? ""
         )
         graph.areas[uid] = area
-        try? store.upsert(area)
+        persist("area") { try store.upsert(area) }
         publishLayout()
     }
 
@@ -517,7 +514,7 @@ public actor Mapper {
             if let name = sector.name, let color = sector.color { terrainColours[name] = color }
             rows.append(MapperStore.Environment(uid: key, name: sector.name, color: sector.color))
         }
-        try? store.replaceEnvironments(rows)
+        persist("sector palette") { try store.replaceEnvironments(rows) }
     }
 
     /// Merge the persisted sector palette into the in-memory `environments`
