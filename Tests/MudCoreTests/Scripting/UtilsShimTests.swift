@@ -29,12 +29,33 @@ struct UtilsShimTests {
             .string("utils.base64decode(utils.base64encode('hello world'))") == "hello world")
     }
 
-    @Test("edit_distance is Levenshtein; timer is sub-second wall time")
+    @Test("edit_distance is Levenshtein; timer is monotonic with sub-second precision")
     func distanceAndTimer() async throws {
         let lua = try await shimmed()
         #expect(try await lua.number("utils.edit_distance('kitten', 'sitting')") == 3)
         #expect(try await lua.number("utils.edit_distance('abc', 'abc')") == 0)
-        #expect(try await lua.number("utils.timer()") > 1_000_000_000)
+        // proteles.monotonic backs utils.timer: process-relative seconds on
+        // ContinuousClock (#58 — was wall-clock; an NTP step could jump it).
+        // Only deltas matter; two reads must never go backwards, and the
+        // resolution must be sub-second (S&D's 1s debounces subtract these).
+        let first = try await lua.number("utils.timer()")
+        let second = try await lua.number("utils.timer()")
+        #expect(first >= 0)
+        #expect(second >= first)
+        // Resolution: spin until the reading changes — the step must be far
+        // below the 1-second debounce granularity, not a whole-second tick.
+        let step = try await lua.number("""
+        (function()
+          local t0 = utils.timer()
+          local t1 = t0
+          for _ = 1, 10000000 do
+            t1 = utils.timer()
+            if t1 ~= t0 then break end
+          end
+          return t1 - t0
+        end)()
+        """)
+        #expect(step > 0 && step < 0.1)
     }
 
     @Test("GUI dialogs are safe stubs (no crash, sensible defaults)")

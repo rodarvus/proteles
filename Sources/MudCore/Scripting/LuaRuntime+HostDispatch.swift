@@ -27,7 +27,7 @@ extension LuaRuntime {
     nonisolated func miscValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
-        case .monotonic: [.number(Date().timeIntervalSince1970)]
+        case .monotonic: [.number(Self.monotonicSeconds())]
         case .databaseDir: [.string(databasesDirectory)]
         case .isPluginInstalled:
             [.boolean({
@@ -36,6 +36,21 @@ extension LuaRuntime {
             }())]
         default: []
         }
+    }
+
+    /// The instant `proteles.monotonic()` counts from (first use). Only
+    /// deltas are meaningful — consumers (S&D's `os.clock` shim, the shim's
+    /// `utils.timer`) subtract successive readings for debounces, so the
+    /// absolute value is deliberately small and process-relative.
+    private static let monotonicBase = ContinuousClock.now
+
+    /// Seconds since ``monotonicBase`` on a clock that never steps. The old
+    /// `Date().timeIntervalSince1970` was wall-clock: an NTP adjustment could
+    /// jump it backwards and confuse S&D's 1-second debounces (#58).
+    nonisolated static func monotonicSeconds() -> Double {
+        let elapsed = monotonicBase.duration(to: ContinuousClock.now)
+        let (seconds, attoseconds) = elapsed.components
+        return Double(seconds) + Double(attoseconds) / 1e18
     }
 
     /// `proteles.clipboardGet()` → the app clipboard provider's current string

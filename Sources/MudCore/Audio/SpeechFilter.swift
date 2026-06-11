@@ -273,7 +273,7 @@ public extension SpeechFilter {
 /// The TTS configuration (#9), stored hand-editably in
 /// `Settings/speech.json` (the soundpack.json pattern: defaults in code,
 /// tolerant decode, global across worlds).
-public struct SpeechConfig: Codable, Sendable, Equatable {
+public struct SpeechConfig: SettingsFileBacked, Equatable {
     /// What gets spoken. Off by default — TTS is an accessibility opt-in.
     public var mode: SpeechMode = .off
     /// Speaking rate in words per minute. 175 ≈ the synthesizer default;
@@ -332,26 +332,6 @@ public struct SpeechConfig: Codable, Sendable, Equatable {
         )
     }
 
-    /// `Settings/speech.json`.
-    public static func defaultURL() throws -> URL {
-        try ProtelesPaths.settingsDirectory().appendingPathComponent("speech.json")
-    }
-
-    public static func load(from url: URL?) -> SpeechConfig {
-        guard let url, let data = FileManager.default.contents(atPath: url.path),
-              let decoded = try? JSONDecoder().decode(SpeechConfig.self, from: data)
-        else { return SpeechConfig() }
-        return decoded
-    }
-
-    public func save(to url: URL?) {
-        guard let url else { return }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(self) else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        try? data.write(to: url, options: .atomic)
-    }
+    /// Disk load/save via SettingsFileBacked (`Settings/speech.json`).
+    public static let settingsFileName = "speech.json"
 }
