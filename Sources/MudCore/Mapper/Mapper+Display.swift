@@ -36,7 +36,8 @@ extension Mapper {
 
     /// `mapper textures [on|off]` — toggle the tiled per-area background
     /// texture (the reference's "Area Textures" config). Image files come
-    /// from `~/Documents/Proteles/MapImages/`; none ship with Proteles (#11).
+    /// from `~/Documents/Proteles/MapImages/`, falling back to the bundled
+    /// generated defaults (DefaultMapTextures — no external assets, #11).
     private func texturesCommand(_ arg: String) -> [ScriptEffect] {
         switch arg.lowercased() {
         case "on": setUseTextures(true); return [Self.note("Area textures: on.")]

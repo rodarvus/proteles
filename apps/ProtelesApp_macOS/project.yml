@@ -38,6 +38,13 @@ targets:
       # ~/Documents/Proteles/Sounds/ always overrides.
       - path: Resources/DefaultSounds
         type: folder
+      # Bundled default map textures (#11) — generated from scratch by
+      # scripts/generate-map-textures.swift (seeded noise, no external assets;
+      # see Resources/DefaultMapTextures/PROVENANCE.md). Copied to
+      # Contents/Resources/DefaultMapTextures/; a same-named file in the
+      # user's ~/Documents/Proteles/MapImages/ always overrides.
+      - path: Resources/DefaultMapTextures
+        type: folder
     info:
       path: Info.plist
       properties:
