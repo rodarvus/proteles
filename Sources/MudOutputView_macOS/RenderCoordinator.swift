@@ -42,11 +42,25 @@
         public let flushDuration: Duration
         public let appendedLines: Int
         public let maxArrivalLatency: TimeInterval
+        /// Live document size after this flush (#65 follow-up): the line FIFO
+        /// count and the NSTextStorage UTF-16 length. In the field these are
+        /// the datum that separates "eviction broken → unbounded document"
+        /// from "fixed-size document degrading" when flushes slow down.
+        public let documentLines: Int
+        public let documentUTF16Length: Int
 
-        public init(flushDuration: Duration, appendedLines: Int, maxArrivalLatency: TimeInterval) {
+        public init(
+            flushDuration: Duration,
+            appendedLines: Int,
+            maxArrivalLatency: TimeInterval,
+            documentLines: Int = 0,
+            documentUTF16Length: Int = 0
+        ) {
             self.flushDuration = flushDuration
             self.appendedLines = appendedLines
             self.maxArrivalLatency = maxArrivalLatency
+            self.documentLines = documentLines
+            self.documentUTF16Length = documentUTF16Length
         }
     }
 
@@ -62,7 +76,28 @@
         /// remains engaged.
         public var autoScrollThreshold: CGFloat = 32
 
+        /// Self-healing (#65, 2026-06-12 hang #2): when the median of recent
+        /// flush durations crosses this, the storage is rebuilt wholesale
+        /// from the store snapshot — resetting whatever TextKit-internal
+        /// state degraded. The two field hangs ramped 15→84 ms before a 22 s
+        /// cliff; 25 ms catches the ramp early at ~5× the healthy baseline.
+        public var rebuildMedianThresholdMs = 25.0
+        /// Minimum spacing between rebuilds (a rebuild is a ~100 ms blip; if
+        /// medians stay bad despite rebuilding, re-rebuilding faster won't
+        /// help and would stutter).
+        public var rebuildMinInterval: Duration = .seconds(60)
+        /// Fired when a self-heal rebuild happens: (documentLines,
+        /// documentUTF16Length, medianFlushMs) — the app logs it to the
+        /// transcript so field sessions record every heal.
+        public var onRebuild: ((Int, Int, Double) -> Void)?
+
+        /// Ring of recent flush durations (ms) for the healing median.
+        private var recentFlushMs: Deque<Double> = []
+        private var lastRebuild: ContinuousClock.Instant = .now
+
         private weak var textView: NSTextView?
+        /// The attached store, kept for the self-heal rebuild (#65).
+        private weak var store: ScrollbackStore?
         private let builder: AttributedStringBuilder
         private let frameInterval: Duration
         private var pendingEvents: [ScrollbackEvent] = []
@@ -114,6 +149,17 @@
         /// with the store's eviction order.
         public func attach(to store: ScrollbackStore) async {
             detach()
+            self.store = store
+            // Clear any prior rendered state so attach is a full reset — a
+            // fresh view starts empty anyway, and the self-heal path (#65)
+            // re-attaches to the SAME view to rebuild its storage.
+            if let storage = textView?.textStorage {
+                storage.setAttributedString(NSAttributedString())
+            }
+            lineLengths.removeAll()
+            recentLines.removeAll()
+            pendingEvents.removeAll()
+            recentFlushMs.removeAll()
             // Atomically grab the resident lines + a live event stream, then
             // render the existing buffer up front — so a freshly (re)created
             // view (e.g. after a font-size change) isn't blank.
@@ -273,11 +319,57 @@
             }
             if didAppend { refreshTail() }
 
+            finishFlush(
+                start: start,
+                appendedCount: appendedCount,
+                maxArrivalLatency: maxArrivalLatency,
+                documentUTF16Length: storage.length
+            )
+        }
+
+        /// Emit the frame telemetry and feed the self-heal monitor (split
+        /// from ``flushPending`` for the function-length budget).
+        private func finishFlush(
+            start: ContinuousClock.Instant,
+            appendedCount: Int,
+            maxArrivalLatency: TimeInterval,
+            documentUTF16Length: Int
+        ) {
+            let flushDuration = ContinuousClock.now - start
             onFrameFlush?(RenderFrameStats(
-                flushDuration: ContinuousClock.now - start,
+                flushDuration: flushDuration,
                 appendedLines: appendedCount,
-                maxArrivalLatency: maxArrivalLatency
+                maxArrivalLatency: maxArrivalLatency,
+                documentLines: lineLengths.count,
+                documentUTF16Length: documentUTF16Length
             ))
+            healIfDegraded(flushDuration)
+        }
+
+        /// Self-healing (#65): track recent flush costs; if the median
+        /// degrades past ``rebuildMedianThresholdMs`` while a real document
+        /// is up, rebuild the storage wholesale from the store snapshot —
+        /// resetting whatever TextKit-internal state the two 2026-06-12
+        /// field hangs accumulated (their ramp was 15→84 ms over an hour
+        /// before a 22 s cliff; the rebuild costs a one-time ~100 ms).
+        private func healIfDegraded(_ flushDuration: Duration) {
+            let ms = Double(flushDuration.components.seconds) * 1000
+                + Double(flushDuration.components.attoseconds) / 1e15
+            recentFlushMs.append(ms)
+            if recentFlushMs.count > 32 { _ = recentFlushMs.popFirst() }
+            guard recentFlushMs.count >= 16,
+                  lineLengths.count > 500,
+                  ContinuousClock.now - lastRebuild > rebuildMinInterval,
+                  let store
+            else { return }
+            let sorted = recentFlushMs.sorted()
+            let median = sorted[sorted.count / 2]
+            guard median > rebuildMedianThresholdMs else { return }
+            lastRebuild = .now
+            onRebuild?(lineLengths.count, textView?.textStorage?.length ?? 0, median)
+            Task { @MainActor [weak self] in
+                await self?.attach(to: store)
+            }
         }
 
         /// Pin the view to the bottom. We scroll immediately *and* again on the
