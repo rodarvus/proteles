@@ -53,6 +53,9 @@ struct ContentView: View {
     /// Recent output lines (plain text), the word source for Tab completion.
     /// A reference holder so appends don't trigger a view re-render.
     @State var recentLines = RecentLineBuffer()
+    /// Latest render-frame stats, held by reference (no re-render per flush);
+    /// feeds the 10-minute render-health transcript note (#65 follow-up).
+    @State var renderStats = RenderStatsBox()
     /// dinv item-keyword cache for `wear`/`wield`/… completion (#32 B).
     @State var itemCompletions = ItemCompletionCache()
     /// Installed plugins' verb + subcommand grammar for completion (#31).
@@ -174,6 +177,9 @@ struct ContentView: View {
         // Main-thread stall monitor (perf diagnostics) — logs UI-thread hitches
         // to the session transcript. Body lives in the extension (type budget).
         .task { await monitorMainThreadStalls() }
+        // Periodic render-health note: proves in the transcript whether the
+        // rendered document stays capped over a long session (#65 follow-up).
+        .task { await renderHealthLoop() }
         .task {
             for await snapshot in await session.gmcpState.subscribe() {
                 gmcp.state = snapshot
@@ -308,7 +314,10 @@ struct ContentView: View {
                 fontName: outputFontName,
                 findable: true, // ⌘F find-in-scrollback (D-104)
                 onCommand: { command in Task { try? await session.send(command) } },
-                onFrameFlush: { stats in logSlowFrame(stats) }
+                onFrameFlush: { stats in logSlowFrame(stats) },
+                onRebuild: { lines, length, median in
+                    logStorageRebuild(lines: lines, utf16Length: length, medianMs: median)
+                }
             )
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
@@ -517,43 +526,6 @@ extension ContentView {
     }
 
     /// Map a panel kind to its live view (the layout engine supplies chrome).
-    /// A ~500ms MainActor heartbeat; a late wake means the UI thread was blocked
-    /// that long, logged to the transcript so perf hitches are visible in a
-    /// recording. Cheap (one wake/500ms; logs only on a real stall).
-    func monitorMainThreadStalls() async {
-        // A 50 ms heartbeat resolves the sub-second hitches that make movement
-        // feel "jagged" (a 500 ms beat can't even see a 150 ms block). Log when
-        // a wake overruns its budget by >80 ms — i.e. the main thread was busy
-        // that long — so a recording timestamps each hitch. (Perf diagnosis.)
-        let beat = Duration.milliseconds(50)
-        let budget = beat / .milliseconds(1) / 1000 // seconds
-        var last = Date()
-        while !Task.isCancelled {
-            try? await Task.sleep(for: beat)
-            let now = Date()
-            let overrun = now.timeIntervalSince(last) - budget
-            last = now
-            if overrun > 0.08 {
-                await session.recordNote("UI stall: main thread blocked ~\(Int(overrun * 1000))ms")
-            }
-        }
-    }
-
-    /// Perf probe: log only frames that overran a 60 fps paint budget *or*
-    /// showed a high arrival→paint latency, so the transcript reveals jagged
-    /// hitches without noise. The flush runs on the main actor, so a slow one
-    /// directly stutters the scroll; a high arrival→paint latency with a *low*
-    /// flush time means the stall is upstream (GMCP dispatch / queueing), not the
-    /// paint. (Diagnosis — perf arc.)
-    func logSlowFrame(_ stats: RenderFrameStats) {
-        let flushMS = stats.flushDuration / .milliseconds(1)
-        let latencyMS = stats.maxArrivalLatency * 1000
-        guard flushMS > 12 || latencyMS > 120 else { return }
-        let note = "render: \(stats.appendedLines) line(s) "
-            + "flush \(Int(flushMS))ms arrival→paint \(Int(latencyMS))ms"
-        Task { await session.recordNote(note) }
-    }
-
     func panelContent(_ kind: PanelKind) -> AnyView {
         switch kind {
         case .output: AnyView(gameColumn)
@@ -570,30 +542,5 @@ extension ContentView {
                 scripts.requestButtonsTab()
             }))
         }
-    }
-}
-
-/// A small bounded ring of recent output lines (plain text) — the word source
-/// for Tab completion. A reference type so the scrollback subscription can
-/// append without triggering a SwiftUI re-render of ``ContentView``.
-@MainActor
-final class RecentLineBuffer {
-    private var lines: [String] = []
-    private let capacity: Int
-
-    init(capacity: Int = 250) {
-        self.capacity = capacity
-    }
-
-    func append(_ text: String) {
-        lines.append(text)
-        if lines.count > capacity {
-            lines.removeFirst(lines.count - capacity)
-        }
-    }
-
-    /// Oldest-first, as ``InputCompletion/harvestWords`` expects.
-    var snapshot: [String] {
-        lines
     }
 }

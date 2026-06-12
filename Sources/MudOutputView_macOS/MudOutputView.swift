@@ -24,6 +24,10 @@
         /// text-render frames to the session transcript (perf diagnosis — see
         /// ``RenderCoordinator/RenderFrameStats``).
         private let onFrameFlush: ((RenderFrameStats) -> Void)?
+        /// Self-heal probe (#65): invoked when the coordinator rebuilds its
+        /// storage after flush medians degrade — (lines, utf16Length,
+        /// medianMs), logged to the transcript by the app.
+        private let onRebuild: ((Int, Int, Double) -> Void)?
         /// Opt this instance's history view into ⌘F (the system find bar,
         /// D-104). Exactly one view per window should be findable, so
         /// ``MudOutputFindBar`` can locate it unambiguously — the app turns
@@ -38,7 +42,8 @@
             showsLiveTail: Bool = true,
             findable: Bool = false,
             onCommand: ((String) -> Void)? = nil,
-            onFrameFlush: ((RenderFrameStats) -> Void)? = nil
+            onFrameFlush: ((RenderFrameStats) -> Void)? = nil,
+            onRebuild: ((Int, Int, Double) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
@@ -48,6 +53,7 @@
             self.findable = findable
             self.onCommand = onCommand
             self.onFrameFlush = onFrameFlush
+            self.onRebuild = onRebuild
         }
 
         /// The base output font: the named family if available, else the system
@@ -88,6 +94,7 @@
             if !showsLiveTail {
                 let coordinator = RenderCoordinator(textView: textView, palette: palette)
                 coordinator.onFrameFlush = onFrameFlush
+                coordinator.onRebuild = onRebuild
                 context.coordinator.renderCoordinator = coordinator
                 let storeRef = store
                 Task { @MainActor in
@@ -123,6 +130,7 @@
             let coordinator = RenderCoordinator(textView: textView, palette: palette)
             coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
             coordinator.onFrameFlush = onFrameFlush
+            coordinator.onRebuild = onRebuild
             context.coordinator.renderCoordinator = coordinator
             let storeRef = store
             Task { @MainActor in
