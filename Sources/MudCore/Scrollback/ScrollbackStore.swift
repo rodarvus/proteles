@@ -39,7 +39,13 @@ public actor ScrollbackStore {
     private var lineSubscribers: [UUID: AsyncStream<Line>.Continuation] = [:]
     private var eventSubscribers: [UUID: AsyncStream<ScrollbackEvent>.Continuation] = [:]
 
-    public init(maxLines: Int = 50000) {
+    /// 10k default (#65): the rendered `NSTextStorage` mirrors this store,
+    /// and TextKit 2's per-flush viewport layout cost grows with document
+    /// size — at the old 50k default a six-hour combat session saturated the
+    /// main thread (100% CPU in run-storage enumeration) until force-quit.
+    /// 10k is double MUSHclient's shipped 5k output buffer; older history
+    /// lives in scrollback.sqlite (search + resume), not the live view.
+    public init(maxLines: Int = 10000) {
         precondition(maxLines > 0, "maxLines must be positive")
         self.maxLines = maxLines
     }
