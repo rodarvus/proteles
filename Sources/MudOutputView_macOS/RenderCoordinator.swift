@@ -288,8 +288,17 @@
         /// deferred pass runs after layout settles and lands on the real bottom.
         private func scrollToBottom(_ textView: NSTextView) {
             textView.scrollToEndOfDocument(nil)
-            DispatchQueue.main.async { [weak textView] in
-                textView?.scrollToEndOfDocument(nil)
+            DispatchQueue.main.async { [weak textView, weak self] in
+                guard let textView, let self else { return }
+                // Only pay the second scroll when the immediate one actually
+                // landed short. `scrollToEndOfDocument` on a big document
+                // walks TextKit 2's run storage to estimate the target
+                // location (#65 — the 100%-CPU hang's hot frame), so the
+                // common already-at-bottom case must be a cheap geometry
+                // check, not a second walk.
+                if !isScrolledToBottom(textView) {
+                    textView.scrollToEndOfDocument(nil)
+                }
             }
         }
 
