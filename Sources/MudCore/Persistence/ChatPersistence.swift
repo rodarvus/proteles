@@ -20,9 +20,15 @@ public actor ChatPersistence {
     private var flushTask: Task<Void, Never>?
     private let logger = Logger(label: "\(MudCore.loggerLabel).chat-persistence")
 
+    /// 60 s default (#66): chat volume is tiny, but a 250 ms transaction
+    /// cadence pays the same WAL+FTS write amplification per commit as
+    /// scrollback did. The loss window on a hard crash is ≤ one interval of
+    /// *chat-window* history (the lines still exist in the scrollback
+    /// sidecar and the transcript); a graceful quit flushes everything via
+    /// ``detach()``/``flushNow()``.
     public init(
         database: ChatDatabase,
-        flushInterval: Duration = .milliseconds(250)
+        flushInterval: Duration = .seconds(60)
     ) {
         self.database = database
         self.flushInterval = flushInterval
