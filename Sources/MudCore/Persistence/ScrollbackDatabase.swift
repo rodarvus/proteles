@@ -215,6 +215,52 @@ public final class ScrollbackDatabase: Sendable {
             )
         }
 
+        // v3 (#66): the cold-path index cursor. The sidecar is the hot path
+        // now; this records the highest sidecar `seq` already ingested, so a
+        // launch after a crash knows exactly which sidecar entries the index
+        // is missing.
+        migrator.registerMigration("v3.meta") { db in
+            try db.execute(sql: """
+            CREATE TABLE proteles_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)
+            """)
+        }
+
         return migrator
+    }
+
+    // MARK: - Index cursor (#66)
+
+    /// The highest sidecar sequence number already indexed, or nil if none.
+    public func indexedThroughSeq() throws -> UInt64? {
+        do {
+            return try dbQueue.read { db in
+                let value = try String.fetchOne(
+                    db, sql: "SELECT value FROM proteles_meta WHERE key = 'indexed_seq'"
+                )
+                return value.flatMap(UInt64.init)
+            }
+        } catch {
+            throw DatabaseError.readFailed(error.localizedDescription)
+        }
+    }
+
+    /// One cold-path index transaction (#66): insert the batch AND advance
+    /// the cursor atomically, so a crash can never leave the cursor ahead of
+    /// the rows (behind is fine — reconciliation re-indexes, worst case a
+    /// few duplicate rows from a torn batch, never lost ones).
+    public func insertSidecarBatch(_ lines: [PersistedLine], through seq: UInt64) throws {
+        do {
+            try dbQueue.write { db in
+                for line in lines {
+                    try line.insert(db)
+                }
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO proteles_meta (key, value) VALUES ('indexed_seq', ?)",
+                    arguments: [String(seq)]
+                )
+            }
+        } catch {
+            throw DatabaseError.writeFailed(error.localizedDescription)
+        }
     }
 }

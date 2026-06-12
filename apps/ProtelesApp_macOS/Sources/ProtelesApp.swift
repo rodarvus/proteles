@@ -88,27 +88,10 @@ struct ProtelesApp: App {
         // changes back (#43).
         PreferencesFile.shared.start()
 
-        // Scrollback persistence.
-        let persistence: ScrollbackPersistence?
-        do {
-            let location = try ScrollbackDatabase.defaultLocation()
-            let database = try ScrollbackDatabase(url: location)
-            persistence = ScrollbackPersistence(database: database)
-        } catch {
-            NSLog("[Proteles] persistence init failed: \(error)")
-            persistence = nil
-        }
+        // Scrollback + chat persistence (split out for the init-length budget).
+        let persistence = Self.makeScrollbackPersistence()
         self.persistence = persistence
-
-        // Chat persistence (#57): same shape, its own database + retention.
-        let chatPersistence: ChatPersistence?
-        do {
-            let chatDatabase = try ChatDatabase(url: ChatDatabase.defaultLocation())
-            chatPersistence = ChatPersistence(database: chatDatabase)
-        } catch {
-            NSLog("[Proteles] chat persistence init failed: \(error)")
-            chatPersistence = nil
-        }
+        let chatPersistence = Self.makeChatPersistence()
         self.chatPersistence = chatPersistence
 
         // Scripting engine → session. A failed Lua init disables scripting
@@ -161,7 +144,9 @@ struct ProtelesApp: App {
         // "Show All Tabs" menu items don't clutter the menu bar.
         NSWindow.allowsAutomaticWindowTabbing = false
 
-        Self.wireTerminationSave(session: session)
+        Self.wireTerminationSave(
+            session: session, persistence: persistence, chatPersistence: chatPersistence
+        )
 
         // Opt-in crash/hang diagnostics (MetricKit): subscribe iff the user has
         // enabled it. MetricKit delivers any pending payload shortly after launch.
@@ -386,12 +371,52 @@ struct ProtelesApp: App {
         }
     }
 
+    /// Scrollback persistence (#66): hot path = the sidecar ring (crash
+    /// safety, 250 ms appends); cold path = SQLite/FTS indexing in big 60 s
+    /// transactions. A failed init disables persistence, never the app.
+    private static func makeScrollbackPersistence() -> ScrollbackPersistence? {
+        do {
+            let database = try ScrollbackDatabase(url: ScrollbackDatabase.defaultLocation())
+            return ScrollbackPersistence(
+                database: database,
+                sidecarURL: try? ScrollbackSidecar.defaultURL()
+            )
+        } catch {
+            NSLog("[Proteles] persistence init failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Chat persistence (#57): its own database + 30-day retention; cold
+    /// 60 s flush cadence (#66).
+    private static func makeChatPersistence() -> ChatPersistence? {
+        do {
+            return try ChatPersistence(
+                database: ChatDatabase(url: ChatDatabase.defaultLocation())
+            )
+        } catch {
+            NSLog("[Proteles] chat persistence init failed: \(error)")
+            return nil
+        }
+    }
+
     /// Save plugin state on quit (OnPluginSaveState + variable persist) —
     /// disconnect already saves; quitting while connected must too (`ldb on`
-    /// was lost this way). Wired via ``AppDelegate/onTerminate``.
-    private static func wireTerminationSave(session: SessionController) {
+    /// was lost this way). Also drains both persistence cold paths (#66:
+    /// index/chat flush every 60 s, so a quit mid-interval would otherwise
+    /// leave up to a minute unindexed/unwritten). Wired via
+    /// ``AppDelegate/onTerminate``.
+    private static func wireTerminationSave(
+        session: SessionController,
+        persistence: ScrollbackPersistence?,
+        chatPersistence: ChatPersistence?
+    ) {
         Task { @MainActor in
-            AppDelegate.onTerminate = { await session.savePluginState() }
+            AppDelegate.onTerminate = {
+                await session.savePluginState()
+                await persistence?.flushNow()
+                await chatPersistence?.flushNow()
+            }
         }
     }
 
