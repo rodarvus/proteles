@@ -113,8 +113,8 @@ public struct MapLayout: Sendable, Equatable {
     /// Background texture filename for the current room's area, drawn tiled
     /// behind the map (the reference mapper's per-area `texture` with its
     /// `test5.png` room-level default) — nil when textures are off. The view
-    /// resolves the name against `~/Documents/Proteles/MapImages/`; a missing
-    /// file means a plain background (Proteles ships no image assets, #11).
+    /// resolves the name against `~/Documents/Proteles/MapImages/`, then the
+    /// bundled generated defaults (#11); missing both means a plain background.
     public let areaTexture: String?
     /// Set while the player is overland (GMCP `coord.cont == 1`): the graph
     /// fan-out is meaningless there, so the layout carries no rooms and the
