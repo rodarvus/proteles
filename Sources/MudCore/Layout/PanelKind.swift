@@ -18,6 +18,8 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case channels
     /// Search-and-Destroy targets/navigation.
     case hunt
+    /// The room's mobs with difficulty tiers (native Consider feature).
+    case consider
     /// Character summary (stats / resources / vitals / foe).
     case info
     /// Group / party monitor (per-member vitals + quest).
@@ -41,6 +43,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .asciiMap: "Text Map"
         case .channels: "Channels"
         case .hunt: "Search & Destroy"
+        case .consider: "Consider"
         case .info: "Character"
         case .group: "Group"
         case .help: "Help"
@@ -57,6 +60,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .asciiMap: "Text"
         case .channels: "Chat"
         case .hunt: "S&D"
+        case .consider: "Cons"
         case .info: "Char"
         case .group: "Group"
         case .help: "Help"
@@ -73,6 +77,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .asciiMap: "square.grid.3x3"
         case .channels: "bubble.left.and.bubble.right"
         case .hunt: "scope"
+        case .consider: "list.bullet.rectangle"
         case .info: "person.text.rectangle"
         case .group: "person.3"
         case .help: "questionmark.circle"
@@ -92,7 +97,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     /// doesn't collapse to nothing?
     public var floatingHugsContent: Bool {
         switch self {
-        case .asciiMap, .commandBar, .info, .group: true
+        case .asciiMap, .commandBar, .info, .group, .consider: true
         default: false
         }
     }

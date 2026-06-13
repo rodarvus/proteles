@@ -83,6 +83,12 @@ public actor SessionController {
     public nonisolated let publishedModels: AsyncStream<String>
     nonisolated let publishedModelsContinuation: AsyncStream<String>.Continuation
 
+    /// Snapshots the native Consider feature published (room-mob list + control
+    /// state) — the floating Consider panel subscribes and renders the latest.
+    /// Newest-only.
+    public nonisolated let publishedConsider: AsyncStream<ConsiderSnapshot>
+    nonisolated let publishedConsiderContinuation: AsyncStream<ConsiderSnapshot>.Continuation
+
     /// Captured in-game help articles (Rich Exits' sibling — see ``HelpParser``);
     /// the Help panel subscribes and renders the latest. Newest-only.
     public nonisolated let helpArticles: AsyncStream<HelpArticle>
@@ -406,6 +412,8 @@ public actor SessionController {
         )
         publishedModels = models
         publishedModelsContinuation = modelsContinuation
+        (publishedConsider, publishedConsiderContinuation) =
+            AsyncStream<ConsiderSnapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (helpArticles, helpArticlesContinuation) =
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (notifications, notificationsContinuation) =

@@ -86,6 +86,14 @@ public struct ConsiderModel: Sendable, Equatable {
         considering = false
     }
 
+    /// Empty the list and abandon any capture (used for safe rooms / ignored
+    /// zones, where there's nothing to consider).
+    public mutating func clear() {
+        mobs = []
+        waitingForStart = false
+        considering = false
+    }
+
     // MARK: - Line ingestion
 
     /// Feed one incoming line. `zone` (current `room.info.zone`) gates ignored
