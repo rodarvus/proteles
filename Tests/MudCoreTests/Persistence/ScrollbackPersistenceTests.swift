@@ -2,15 +2,18 @@ import Foundation
 @testable import MudCore
 import Testing
 
+/// ``ScrollbackPersistence`` is now sidecar-only (#65 follow-up: the SQLite/FTS
+/// index was removed). These cover the store → sidecar flow, graceful-shutdown
+/// flushing, styled-run round-trips, and the resume tail.
 @Suite("ScrollbackPersistence", .serialized)
 struct ScrollbackPersistenceTests {
-    @Test("Appended lines are flushed to the database")
+    @Test("Appended lines are flushed to the sidecar")
     func appendedLinesArePersisted() async throws {
-        let url = temporaryDatabaseURL()
-        let database = try ScrollbackDatabase(url: url)
+        let url = temporarySidecarURL()
+        defer { try? cleanup(url: url) }
         let store = ScrollbackStore()
         let persistence = ScrollbackPersistence(
-            database: database,
+            sidecarURL: url,
             flushInterval: .milliseconds(20)
         )
         await persistence.attach(to: store)
@@ -22,22 +25,21 @@ struct ScrollbackPersistenceTests {
         try await Task.sleep(for: .milliseconds(80))
         await persistence.flushNow()
 
-        let lines = try database.mostRecent(limit: 10)
-        #expect(lines.map(\.text) == ["first", "second"])
+        let entries = ScrollbackSidecar(url: url).tail(limit: 10)
+        #expect(entries.map(\.text) == ["first", "second"])
 
         await persistence.detach()
-        try cleanup(url: url)
     }
 
     @Test("detach() flushes buffered writes (graceful shutdown)")
     func detachFlushesBuffer() async throws {
-        let url = temporaryDatabaseURL()
-        let database = try ScrollbackDatabase(url: url)
+        let url = temporarySidecarURL()
+        defer { try? cleanup(url: url) }
         let store = ScrollbackStore()
-        // A long flush interval ensures the buffer holds the writes
-        // until detach() forces a flush.
+        // A long flush interval ensures the buffer holds the writes until
+        // detach() forces a flush.
         let persistence = ScrollbackPersistence(
-            database: database,
+            sidecarURL: url,
             flushInterval: .seconds(60)
         )
         await persistence.attach(to: store)
@@ -50,41 +52,17 @@ struct ScrollbackPersistenceTests {
 
         await persistence.detach()
 
-        let lines = try database.mostRecent(limit: 10)
-        #expect(lines.map(\.text) == (0..<5).map { "line-\($0)" })
-        try cleanup(url: url)
+        let entries = ScrollbackSidecar(url: url).tail(limit: 10)
+        #expect(entries.map(\.text) == (0..<5).map { "line-\($0)" })
     }
 
-    @Test("Search round-trips a persisted line")
-    func searchFindsAPersistedLine() async throws {
-        let url = temporaryDatabaseURL()
-        let database = try ScrollbackDatabase(url: url)
-        let store = ScrollbackStore()
-        let persistence = ScrollbackPersistence(
-            database: database,
-            flushInterval: .milliseconds(20)
-        )
-        await persistence.attach(to: store)
-
-        await store.append(text: "the misty wolf approaches.")
-        await store.append(text: "an ogre roars.")
-        try await Task.sleep(for: .milliseconds(80))
-        await persistence.flushNow()
-
-        let hits = try await persistence.search("wolf")
-        #expect(hits.map(\.text) == ["the misty wolf approaches."])
-
-        await persistence.detach()
-        try cleanup(url: url)
-    }
-
-    @Test("Styled runs survive a store → persistence → DB → restore round-trip")
+    @Test("Styled runs survive a store → persistence → sidecar → restore round-trip")
     func styledRunsSurviveRoundTrip() async throws {
-        let url = temporaryDatabaseURL()
-        let database = try ScrollbackDatabase(url: url)
+        let url = temporarySidecarURL()
+        defer { try? cleanup(url: url) }
         let store = ScrollbackStore()
         let persistence = ScrollbackPersistence(
-            database: database,
+            sidecarURL: url,
             flushInterval: .milliseconds(20)
         )
         await persistence.attach(to: store)
@@ -99,21 +77,20 @@ struct ScrollbackPersistenceTests {
         try await Task.sleep(for: .milliseconds(80))
         await persistence.flushNow()
 
-        let lines = try database.mostRecent(limit: 1)
-        let restored = try lines[0].toLine()
-        #expect(restored.text == "you hit the troll for 42 damage.")
-        #expect(restored.runs == [StyledRun(utf16Range: 13..<18, style: bold)])
+        let restored = await persistence.loadTail(limit: 1)
+        #expect(restored.count == 1)
+        #expect(restored[0].text == "you hit the troll for 42 damage.")
+        #expect(restored[0].runs == [StyledRun(utf16Range: 13..<18, style: bold)])
 
         await persistence.detach()
-        try cleanup(url: url)
     }
 
     @Test("loadTail returns the most recent lines oldest-first, read-only (#42)")
     func loadTailRestoresRecentLines() async throws {
-        let url = temporaryDatabaseURL()
-        let database = try ScrollbackDatabase(url: url)
+        let url = temporarySidecarURL()
+        defer { try? cleanup(url: url) }
         let store = ScrollbackStore()
-        let persistence = ScrollbackPersistence(database: database, flushInterval: .milliseconds(20))
+        let persistence = ScrollbackPersistence(sidecarURL: url, flushInterval: .milliseconds(20))
         await persistence.attach(to: store)
         for text in ["one", "two", "three"] {
             await store.append(text: text)
@@ -121,30 +98,25 @@ struct ScrollbackPersistenceTests {
         try await Task.sleep(for: .milliseconds(80))
         await persistence.flushNow()
 
-        let restored = try await persistence.loadTail(limit: 2)
+        let restored = await persistence.loadTail(limit: 2)
         #expect(restored.map(\.text) == ["two", "three"]) // last two, oldest-first
 
-        // Read-only: the DB still holds exactly the three originals (restoring
-        // must not re-persist).
-        #expect(try database.count() == 3)
+        // Read-only: the sidecar still holds exactly the three originals
+        // (restoring must not re-persist).
+        #expect(ScrollbackSidecar(url: url).tail(limit: 10).count == 3)
 
         await persistence.detach()
-        try cleanup(url: url)
     }
 }
 
 // MARK: - Helpers
 
-private func temporaryDatabaseURL() -> URL {
+private func temporarySidecarURL() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent(
-        "proteles-persistence-test-\(UUID().uuidString).sqlite"
+        "proteles-persistence-test-\(UUID().uuidString).jsonl"
     )
 }
 
 private func cleanup(url: URL) throws {
-    let fileManager = FileManager.default
-    for suffix in ["", "-wal", "-shm"] {
-        let candidate = URL(fileURLWithPath: url.path + suffix)
-        try? fileManager.removeItem(at: candidate)
-    }
+    try? FileManager.default.removeItem(at: url)
 }

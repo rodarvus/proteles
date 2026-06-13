@@ -371,16 +371,14 @@ struct ProtelesApp: App {
         }
     }
 
-    /// Scrollback persistence (#66): hot path = the sidecar ring (crash
-    /// safety, 250 ms appends); cold path = SQLite/FTS indexing in big 60 s
-    /// transactions. A failed init disables persistence, never the app.
+    /// Scrollback persistence (#66 → #65 follow-up): a flat JSONL sidecar ring
+    /// (crash safety, 250 ms appends) that backs the resume tail. The former
+    /// SQLite/FTS index was removed — it caused write-amplification incidents
+    /// and had no UI consumer (see ``ScrollbackPersistence``). A failed init
+    /// disables persistence, never the app.
     private static func makeScrollbackPersistence() -> ScrollbackPersistence? {
         do {
-            let database = try ScrollbackDatabase(url: ScrollbackDatabase.defaultLocation())
-            return ScrollbackPersistence(
-                database: database,
-                sidecarURL: try? ScrollbackSidecar.defaultURL()
-            )
+            return try ScrollbackPersistence(sidecarURL: ScrollbackSidecar.defaultURL())
         } catch {
             NSLog("[Proteles] persistence init failed: \(error)")
             return nil
