@@ -24,8 +24,8 @@ extension ProtelesApp {
         if let persistence {
             Task {
                 // Seed the restored tail BEFORE attaching persistence so it isn't
-                // written to the DB again (it's already there).
-                let tail = await resuming ? ((try? persistence.loadTail(limit: 400)) ?? []) : []
+                // written to the sidecar again (it's already there).
+                let tail = resuming ? await persistence.loadTail(limit: 400) : []
                 for line in tail {
                     await store.append(text: line.text, runs: line.runs)
                 }

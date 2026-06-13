@@ -50,7 +50,7 @@ public final class ScrollbackSidecar {
     public let url: URL
     public let targetLines: Int
     /// The next sequence number to assign (continues across launches).
-    public private(set) var nextSeq: UInt64
+    private var nextSeq: UInt64
 
     private var entryCount: Int
     private let encoder = JSONEncoder()
@@ -116,14 +116,6 @@ public final class ScrollbackSidecar {
     public func tail(limit: Int) -> [Entry] {
         let all = Self.decode(url: url)
         return Array(all.suffix(max(0, limit)))
-    }
-
-    /// Entries with `seq` strictly greater than `seq` (launch reconciliation:
-    /// everything the cold-path index hasn't ingested yet).
-    public func entries(after seq: UInt64?) -> [Entry] {
-        let all = Self.decode(url: url)
-        guard let seq else { return all }
-        return all.filter { $0.seq > seq }
     }
 
     // MARK: - Private

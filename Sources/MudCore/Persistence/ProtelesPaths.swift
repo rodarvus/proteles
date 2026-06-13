@@ -152,11 +152,6 @@ public enum ProtelesPaths {
         try stateDirectory(fileManager: fileManager).appendingPathComponent("resume.json")
     }
 
-    /// `State/scrollback.sqlite` — the rendered-output history DB.
-    public static func scrollbackFile(fileManager: FileManager = .default) throws -> URL {
-        try stateDirectory(fileManager: fileManager).appendingPathComponent("scrollback.sqlite")
-    }
-
     /// `State/chat.sqlite` — the Chat window's channel-capture history DB (#57).
     public static func chatFile(fileManager: FileManager = .default) throws -> URL {
         try stateDirectory(fileManager: fileManager).appendingPathComponent("chat.sqlite")
