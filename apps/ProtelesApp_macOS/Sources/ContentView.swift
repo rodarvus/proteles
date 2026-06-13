@@ -314,10 +314,7 @@ struct ContentView: View {
                 fontName: outputFontName,
                 findable: true, // ⌘F find-in-scrollback (D-104)
                 onCommand: { command in Task { try? await session.send(command) } },
-                onFrameFlush: { stats in logSlowFrame(stats) },
-                onRebuild: { lines, length, median in
-                    logStorageRebuild(lines: lines, utf16Length: length, medianMs: median)
-                }
+                onFrameFlush: { stats in logSlowFrame(stats) }
             )
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(outputFontName)|\(outputFontSize)")

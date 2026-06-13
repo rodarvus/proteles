@@ -76,28 +76,32 @@
         /// remains engaged.
         public var autoScrollThreshold: CGFloat = 32
 
-        /// Self-healing (#65, 2026-06-12 hang #2): when the median of recent
-        /// flush durations crosses this, the storage is rebuilt wholesale
-        /// from the store snapshot — resetting whatever TextKit-internal
-        /// state degraded. The two field hangs ramped 15→84 ms before a 22 s
-        /// cliff; 25 ms catches the ramp early at ~5× the healthy baseline.
-        public var rebuildMedianThresholdMs = 25.0
-        /// Minimum spacing between rebuilds (a rebuild is a ~100 ms blip; if
-        /// medians stay bad despite rebuilding, re-rebuilding faster won't
-        /// help and would stutter).
-        public var rebuildMinInterval: Duration = .seconds(60)
-        /// Fired when a self-heal rebuild happens: (documentLines,
-        /// documentUTF16Length, medianFlushMs) — the app logs it to the
-        /// transcript so field sessions record every heal.
-        public var onRebuild: ((Int, Int, Double) -> Void)?
+        /// Render-side eviction batching (#65 follow-up). The store evicts at
+        /// its `maxLines` cap and emits one `.evicted` per line; naively we
+        /// deleted that line from the TOP of the `NSTextStorage` on the same
+        /// flush. But a delete at offset 0 invalidates TextKit 2's layout for
+        /// the entire document, and the `scrollToEndOfDocument` that follows
+        /// then estimates the end position over un-laid-out content — landing
+        /// thousands of lines off and jumping the view, then crawling back as
+        /// layout settles. The field signature is unmistakable: the jumping
+        /// begins only after ~45–60 min, i.e. exactly when scrollback fills
+        /// the cap and per-flush eviction starts.
+        ///
+        /// So we DEFER the top-delete: evicted lines stay rendered until
+        /// `evictionBatch` of them accumulate, then we trim them in one edit —
+        /// turning a per-flush invalidation into one per `evictionBatch` lines.
+        /// (Mudlet does exactly this: `TBuffer.mBatchDeleteSize = 1000`.) The
+        /// rendered document is bounded at the store's cap + `evictionBatch`.
+        public var evictionBatch = 1000
 
-        /// Ring of recent flush durations (ms) for the healing median.
-        private var recentFlushMs: Deque<Double> = []
-        private var lastRebuild: ContinuousClock.Instant = .now
+        /// Number of leading ``lineLengths`` entries the store has evicted but
+        /// we have not yet deleted from the `NSTextStorage` (see
+        /// ``evictionBatch``). The first `evictionBacklog` rendered lines are
+        /// logically gone; they're trimmed in one delete once a full batch
+        /// accumulates.
+        private var evictionBacklog = 0
 
         private weak var textView: NSTextView?
-        /// The attached store, kept for the self-heal rebuild (#65).
-        private weak var store: ScrollbackStore?
         private let builder: AttributedStringBuilder
         private let frameInterval: Duration
         private var pendingEvents: [ScrollbackEvent] = []
@@ -149,17 +153,17 @@
         /// with the store's eviction order.
         public func attach(to store: ScrollbackStore) async {
             detach()
-            self.store = store
-            // Clear any prior rendered state so attach is a full reset — a
-            // fresh view starts empty anyway, and the self-heal path (#65)
-            // re-attaches to the SAME view to rebuild its storage.
+            // Clear any prior rendered state so attach is a full reset and is
+            // safe to call on an already-populated view (e.g. a font-size
+            // change re-creates the view, but a defensive reset keeps attach
+            // idempotent regardless).
             if let storage = textView?.textStorage {
                 storage.setAttributedString(NSAttributedString())
             }
             lineLengths.removeAll()
             recentLines.removeAll()
             pendingEvents.removeAll()
-            recentFlushMs.removeAll()
+            evictionBacklog = 0
             // Atomically grab the resident lines + a live event stream, then
             // render the existing buffer up front — so a freshly (re)created
             // view (e.g. after a font-size change) isn't blank.
@@ -270,21 +274,9 @@
 
             storage.beginEditing()
 
-            // Coalesce contiguous evictions into a single
-            // `deleteCharacters` call. The store always emits evictions in
-            // append order, so a run of `.evicted` events corresponds to a
-            // contiguous prefix of `NSTextStorage`.
-            var pendingEvictBytes = 0
-
             for event in toApply {
                 switch event {
                 case .appended(let line):
-                    if pendingEvictBytes > 0 {
-                        storage.deleteCharacters(
-                            in: NSRange(location: 0, length: pendingEvictBytes)
-                        )
-                        pendingEvictBytes = 0
-                    }
                     let attributed = builder.build(line)
                     storage.append(attributed)
                     lineLengths.append((id: line.id, utf16Length: attributed.length))
@@ -297,19 +289,31 @@
                     maxArrivalLatency = max(maxArrivalLatency, wallNow.timeIntervalSince(line.timestamp))
 
                 case .evicted(let id):
-                    guard let head = lineLengths.popFirst() else { break }
+                    // Defer the top-delete (see ``evictionBatch``): the line
+                    // stays rendered for now; we only advance the backlog
+                    // cursor. The store evicts in append order, so the next
+                    // eviction is always the first not-yet-deleted line,
+                    // `lineLengths[evictionBacklog]`.
+                    guard evictionBacklog < lineLengths.count else { break }
                     assert(
-                        head.id == id,
+                        lineLengths[evictionBacklog].id == id,
                         "ScrollbackStore eviction order does not match coordinator FIFO"
                     )
-                    pendingEvictBytes += head.utf16Length
+                    evictionBacklog += 1
                 }
             }
 
-            if pendingEvictBytes > 0 {
-                storage.deleteCharacters(
-                    in: NSRange(location: 0, length: pendingEvictBytes)
-                )
+            // Trim the backlog in a single delete once it reaches a full
+            // batch, so the layout-invalidating top-of-document delete happens
+            // once per `evictionBatch` lines rather than once per flush.
+            if evictionBacklog >= evictionBatch {
+                var evictBytes = 0
+                for index in 0..<evictionBacklog {
+                    evictBytes += lineLengths[index].utf16Length
+                }
+                storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
+                lineLengths.removeFirst(evictionBacklog)
+                evictionBacklog = 0
             }
 
             storage.endEditing()
@@ -327,8 +331,11 @@
             )
         }
 
-        /// Emit the frame telemetry and feed the self-heal monitor (split
-        /// from ``flushPending`` for the function-length budget).
+        /// Emit the frame telemetry (split from ``flushPending`` for the
+        /// function-length budget). The live document size travels with every
+        /// frame so a field session proves whether the rendered document
+        /// stays capped (#65) — the datum that separates "eviction broken →
+        /// unbounded document" from "fixed-size document degrading".
         private func finishFlush(
             start: ContinuousClock.Instant,
             appendedCount: Int,
@@ -343,33 +350,6 @@
                 documentLines: lineLengths.count,
                 documentUTF16Length: documentUTF16Length
             ))
-            healIfDegraded(flushDuration)
-        }
-
-        /// Self-healing (#65): track recent flush costs; if the median
-        /// degrades past ``rebuildMedianThresholdMs`` while a real document
-        /// is up, rebuild the storage wholesale from the store snapshot —
-        /// resetting whatever TextKit-internal state the two 2026-06-12
-        /// field hangs accumulated (their ramp was 15→84 ms over an hour
-        /// before a 22 s cliff; the rebuild costs a one-time ~100 ms).
-        private func healIfDegraded(_ flushDuration: Duration) {
-            let ms = Double(flushDuration.components.seconds) * 1000
-                + Double(flushDuration.components.attoseconds) / 1e15
-            recentFlushMs.append(ms)
-            if recentFlushMs.count > 32 { _ = recentFlushMs.popFirst() }
-            guard recentFlushMs.count >= 16,
-                  lineLengths.count > 500,
-                  ContinuousClock.now - lastRebuild > rebuildMinInterval,
-                  let store
-            else { return }
-            let sorted = recentFlushMs.sorted()
-            let median = sorted[sorted.count / 2]
-            guard median > rebuildMedianThresholdMs else { return }
-            lastRebuild = .now
-            onRebuild?(lineLengths.count, textView?.textStorage?.length ?? 0, median)
-            Task { @MainActor [weak self] in
-                await self?.attach(to: store)
-            }
         }
 
         /// Pin the view to the bottom. We scroll immediately *and* again on the
