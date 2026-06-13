@@ -307,6 +307,18 @@ public actor SessionController {
     /// from. Cleared by any other command and on each fresh connect.
     var expectsCleanClose = false
 
+    /// When the most recent quit command was sent. The resume breadcrumb is
+    /// dropped only if a close arrives within ``cleanQuitWindow`` of this —
+    /// because Aardwolf can **refuse** a quit (combat, confirmation) and leave
+    /// you connected. Clearing on the *typed* command lost the session when the
+    /// quit was refused and the app was closed before the next heartbeat (#42).
+    var quitSentAt: ContinuousClock.Instant?
+
+    /// A server close within this window of a quit command is a clean logout
+    /// (Aardwolf closes within ~1–2 s of an accepted `quit`); a later close, or
+    /// one with no recent quit, is the session ending while still live.
+    static let cleanQuitWindow: Duration = .seconds(10)
+
     /// Commands that mean "log me out" — a server close right after one is
     /// expected, not a dropped link. Aardwolf's is `quit`.
     public static let quitCommands: Set<String> = ["quit"]
@@ -429,6 +441,7 @@ public actor SessionController {
         isReconnecting = false
         userInitiatedDisconnect = false
         expectsCleanClose = false
+        quitSentAt = nil
         lastEndpoint = endpoint
         lastAutologinPlan = plan
 
@@ -509,9 +522,12 @@ public actor SessionController {
         expectsCleanClose = Self.quitCommands.contains(
             command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
-        // A `quit` is an intentional session end — drop the resume breadcrumb now
-        // (don't wait for the server close, which may race a follow-on app quit).
-        if expectsCleanClose { cleanSessionEndHandler?() }
+        // Don't drop the resume breadcrumb here — Aardwolf can REFUSE a quit
+        // (combat, confirmation) and leave you connected. We only treat it as a
+        // clean end if the server actually closes soon after (see
+        // ``handleByteStreamEnded`` + ``cleanQuitWindow``). Record when the quit
+        // was sent; a non-quit command clears it (you're plainly still playing).
+        quitSentAt = expectsCleanClose ? .now : nil
         // Echo typed input (dimmed) so it's visible — e.g. while writing a note.
         // Suppressed when the server echoes (passwords) and for the bare
         // prompt-refresh Enter; the transcript tap is gated the same way.
