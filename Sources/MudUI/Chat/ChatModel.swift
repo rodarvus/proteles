@@ -19,16 +19,18 @@ public final class ChatModel {
     private let store: ChatStore
     private let maxLines: Int
     private var streamTask: Task<Void, Never>?
+    private var drainTask: Task<Void, Never>?
 
-    /// Coalescing buffer for streamed lines (same idea as the main output's
-    /// render coalescing, D-01). The store subscription appends here and
-    /// schedules a single flush on the next main-actor turn, so a burst — a
-    /// resume backlog restored via ``ChatStore/restoreBatch(_:)``, or heavy
-    /// channel spam — lands in ONE `lines` mutation (one SwiftUI update)
-    /// instead of one update per line. Without this the restored backlog
-    /// filled the panel line-by-line (#57 follow-up to the #42/#65 fixes).
-    private var pendingAppends: [ChatLine] = []
-    private var appendFlushScheduled = false
+    /// Thread-safe intake buffer (same idea as the main output's render
+    /// coalescing, D-01). The store subscription pushes here OFF the main actor
+    /// and a main-actor drain loop applies the buffered lines in batches — so a
+    /// burst (a resume backlog restored via ``ChatStore/restoreBatch(_:)``, or
+    /// heavy channel spam) lands in one `lines` mutation (one SwiftUI update)
+    /// instead of one update per line. The off-main subscription is essential:
+    /// a main-isolated `for await` interleaves with everything else on the main
+    /// actor and delivers one line per turn — the line-by-line resume trickle
+    /// (#57 follow-up to the #42/#65 fixes).
+    private let inbox = ChatLineInbox()
 
     public init(store: ChatStore, maxLines: Int = 5000) {
         self.store = store
@@ -63,29 +65,32 @@ public final class ChatModel {
         let lastBackfilledID = backlog.last?.id
 
         streamTask?.cancel()
-        streamTask = Task { [weak self] in
+        drainTask?.cancel()
+        inbox.clear()
+        // Drain the stream OFF the main actor into the inbox (Task.detached) —
+        // a plain `Task {}` would inherit this @MainActor method's isolation
+        // and run the `for await` on the main actor, one line per turn.
+        let inbox = inbox
+        streamTask = Task.detached {
             for await line in stream {
                 if let lastBackfilledID, line.id <= lastBackfilledID { continue }
-                self?.scheduleAppend(line)
+                inbox.push(line)
+            }
+        }
+        // Apply buffered lines in batches on the main actor (one SwiftUI update
+        // per drain), the way the main output's frame ticker drains its inbox.
+        drainTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+                self?.drainInbox()
             }
         }
     }
 
-    /// Buffer a streamed line and schedule a single coalesced flush on the
-    /// next main-actor turn (see ``pendingAppends``).
-    private func scheduleAppend(_ line: ChatLine) {
-        pendingAppends.append(line)
-        guard !appendFlushScheduled else { return }
-        appendFlushScheduled = true
-        Task { @MainActor [weak self] in self?.flushAppends() }
-    }
-
-    /// Apply all buffered lines in one `lines` mutation.
-    private func flushAppends() {
-        appendFlushScheduled = false
-        guard !pendingAppends.isEmpty else { return }
-        let batch = pendingAppends
-        pendingAppends.removeAll(keepingCapacity: true)
+    /// Apply everything buffered since the last drain in one `lines` mutation.
+    private func drainInbox() {
+        let batch = inbox.drain()
+        guard !batch.isEmpty else { return }
         lines.append(contentsOf: batch)
         if lines.count > maxLines {
             lines.removeFirst(lines.count - maxLines)
@@ -94,5 +99,34 @@ public final class ChatModel {
         if !fresh.isEmpty {
             channels = Array(Set(channels + fresh)).sorted()
         }
+    }
+}
+
+/// Thread-safe FIFO of chat lines: pushed by the off-main store subscription,
+/// drained by ``ChatModel``'s main-actor loop. Decoupling intake from the main
+/// actor is what lets a restored backlog land as one batch (see ``ChatModel``).
+private final class ChatLineInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [ChatLine] = []
+
+    func push(_ line: ChatLine) {
+        lock.lock()
+        lines.append(line)
+        lock.unlock()
+    }
+
+    func drain() -> [ChatLine] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !lines.isEmpty else { return [] }
+        let drained = lines
+        lines.removeAll(keepingCapacity: true)
+        return drained
+    }
+
+    func clear() {
+        lock.lock()
+        lines.removeAll(keepingCapacity: true)
+        lock.unlock()
     }
 }
