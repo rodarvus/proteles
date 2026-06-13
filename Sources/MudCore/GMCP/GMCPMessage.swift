@@ -1,7 +1,7 @@
 import Foundation
 
 /// One decoded GMCP message: a dotted package name and its JSON payload
-/// (PLAN.md §5.5).
+/// (ARCHITECTURE.md §5.5).
 ///
 /// GMCP rides on telnet option 201 as `IAC SB 201 <payload> IAC SE`, where
 /// the payload is `"Package.SubName <space> <JSON>"` — e.g.

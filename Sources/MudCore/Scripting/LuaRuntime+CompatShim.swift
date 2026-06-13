@@ -1,7 +1,7 @@
 import CLua
 import Foundation
 
-/// The MUSHclient world-API compatibility shim (Phase 6, PLAN.md §7.3).
+/// The MUSHclient world-API compatibility shim (Phase 6, ARCHITECTURE.md §7.3).
 ///
 /// `loadCompatShim()` installs a set of global Lua functions
 /// (`Send`, `Note`, `ColourNote`, `GetVariable`, `GetInfo`, …) that the
@@ -508,7 +508,7 @@ public extension LuaRuntime {
       setfenv(2, m)
     end
 
-    -- MUSHclient flag constants (mushclient/flags.h). trigger_flag values MUST
+    -- MUSHclient flag constants (submodules/mushclient/flags.h). trigger_flag values MUST
     -- match the host's decoder (ScriptEngine.TriggerFlag). -------------------
     timer_flag = {
       Enabled = 1, AtTime = 2, OneShot = 4, Active = 32, Replace = 1024,
@@ -520,7 +520,7 @@ public extension LuaRuntime {
       IgnoreCase = 16, RegularExpression = 32, ExpandVariables = 512,
       Replace = 1024, LowercaseWildcard = 2048, Temporary = 16384, OneShot = 32768,
     }
-    -- AddAlias flag bits (mushclient/flags.h — distinct from trigger bits).
+    -- AddAlias flag bits (submodules/mushclient/flags.h — distinct from trigger bits).
     alias_flag = {
       Enabled = 1, IgnoreCase = 32, OmitFromLogFile = 64,
       RegularExpression = 128, OmitFromOutput = 256, Temporary = 16384,
@@ -531,7 +531,7 @@ public extension LuaRuntime {
     -- AddTriggerEx colour arg), so they must be present + non-nil.
     custom_colour = { NoChange = -1 }
     for i = 1, 16 do custom_colour["Custom" .. i] = i - 1 end
-    -- MUSHclient send-target constants (mushclient/OtherTypes.h): sendto.script
+    -- MUSHclient send-target constants (submodules/mushclient/OtherTypes.h): sendto.script
     -- (12) / sendto.execute (10) etc., used as the DoAfterSpecial/AddTriggerEx
     -- target. Indexing a nil here aborts the calling chunk.
     sendto = {

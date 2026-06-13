@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Status bar along the bottom of the main window: connection state on the
 /// left, and — once GMCP data arrives — a character summary and HP/MP/MV
-/// gauges on the right (PLAN.md §8.5).
+/// gauges on the right (ARCHITECTURE.md §8.5).
 public struct StatusBarView: View {
     public enum ConnectionState: Sendable, Equatable {
         case disconnected

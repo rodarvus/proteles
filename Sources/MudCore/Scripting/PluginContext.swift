@@ -2,7 +2,7 @@ import Foundation
 
 /// The ambient information a script/plugin can query about its environment —
 /// the backing for the MUSHclient `GetInfo(N)` / `GetPluginID` surface the
-/// Phase-6 shim maps onto (PLAN.md §8.7).
+/// Phase-6 shim maps onto (ARCHITECTURE.md §8.7).
 ///
 /// A plain value type the host sets per plugin (the loader builds one with
 /// the plugin's id + directories; the user's own scripts get ``default``).
@@ -79,7 +79,7 @@ public struct PluginContext: Sendable, Equatable {
 
     /// Resolve a MUSHclient `GetInfo` number. Returns `nil` for codes we
     /// don't implement, matching MUSHclient's nil-for-unknown behaviour.
-    /// (Numbers per `mushclient/scripting/methods/methods_info.cpp`.)
+    /// (Numbers per `submodules/mushclient/scripting/methods/methods_info.cpp`.)
     public func info(_ code: Int, now: Date = Date()) -> InfoValue? {
         if let text = textInfo(code) { return .text(text) }
         if let flag = flagInfo(code) { return .flag(flag) }

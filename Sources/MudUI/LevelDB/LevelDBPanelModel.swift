@@ -6,7 +6,7 @@ import SwiftUI
 /// `@Observable` bridge for the **leveldb** reporting panel. Reads the leveldb
 /// plugin's SQLite file (`leveldb.db`) read-only via ``LevelDBStore`` and holds
 /// the loaded ``LevelDBReport`` for the SwiftUI views — the plugin stays the
-/// sole writer; this panel never mutates its data (PLAN.md D-71). Re-querying is
+/// sole writer; this panel never mutates its data (DECISIONS.md D-71). Re-querying is
 /// explicit (`reload()`), so a running grind doesn't thrash the DB.
 @MainActor
 @Observable

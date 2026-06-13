@@ -14,7 +14,7 @@ public struct PathStep: Sendable, Equatable {
     }
 }
 
-/// Routes between rooms over a ``RoomGraph`` (PLAN.md §7.7).
+/// Routes between rooms over a ``RoomGraph`` (ARCHITECTURE.md §7.7).
 ///
 /// Dijkstra (uniform hop cost by default; honours a per-exit ``Exit/weight``
 /// override) over the in-memory graph — fast at the live ~30k-room scale and

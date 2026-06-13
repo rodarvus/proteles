@@ -1,7 +1,7 @@
 import Foundation
 
 /// On-disk collection of ``WorldProfile``s plus a pointer to the
-/// currently-active one (PLAN.md §8.4).
+/// currently-active one (ARCHITECTURE.md §8.4).
 ///
 /// The whole collection lives in one JSON document. That's plenty for
 /// the handful of worlds a user realistically configures, keeps the

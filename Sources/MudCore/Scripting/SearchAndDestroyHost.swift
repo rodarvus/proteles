@@ -482,7 +482,7 @@ public actor SearchAndDestroyHost {
         }
     }
 
-    /// MUSHclient AddTrigger flag bits (mushclient/flags.h).
+    /// MUSHclient AddTrigger flag bits (submodules/mushclient/flags.h).
     private enum TriggerFlag {
         static let enabled = 0x01
         static let omitFromOutput = 0x04

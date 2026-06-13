@@ -15,11 +15,11 @@ public enum ScrollbackEvent: Sendable, Equatable {
 }
 
 /// Append-only line buffer with bounded in-memory capacity and a
-/// monotonic ``LineID`` allocator (PLAN.md §6.2).
+/// monotonic ``LineID`` allocator (ARCHITECTURE.md §6.2).
 ///
 /// Phase 1: in-memory only. Phase 2 adds eviction-event propagation so
 /// the view layer's `NSTextStorage` stays bounded; SQLite-backed
-/// persistence of evicted lines (PLAN.md §8.3, §6.5) lands in a
+/// persistence of evicted lines (ARCHITECTURE.md §8.3, §6.5) lands in a
 /// subsequent commit.
 ///
 /// Subscribers:

@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 /// `@Observable` view-model bridging the `ProfileStore` actor to
-/// SwiftUI (PLAN.md §8.4).
+/// SwiftUI (ARCHITECTURE.md §8.4).
 ///
 /// `ProfileStore` is the source of truth and lives on its own actor;
 /// SwiftUI needs synchronous, main-actor state to bind to. This model

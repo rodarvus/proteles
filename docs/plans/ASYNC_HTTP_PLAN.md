@@ -1,6 +1,8 @@
 # Plan — `async` HTTP for plugins
 
-**Status: SHIPPED** (D-67, post-`0.3.0` on `main`). Implemented over URLSession
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept for the rationale and trade-offs.**
+
+**Status: SHIPPED** (docs/DECISIONS.md D-67, post-`0.3.0` on `main`). Implemented over URLSession
 as designed below; full parity (`doAsyncRemoteRequest`/`HEAD`/`GETFILE`),
 outbound HTTP allowed freely (MUSHclient parity). Code:
 `Sources/MudCore/Networking/HTTPClient.swift`, `LuaRuntime+HTTP.swift`,
@@ -10,7 +12,7 @@ outbound HTTP allowed freely (MUSHclient parity). Code:
 ## What it is
 
 `async` is the Aardwolf MUSHclient package's HTTP helper
-(`aardwolfclientpackage/MUSHclient/lua/async.lua`, ~182 lines). Plugins use it
+(`submodules/aardwolfclientpackage/MUSHclient/lua/async.lua`, ~182 lines). Plugins use it
 to call web APIs / download files on a background thread. Real surface:
 
 - `doAsyncRemoteRequest(url, callback, protocol, timeout, on_timeout, body)`
@@ -34,9 +36,9 @@ sendto.script)`.
   is exactly what our `DoAfter` / timer path already does. We don't even need
   the 0.2s poll — URLSession's completion handler drives the callback directly.
 
-## Current state (the 0.3.0 stub)
+## Prior state (the 0.3.0 stub — since replaced)
 
-`require "async"` resolves to an **inert stub** (`asyncStubSource` in
+Before this shipped, `require "async"` resolved to an **inert stub** (`asyncStubSource` in
 `LuaRuntime+CompatShim.swift`): every `async.*` is a no-op, so a plugin that
 uses it **loads and its local logic runs**, but network calls quietly do
 nothing. The compatibility report shows a soft (verdict-neutral) note: "Talks
@@ -44,7 +46,7 @@ to the internet (the `async` helper), which Proteles doesn't support yet —
 those parts won't work." For a plugin where the network *is* the feature (e.g.
 lightRankStats' stat sync), that feature is effectively dead until this lands.
 
-## Proposed implementation
+## Implementation (as shipped — was the proposal below)
 
 1. **`ScriptEffect.httpRequest(url, method, headers, body, timeoutSeconds,
    callback: <persistent fn ref>, onTimeout: <persistent fn ref?>)`.** Needs a

@@ -3,7 +3,7 @@
 This is the **why** behind the UI: what Proteles should *feel* like, and the
 principles every screen, control, and interaction is checked against. It is not a
 backlog (that's GitHub Issues, label `ux`) and not architecture (that's
-**PLAN.md**). When a design choice is contested, the answer should be derivable
+**[ARCHITECTURE.md](../ARCHITECTURE.md)**). When a design choice is contested, the answer should be derivable
 from this doc — and if it isn't, we add the missing principle here.
 
 **Status:** living draft, iterated from live use. Edit freely; contested calls

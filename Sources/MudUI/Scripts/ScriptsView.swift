@@ -2,7 +2,7 @@ import MudCore
 import SwiftUI
 
 /// The "Scripts" window: a tabbed master-detail editor for a world's
-/// triggers, aliases, timers, and macros (PLAN.md §8.6).
+/// triggers, aliases, timers, and macros (ARCHITECTURE.md §8.6).
 ///
 /// Each tab is a list + detail editor in the same shape as the Worlds
 /// manager. Edits bind live through ``ScriptsModel`` so they persist and

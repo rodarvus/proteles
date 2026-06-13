@@ -1,7 +1,7 @@
 import Foundation
 
 /// Maps MUSHclient `<trigger>`/`<alias>`/`<timer>` attribute dictionaries to
-/// Proteles' value types, applying MUSHclient's defaults (PLAN.md §7.4).
+/// Proteles' value types, applying MUSHclient's defaults (ARCHITECTURE.md §7.4).
 enum PluginMapping {
     /// MUSHclient `send_to` values seen in the Aardwolf corpus: `12` = send
     /// to script, `14` = script + omit from command history.

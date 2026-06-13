@@ -1,7 +1,7 @@
 import Foundation
 
 // Value-type result models for the **leveldb** native reporting panels
-// (PLAN.md D-71). These are derived *read-only* from the leveldb plugin's own
+// (DECISIONS.md D-71). These are derived *read-only* from the leveldb plugin's own
 // SQLite file (`leveldb.db`) — the plugin remains the single writer; Proteles
 // only reads, exactly as the mapper reads its DB. Keeping the shapes here (pure
 // `Sendable` structs) lets ``LevelDBStore``'s queries be unit-tested without UI.

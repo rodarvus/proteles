@@ -2,7 +2,7 @@ import MudCore
 import SwiftUI
 
 /// The "Worlds" window: master-detail manager for ``WorldProfile``s
-/// (PLAN.md §8.4).
+/// (ARCHITECTURE.md §8.4).
 ///
 /// Left: a selectable list of worlds with add/remove controls and an
 /// active-world indicator. Right: the editor for the selected world.

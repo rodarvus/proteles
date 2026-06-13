@@ -1,238 +1,188 @@
 # Proteles
 
-A fast, native **Aardwolf** MUD client for macOS (iPad later). Built in Swift 6
-for the modern Mac — no Wine, no VM, no emulator.
+**A fast, native [Aardwolf](https://www.aardwolf.com/) client for the Mac.** No
+Wine, no virtual machine, no emulator — just a real Mac app that connects to
+Aardwolf, understands it deeply, and runs the plugins you already know.
 
-> **Status: `v0.7.0` — daily-usable.**
-> Connect, play, script, map, and run the Aardwolf plugin ecosystem today —
-> with a **tiled, resizable window** (drag panels to re-dock or tear them into
-> their own windows), a **full six-bar status display** (Health/Mana/Moves/TNL/
-> Enemy/Alignment, configurable), a **theme gallery**, **clickable room exits**,
-> an in-game **Help reader**, **session logging**, **notifications**, keyboard
-> **macros**, the **dinv inventory manager**, **native leveling analytics** (the
-> Levels window over the leveldb plugin), the Aardwolf plugin package ported
-> natively, and a **discoverable plugin library** (add MUSHclient plugins from
-> your Mac or a URL, all under `~/Documents/Proteles/`). Coming from MUSHclient?
-> **File ▸ Import from MUSHclient…** brings your whole setup over in one pass —
-> connection + autologin, aliases/triggers/timers/macros, your plugins, and the
-> map/S&D/dinv/leveldb databases. It **survives an Aardwolf "ice age"** (copyover
-> reboot) without dropping, and native **mapper / Search-and-Destroy navigation**
-> (portals, custom exits, scan-on-arrival) is live-hardened.
-> **MIT-licensed**. A **notarized, Developer-ID-signed
-> build** is attached to each [release](https://github.com/rodarvus/proteles/releases)
-> (download, unzip, drag to Applications — it opens with no Gatekeeper warning),
-> or build from source (below). Design lives in **[PLAN.md](PLAN.md)**.
+Proteles is built for one MUD: **Aardwolf**. It speaks Aardwolf's GMCP, maps its
+world, hunts campaign and quest targets, and can import your whole MUSHclient
+setup so switching costs you nothing. It's named after the genus of the aardwolf.
+
+> **Status:** feature-complete and daily-usable. Latest release **`v0.7.3`**,
+> a notarized, Developer-ID-signed build. **[MIT-licensed](LICENSE)** and free.
+
+---
+
+## Download & install
+
+1. Go to the **[latest release](https://github.com/rodarvus/proteles/releases/latest)**
+   and download the `Proteles…zip`.
+2. Unzip it and drag **Proteles** into your **Applications** folder.
+3. Double-click to launch.
+
+Because the app is **notarized and signed with a Developer ID**, it opens
+normally — no "unidentified developer" warning, no right-click-to-open dance.
+Proteles checks for updates on its own and can install them in place, so you stay
+current without re-downloading.
+
+**Requires macOS 15 (Sequoia) or newer.**
+
+### First connection
+
+On first launch, Proteles already has an **Aardwolf** profile ready
+(`aardmud.org`). Open **Manage Worlds…**, add your character name and password
+(the password is stored in your Mac's Keychain, never in a file), and
+**Connect**. That's it — you're in.
+
+> Aardwolf answers on a few ports; Proteles defaults to the standard one and
+> offers the alternatives (4000 / 4010 / 4444 / 7777) as a quick pick in the
+> connection editor if you ever need them.
+
+---
+
+## Coming from MUSHclient? Bring everything with you
+
+If you play Aardwolf on MUSHclient today, **File ▸ Import from MUSHclient…**
+brings your whole setup across in one pass — point it at your MUSHclient folder
+(or a `.zip` of it):
+
+- your **connection and autologin** (password goes straight to the Keychain),
+- your **aliases, triggers, timers, macros, and keypad** bindings,
+- your **third-party plugins** (each checked for compatibility, just like adding
+  one by hand),
+- and your **mapper, Search & Destroy, inventory, and leveling** databases.
+
+A review sheet shows exactly what will come over before anything is written, and
+your current data is backed up first. On a fresh install it simply becomes your
+profile; if you already have one set up, it lands as a separate "Aardwolf
+(imported)". MUSHclient plugins *are* Proteles plugins — there's no separate
+format to learn.
 
 ---
 
 ## What it does
 
 **Connect & play**
-- Telnet + **MCCP2** decompression + full **ANSI** colour (16/256/24-bit, all
-  styles), streamed into a fast TextKit 2 output view that doesn't jank under
-  a combat burst.
-- **Prompt-driven autologin** — your password lives in the Keychain, not a
-  config file. Connect timeout + **autoreconnect** with backoff on a drop.
-- **Command input** with history recall (↑/↓), **word completion** (Tab — from
-  on-screen targets, exits, group members + recent output) and a subtle
-  **as-you-type ghost hint** (→ to accept), and bare-Enter prompt nudges — and it
-  **stays focused**, so you can type a command even right after selecting/copying
-  from the output.
-- A configurable **command-button bar** (Panels ▸ Commands): grouped, clickable
-  command/toggle buttons in a dockable or floating panel; authored in Scripts ▸
-  Buttons and scriptable from plugins (`Button.*`).
-- **Copy with colour codes** — as ANSI (⇧⌘C), Aardwolf `@`-codes, or HTML — for
-  pasting coloured snippets elsewhere.
+- Telnet + **MCCP2** compression + full **ANSI** colour (16/256/24-bit), streamed
+  into a fast text view that doesn't stutter under a combat burst.
+- **Prompt-driven autologin** (password in the Keychain), a connect timeout, and
+  **autoreconnect** if you drop. It even survives an Aardwolf **"ice age"**
+  (a copyover reboot) without losing your session.
+- **Command input** with history (↑/↓), **Tab completion** (from on-screen
+  targets, exits, group members, and recent output), a subtle **as-you-type
+  hint**, and a focus that sticks so you can type right after copying text.
+- A configurable **command-button bar**: grouped, clickable command/toggle
+  buttons in a dockable or floating panel.
+- **Copy with colour** — as ANSI, Aardwolf `@`-codes, or HTML.
 
-**A tiled, resizable window**
-- Panels **tile a resizable dock** so you can see the **Map, Search & Destroy,
-  Channels, Text Map, and Character** panels at the same time — drag the
-  dividers to resize, **drag a panel onto another's edge/centre to re-dock** or
-  tab-group it, **tear a panel into its own window**, and **show/hide** any of
-  them from the View menu. The arrangement persists per world; you can **save
-  layout presets** and **Reset Layout** restores the default.
-- A **full-width graphical vitals bar** (HP/MP/MV + a combat Enemy gauge) spans
-  the game output — no duplicated text.
-- A **theme gallery** (Preferences ▸ Appearance): 10 colour themes inspired by
-  iTerm2 (Dracula, Nord, Tokyo Night, Catppuccin, Gruvbox, …) plus a light
-  theme with a contrast clamp so bright MUD text stays legible.
+**A window that's yours**
+- Panels **tile a resizable dock** — see the **Map**, **Search & Destroy**,
+  **Channels**, **Text Map**, and **Character** panels at once. Drag dividers to
+  resize, drag a panel onto another's edge to re-dock or tab-group it, tear a
+  panel into its own window, and show/hide any of them. Layouts persist per world
+  and you can save presets.
+- A **graphical vitals bar** (HP/MP/MV plus a combat Enemy gauge) spans the top.
+- A **theme gallery** with colour themes inspired by iTerm2 (Dracula, Nord, Tokyo
+  Night, Catppuccin, Gruvbox, …) plus a legible light theme.
 
-**Aardwolf surface (GMCP)**
-- The **Character** panel (room/exits/group/worth) and the live vitals bar.
-- **Chat capture** with per-channel filtering and `@`-colour rendering.
-- **Rich Exits** (View ▸ Rich Exits): makes the room's exits — cardinals *and*
-  custom exits like `enter portal` — clickable right in the game output, so a
-  click walks you there. Right in the main window; no separate panel.
-- **In-game Help reader** (View ▸ Help): `help <topic>` is captured into a
-  dedicated panel with **clickable cross-references** (click a "Related Helps"
-  topic to follow it), a search field, and back/forward history.
-- **Inventory Serials** (Plugins window toggle): `inventory` lists items
-  grouped with serial numbers, flag colours, and counts.
-- **Leveling analytics** (View ▸ Levels, ⇧⌘L): a native **Levels** window over
-  the bundled leveldb plugin's data — a live grind HUD (XP/hour, next level,
-  best zone), faithful sortable reports (top zones/mobs, quests, campaigns, gold
-  sources, deaths, daily), Swift-Charts analytics, and a tier/remort "journey"
-  with an activity heatmap. Read-only, so the plugin stays the source of truth.
+**Knows Aardwolf (via GMCP)**
+- A **six-bar status display** — Health, Mana, Moves, TNL, Enemy, Alignment —
+  with per-bar toggles, colours, and number modes.
+- A **Character** panel (room / exits / group / worth) and **chat capture** with
+  per-channel filtering.
+- **Rich Exits** — the room's exits, including custom ones like `enter portal`,
+  become clickable right in the game text.
+- An **in-game Help reader** with clickable cross-references and back/forward
+  history.
+- **Inventory Serials** and **native leveling analytics** (a **Levels** window:
+  a live grind HUD, sortable reports, charts, and a tier/remort journey).
 
-**Notifications & logging**
-- **Notifications** (Preferences ▸ Notifications): native macOS notifications on
-  **tells**, **name-mentions**, your own **keyword/regex** rules, a named
-  **channel**, **low HP**, and **quest-ready** — with per-rule sounds + templates,
-  plus a `Notify(...)` hook for scripts. (Suppressed while focused by default.)
-- **Session logging** (Preferences ▸ Logging): save a readable per-session log
-  as plain text or colour-preserving **HTML**.
-- **Opt-in crash diagnostics** (Preferences ▸ Diagnostics): on-device MetricKit
-  crash/hang capture you can review + copy into a bug report. Off by default.
+**Mapper** (native, graphical, GMCP-driven)
+- Auto-maps as you explore, coloured by terrain with PK and unvisited cues, and an
+  ASCII/graphical toggle.
+- **Speedwalk + pathfinding** through portals and recalls.
+- A faithful `mapper …` command surface (`goto`/`walkto`/`where`/`find`,
+  `portals`, custom exits, notes, and more).
+- Reads and writes the **MUSHclient `Aardwolf.db` format**, so it shares the file
+  your other tools use. Import an existing map any time.
 
-**Scripting**
-- User **triggers / aliases / timers** edited in a GUI (⇧⌘T), persisted
-  per-world, applied live.
-- A real Lua 5.1 engine (`proteles.*`) with a live `gmcp` table + event bus.
+**Search & Destroy** (the campaign/quest hunter)
+- Installed on request from the **S&D** panel (it's a third-party plugin, not
+  bundled). It then runs S&D's own logic with a native dock panel instead of its
+  miniwindow — detecting campaigns/quests, finding and navigating to targets,
+  scanning, and keeping its own database.
 
-**Plugins — a discoverable library**
-- Add a **MUSHclient `.xml` plugin** from the **Plugins** window (⇧⌘P) —
-  **Add Plugin… ▸ From your Mac** (a `.xml`, its folder, or its loose files) or
-  **▸ From a URL** (a raw `.xml`, or a repo/zip) — with a plain-language
-  compatibility report before it goes in. It runs through the `mush.lua`
-  compatibility shim (per-plugin sandboxed environments).
-- Every plugin lives in its **own discoverable folder** under
-  **`~/Documents/Proteles/Plugins/<name>/`** — navigate to it, hand-edit it,
-  **Reveal in Finder**, **Update**/refresh from its source, or **Export** it as a
-  zip to share. Per-character databases/state sit beside it under `data/`; the
-  world-wide mapper + Search-and-Destroy databases live in
-  `~/Documents/Proteles/Databases/`.
-- The **dinv inventory manager** (~26k lines of Lua) runs end-to-end through the
-  shim: `dinv build` identifies your whole inventory **including items inside
-  containers**; `search`, `organize`, `priority`, `analyze`, `unused`, and
-  **portal navigation** all work.
-- **Import your whole MUSHclient setup** — **File ▸ Import from MUSHclient…**
-  takes your existing install (a folder or a `.zip`) and brings it across in one
-  pass: connection + **autologin** (password → Keychain), your
-  **aliases/triggers/timers/macros/keypad**, your **third-party plugins** (each
-  with the same compatibility check as adding one by hand), and your
-  **mapper / Search-and-Destroy / inventory / leveling** databases. A review
-  sheet shows exactly what will be brought over first, and it backs up your
-  current data before writing. On a fresh install it just becomes your profile;
-  if you already have one, it lands as a separate "Aardwolf (imported)".
-- **Or import individual databases.** Already set up, and just want the data?
-  Bring over the mapper, S&D, **dinv**, or **leveldb** databases on their own
-  (**Databases ▸ Import …**) — done while disconnected, taking effect on your
-  next connect. Plugins initialise only once you're in-game (after the MOTD), so
-  their login-time server probes don't fail.
-- The **Aardwolf MUSHclient plugin package** is ported natively (all 43 plugins
-  triaged): the GMCP handler (`sendgmcp` + config), a GA-based prompt boundary,
-  the tick-timer countdown, Omit Blank Lines, Enemy/TNL HUD bars, the three
-  copy-colour formats, clickable hyperlinks / URL auto-linkify, and the
-  group/channels surfaces — plus the bundled native plugins (Vital Shortcuts,
-  Note Mode, Text Substitution `#sub`/`#gag`, Chat Echo, ASCII Map).
+**Scripting & plugins**
+- **Triggers / aliases / timers** edited in a GUI and applied live, plus a real
+  **Lua 5.1** engine for scripts.
+- A discoverable **Plugin Library**: add a MUSHclient `.xml` plugin from your Mac
+  or a URL (with a plain-language compatibility report first). Every plugin lives
+  in its own folder under `~/Documents/Proteles/Plugins/` — reveal it in Finder,
+  hand-edit it, update it, or export it to share.
+- The big community plugins run here: the **dinv inventory manager** (build,
+  search, organize, portal navigation) and the **Aardwolf MUSHclient plugin
+  package**, ported natively.
 
-**Mapper** (native graphical, GMCP-driven)
-- Auto-maps as you explore; a tight fan-out layout coloured by terrain, with
-  PK and unvisited-room cues and an ASCII/graphical toggle.
-- **Speedwalk navigation + Dijkstra pathfinding** through portals and recalls.
-- A faithful `mapper …` command surface: `goto`/`walkto`/`where`/`find` (by id
-  *or* name), `findpath`, `portals`/`portal`/`fullportal`/`delete portal`,
-  `cexit`/`cexits`/`fullcexit`, `notes`, `area`, `thisroom`, `unmapped`,
-  `purgeroom`/`purgezone`, `reset`, `backup`, room flags, and more.
-- Reads/writes the **MUSHclient `Aardwolf.db` schema**, so it shares the file
-  other tools read. Import an existing map via **Databases ▸ Import Map
-  Database**.
+**Sound, speech & accessibility**
+- A native **soundpack** (event cues for combat, channels, quests, repop) with a
+  bundled royalty-free cue set; muted by default, opt-in.
+- **Text-to-speech** for tells and alerts, including routing through **VoiceOver**
+  — Aardwolf has an active visually-impaired community and Proteles is built to
+  serve it.
 
-**Search & Destroy** (the campaign/quest hunter, installed on request)
-- Not bundled (it's a third-party plugin) — the **S&D** panel offers **Install
-  Search & Destroy…**, which downloads + attaches it on request. It then runs
-  S&D's own Lua logic verbatim on a dedicated sandboxed runtime, with a native
-  dock panel instead of its miniwindow.
-- Detects campaigns/quests, finds + navigates to targets (`xcp`, `nx`, `xrt`,
-  `go`, …), scans, and keeps its own `SnDdb.db` (import via **Databases ▸
-  Import Search & Destroy Database**).
-
-**Session recording**
-- Every connect auto-records two files under `~/Library/Application
-  Support/com.proteles.ProtelesApp/recordings/`: a replayable binary capture
-  (`.jsonl`, raw wire bytes) and a **human-readable, timestamped transcript**
-  (`.log`) that logs local events the wire capture can't — typed input, sends,
-  script/echo output, and GMCP — for after-the-fact debugging.
+**Notifications, logging & diagnostics**
+- macOS **notifications** on tells, name-mentions, your own keyword/regex rules, a
+  named channel, low HP, and quest-ready.
+- **Session logging** as plain text or colour-preserving HTML.
+- Optional, on-device **crash diagnostics** you can review and copy into a report
+  (off by default).
 
 ---
 
-## Getting started (build from source)
+## What it doesn't do (on purpose)
 
-Requires **macOS 14+** and **Xcode 16+** (Swift 6).
-
-```sh
-git clone --recurse-submodules https://github.com/rodarvus/proteles.git
-cd proteles
-
-# One-time: a stable local code-signing identity (so macOS keeps Keychain grants)
-./scripts/create-dev-signing-cert.sh
-
-# Generate + build the app
-cd apps/ProtelesApp_macOS
-xcodegen generate
-xcodebuild -scheme ProtelesApp_macOS -configuration Release \
-  -derivedDataPath /tmp/proteles-build/DerivedData build
-open /tmp/proteles-build/DerivedData/Build/Products/Release/Proteles.app
-```
-
-Then, in the app:
-1. **Manage Worlds…** (⇧⌘M) → add Aardwolf (`aardmud.org:23`) and your
-   character + password.
-2. **Connect** (⌘K).
-3. (Recommended) **Databases ▸ Import Map Database / Import Search & Destroy
-   Database** to seed the mapper + S&D from your existing MUSHclient `.db`
-   files — this is what lets navigation and S&D resolve rooms.
-
-### Keyboard shortcuts
-| | |
-|---|---|
-| Connect / Disconnect | ⌘K / ⇧⌘D |
-| Manage Worlds | ⇧⌘M |
-| Scripts editor | ⇧⌘T |
-| Plugins | ⇧⌘P |
-| Toggle panels — Map / Text Map / Channels / S&D / Character | ⇧⌘B / ⇧⌘E / ⇧⌘J / ⇧⌘U / ⇧⌘I |
-| Levels window | ⇧⌘L |
-| Copy with colour codes (ANSI) | ⇧⌘C |
+- **It's Aardwolf-only.** Proteles isn't a generic MUD client with an Aardwolf
+  theme — Aardwolf's protocol and conventions are first-class, and that focus is
+  the point. Other MUDs may partly work, but they're not supported.
+- **One character at a time.** Aardwolf prohibits multi-playing, so Proteles is
+  built around a single active session by design.
+- **Not on the Mac App Store (yet).** Distribution is a direct, notarized
+  download for now.
+- **Desktop-class connection only.** Proteles connects to Aardwolf directly over
+  the classic game port. (A WebSocket path exists in the code for a future iOS
+  app, but Aardwolf's WebSocket gateway only forwards part of the data the client
+  needs, so it isn't offered on the Mac — see
+  **[docs/WEBSOCKET.md](docs/WEBSOCKET.md)**.)
 
 ---
 
-## For developers
+## Building from source
 
-```sh
-swift build
-swift test --parallel
-swiftformat --lint .      # brew install swiftformat swiftlint xcodegen
-swiftlint --strict
-./scripts/install-hooks.sh
-```
-
-Three SwiftPM libraries — **MudCore** (platform-agnostic: networking, telnet,
-ANSI, MCCP2, scripting, mapper, S&D host), **MudUI** (SwiftUI), and
-**MudOutputView_macOS** (AppKit/TextKit 2) — plus C targets `CLua`, `CZlib`,
-`CLSQLite3`. The macOS app is generated with XcodeGen under
-`apps/ProtelesApp_macOS/`. ~1530 tests; four gates green on every commit.
-
-The submodules at the repo root (`mushclient`, `aardwolfclientpackage`,
-`mudlet`, `search-and-destroy`, `dinv`, `iterm2`) are **reference-only** — they
-encode years of real-world Aardwolf/MUD behaviour and are never modified.
+Proteles is open source. If you want to build it yourself or contribute, you'll
+need **macOS 15+** and **Xcode 16+** (Swift 6); clone with
+`--recurse-submodules`, then build the SwiftPM package (`swift build`) or generate
+the app target with XcodeGen. The full layout, the engineering conventions, and
+the four pre-commit gates are documented in **[ARCHITECTURE.md](ARCHITECTURE.md)**
+and **[CLAUDE.md](CLAUDE.md)**.
 
 ---
 
 ## Documents
 
-- **[PLAN.md](PLAN.md)** — architecture, status, phases, testing, risks, and
-  the append-only decision log (D-01…D-101). Phase-7 feature plans live in
-  **[docs/plans/](docs/plans/)**.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — how Proteles is built: modules, the
+  protocol stack, the scripting/plugin model, testing, and conventions.
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — the append-only decision log
+  (D-01…), referenced throughout the codebase.
 - **[docs/DESIGN.md](docs/DESIGN.md)** — the UI/UX north-star: what Proteles
-  should feel like, the ranked design principles, and the per-surface intent.
-- **[CLAUDE.md](CLAUDE.md)** — working notes + standing rules (incl. the
-  reference-driven, no-guessing rule for mapper/S&D work).
+  should feel like and the per-surface intent.
+- **[CLAUDE.md](CLAUDE.md)** — the working manual for the repo (incl. the
+  reference-driven, no-guessing rule for mapper / Search & Destroy work).
 
 ## License & attribution
 
-Proteles is **[MIT-licensed](LICENSE)**. It **references** MUSHclient, Mudlet,
-and the Aardwolf plugin package for protocol/behaviour fidelity but links none
-of their code — the native ports are independent reimplementations of Aardwolf's
+Proteles is **[MIT-licensed](LICENSE)**. It **references** MUSHclient, Mudlet, and
+the Aardwolf plugin package for protocol and behaviour fidelity but links none of
+their code — the native ports are independent reimplementations of Aardwolf's
 documented behaviour. The shipped binary contains no GPL or unlicensed code;
-Search-and-Destroy is **not bundled** (installed on request). Third-party
+Search & Destroy is **not bundled** (installed on request). Third-party
 attribution is in **[NOTICES.md](NOTICES.md)**.

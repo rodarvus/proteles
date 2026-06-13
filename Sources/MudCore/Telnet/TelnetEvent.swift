@@ -4,7 +4,7 @@ import Foundation
 /// escaping removed) or per complete telnet sequence.
 public enum TelnetEvent: Sendable, Equatable {
     /// A plain data byte from the server. `IAC IAC` is reported as a
-    /// single `0xFF` data byte (see PLAN.md §5.2).
+    /// single `0xFF` data byte (see ARCHITECTURE.md §5.2).
     case data(UInt8)
 
     /// A standalone command byte such as NOP, GA, AYT, EC, EL, BRK …

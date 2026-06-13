@@ -8,7 +8,7 @@ import Foundation
 /// indices 16…231 are the 6×6×6 xterm RGB cube; 232…255 are 24 grays.
 /// 24-bit RGB colours pass through unchanged.
 ///
-/// PLAN.md §6.6 — additional palettes (Solarized, MUSHclient-default,
+/// ARCHITECTURE.md §6.6 — additional palettes (Solarized, MUSHclient-default,
 /// user-edited) ship in Phase 7 alongside the theme picker.
 public struct ColorPalette: Sendable, Equatable, Codable {
     public let named: [NamedColor: RGB]

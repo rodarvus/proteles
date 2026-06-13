@@ -1,7 +1,7 @@
 import Foundation
 
 /// Snapshot of the Aardwolf character state assembled from GMCP modules
-/// (PLAN.md §5.5). Each field holds the most recent decoded module, or
+/// (ARCHITECTURE.md §5.5). Each field holds the most recent decoded module, or
 /// `nil` until one arrives.
 public struct GMCPState: Sendable, Equatable {
     public var vitals: CharVitals?

@@ -1,5 +1,13 @@
 # The Plugin Library — one discoverable home for plugins (and, later, scripts)
 
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept
+> for the rationale and trade-offs.** Delivered across
+> [`../DECISIONS.md`](../DECISIONS.md) D-59 (the plan) and D-61 (Phases A/B/C
+> implemented: home + registry + Add Plugin from Mac/URL + Export; data
+> relocated to global DBs + per-character data; user scripts split by kind).
+> The forward-looking "(Phase B)" / "(later)" / "out of scope here" notes below
+> are all now done.
+>
 > Supersedes `PERSONAL_PLUGIN_INSTALL_PLAN.md`. Replaces the split between
 > "imported" (copied-in) and "personal" (in-place) plugins with **one**
 > mechanism, organised around user journeys, in a **user-visible, hand-editable**
@@ -86,7 +94,7 @@ world. Per-row: enable/disable (per world), **Reveal in Finder**, **Update**
 with confirm). Built-ins (mapper, dinv, S&D, native ports) stay a separate,
 clearly app-provided group.
 
-## Phases
+## Phases *(A, B, and C all shipped — D-61)*
 - **Phase A — the library + discoverable plugin code (this deliverable).**
   `ProtelesPaths` home; `PluginLibrary` registry + per-plugin dir + `plugin.json`
   manifest; unified loader; `PluginDownloader`; the new Plugins-window UX; drop

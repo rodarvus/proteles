@@ -1,30 +1,27 @@
 # Proteles — Claude working notes
 
 Proteles is a native macOS MUD client focused exclusively on **Aardwolf**.
-Swift 6, strict concurrency. The living design + status doc is **PLAN.md**
-(read it first); every decision is logged there as **D-NN**. This file is the
-operating manual: how to work in the repo, the hard rules, and the gotchas.
+Swift 6, strict concurrency. The technical design doc is **ARCHITECTURE.md**
+(read it first); the append-only decision log is **docs/DECISIONS.md**, where
+every decision is recorded as **D-NN** (those IDs are referenced across the
+codebase). This file is the operating manual: how to work in the repo, the hard
+rules, and the gotchas.
 
 ## Current status
 
-**Shipped `v0.7.0`** (tag + GitHub release, **notarized Developer-ID build**;
-`scripts/release.sh` runs the build→sign→notarize→staple→verify flow). The
-build-out phases are **done**; we are **polishing + debugging from live play**.
-`v0.6.0` adds a **one-shot MUSHclient import** (`File ▸ Import from MUSHclient…`,
-D-101): a whole install (folder or `.zip`) → connection + autologin,
-aliases/triggers/timers/macros/keypad, third-party plugins (vetted by the same
-`PluginImporter.analyze` due-diligence as a manual add), and the
-mapper/S&D/dinv/leveldb DBs, into an **adaptive** profile behind a reviewable
-sheet — **no GPL vendoring** (package plugins skipped via `PackagePluginCatalog`).
-Earlier: a **storage reshape** (all user data under `~/Documents/Proteles/`,
-hand-editable `Settings/*.json`, per-character flat plugin DBs in `Databases/`),
-a **command-completion overhaul** (full 519-command verb base + aliases,
-kind-aware channel ghosting, per-verb argument completion — exits/spells/areas/
-items), and the **Sparkle auto-updater** (Phase 1 + seamless-resume Phase 2).
-~1530 tests, four gates green. Post-`v0.7.0` on `main`: the native
-soundpack engine (#10, D-109 — bundled CC0 cues, `Settings/soundpack.json`)
-and text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). See **PLAN.md §0** for what works and the
-**decision log (§12)** for history.
+**Feature-complete for 1.0. Shipped `v0.7.3`** (build 47; tag + GitHub release,
+**notarized Developer-ID build**; `scripts/release.sh` runs the
+build→sign→notarize→staple→verify flow). The build-out phases are **done**; the
+work now is **UI/UX polish + live-play debugging** ahead of tagging 1.0. Everything
+in the planned 1.0 scope ships: the MUSHclient import (D-101), the native mapper,
+Search-and-Destroy + dinv, the Plugin Library, the six-bar HUD, the native
+soundpack (#10, D-109 — bundled CC0 cues, `Settings/soundpack.json`), and
+text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). The
+`v0.7.x` line has been a scrollback/render/resume-correctness arc: the TextKit
+document is bounded at 10k lines independently of the store (#65), resume fills
+panels in one batch (#42), and chat intake reverted to direct-append (#57).
+~1570 tests, four gates green. See **ARCHITECTURE.md §0** for what works and
+**docs/DECISIONS.md** for history.
 
 ## Backlog — GitHub Issues are the source of truth
 
@@ -36,8 +33,9 @@ how items got silently dropped in a past rewrite). Use `gh issue create` with a
 clear body + a source-doc pointer; labels in use: `bug`, `enhancement`,
 `mapper`, `accessibility`, `tech-debt`, `qa`, `1.0`, `documentation`.
 
-- **PLAN.md** keeps the *narrative* (architecture, what's built, decisions D-NN)
-  but no longer enumerates the backlog — it points here.
+- **ARCHITECTURE.md** keeps the *narrative* (architecture, what's built); the
+  *decision log* (D-NN) is **docs/DECISIONS.md**. Neither enumerates the
+  backlog — they point here.
 - **`docs/DESIGN.md`** is the **UI/UX north-star** (what Proteles should feel
   like, ranked design principles, per-surface intent). UI/UX is the primary
   remaining gate to 1.0; design/polish work is checked against it and tracked
@@ -50,31 +48,36 @@ clear body + a source-doc pointer; labels in use: `bug`, `enhancement`,
 
 ## Reference submodules — ALWAYS research them first
 
-The repo vendors reference clients + plugins as git submodules. **Reference-only;
+The repo vendors reference clients + plugins as git submodules — reference clients
+under **`submodules/`**, reference plugins under **`plugins/`**. **Reference-only;
 never modify.** You have standing approval to read/search them at any time.
-- `mushclient/` — Nick Gammon's MUSHclient (the Aardwolf community's client; the
-  Lua world-API reference, `MUSHclient.cpp`).
-- `mudlet/` — Mudlet (`src/ctelnet.cpp` for telnet/GMCP/copyover, the engines).
-- `aardwolfclientpackage/` — Aardwolf's MUSHclient plugin package (channels,
-  GMCP handler, mapper, soundpack, …). `lua/{gmcphelper,aardwolf_colors,mapper}.lua`.
-- `search-and-destroy/` — the canonical S&D (the version the user runs + we
-  vendored). Ignore `Search-and-Destroy-V2`/`WinkleGold_*` under
+- `submodules/mushclient/` — Nick Gammon's MUSHclient (the Aardwolf community's
+  client; the Lua world-API reference, `MUSHclient.cpp`).
+- `submodules/mudlet/` — Mudlet (`src/ctelnet.cpp` for telnet/GMCP/copyover, the
+  engines).
+- `submodules/aardwolfclientpackage/` — Aardwolf's MUSHclient plugin package
+  (channels, GMCP handler, mapper, soundpack, …).
+  `lua/{gmcphelper,aardwolf_colors,mapper}.lua`.
+- `plugins/search-and-destroy/` — the canonical S&D (the version the user runs +
+  we vendored). Ignore `Search-and-Destroy-V2`/`WinkleGold_*` under
   `MUSHclient-live-from-windows/` — the user does NOT run those.
-- `dinv/` — the inventory manager (~26k LOC; multi-file `dofile`/`require`,
+- `plugins/dinv/` — the inventory manager (~26k LOC; multi-file `dofile`/`require`,
   lsqlite3, no miniwindows).
-- `iterm2/` — ANSI/rendering reference only.
+- `plugins/leveldb/` — the leveling-DB plugin (the Levels window reads it).
 
-When implementing, designing, or fixing any Aardwolf/MUD feature, investigate how
-these handle it **first** — they encode years of protocol quirks and UX.
+(`iterm2/` was removed — it was never used.) When implementing, designing, or
+fixing any Aardwolf/MUD feature, investigate how these handle it **first** — they
+encode years of protocol quirks and UX.
 
 ## NO GUESSING on the mapper & Search-and-Destroy (hard rule)
 
 Do **not** invent behaviour, regexes, command semantics, schema, or query shapes
 from intuition. The user has forbidden guessing here.
 1. **Read the reference** for the exact behaviour — mapper:
-   `aardwolfclientpackage/MUSHclient/lua/mapper.lua` + `worlds/plugins/aard_GMCP_mapper.xml`
-   (room/area search uses FTS `rooms_lookup*` — don't reinvent `find`/`where`);
-   S&D: the `search-and-destroy/` submodule; world-API: `mushclient/`.
+   `submodules/aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
+   `worlds/plugins/aard_GMCP_mapper.xml` (room/area search uses FTS
+   `rooms_lookup*` — don't reinvent `find`/`where`); S&D: the
+   `plugins/search-and-destroy/` submodule; world-API: `submodules/mushclient/`.
 2. **Use the live DBs the user provided** (`MUSHclient-live-from-windows/Aardwolf.db`,
    `SnDdb.db`) — query with `sqlite3` to confirm real schema/columns/shapes before
    writing code or tests.
@@ -152,7 +155,7 @@ Before committing, ALL must pass (from repo root):
 4. `swiftlint --strict`
 
 ## Workflow conventions
-- **Porting an Aardwolf-package plugin** (PLAN.md §7/§10): for every plugin —
+- **Porting an Aardwolf-package plugin** (ARCHITECTURE.md §7/§10): for every plugin —
   native *feature* or native *plugin* — **PROPOSE a plan first (analysis,
   trade-offs, options) and wait for approval.** Do NOT port directly. None run
   through the generic shim (that stays for arbitrary 3rd-party plugins).

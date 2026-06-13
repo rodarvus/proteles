@@ -1,6 +1,6 @@
 import Foundation
 
-/// The set of dockable panels the layout can arrange (PLAN.md §8.5 / the UI
+/// The set of dockable panels the layout can arrange (ARCHITECTURE.md §8.5 / the UI
 /// revamp, `docs/UI_REVAMP.md`). A `PanelKind` is a stable identifier only —
 /// the actual SwiftUI view for each kind is supplied by the app at render time,
 /// so this data model stays UI-agnostic, `Codable`, and unit-testable.

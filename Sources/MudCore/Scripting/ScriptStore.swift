@@ -1,7 +1,7 @@
 import Foundation
 
 /// The persisted scripting set for one world: its triggers, aliases, timers, and
-/// macros (PLAN.md §8.6). Loaded into a ``ScriptEngine`` at connect time.
+/// macros (ARCHITECTURE.md §8.6). Loaded into a ``ScriptEngine`` at connect time.
 public struct ScriptDocument: Codable, Sendable, Equatable {
     public var triggers: [Trigger]
     public var aliases: [Alias]

@@ -3,7 +3,7 @@ import Foundation
 /// Ties the scripting layer to a live session: owns a ``LuaRuntime`` and a
 /// ``TriggerEngine``, runs incoming lines through the triggers, executes matched
 /// scripts with their captures bound, and reports what the host should do
-/// (PLAN.md §8.6). Pure decision-making — it returns ``ScriptEffect``s + a gag
+/// (ARCHITECTURE.md §8.6). Pure decision-making — it returns ``ScriptEffect``s + a gag
 /// decision rather than touching the network/scrollback, so it stays testable
 /// without a live session; the host (``SessionController``) applies the result.
 public actor ScriptEngine {

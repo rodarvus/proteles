@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Aardwolf publishes chat/channel text (via `comm.channel` GMCP) using its
 /// own colour markup rather than ANSI (mapping verified against
-/// `aardwolfclientpackage/.../aardwolf_colors.lua`):
+/// `submodules/aardwolfclientpackage/.../aardwolf_colors.lua`):
 ///
 ///   - `@@` → a literal `@`.
 ///   - `@x` followed by 1–3 digits → an xterm palette colour

@@ -1,10 +1,12 @@
 # Inventory serials — native implementation plan
 
-> Plan deliverable (no code). Native port of Fiendish's `aard_inventory_serials`
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept for the rationale and trade-offs.** Implemented as the `InventorySerials` NativePlugin (`Sources/MudCore/Scripting/NativePlugins/InventorySerialsPlugin.swift`) over the pure `InventorySerialsParser` (`Sources/MudCore/LineModel/InventorySerials.swift`).
+>
+> Native port of Fiendish's `aard_inventory_serials`
 > (id `0cbb10309587f0ee15ba78ce`): adds item **serial numbers** + flag colours +
 > grouped counts to `inventory` / `keyring list` / `vault list` output. You
-> greenlit implementing it; this is the concrete build plan. Reference:
-> `aardwolfclientpackage/.../aard_inventory_serials.xml`.
+> greenlit implementing it; this was the concrete build plan. Reference:
+> `submodules/aardwolfclientpackage/.../aard_inventory_serials.xml`.
 
 ## How the reference works
 Intercepts the `inventory` (+ `keyring list`, `vault list`) aliases. Instead of
@@ -52,11 +54,11 @@ global display mode. Reuses the tag-block capture pattern I built for Help.
   `AardwolfColor.styledLine`) and emit as echo effects (like the mapper's notes).
 - Flag-colour map is small + static (from the reference's `color_lookup`).
 
-## Why I held it back overnight
-It needs **live `invdata`-format verification** (the exact CSV columns + the
-keyring/vault variants + the "asleep" edge case). I'd rather confirm the format
-against dinv's parser + one live capture than ship untested re-rendering. The
-plan above is ready to execute on your go-ahead.
+## Why it was held back overnight (historical)
+It needed **live `invdata`-format verification** (the exact CSV columns + the
+keyring/vault variants + the "asleep" edge case): better to confirm the format
+against dinv's parser + one live capture than ship untested re-rendering. That
+verification was done and the plan below was executed.
 
 ## Phases
 1. `InventorySerialsParser` (pure + tests against sample `invdata` rows from the
@@ -67,14 +69,13 @@ plan above is ready to execute on your go-ahead.
    "be awake" note.
 4. Live-verify the format + rendering (your side); adjust if columns differ.
 
-## Decisions for the user
+## Decisions (resolved)
 1. **Default**: off, one-shot via `inventory serials`, with `serials on` for
-   always — matching the reference (recommended).
-2. Bundle it (like the native ports) or keep it toggle-off by default? (It's a
-   clean native plugin; bundle + default-off.)
-3. Any interaction with **dinv** to worry about? Both consume `invdata`; they
-   run independently (dinv on its own command), so no conflict — but confirm you
-   don't mind both being available.
+   always — matching the reference. *(Adopted.)*
+2. Bundled like the native ports, default-off. *(Adopted — it's a clean native
+   plugin, toggleable in the Plugins window.)*
+3. Interaction with **dinv**: both consume `invdata` but run independently (dinv
+   on its own command), so no conflict; both are available. *(Confirmed.)*
 
 ## Effort
 Medium (Help-sized): a pure parser + a stateful NativePlugin + live format

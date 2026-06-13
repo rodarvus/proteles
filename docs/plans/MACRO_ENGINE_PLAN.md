@@ -1,5 +1,11 @@
 # MacroEngine — design + the one-key/keypad problem on macOS
 
+> **Status: shipped (feature-complete for 1.0; D-50, v0.3.0). Historical design
+> doc — kept for the rationale and trade-offs.** `MacroEngine`, the `NSEvent`
+> monitor, numpad/chord/function-key tiers, the Navigation-mode toggle, defaults,
+> and the Macros editor all landed. The paired command-button bar also shipped
+> (GitHub #15). See `../DECISIONS.md` (D-50).
+
 > Plan deliverable (no code). A **macro** = a key (or key chord) bound to a
 > command or script. The hard part on macOS is **one-key (keypad-style)
 > navigation** — sending a movement on a *bare* keypress while a text input has
@@ -63,22 +69,26 @@ arrow keys / hjkl / numpad send movement even with focus; a status chip shows
   KP-0 = look; KP-`.` = recall. (Matches the long-standing MUD numpad layout.)
 - These are *editable defaults*, created on first run, not hardcoded.
 
-## Pairing opportunity (from the Mudlet gap analysis)
+## Pairing opportunity (from the Mudlet gap analysis) — shipped
 A **command-button bar** (Mudlet's TAction) is the natural sibling: the same
 `MacroAction` model, surfaced as clickable on-screen buttons for users who
-prefer the mouse. Recommend designing `MacroAction` to serve both from day one;
-build the button bar as a fast follow.
+prefer the mouse. `MacroAction` was designed to serve both from day one, and the
+button bar shipped as the fast follow (GitHub #15; see
+`COMMAND_BUTTON_BAR.md`).
 
-## Decisions for the user
+## Decisions for the user (resolved as shipped)
 1. **Scope of v1**: chords + function keys + numpad + the Navigation-mode
-   empty-input path — all of it, or start with chords/numpad only?
+   empty-input path — all of it, or start with chords/numpad only? → shipped the
+   full surface.
 2. **Navigation mode**: opt-in toggle (recommended) vs always-on empty-input
-   bare-key firing (riskier — surprises while typing)?
+   bare-key firing (riskier — surprises while typing)? → opt-in toggle.
 3. **Button bar**: design `MacroAction` to support it now (cheap) even if the UI
-   comes later? (Recommended yes.)
+   comes later? → yes; the UI shipped (GitHub #15).
 4. Default numpad layout — confirm the mapping above matches your muscle memory.
+   → shipped as editable defaults.
 
-## Effort
-Medium. The engine + persistence + editor is comparable to a trigger editor.
-The `NSEvent` monitor is small but needs careful focus/empty-input/keypad logic
-and live testing across keyboard types (laptop vs external numpad).
+## Effort (as built)
+Medium, as estimated. The engine + persistence + editor was comparable to a
+trigger editor. The `NSEvent` monitor was small but needed careful focus/
+empty-input/keypad logic and live testing across keyboard types (laptop vs
+external numpad).

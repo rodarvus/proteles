@@ -1,6 +1,6 @@
 import Foundation
 
-/// Word-level command-line completion (PLAN.md §8.4), the model behind the
+/// Word-level command-line completion (ARCHITECTURE.md §8.4), the model behind the
 /// input box's Tab completion and ghost hint. Pure value type, unit-testable
 /// without the UI.
 ///

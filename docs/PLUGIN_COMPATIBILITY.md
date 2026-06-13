@@ -1,8 +1,13 @@
 # MUSHclient plugin compatibility
 
-Status of the Phase-6 compatibility shim that lets Aardwolf MUSHclient
+> **Status: complete (feature-complete for 1.0). Historical — kept for the
+> rationale.** The compatibility shim ships; the surface below is the
+> as-built reference for what the `mush.lua` shim provides (with the deferred
+> miniwindow family deliberately replaced by native panels).
+
+Status of the compatibility shim that lets Aardwolf MUSHclient
 plugins run on Proteles. The shim implements the MUSHclient *world* API on
-top of the native `proteles.*` layer (see PLAN.md §7).
+top of the native `proteles.*` layer (see `ARCHITECTURE.md` §7).
 
 > **Status legend:** ✅ implemented · 🟡 partial · ⬜ planned · ❌ not planned
 
@@ -20,13 +25,13 @@ top of the native `proteles.*` layer (see PLAN.md §7).
 | `GetInfo(n)` | 🟡 | the path/identity/time/flag subset the corpus uses; window-geometry numbers stubbed |
 | `GetPluginID` | ✅ | |
 | `GetPluginInfo(id, n)` | 🟡 | `n=20` (plugin dir) for the current plugin; else nil |
-| `CallPlugin` | 🟡 | reports `eOK` + forwards results (no per-plugin call routing yet) |
+| `CallPlugin` | ✅ | per-plugin call routing — routes to native plugins (GMCP handler, mapper, Chat Capture) by id and forwards results; reports `eOK` |
 | `BroadcastPlugin` / `OnPluginBroadcast` | ✅ | pub/sub; native GMCP is bridged in as the GMCP-handler's broadcast |
 | `IsConnected` | ✅ | live connection state |
 | `Send_GMCP_Packet` | ✅ | frames `IAC SB 201 … IAC SE` |
 | `Trim` | ✅ | |
-| `EnableTrigger`/`EnableTimer`/`EnableGroup` | 🟡 | name-based enable is a stub until triggers carry loader-assigned names at fire time |
-| `AddTriggerEx`, `AddAlias`, `AddTimer` (programmatic) | ⬜ | declarative triggers/aliases/timers from XML work today |
+| `EnableTrigger`/`EnableTimer`/`EnableGroup` | ✅ | name-based enable/disable via `proteles.enableTrigger`; triggers/timers carry loader-assigned names |
+| `AddTriggerEx`, `AddAlias`, `AddTimer` (programmatic) | ✅ | runtime registration through the shim → `ScriptEngine` (alongside declarative XML triggers/aliases/timers); recurring `AddTimer` fires repeatedly (#18) |
 | `WindowCreate` and the `Window*` miniwindow family | ❌ | native panels instead (D-19); miniwindow plugins are hand-ported |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 

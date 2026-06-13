@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// **Read-only** access to the leveldb plugin's SQLite file (`leveldb.db`),
-/// feeding the native reporting panels (PLAN.md D-71). The leveldb Lua plugin is
+/// feeding the native reporting panels (DECISIONS.md D-71). The leveldb Lua plugin is
 /// the sole writer (it runs verbatim through the compat shim); Proteles only
 /// reads — the same decoupling the mapper uses for `Aardwolf.db`. Opening the
 /// file in read-only mode means a running plugin's WAL writes never block us and

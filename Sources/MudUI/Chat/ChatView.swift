@@ -2,7 +2,7 @@ import MudCore
 import SwiftUI
 
 /// The chat-capture window: clickable per-channel tabs over a scrolling, styled
-/// log of `comm.channel` lines (PLAN.md §8.5). Rendered to match the main game
+/// log of `comm.channel` lines (ARCHITECTURE.md §8.5). Rendered to match the main game
 /// output — the active theme's palette + background, sticky-to-bottom, with an
 /// optional timestamp column.
 public struct ChatView: View {

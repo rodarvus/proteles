@@ -69,7 +69,7 @@ private let luaHostDispatch: @convention(c) (OpaquePointer?) -> Int32 = { stateP
 
 /// Thin Swift actor over a vendored PUC-Rio Lua 5.1 interpreter
 /// (`CLua`) — the foundation for triggers, aliases, timers, and the
-/// `proteles.*` scripting API (PLAN.md §8.6, D-03).
+/// `proteles.*` scripting API (ARCHITECTURE.md §8.6, D-03).
 ///
 /// One `lua_State` per runtime, owned and isolated by the actor so the
 /// (non-reentrant) interpreter is only ever touched from one place.

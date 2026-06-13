@@ -1,6 +1,6 @@
 import Foundation
 
-/// A compatibility report for a MUSHclient plugin being added (PLAN.md §7.5),
+/// A compatibility report for a MUSHclient plugin being added (ARCHITECTURE.md §7.5),
 /// shown before install so the player knows whether it'll work.
 ///
 /// Design principle (the player's mental model): **if the plugin works the way

@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 /// `@Observable` view-model bridging a world's ``ScriptStore`` to SwiftUI
-/// and keeping the live ``SessionController`` in sync (PLAN.md §8.6).
+/// and keeping the live ``SessionController`` in sync (ARCHITECTURE.md §8.6).
 ///
 /// Mirrors ``WorldsModel``: the store is the persisted source of truth on
 /// its own actor; this model holds main-actor copies the editor binds to,

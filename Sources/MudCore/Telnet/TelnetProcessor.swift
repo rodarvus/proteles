@@ -13,7 +13,7 @@ import Foundation
 /// only parses the wire format. The session controller decides whether to
 /// accept or refuse each negotiation event.
 ///
-/// Malformed-input policy (PLAN.md §9.6): the processor never panics,
+/// Malformed-input policy (ARCHITECTURE.md §9.6): the processor never panics,
 /// never reads past the input slice, and recovers conservatively. If an
 /// `IAC` byte inside an active subnegotiation is followed by something
 /// other than `IAC` or `SE`, the in-progress subnegotiation is

@@ -1,7 +1,7 @@
 import CLua
 import Foundation
 
-/// Controlled `require`/`dofile` for plugins (PLAN.md §7.3/§7.7). The sandbox
+/// Controlled `require`/`dofile` for plugins (ARCHITECTURE.md §7.3/§7.7). The sandbox
 /// removes raw `require`/`dofile`/`loadstring`; this reintroduces them in a
 /// gated form:
 ///
