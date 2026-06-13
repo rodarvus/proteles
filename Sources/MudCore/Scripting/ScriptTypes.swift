@@ -152,6 +152,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish a captured ASCII map block (its styled lines) to the Map
     /// panel; an empty array clears it.
     case updateMap([Line])
+    /// Publish the native Consider feature's current room-mob list + control
+    /// state to its floating panel (the inverse of `consider all` parsing).
+    case updateConsider(ConsiderSnapshot)
     /// Publish a captured continent bigmap (border-stripped styled lines) for
     /// a continent zone id — the map panel renders it while overland.
     case updateBigmap(zone: Int, name: String, lines: [Line])

@@ -17,6 +17,7 @@ struct DetachedPanelWindow: View {
     let map: MapPanelModel
     let asciiMap: MapModel
     let snd: SnDPanelModel
+    let consider: ConsiderPanelModel
     let help: HelpPanelModel
     let levels: LevelDBPanelModel
     let scripts: ScriptsModel
@@ -72,6 +73,7 @@ struct DetachedPanelWindow: View {
         case .asciiMap: MapView(model: asciiMap)
         case .channels: ChatView(model: chat)
         case .hunt: SearchAndDestroyPanelView(model: snd)
+        case .consider: ConsiderPanelView(model: consider)
         case .info: InfoPanel(state: gmcp)
         case .group: GroupPanel(state: gmcp)
         case .help: HelpPanelView(model: help)

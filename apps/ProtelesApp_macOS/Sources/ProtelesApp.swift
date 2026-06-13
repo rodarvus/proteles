@@ -68,6 +68,9 @@ struct ProtelesApp: App {
     /// The Search-and-Destroy panel model (docked S&D panel).
     @State private var snd = SnDPanelModel()
 
+    /// The Consider panel model (floating room-mob list).
+    @State private var consider = ConsiderPanelModel()
+
     /// Main-window tiled-dock layout (UI revamp — docs/UI_REVAMP.md).
     @State private var layout = LayoutStore()
 
@@ -168,6 +171,7 @@ struct ProtelesApp: App {
                 map: map,
                 asciiMap: asciiMap,
                 snd: snd,
+                consider: consider,
                 help: help,
                 levels: levels,
                 pluginDBs: pluginDBs,
@@ -245,6 +249,7 @@ struct ProtelesApp: App {
                     map: map,
                     asciiMap: asciiMap,
                     snd: snd,
+                    consider: consider,
                     help: help,
                     levels: levels,
                     scripts: scripts
@@ -363,6 +368,7 @@ struct ProtelesApp: App {
             await session.registerNativePlugin(TickTimer())
             await session.registerNativePlugin(URLLinkify())
             await session.registerNativePlugin(InventorySerialsPlugin())
+            await session.registerNativePlugin(ConsiderFeature())
             // Native `utils.*` dialogs (msgbox/inputbox/editbox/choose/file
             // pickers) for shim plugins that pop a dialog.
             await scriptEngine.setDialogProvider(makeScriptDialogProvider())

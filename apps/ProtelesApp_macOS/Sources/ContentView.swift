@@ -14,6 +14,7 @@ struct ContentView: View {
     let map: MapPanelModel
     let asciiMap: MapModel
     let snd: SnDPanelModel
+    let consider: ConsiderPanelModel
     /// In-game Help panel: receives captured help articles + drives navigation.
     let help: HelpPanelModel
     /// Native leveldb reporting panel (read-only over the plugin's DB).
@@ -280,6 +281,12 @@ struct ContentView: View {
                 snd.update(json: json)
             }
         }
+        .task {
+            // Feed the native Consider feature's room-mob snapshots to its panel.
+            for await snapshot in session.publishedConsider {
+                consider.update(snapshot)
+            }
+        }
         .alert("Save Layout Preset", isPresented: $showingSavePreset) {
             TextField("Preset name", text: $newPresetName)
             Button("Save") { layout.savePreset(named: newPresetName) }
@@ -407,6 +414,9 @@ struct ContentView: View {
         snd.onCommand = { command in
             Task { try? await session.send(command) }
         }
+        consider.onCommand = { command in
+            Task { try? await session.send(command) }
+        }
         snd.onImport = { importSearchAndDestroyDatabase() }
         snd.onScan = { Task { await session.scanSearchAndDestroy() } }
         snd.onReset = { resetSearchAndDestroyDatabase() }
@@ -531,6 +541,15 @@ extension ContentView {
         case .asciiMap: AnyView(MapView(model: asciiMap))
         case .channels: AnyView(ChatView(model: chat))
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
+        case .consider: AnyView(ConsiderPanelView(model: consider))
+        default: auxPanelContent(kind)
+        }
+    }
+
+    /// The remaining panel kinds (split from `panelContent` to stay within the
+    /// per-function complexity budget).
+    private func auxPanelContent(_ kind: PanelKind) -> AnyView {
+        switch kind {
         case .info: AnyView(InfoPanel(state: gmcp))
         case .group: AnyView(GroupPanel(state: gmcp))
         case .help: AnyView(HelpPanelView(model: help))
@@ -539,6 +558,7 @@ extension ContentView {
                 openWindow(id: ProtelesApp.scriptsWindowID)
                 scripts.requestButtonsTab()
             }))
+        default: AnyView(EmptyView())
         }
     }
 }

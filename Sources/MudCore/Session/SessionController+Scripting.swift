@@ -256,31 +256,6 @@ public extension SessionController {
         return true
     }
 
-    /// Effects that just feed a UI store (the captured maps, the tick anchor,
-    /// the Lua Console). Returns true when handled.
-    private func applyStoreEffect(_ effect: ScriptEffect) async -> Bool {
-        switch effect {
-        case .updateMap(let map):
-            await mapStore.update(map)
-        case .updateBigmap(let zone, let name, let lines):
-            await bigmapStore.update(BigmapStore.ContinentMap(zone: zone, name: name, lines: lines))
-        case .diagnostic(let source, let message):
-            // Tee to the Lua Console window — and ALWAYS to the transcript
-            // (#63): with #16 routing errors console-only, the red note never
-            // exists, the console dies with the session, and a post-mortem
-            // transcript had no record that a script failed.
-            logTranscript(.note, "[script-error\(source.map { ": \($0)" } ?? "")] \(message)")
-            await scriptDiagnostics.append(ScriptDiagnostic(
-                severity: .error, source: source, message: message
-            ))
-        case .updateTick(let date):
-            await gmcpState.setLastTick(date)
-        default:
-            return false
-        }
-        return true
-    }
-
     /// MUSHclient `Simulate`: feed `text` back through the inbound pipeline as
     /// if it had arrived from the MUD, so triggers (user + S&D) process it and
     /// it displays. Split on newlines; a single trailing newline doesn't add a
