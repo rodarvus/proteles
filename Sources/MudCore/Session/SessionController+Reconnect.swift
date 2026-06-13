@@ -2,6 +2,14 @@ import Foundation
 
 /// Remote-close handling + the autoreconnect loop (ReconnectPolicy, D-18/D-19).
 extension SessionController {
+    /// True when a close arriving now is a clean logout: a quit command was
+    /// accepted (the close lands within ``cleanQuitWindow`` of it). A refused
+    /// quit leaves the connection up, so no close arrives and this never trips.
+    private var closedByAcceptedQuit: Bool {
+        guard expectsCleanClose, let quitSentAt else { return false }
+        return ContinuousClock.now - quitSentAt < Self.cleanQuitWindow
+    }
+
     /// Close the connection. Idempotent. A user-initiated disconnect — it
     /// suppresses autoreconnect and fires the clean-session-end handler (so the
     /// resume breadcrumb is dropped, #42).
@@ -30,6 +38,13 @@ extension SessionController {
         guard connection != nil else { return }
         await flushOnDisconnect()
         teardownSession()
+
+        // A quit that PROMPTLY closed the connection is a clean logout — drop
+        // the resume breadcrumb so the next launch cold-starts. A close long
+        // after a quit (Aardwolf refused it; you kept playing) or with no
+        // recent quit at all is the session ending while live — keep the
+        // breadcrumb so the next launch resumes (#42).
+        if closedByAcceptedQuit { cleanSessionEndHandler?() }
 
         let shouldReconnect = reconnectPolicy.isEnabled
             && !userInitiatedDisconnect

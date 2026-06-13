@@ -131,4 +131,40 @@ struct SessionControllerAutoreconnectTests {
         let finalState = await controller.state
         #expect(finalState == .disconnected)
     }
+
+    @Test("quit + prompt server close fires the clean-end handler; refused quit doesn't (#42)")
+    func quitClearsBreadcrumbOnlyOnPromptClose() async throws {
+        // Case A: quit, then the server closes → clean logout → handler fires.
+        let listenerA = LoopbackListener()
+        let portA = try await listenerA.start()
+        let controllerA = SessionController(reconnectPolicy: fastPolicy(maxAttempts: 10))
+        let flagA = CleanEndFlag()
+        await controllerA.setCleanSessionEndHandler { flagA.fired = true }
+        try await controllerA.connect(to: .init(host: "127.0.0.1", port: portA))
+        await listenerA.waitForConnection()
+        try await controllerA.send("quit")
+        await listenerA.stop() // server closes its side
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(flagA.fired, "a prompt close after quit is a clean logout")
+
+        // Case B: quit, but the connection stays up (Aardwolf refused it) →
+        // handler must NOT fire, so the resume breadcrumb survives.
+        let listenerB = LoopbackListener()
+        let portB = try await listenerB.start()
+        let controllerB = SessionController(reconnectPolicy: fastPolicy(maxAttempts: 10))
+        let flagB = CleanEndFlag()
+        await controllerB.setCleanSessionEndHandler { flagB.fired = true }
+        try await controllerB.connect(to: .init(host: "127.0.0.1", port: portB))
+        await listenerB.waitForConnection()
+        try await controllerB.send("quit")
+        try await Task.sleep(for: .milliseconds(200)) // no close
+        #expect(!flagB.fired, "a refused quit (no close) must keep the breadcrumb")
+        await listenerB.stop()
+    }
+}
+
+/// Mutable flag the @Sendable clean-end handler flips; the test awaits the
+/// actor between writes, so unchecked is fine.
+private final class CleanEndFlag: @unchecked Sendable {
+    var fired = false
 }
