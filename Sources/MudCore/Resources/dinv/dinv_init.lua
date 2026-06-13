@@ -3,8 +3,8 @@
 -- Plugin Information
 ----------------------------------------------------------------------------------------------------
 
-pluginNameCmd   = "dinv" 
-pluginNameAbbr  = "DINV" 
+pluginNameCmd   = "dinv"
+pluginNameAbbr  = "DINV"
 pluginId        = "731f94b0f2b54345f836bbaf"
 
 
@@ -41,7 +41,7 @@ dinv_plugin_dir = GetPluginInfo(GetPluginID(), 20)
 -- your state directory while other installations use relative paths.  Double ugh.
 --
 -- Our solution is to start with the state directory and check if it is a relative or absolute
--- path.  If it is relative it should be relative to our current directory.  Fortunately, we 
+-- path.  If it is relative it should be relative to our current directory.  Fortunately, we
 -- have access to an absolute path to the current directory via GetInfo(64).  If we concatenate
 -- the current directory and relative state directory, we should have an absolute path to the
 -- state directory.  On the other hand, if the state directory is an absolute path, we can just
@@ -65,7 +65,7 @@ function drlGetPluginStatePath()
     path = stateDir
   end -- if
 
-  -- Some versions of windows don't like if a path has something like "foo\.\bar" in it.  This 
+  -- Some versions of windows don't like if a path has something like "foo\.\bar" in it.  This
   -- strips out any redundant ".\" in the path if it exists.
   path = string.gsub(path, "\\.\\", "\\")
 
@@ -93,7 +93,7 @@ function OnPluginInstall()
 end -- OnPluginInstall
 
 
--- You might think that this would be a great place to de-init the plugin.  Unfortunately, 
+-- You might think that this would be a great place to de-init the plugin.  Unfortunately,
 -- MUSHclient calls OnPluginSaveState AFTER calling OnPluginClose.  This means that the state
 -- won't save properly if we fully de-init our data and clean things up.  Bummer.  Instead, we
 -- currently use a somewhat convoluted scheme duplicating code in OnPluginDisconnect and in
@@ -313,7 +313,7 @@ function setPending(msg)
     -- Add a trigger to clear the quitIsPending flag if the quit is cancelled
     AddTriggerEx("drlQuitCancelConfirmationTrigger",
                  "^These items will be lost if you quit. Use .quit quit. if you are sure.$",
-                 "dbot.execute.quitIsPending = false", 
+                 "dbot.execute.quitIsPending = false",
                  drlTriggerFlagsBaseline + trigger_flag.OneShot,
                  custom_colour.NoChange, 0, "", "", sendto.script, 0)
 
@@ -327,7 +327,7 @@ function setPending(msg)
                     "You are now continuing a new post in the .* forum.|" ..
                     "You cannot post notes in this forum."                ..
                  ")$",
-                 "dbot.execute.noteIsPending = false", 
+                 "dbot.execute.noteIsPending = false",
                  drlTriggerFlagsBaseline + trigger_flag.OneShot,
                  custom_colour.NoChange, 0, "", "", sendto.script, 0)
   end -- if
@@ -382,7 +382,7 @@ function OnPluginSend(msg)
   if dbot.execute.doDelayCommands then
     dbot.execute.queue.pushFast(msg)
 
-    -- We just added a new command to the command queue.  If we don't already have a 
+    -- We just added a new command to the command queue.  If we don't already have a
     -- co-routine processing commands on that queue, start one now.
     if (not dbot.execute.queue.isDequeueRunning) then
       dbot.execute.queue.isDequeueRunning = true
@@ -637,7 +637,7 @@ function inv.fini(doSaveState)
       local initVal = inv[module].fini(doSaveState)
 
       if (initVal ~= DRL_RET_SUCCESS) and (initVal ~= DRL_RET_UNINITIALIZED) then
-        dbot.warn("inv.fini: Failed to de-initialize inv." .. module .. " module: " .. 
+        dbot.warn("inv.fini: Failed to de-initialize inv." .. module .. " module: " ..
                   dbot.retval.getString(initVal))
         retval = initVal
       else
@@ -704,7 +704,7 @@ function inv.reset(moduleNames, endTag)
   local suffix = ""
   if (numModulesReset ~= 1) then
     suffix = "s"
-  end -- if 
+  end -- if
 
   dbot.info("Successfully reset " .. numModulesReset .. " module" .. suffix)
 
@@ -722,7 +722,7 @@ function inv.reload(doSaveState)
 
     retval = inv.fini(doSaveState)
     if (retval ~= DRL_RET_SUCCESS) then
-      dbot.warn("inv.reload: Failed to de-initialize inventory module: " .. 
+      dbot.warn("inv.reload: Failed to de-initialize inventory module: " ..
                 dbot.retval.getString(retval))
     end -- if
   end -- if
@@ -761,9 +761,9 @@ inv.version.table = { pluginVer      = { major = inv.version.pluginMajor, minor 
                       tableFormat    = { major = 0, minor = 1 },
                       cacheFormat    = { major = 0, minor = 1 },
                       consumeFormat  = { major = 0, minor = 1 },
-                      priorityFormat = { major = 0, minor = 1 }, 
-                      setFormat      = { major = 0, minor = 1 }, 
-                      snapshotFormat = { major = 0, minor = 1 } 
+                      priorityFormat = { major = 0, minor = 1 },
+                      setFormat      = { major = 0, minor = 1 },
+                      snapshotFormat = { major = 0, minor = 1 }
                     }
 
 
@@ -775,26 +775,26 @@ end -- inv.version.get
 function inv.version.display()
   dbot.print("\n  @y" .. pluginNameAbbr .. "  Aardwolf Plugin\n" ..
                 "-------------------------@w")
-  dbot.print("@WPlugin Version:    @G" .. 
+  dbot.print("@WPlugin Version:    @G" ..
              string.format("%01d", inv.version.table.pluginVer.major) .. "." ..
              string.format("%04d", inv.version.table.pluginVer.minor) .. "@w")
   dbot.print("")
-  dbot.print("@WInv. Table Format: @G" .. 
+  dbot.print("@WInv. Table Format: @G" ..
              inv.version.table.tableFormat.major .. "." ..
              inv.version.table.tableFormat.minor .. "@w")
-  dbot.print("@WInv. Cache Format: @G" .. 
+  dbot.print("@WInv. Cache Format: @G" ..
              inv.version.table.cacheFormat.major .. "." ..
              inv.version.table.cacheFormat.minor .. "@w")
-  dbot.print("@WConsumable Format: @G" .. 
+  dbot.print("@WConsumable Format: @G" ..
              inv.version.table.consumeFormat.major .. "." ..
              inv.version.table.consumeFormat.minor .. "@w")
-  dbot.print("@WPriorities Format: @G" .. 
+  dbot.print("@WPriorities Format: @G" ..
              inv.version.table.priorityFormat.major .. "." ..
              inv.version.table.priorityFormat.minor .. "@w")
-  dbot.print("@WEquip Set Format:  @G" .. 
+  dbot.print("@WEquip Set Format:  @G" ..
              inv.version.table.setFormat.major .. "." ..
              inv.version.table.setFormat.minor .. "@w")
-  dbot.print("@WSnapshot Format:   @G" .. 
+  dbot.print("@WSnapshot Format:   @G" ..
              inv.version.table.snapshotFormat.major .. "." ..
              inv.version.table.snapshotFormat.minor .. "@w")
   dbot.print("")
@@ -822,7 +822,7 @@ end -- inv.version.display
 
 inv.config           = {}
 inv.config.init      = {}
-inv.config.table     = {} 
+inv.config.table     = {}
 
 
 function inv.config.init.atActive()

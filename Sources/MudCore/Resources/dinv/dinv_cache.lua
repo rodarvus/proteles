@@ -49,14 +49,14 @@
 --   inv.cache.add
 --   inv.cache.remove
 --   inv.cache.prune
--- 
+--
 --   inv.cache.get
 --   inv.cache.getSize
 --   inv.cache.setSize
--- 
+--
 --   inv.cache.dump
 --   inv.cache.clearOld
--- 
+--
 -- Data:
 --   inv.cache.recent.table
 --   inv.cache.frequent.table
@@ -521,7 +521,7 @@ function inv.cache.prune(cache)
     numEntriesToPrune = math.floor(numEntriesInCache * inv.cache.custom.prunePercent) + 1 or 0
   end -- if
 
-  dbot.debug("The " .. cache.name .. " cache is full, removing the " .. 
+  dbot.debug("The " .. cache.name .. " cache is full, removing the " ..
              numEntriesToPrune .. " least recently used items")
 
   -- Sort the cache entries.  We create a temporary array of the entries so that we can sort them

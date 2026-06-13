@@ -52,17 +52,17 @@
 --   inv.items.get
 --   inv.items.getCR
 --   inv.items.getItem
--- 
+--
 --   inv.items.put
 --   inv.items.putCR
 --   inv.items.putItem
--- 
+--
 --   inv.items.store
 --   inv.items.storeCR
 --   inv.items.storeItem
--- 
+--
 --   inv.items.wearItem(objId, objLoc, commandArray, doCheckLocation)
---   inv.items.wearSetupFn()   
+--   inv.items.wearSetupFn()
 --   inv.items.wearResultFn()
 --
 --   inv.items.isWorn(objId)
@@ -71,12 +71,12 @@
 --   inv.items.wearableTypeToLocs(wearableType)
 --
 --   inv.items.removeItem(objId, commandArray)
---   inv.items.removeSetupFn()   
+--   inv.items.removeSetupFn()
 --   inv.items.removeResultFn()
 --
 --   inv.items.keyword
 --   inv.items.keywordCR
--- 
+--
 --   inv.items.search
 --   inv.items.searchCR
 --   inv.items.sort
@@ -97,7 +97,7 @@
 ----------------------------------------------------------------------------------------------------
 
 
--- We don't want to scan worn equipment, the main inventory, and all containers each time that we 
+-- We don't want to scan worn equipment, the main inventory, and all containers each time that we
 -- do a refresh because that can take 5-10 seconds depending on how many containers you have.
 -- Instead, we maintain "clean" or "dirty" flags for each possible place to scan.  At startup, we
 -- consider everything to be "dirty" and we require a full scan.  After that, we mark locations as
@@ -133,210 +133,188 @@ inv.items.burstSize     = 20 -- max # of items that can be moved in one atomic o
 function inv.items.init.atInstall()
   local retval = DRL_RET_SUCCESS
 
+  inv.items.trigger.registered = {}
+  local function addTrigger(name, regex, handler, startEnabled)
+    check (AddTriggerEx(name, regex, handler,
+                        drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
+                        custom_colour.Custom11, 0, "", "", sendto.script, 0))
+    table.insert(inv.items.trigger.registered, name)
+    if not startEnabled then check (EnableTrigger(name, false)) end
+  end
+
   -- Trigger on invmon
-  check (AddTriggerEx(inv.items.trigger.invmonName,
-                      "^{invmon}(.*?),(.*?),(.*?),(.*?)$",
-                      "inv.items.trigger.invmon(\"%1\",\"%2\",\"%3\",\"%4\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
+  addTrigger(inv.items.trigger.invmonName,
+             "^{invmon}(.*?),(.*?),(.*?),(.*?)$",
+             "inv.items.trigger.invmon(\"%1\",\"%2\",\"%3\",\"%4\")",
+             true)
 
   -- Trigger on invitem
-  check (AddTriggerEx(inv.items.trigger.invitemName,
-                      "^{invitem}(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)$",
-                      "inv.items.trigger.itemDataStats(" ..
-                        "\"%1\",\"%2\",\"%3\",\"%4\", \"%5\",\"%6\",\"%7\",\"%8\",true)",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
+  addTrigger(inv.items.trigger.invitemName,
+             "^{invitem}(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)$",
+             "inv.items.trigger.itemDataStats" ..
+             "(\"%1\",\"%2\",\"%3\",\"%4\",\"%5\",\"%6\",\"%7\",\"%8\",true)",
+             true)
 
   -- Trigger on the start of an identify-ish command (lore, identify, object read, bid, lbid, etc.)
-  check (AddTriggerEx(inv.items.trigger.itemIdStartName,
-                      "^(" ..
-                         ".-----------------------------------------------------------------.*|" ..
-                         "\\| Keywords.*|" ..                              -- blindmode: no border
-                         "Current bid on this item is.*|"              ..
-                         "You do not have that item.*|"                ..
-                         "You dream about being able to identify.*|"   ..
-                         ".*does not have that item for sale.*|"       ..
-                         "There is no auction item with that id.*|"    ..
-                         ".*currently holds no inventory.*|"           ..
-                         ".* is closed.|"                              ..
-                         "There is no marketplace item with that id.*" ..
-                      ")$",
-                      "inv.items.trigger.itemIdStart(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemIdStartName, false)) -- default to off
+  addTrigger(inv.items.trigger.itemIdStartName,
+             "^(" ..
+                ".-----------------------------------------------------------------.*|" ..
+                "\\| Keywords.*|" ..                              -- blindmode: no border
+                "Current bid on this item is.*|"              ..
+                "You do not have that item.*|"                ..
+                "You dream about being able to identify.*|"   ..
+                ".*does not have that item for sale.*|"       ..
+                "There is no auction item with that id.*|"    ..
+                ".*currently holds no inventory.*|"           ..
+                ".* is closed.|"                              ..
+                "There is no marketplace item with that id.*" ..
+             ")$",
+             "inv.items.trigger.itemIdStart(\"%1\")",
+             false)
 
   -- Trigger on an identification of "A Fantasy Series Card Collector Case", a Winds of Fate epic item.
   -- This is a unique item that claims to be a container but it actually isn't.  It can even be placed
   -- inside other containers.  It also has varying output when identified based on what cards the user
   -- has assigned to it as part of the Winds' epic.
-  check (AddTriggerEx(inv.items.trigger.suppressWindsName,
-                      "^(" ..
-                         "You have the following cards stored:.*|"     ..
-                         ".*Fantasy Series Collector\'s Card.*|"       ..
-                         "Total: [0-9]+.*"                             ..
-                      ")$",
-                      "",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.suppressWindsName, false)) -- default to off
+  addTrigger(inv.items.trigger.suppressWindsName,
+             "^(" ..
+                "You have the following cards stored:.*|"     ..
+                ".*Fantasy Series Collector\'s Card.*|"       ..
+                "Total: [0-9]+.*"                             ..
+             ")$",
+             "",
+             false)
 
   -- Trigger on one of the detail/stat lines of an item's id report (lore, identify, bid, etc.)
-  check (AddTriggerEx(inv.items.trigger.itemIdStatsName,
-                      "^(" ..
-                         "\\| .*\\||" ..
-                         ".*A full appraisal will reveal further information on this item.|" ..
-                      ")$",
-                      "inv.items.trigger.itemIdStats(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemIdStatsName, false)) -- default to off
+  addTrigger(inv.items.trigger.itemIdStatsName,
+             "^(" ..
+                "\\| .*\\||" ..
+                ".*A full appraisal will reveal further information on this item.|" ..
+             ")$",
+             "inv.items.trigger.itemIdStats(\"%1\")",
+             false)
 
   -- Suppress output messages from the identification (lore, cast identify, cast object read, etc.)
-  check (AddTriggerEx(inv.items.trigger.suppressIdMsgName,
-                      "^Your natural intuition reveals the item's properties.....*$",
-                      "",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.suppressIdMsgName, false)) -- default to off
+  addTrigger(inv.items.trigger.suppressIdMsgName,
+             "^Your natural intuition reveals the item's properties.....*$",
+             "",
+             false)
 
   -- Trigger on an eqdata, invdata, or keyring data tag
-  check (AddTriggerEx(inv.items.trigger.itemDataStartName,
-                      "^{(eqdata|invdata|keyring)[ ]?([0-9]+)?}$|^(Item) ([0-9]+) not found.$",
-                      "inv.items.trigger.itemDataStart(\"%1\",\"%2\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemDataStartName, false)) -- default to off
+  addTrigger(inv.items.trigger.itemDataStartName,
+             "^{(eqdata|invdata|keyring)[ ]?([0-9]+)?}$|^(Item) ([0-9]+) not found.$",
+             "inv.items.trigger.itemDataStart(\"%1\",\"%2\")",
+             false)
 
   -- Trigger on the stats for an eqdata, invdata, or keyring data item
-  check (AddTriggerEx(inv.items.trigger.itemDataStatsName,
-                      "^([0-9]+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)$",
-                      "inv.items.trigger.itemDataStats" .. 
-                      "(\"%1\",\"%2\",\"%3\",\"%4\", \"%5\",\"%6\",\"%7\",\"%8\",false)",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemDataStatsName, false)) -- default to off
+  addTrigger(inv.items.trigger.itemDataStatsName,
+             "^([0-9]+?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?),(.*?)$",
+             "inv.items.trigger.itemDataStats" ..
+             "(\"%1\",\"%2\",\"%3\",\"%4\",\"%5\",\"%6\",\"%7\",\"%8\",false)",
+             false)
 
   -- Trigger on an identify command to capture the item's object ID
-  check (AddTriggerEx(inv.items.trigger.idItemName,
-                      "^(" .. 
-                         ".------.*|"                                   ..
-                         "\\|.*|"                                       ..
-                         "You do not have that item.*|"                 ..
-                         "You dream about being able to identify.*|"    ..
-                         ".*does not have that item for sale.*|"        ..
-                         "There is no auction item with that id.*|"     ..
-                         ".*currently holds no inventory.*|"            ..
-                         "There is no marketplace item with that id.*|" ..
-                         inv.items.identifyFence                        ..
-                      "|)$", -- accept an empty capture on the last line if there is one there
-
-                      "inv.items.trigger.idItem(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.idItemName, false)) -- default to off
+  addTrigger(inv.items.trigger.idItemName,
+             "^(" ..
+                ".------.*|"                                   ..
+                "\\|.*|"                                       ..
+                "You do not have that item.*|"                 ..
+                "You dream about being able to identify.*|"    ..
+                ".*does not have that item for sale.*|"        ..
+                "There is no auction item with that id.*|"     ..
+                ".*currently holds no inventory.*|"            ..
+                "There is no marketplace item with that id.*|" ..
+                inv.items.identifyFence                        ..
+             "|)$", -- accept an empty capture on the last line if there is one there
+             "inv.items.trigger.idItem(\"%1\")",
+             false)
 
   -- Trigger on "special" wear messages for unique items
-  check (AddTriggerEx(inv.items.trigger.wearSpecialName,
-                      "^(" ..
-                         "You proudly pin.*to your chest."                ..
-                         "|Your gloves tighten around.*with a loud snap!" ..
-                         "|.* feels like a part of you!"                  ..
-                         "|You are skilled with .*"                       ..
-                         "|You feel quite confident with .*"              ..
-                      ")$",
-                      "",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.wearSpecialName, false)) -- default to off
+  addTrigger(inv.items.trigger.wearSpecialName,
+             "^(" ..
+                "You proudly pin.*to your chest."                ..
+                "|Your gloves tighten around.*with a loud snap!" ..
+                "|.* feels like a part of you!"                  ..
+                "|You are skilled with .*"                       ..
+                "|You feel quite confident with .*"              ..
+             ")$",
+             "",
+             false)
 
   -- Trigger on the output of the "wear" command
-  check (AddTriggerEx(inv.items.trigger.wearName,
-                      "^(" ..
-                         "You do not have that item.*"           .. -- wear BADNAME
-                         "|You wear.*"                           .. -- wear the item
-                         "|You wield .*"                         .. -- hold weapon
-                         "|You light .*"                         .. -- wear light
-                         "|You hold .*"                          .. -- held item
-                         "|You equip .*"                         .. -- wear portal or sleeping bag
-                         "|.* begins floating around you.*"      .. -- wear float
-                         "|.* begins floating above you.*"       .. -- wear aura of trivia
-                         "|You dream about being able to wear.*" .. -- you are sleeping
-                         "|You cannot wear .*"                   .. -- item type can't be worn
-                         "|You must be at least level.*to use.*" .. -- your level is too low
-                      ")$",
-                      "inv.items.trigger.wear(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.wearName, false)) -- default to off
+  addTrigger(inv.items.trigger.wearName,
+             "^(" ..
+                "You do not have that item.*"           .. -- wear BADNAME
+                "|You wear.*"                           .. -- wear the item
+                "|You wield .*"                         .. -- hold weapon
+                "|You light .*"                         .. -- wear light
+                "|You hold .*"                          .. -- held item
+                "|You equip .*"                         .. -- wear portal or sleeping bag
+                "|.* begins floating around you.*"      .. -- wear float
+                "|.* begins floating above you.*"       .. -- wear aura of trivia
+                "|You dream about being able to wear.*" .. -- you are sleeping
+                "|You cannot wear .*"                   .. -- item type can't be worn
+                "|You must be at least level.*to use.*" .. -- your level is too low
+             ")$",
+             "inv.items.trigger.wear(\"%1\")",
+             false)
 
   -- Trigger on the output of the "remove" command
-  check (AddTriggerEx(inv.items.trigger.removeName,
-                      "^(" ..
-                         "You are not wearing that item."  .. -- remove BADNAME
-                         "|You remove .*"                  .. -- wear item
-                         "|You stop using .*"              .. -- shield
-                         "|You stop holding.*"             .. -- held item
-                         "|You stop wielding .*"           .. -- weapon
-                         "|.* stops floating around you.*" .. -- float
-                         "|.* stops floating above you.*"  .. -- above
-                         "|You stop using.* as a portal.*" .. -- portal
-                         "|You dream about removing your equipment.*" ..
-                      ")$",
-                      "inv.items.trigger.remove(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.removeName, false)) -- default to off
+  addTrigger(inv.items.trigger.removeName,
+             "^(" ..
+                "You are not wearing that item."  .. -- remove BADNAME
+                "|You remove .*"                  .. -- wear item
+                "|You stop using .*"              .. -- shield
+                "|You stop holding.*"             .. -- held item
+                "|You stop wielding .*"           .. -- weapon
+                "|.* stops floating around you.*" .. -- float
+                "|.* stops floating above you.*"  .. -- above
+                "|You stop using.* as a portal.*" .. -- portal
+                "|You dream about removing your equipment.*" ..
+             ")$",
+             "inv.items.trigger.remove(\"%1\")",
+             false)
 
   -- Trigger on the output of the "get" command
-  check (AddTriggerEx(inv.items.trigger.getName,
-                      "^(" ..
-                         "You get.*"                            ..
-                         "|You do not see.*"                    ..
-                         "|You dream about being able to get.*" ..
-                      ")$",
-                      "inv.items.trigger.get(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.getName, false)) -- default to off
+  addTrigger(inv.items.trigger.getName,
+             "^(" ..
+                "You get.*"                            ..
+                "|You do not see.*"                    ..
+                "|You dream about being able to get.*" ..
+             ")$",
+             "inv.items.trigger.get(\"%1\")",
+             false)
 
   -- Trigger on the output of the "put" command
-  check (AddTriggerEx(inv.items.trigger.putName,
-                      "^(" .. 
-                         "You don't have that.*"                 ..
-                         "|You do not see.*"                     ..
-                         "|You dream about putting items away.*" ..
-                         "|You put .* into .*"                   ..
-                      ")$",
-                      "inv.items.trigger.put(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.putName, false)) -- default to off
+  addTrigger(inv.items.trigger.putName,
+             "^(" ..
+                "You don't have that.*"                 ..
+                "|You do not see.*"                     ..
+                "|You dream about putting items away.*" ..
+                "|You put .* into .*"                   ..
+             ")$",
+             "inv.items.trigger.put(\"%1\")",
+             false)
 
   -- Trigger on the output of the "keyring get" command
-  check (AddTriggerEx(inv.items.trigger.getKeyringName,
-                      "^(" ..
-                         "You remove.*from your keyring.*"          ..
-                         "|You did not find that on your keyring.*" ..
-                         "|You dream about being able to keyring.*" ..
-                      ")$",
-                      "inv.items.trigger.getKeyring(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.getKeyringName, false)) -- default to off
+  addTrigger(inv.items.trigger.getKeyringName,
+             "^(" ..
+                "You remove.*from your keyring.*"          ..
+                "|You did not find that on your keyring.*" ..
+                "|You dream about being able to keyring.*" ..
+             ")$",
+             "inv.items.trigger.getKeyring(\"%1\")",
+             false)
 
   -- Trigger on the output of the "keyring put" command
-  check (AddTriggerEx(inv.items.trigger.putKeyringName,
-                      "^(" ..
-                         "You put.*on your keyring.*"               ..
-                         "|You do not have that item.*"             ..
-                         "|You dream about being able to keyring.*" ..
-                      ")$",
-                      "inv.items.trigger.putKeyring(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.putKeyringName, false)) -- default to off
+  addTrigger(inv.items.trigger.putKeyringName,
+             "^(" ..
+                "You put.*on your keyring.*"               ..
+                "|You do not have that item.*"             ..
+                "|You dream about being able to keyring.*" ..
+             ")$",
+             "inv.items.trigger.putKeyring(\"%1\")",
+             false)
 
   return retval
 
@@ -367,7 +345,7 @@ function inv.items.init.atActive()
     end -- if
   end -- for
 
-  -- If automatic refreshes are enabled (i.e., the period is > 0 minutes), kick off the 
+  -- If automatic refreshes are enabled (i.e., the period is > 0 minutes), kick off the
   -- refresh timer to periodically scan our inventory and update the inventory table
   local refreshPeriod = inv.items.refreshGetPeriods() or inv.items.timer.refreshMin
   if (refreshPeriod > 0) then
@@ -383,22 +361,9 @@ end -- inv.items.init.atActive
 function inv.items.fini(doSaveState)
   local retval = DRL_RET_SUCCESS
 
-  dbot.deleteTrigger(inv.items.trigger.invmonName)
-  dbot.deleteTrigger(inv.items.trigger.invitemName)
-  dbot.deleteTrigger(inv.items.trigger.itemIdStartName)
-  dbot.deleteTrigger(inv.items.trigger.suppressWindsName)
-  dbot.deleteTrigger(inv.items.trigger.itemIdStatsName)
-  dbot.deleteTrigger(inv.items.trigger.suppressIdMsgName)
-  dbot.deleteTrigger(inv.items.trigger.itemDataStartName)
-  dbot.deleteTrigger(inv.items.trigger.itemDataStatsName)
-  dbot.deleteTrigger(inv.items.trigger.idItemName)
-  dbot.deleteTrigger(inv.items.trigger.wearSpecialName)
-  dbot.deleteTrigger(inv.items.trigger.wearName)
-  dbot.deleteTrigger(inv.items.trigger.removeName)
-  dbot.deleteTrigger(inv.items.trigger.getName)
-  dbot.deleteTrigger(inv.items.trigger.putName)
-  dbot.deleteTrigger(inv.items.trigger.getKeyringName)
-  dbot.deleteTrigger(inv.items.trigger.putKeyringName)
+  for _, name in ipairs(inv.items.trigger.registered or {}) do
+    dbot.deleteTrigger(name)
+  end
 
   dbot.deleteTimer(inv.items.timer.refreshName)
   dbot.deleteTimer(inv.items.timer.idTimeoutName)
@@ -521,7 +486,7 @@ function inv.items.getField(objId, field)
 
   local entry = inv.items.getEntry(objId)
   if (entry == nil) then
-    dbot.debug("inv.items.getField: Failed to get field \"" .. field .. "\", entry " .. objId .. 
+    dbot.debug("inv.items.getField: Failed to get field \"" .. field .. "\", entry " .. objId ..
                " does not exist")
     return nil,DRL_RET_MISSING_ENTRY
   end -- if
@@ -533,12 +498,12 @@ end -- inv.items.getField
 function inv.items.setField(objId, field, value)
   -- Check the params
   assert((objId ~= nil) and (field ~= nil) and (value ~= nil), "inv.items.setField: nil parameters")
-  objId = tonumber(objId) 
+  objId = tonumber(objId)
   assert((objId ~= nil), "Invalid non-numeric objId detected")
 
   local entry = inv.items.getEntry(objId)
   if (entry == nil) then
-    dbot.warn("inv.items.setField: Failed to set field \"" .. field .. "\", entry " .. objId .. 
+    dbot.warn("inv.items.setField: Failed to set field \"" .. field .. "\", entry " .. objId ..
               " does not exist")
     return DRL_RET_MISSING_ENTRY
   end -- if
@@ -564,7 +529,7 @@ function inv.items.getStatField(objId, field)
 
   local entry = inv.items.table[objId]
   if (entry == nil) then
-    dbot.debug("inv.items.getStatField failed: no inventory entry found for objectID " .. objId .. 
+    dbot.debug("inv.items.getStatField failed: no inventory entry found for objectID " .. objId ..
                " for field " .. (field or "nil"))
     return nil, DRL_RET_MISSING_ENTRY
   end -- if
@@ -578,7 +543,21 @@ function inv.items.getStatField(objId, field)
 end -- inv.items.getStatField
 
 
-function inv.items.setStatField(objId, field, value) 
+-- Read a numeric stat field, coercing through dbot.tonumber (which strips
+-- commas).  Missing/nil stats return 0.
+function inv.items.getStatNum(objId, field)
+  return dbot.tonumber(inv.items.getStatField(objId, field) or "0")
+end -- inv.items.getStatNum
+
+
+-- Read a string stat field, defaulting to the given default (or "" if not
+-- provided) when the stat is missing/nil.
+function inv.items.getStatStr(objId, field, default)
+  return inv.items.getStatField(objId, field) or default or ""
+end -- inv.items.getStatStr
+
+
+function inv.items.setStatField(objId, field, value)
 
   assert(objId ~= nil, "inv.items.setStatField: nil objId parameter")
   assert(field ~= nil, "inv.items.setStatField: nil field parameter for item " .. objId)
@@ -645,7 +624,7 @@ function inv.items.add(objId)
   else
     retval = inv.items.setEntry(objId, dbot.table.getCopy(entry))
     if (retval == DRL_RET_SUCCESS) then
-      dbot.debug("Added \"" .. (inv.items.getField(objId, invFieldColorName) or "Unidentified") .. 
+      dbot.debug("Added \"" .. (inv.items.getField(objId, invFieldColorName) or "Unidentified") ..
                DRL_ANSI_WHITE .. "\" (" .. objId .. ") from recent item cache")
 
       -- The item is now in our inventory table so we can remove it from the recent item cache
@@ -871,7 +850,7 @@ function inv.items.ignoreCR()
       dbot.warn("inv.items.ignoreCR: Failed to save inv.config module data: " ..
                 dbot.retval.getString(retval))
     else
-      dbot.info("Ignore mode for keyring \"" .. inv.items.ignorePkg.container .. "\" is " .. modeStr)    
+      dbot.info("Ignore mode for keyring \"" .. inv.items.ignorePkg.container .. "\" is " .. modeStr)
     end -- if
 
   -- We are targeting a container, not the keyring
@@ -981,7 +960,7 @@ function inv.items.listIgnored()
   if (numIgnored == 1) then
     suffix = ""
   end -- if
-  
+
   dbot.info("Currently ignoring " .. numIgnored .. " location" .. suffix)
 
   return DRL_RET_SUCCESS
@@ -1023,7 +1002,7 @@ function inv.items.discoverCR(maxNumItems, refreshLocations)
   maxNumItems = tonumber(maxNumItems or 0) or 0
 
   -- If refreshLocations is not given, default to scanning everything
-  refreshLocation = refreshLocations or invItemsRefreshLocAll
+  local refreshLocation = refreshLocations or invItemsRefreshLocAll
 
   -- Discover equipment that is currently worn.  We only do this if the user asked to scan "all"
   -- locations, if the user specifically asked to scan "worn" locations, or if the user asked to
@@ -1041,12 +1020,12 @@ function inv.items.discoverCR(maxNumItems, refreshLocations)
   end -- if
 
   -- Discover items in the main inventory
-  if (refreshLocation == invItemsRefreshLocAll) or 
+  if (refreshLocation == invItemsRefreshLocAll) or
      (refreshLocation == invItemsRefreshLocMain) or
      ((refreshLocation == invItemsRefreshLocDirty) and (inv.items.mainState == invItemsRefreshDirty)) then
     retval = inv.items.discoverLocation(invItemLocInventory)
     if (retval ~= DRL_RET_SUCCESS) then
-      dbot.debug("inv.items.discoverCR: Failed to discover main inventory contents: " .. 
+      dbot.debug("inv.items.discoverCR: Failed to discover main inventory contents: " ..
                  dbot.retval.getString(retval))
       return retval
     else
@@ -1055,12 +1034,12 @@ function inv.items.discoverCR(maxNumItems, refreshLocations)
   end -- if
 
   -- Discover items in the keyring
-  if (refreshLocation == invItemsRefreshLocAll) or 
+  if (refreshLocation == invItemsRefreshLocAll) or
      (refreshLocation == invItemsRefreshLocKey) or
      ((refreshLocation == invItemsRefreshLocDirty) and (inv.items.keyringState == invItemsRefreshDirty)) then
     retval = inv.items.discoverLocation(invItemLocKeyring)
     if (retval ~= DRL_RET_SUCCESS) then
-      dbot.debug("inv.items.discoverCR: Failed to discover keyring contents: " .. 
+      dbot.debug("inv.items.discoverCR: Failed to discover keyring contents: " ..
                  dbot.retval.getString(retval))
       return retval
     else
@@ -1072,7 +1051,7 @@ function inv.items.discoverCR(maxNumItems, refreshLocations)
   -- their contents next)
   retval = inv.items.identifyCR(maxNumItems, refreshLocations)
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.debug("inv.items.discoverCR: Inventory identification did not complete: " .. 
+    dbot.debug("inv.items.discoverCR: Inventory identification did not complete: " ..
                dbot.retval.getString(retval))
     return retval
   end -- if
@@ -1091,18 +1070,18 @@ function inv.items.discoverCR(maxNumItems, refreshLocations)
          ((ownedBy == nil) or (ownedBy == "") or (ownedBy == itemOwner)) then
 
         -- Scan this container if the caller asked us to scan everything or if we need to scan all
-        -- dirty containers and this container is dirty (i.e., it hasn't been verified to be clean 
+        -- dirty containers and this container is dirty (i.e., it hasn't been verified to be clean
         -- in a previous scan)
         local keywordField = inv.items.getStatField(objId, invStatFieldKeywords) or ""
         if (refreshLocation == invItemsRefreshLocAll) or
-           ((refreshLocation == invItemsRefreshLocDirty) and 
+           ((refreshLocation == invItemsRefreshLocDirty) and
             (not dbot.isWordInString(invItemsRefreshClean, keywordField))) then
           dbot.debug("Discovering contents of container " .. objId .. ": " .. v[invFieldColorName])
 
           -- Discover items in the container
           retval = inv.items.discoverLocation(objId)
           if (retval ~= DRL_RET_SUCCESS) then
-            dbot.debug("inv.items.discoverCR: Failed to discover container " .. objId .. 
+            dbot.debug("inv.items.discoverCR: Failed to discover container " .. objId ..
                        ": " .. dbot.retval.getString(retval))
           else
             inv.items.keyword(invItemsRefreshClean, invKeywordOpAdd, "id " .. objId, true)
@@ -1125,7 +1104,7 @@ function inv.items.discoverLocation(location)
   if (location ~= nil) then
     containerId = tonumber(location)
   end -- if
-  assert((location == invItemLocWorn) or (location == invItemLocInventory) or 
+  assert((location == invItemLocWorn) or (location == invItemLocInventory) or
          (location == invItemLocKeyring) or (containerId ~= nil),
          "inv.items.discoverLocation: invalid location parameter")
 
@@ -1245,7 +1224,7 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
     -- Attempt to get both the colorized name and the regular name for the item.  If we have
     -- the colorized name, we can get the regular name by stripping the colors from the colorized
     -- version of the name.
-    local colorName = inv.items.getField(objId, invFieldColorName) 
+    local colorName = inv.items.getField(objId, invFieldColorName)
     if (colorName == "") then
       colorName = nil
     end -- if
@@ -1277,12 +1256,12 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
 
         retval = inv.items.setEntry(objId, (cachedEntry))
         if (retval ~= DRL_RET_SUCCESS) then
-          dbot.warn("inv.items.identifyCR: Failed to set \"" .. name .. DRL_ANSI_WHITE .. 
+          dbot.warn("inv.items.identifyCR: Failed to set \"" .. name .. DRL_ANSI_WHITE ..
                     "\" from frequent cache entry: " .. dbot.retval.getString(retval))
         else
-          numItemsIdentified = numItemsIdentified + 1        
+          numItemsIdentified = numItemsIdentified + 1
           dbot.note("Identify (" .. numItemsIdentified .. " / " .. numItemsToIdentify ..
-                    "): \"" .. (colorName or name or "Unidentified") .. "@W" .. DRL_ANSI_WHITE .. 
+                    "): \"" .. (colorName or name or "Unidentified") .. "@W" .. DRL_ANSI_WHITE ..
                     "\" (" .. objId .. ") from frequent cache")
         end -- if
       end -- if
@@ -1294,10 +1273,10 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
       local resultData = dbot.callback.new()
       numItemsIdentified = numItemsIdentified + 1
       dbot.note(string.format("Identify (%d / %d)", numItemsIdentified, numItemsToIdentify) ..
-                ": \"" .. (colorName or name or "Unidentified") .. "@W" .. DRL_ANSI_WHITE .. 
+                ": \"" .. (colorName or name or "Unidentified") .. "@W" .. DRL_ANSI_WHITE ..
                 "\" (" .. objId .. ")")
       local commandArray = dbot.execute.new()
-      retval = inv.items.identifyItem(objId, idCommandBasic, resultData, commandArray)      
+      retval = inv.items.identifyItem(objId, idCommandBasic, resultData, commandArray)
 
       -- Wait until we have confirmation the identification completed
       if (retval == DRL_RET_SUCCESS) then
@@ -1314,7 +1293,7 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
             wait.time(inv.items.timer.idTimeoutPeriodSec)
             timeout = timeout + inv.items.timer.idTimeoutPeriodSec
             if (timeout > inv.items.timer.idTimeoutThresholdSec) then
-              dbot.warn("inv.items.identifyCR: Basic identification timed out for item " .. objId  .. 
+              dbot.warn("inv.items.identifyCR: Basic identification timed out for item " .. objId  ..
                         ": \"" .. (colorName or name or "Unidentified") .. DRL_ANSI_WHITE .. "\"")
               break
             end -- if
@@ -1326,7 +1305,7 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
     -- If the item is an instance of a frequently acquired item (potion, pill, etc.) add it
     -- to the "frequently acquired item" cache if it is not already in the cache.
     -- Grab the latest name because it may have been filled in during the ID
-    name = inv.items.getStatField(objId, invStatFieldName) 
+    name = inv.items.getStatField(objId, invStatFieldName)
     if (name ~= nil) then
 
       -- invdata strips out commas in the names of items.  As a result, we won't find items in
@@ -1342,11 +1321,11 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
         --       outweigh the disadvantages.  If you buy 100 starburst staves, you really don't want
         --       to manually identify each one :p
         itemType = inv.items.getStatField(objId, invStatFieldType)
-        if (itemType == invmon.typeStr[invmonTypePotion]) or 
-           (itemType == invmon.typeStr[invmonTypePill])   or 
-           (itemType == invmon.typeStr[invmonTypeFood])   or 
-           (itemType == invmon.typeStr[invmonTypeWand])   or 
-           (itemType == invmon.typeStr[invmonTypeStaff])  or 
+        if (itemType == invmon.typeStr[invmonTypePotion]) or
+           (itemType == invmon.typeStr[invmonTypePill])   or
+           (itemType == invmon.typeStr[invmonTypeFood])   or
+           (itemType == invmon.typeStr[invmonTypeWand])   or
+           (itemType == invmon.typeStr[invmonTypeStaff])  or
            (itemType == invmon.typeStr[invmonTypeScroll]) then
 
           colorName = inv.items.getField(objId, invFieldColorName)
@@ -1406,8 +1385,8 @@ function inv.items.identifyItem(objId, idCommand, resultData, commandArray)
   assert((objId ~= nil) and (idCommand ~= nil), "inv.items.identifyItem: nil parameters detected")
 
   local item = inv.items.getEntry(objId)
-  if (item == nil) then 
-    dbot.warn("inv.items.identifyItem: Failed to identify item " .. objId .. 
+  if (item == nil) then
+    dbot.warn("inv.items.identifyItem: Failed to identify item " .. objId ..
               " in inventory table because it is not in the table")
     return DRL_RET_MISSING_ENTRY
   end -- if
@@ -1416,7 +1395,7 @@ function inv.items.identifyItem(objId, idCommand, resultData, commandArray)
   -- put the item back to its original location once we finish identifying it.
   local objLoc = inv.items.getField(objId, invFieldObjLoc)
   if (objLoc == nil) or (objLoc == invItemLocUninitialized) then
-    dbot.debug("inv.items.identifyItem: Failed to identify item " .. objId .. 
+    dbot.debug("inv.items.identifyItem: Failed to identify item " .. objId ..
                ": item's location could not be determined")
     inv.items.table[objId] = nil
     return DRL_RET_MISSING_ENTRY
@@ -1424,7 +1403,7 @@ function inv.items.identifyItem(objId, idCommand, resultData, commandArray)
 
   -- Check if another id is in progress before we proceed
   if (inv.items.identifyPkg ~= nil) then
-    dbot.info("inv.items.identifyItem: Skipping identification of " .. objId .. 
+    dbot.info("inv.items.identifyItem: Skipping identification of " .. objId ..
               ": another identification is in progress")
     return DRL_RET_BUSY
   end -- if
@@ -1527,7 +1506,7 @@ function inv.items.identifyItem(objId, idCommand, resultData, commandArray)
 
   -- Auction (we may temporarily add an auction item to examine it)
   elseif (objLoc == invItemLocAuction) then
-    command = idCommand .. " " .. objId 
+    command = idCommand .. " " .. objId
     if (commandArray ~= nil) then
       table.insert(commandArray, command)
     else
@@ -1700,9 +1679,9 @@ function inv.items.refresh(maxNumItems, refreshLocations, endTag, tagProxy)
 [[@W
   You must perform at least one manual inventory build before we allow inventory refresh
   requests to proceed.  Otherwise, a user's first automatic refresh could clog up the system
-  for several minutes as the entire inventory is scanned.  We don't want the user to be 
+  for several minutes as the entire inventory is scanned.  We don't want the user to be
   surprised by that behavior.
-]]) 
+]])
     dbot.print("@W  Please see \"@G" .. pluginNameCmd .. " help build@W\" for more details.")
     dbot.print("@W\nUsage:")
     inv.cli.build.usage()
@@ -1728,7 +1707,7 @@ function inv.items.refresh(maxNumItems, refreshLocations, endTag, tagProxy)
   -- then we wait a bit and try again
   elseif (charState ~= dbot.stateActive) then
     dbot.debug("Skipping refresh request: char is in state \"" .. dbot.gmcp.getStateString(charState) .. "\"")
-    retval = DRL_RET_NOT_ACTIVE    
+    retval = DRL_RET_NOT_ACTIVE
 
   -- If the char is in the active state (e.g., not AFK, in a note, in combat, etc.) refresh now
   -- and schedule the next refresh after the default period
@@ -1759,7 +1738,7 @@ function inv.items.refresh(maxNumItems, refreshLocations, endTag, tagProxy)
     inv.items.refreshAtTime(refreshMin, 0)
   end -- if
 
-  -- If everything went as planned, we have a co-routine doing a refresh and that co-routine will 
+  -- If everything went as planned, we have a co-routine doing a refresh and that co-routine will
   -- terminate any end tags that were specified.  Otherwise, we hit an error and we should terminate
   -- the tag now and return what we know to the caller.
   if (retval == DRL_RET_SUCCESS) then
@@ -1773,7 +1752,7 @@ end -- inv.items.refresh
 function inv.items.refreshCR()
   local retval = DRL_RET_SUCCESS
 
-  -- We can skip the refresh if we've already done a full scan, there are no known "dirty" 
+  -- We can skip the refresh if we've already done a full scan, there are no known "dirty"
   -- locations or containers, and the user didn't explicitly request a full scan
   if inv.items.fullScanCompleted and
      (inv.items.refreshPkg.refreshLocations ~= invItemsRefreshLocAll) and
@@ -1789,7 +1768,7 @@ function inv.items.refreshCR()
   dbot.prompt.hide()
 
   -- On each refresh request we track all items discovered and match that against the contents
-  -- of the inventory table.  If something is in the inventory table and we didn't find it 
+  -- of the inventory table.  If something is in the inventory table and we didn't find it
   -- during refresh, remove it from the inventory table because the table is out of sync.
   inv.items.currentItems = {}
 
@@ -1809,13 +1788,13 @@ function inv.items.refreshCR()
   -- refresh.  It's possible that things are out of sync (e.g., the table wasn't saved after
   -- a change to the inventory).  Of course, if the user halted the current search then we
   -- may not have found items that actually are present so we only remove orphans if we
-  -- fully completed the discovery and identification steps above.  Also, if we are only 
+  -- fully completed the discovery and identification steps above.  Also, if we are only
   -- scanning some locations, then we don't want to remove orphans because the items could
   -- be at a location we didn't scan this time.
   if (retval == DRL_RET_SUCCESS) and (inv.items.refreshPkg.refreshLocations == invItemsRefreshLocAll) then
     for k,v in pairs(inv.items.table) do
       if (inv.items.currentItems[k] == nil) then
-        dbot.note("Removed orphan: \"" .. (inv.items.getField(k, invFieldColorName) or "Unidentified") .. 
+        dbot.note("Removed orphan: \"" .. (inv.items.getField(k, invFieldColorName) or "Unidentified") ..
                   DRL_ANSI_WHITE .. "\" (" .. k .. ")")
         inv.items.table[k] = nil
       end -- if
@@ -1836,21 +1815,16 @@ function inv.items.refreshCR()
   -- which is now persisted at its mutation site instead.
   inv.items.save()
 
-  if (retval == DRL_RET_SUCCESS) then
-    resultString = "SUCCESS! (Entire inventory is identified)"
-  elseif (retval == DRL_RET_HALTED) then
-    resultString = "HALTED! (Some items may still need identification)"
-  elseif (retval == DRL_RET_IN_COMBAT) then
-    resultString = "IN COMBAT! (Skipped identification because you were fighting!)"
-  elseif (retval == DRL_RET_TIMEOUT) then
-    resultString = "TIMEOUT! (Skipped identification because you were busy)"
-  elseif (retval == DRL_RET_NOT_ACTIVE) then
-    resultString = "NOT ACTIVE! (You were not ready for item identification)"
-  elseif (retval == DRL_RET_UNINITIALIZED) then
-    resultString = "UNINITIALIZED! (The plugin is not initialized)"
-  else
-    resultString = "ERROR! (" .. dbot.retval.getString(retval) .. ")"
-  end -- if
+  local refreshResultMessages = {
+    [DRL_RET_SUCCESS]        = "SUCCESS! (Entire inventory is identified)",
+    [DRL_RET_HALTED]         = "HALTED! (Some items may still need identification)",
+    [DRL_RET_IN_COMBAT]      = "IN COMBAT! (Skipped identification because you were fighting!)",
+    [DRL_RET_TIMEOUT]        = "TIMEOUT! (Skipped identification because you were busy)",
+    [DRL_RET_NOT_ACTIVE]     = "NOT ACTIVE! (You were not ready for item identification)",
+    [DRL_RET_UNINITIALIZED]  = "UNINITIALIZED! (The plugin is not initialized)",
+  }
+  local resultString = refreshResultMessages[retval]
+                       or ("ERROR! (" .. dbot.retval.getString(retval) .. ")")
 
   dbot.note("Refreshing inventory: " .. resultString)
 
@@ -2029,7 +2003,7 @@ function inv.items.build(endTag)
   retval = inv.items.refresh(0, invItemsRefreshLocAll, endTag, invTagsBuild)
   if (retval ~= DRL_RET_SUCCESS) then
     dbot.warn("inv.items.build: refresh did not complete: " .. dbot.retval.getString(retval))
-  end -- if  
+  end -- if
 
   return retval
 
@@ -2049,7 +2023,7 @@ end -- inv.items.build()
 --
 -- Move item(s) to main inventory
 --
--- Suppress get verbage: 
+-- Suppress get verbage:
 --   "You remove ..."                 -- remove item
 --   "You stop wielding ..."          -- remove weapon
 --   "You stop using ..."             -- remove portal
@@ -2238,7 +2212,7 @@ function inv.items.getItem(objId, commandArray)
 
       -- If we pulled the item out of a worn container, we must remember to re-wear the container
       -- now that we took the item out of it
-      if (containerLoc ~= nil) then 
+      if (containerLoc ~= nil) then
         local containerRetval = inv.items.wearItem(itemLocNum, nil, commandArray, false)
         if (containerRetval ~= DRL_RET_SUCCESS) then
           dbot.warn("inv.items.getItem: Failed to wear item " .. (objId or "nil") .. ": " ..
@@ -2289,7 +2263,7 @@ function inv.items.getItem(objId, commandArray)
       -- Remove the item and wait for confirmation that it moved
       retval = inv.items.removeItem(objId, commandArray)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.debug("Skipping removal of \"" .. itemName .. "\" worn at location " .. 
+        dbot.debug("Skipping removal of \"" .. itemName .. "\" worn at location " ..
                    itemLoc .. ": " .. dbot.retval.getString(retval))
       end -- if
     end -- if
@@ -2382,7 +2356,7 @@ function inv.items.putCR()
   local containerId
 
   -- Be paranoid!
-  if (inv.items.putPkg == nil) or (inv.items.putPkg.container == nil) or 
+  if (inv.items.putPkg == nil) or (inv.items.putPkg.container == nil) or
      (inv.items.putPkg.queryString == nil) then
     dbot.error("inv.items.putCR: Aborting put request -- put package, container or query is nil!")
     inv.items.putPkg = nil
@@ -2406,7 +2380,7 @@ function inv.items.putCR()
 
     containerId = tonumber(containerId)
     if (containerId == nil) then
-      dbot.warn("inv.items.putCR: Container \"" .. inv.items.putPkg.container .. 
+      dbot.warn("inv.items.putCR: Container \"" .. inv.items.putPkg.container ..
                 "\" resolved to a non-numeric object ID -- aborting put request")
       inv.items.putPkg = nil
       return inv.tags.stop(invTagsPut, endTag, DRL_RET_INTERNAL_ERROR)
@@ -2434,7 +2408,7 @@ function inv.items.putCR()
     for _,objId in ipairs(idArray) do
       retval = inv.items.putItem(objId, containerId, commandArray, true)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.debug("Skipping request to put item " .. objId .. " in container \"" .. 
+        dbot.debug("Skipping request to put item " .. objId .. " in container \"" ..
                    containerName .. "\" (" .. containerId .. "): " .. dbot.retval.getString(retval))
         break
       else
@@ -2492,7 +2466,7 @@ function inv.items.putItem(objId, containerId, commandArray, doCheckLocation)
                    "@W" .. DRL_ANSI_WHITE
 
   -- The target container may not be in our inventory (it might be on the floor or might
-  -- be furniture in a room).  
+  -- be furniture in a room).
   local containerName = (inv.items.getField(containerId, invFieldColorName) or "Room container") ..
                         "@W" .. DRL_ANSI_WHITE
   local isRoomContainer = false
@@ -2534,7 +2508,7 @@ function inv.items.putItem(objId, containerId, commandArray, doCheckLocation)
 
     retval = inv.items.getItem(objId, commandArray)
     if (retval ~= DRL_RET_SUCCESS) then
-      dbot.note("Skipping request to move item " .. objId .. " to main inventory: " .. 
+      dbot.note("Skipping request to move item " .. objId .. " to main inventory: " ..
                 dbot.retval.getString(retval))
       return retval
     end -- if
@@ -2644,7 +2618,7 @@ function inv.items.store(queryString, endTag)
   end -- if
 
   if (inv.items.storePkg ~= nil) then
-    dbot.info("Skipping store request for query \"" .. queryString .. 
+    dbot.info("Skipping store request for query \"" .. queryString ..
               "\", another store request is in progress")
     inv.tags.stop(invTagsStore, endTag, DRL_RET_BUSY)
   end -- if
@@ -2767,7 +2741,7 @@ end -- inv.items.storeItem
 -- Routines to handle wearing items
 --
 -- inv.items.wearItem(objId, objLoc, commandArray, doCheckLocation) -- must be called from a co-routine
--- inv.items.wearSetupFn()   
+-- inv.items.wearSetupFn()
 -- inv.items.wearResultFn()
 --
 -- Verbage:
@@ -2808,7 +2782,7 @@ function inv.items.wearItem(objId, targetLoc, commandArray, doCheckLocation)
     retval = inv.items.getItem(objId, commandArray)
     if (retval ~= DRL_RET_SUCCESS) then
       if (retval ~= DRL_RET_MISSING_ENTRY) then
-        dbot.warn("inv.items.wearItem: Failed to get item \"" .. itemName .. "\": " .. 
+        dbot.warn("inv.items.wearItem: Failed to get item \"" .. itemName .. "\": " ..
                   dbot.retval.getString(retval))
       end -- if
 
@@ -2860,7 +2834,7 @@ function inv.items.wearItem(objId, targetLoc, commandArray, doCheckLocation)
         if inv.items.isInvis(objId) then
           dbot.info("Failed to wear invisible item \"" .. itemName .. "\": can you detect invis?")
         else
-          dbot.warn("inv.items.wearItem: Timed out waiting for invmon to confirm we are wearing \"" .. 
+          dbot.warn("inv.items.wearItem: Timed out waiting for invmon to confirm we are wearing \"" ..
                     itemName .. "\"")
         end -- if
         retval = DRL_RET_MISSING_ENTRY
@@ -2953,7 +2927,7 @@ end -- inv.items.wearableTypeToLocs
 -- Routines to handle removing items
 --
 -- inv.items.removeItem(objId, commandArray) -- must be called from a co-routine
--- inv.items.removeSetupFn()   
+-- inv.items.removeSetupFn()
 -- inv.items.removeResultFn()
 --
 -- Verbage:
@@ -3011,7 +2985,7 @@ function inv.items.removeItem(objId, commandArray)
           if inv.items.isInvis(objId) then
             dbot.info("Failed to remove invisible item \"" .. itemName .. "\": can you detect invis?")
           else
-            dbot.warn("inv.items.removeItem: Timed out waiting for invmon to confirm we removed \"" .. 
+            dbot.warn("inv.items.removeItem: Timed out waiting for invmon to confirm we removed \"" ..
                       itemName .. "\"")
           end -- if
           retval = DRL_RET_MISSING_ENTRY
@@ -3056,7 +3030,7 @@ function inv.items.keyword(keyword, keywordOperation, queryString, useQuietMode,
     return inv.tags.stop(invTagsKeyword, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
-  if (keywordOperation == nil) or 
+  if (keywordOperation == nil) or
      ((keywordOperation ~= invKeywordOpAdd) and (keywordOperation ~= invKeywordOpRemove)) then
     dbot.warn("inv.items.keyword: Invalid keywordOperation")
     return inv.tags.stop(invTagsKeyword, endTag, DRL_RET_INVALID_PARAM)
@@ -3140,10 +3114,10 @@ function inv.items.keywordCR()
         if (keywordField == nil) or (keywordField == "") then
           inv.items.setStatField(objId, invStatFieldKeywords, inv.items.keywordPkg.keyword)
         elseif dbot.isWordInString(inv.items.keywordPkg.keyword, keywordField) then
-          dbot.debug("Skipping keyword of item " .. objId .. ": item is already tagged with " .. 
+          dbot.debug("Skipping keyword of item " .. objId .. ": item is already tagged with " ..
                      inv.items.keywordPkg.keyword)
         else
-          inv.items.setStatField(objId, invStatFieldKeywords, keywordField .. " " .. 
+          inv.items.setStatField(objId, invStatFieldKeywords, keywordField .. " " ..
                                  inv.items.keywordPkg.keyword)
         end -- if
 
@@ -3187,7 +3161,7 @@ function inv.items.keywordCR()
   end -- if
 
   if (not inv.items.keywordPkg.useQuietMode) then
-    dbot.info("Updated keyword \"" .. (inv.items.keywordPkg.keyword or "Unknown")  .. "\" for " .. 
+    dbot.info("Updated keyword \"" .. (inv.items.keywordPkg.keyword or "Unknown")  .. "\" for " ..
               numUpdatedKeywords .. " out of " .. numQueryItems .. " items matching query")
   end -- if
 
@@ -3403,19 +3377,12 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
               break
             end -- if
 
-          -- If we are searching for an element in a string of elements (e.g., a keyword in a keyword list
-          -- or a flag in a list of flags) check if the queried string is present.  We use a case-insensitive
-          -- search by making everything in the strings lower case.  We also temporarily replace special
-          -- characters in the search strings with their escaped equivalents (e.g., "-" becomes "%-") so 
-          -- that we can search for things like "anti-evil" without the hyphen being interpreted as a
-          -- special character.
-          --
-          -- Some string fields (name and leadsTo) support a partial match.  For example, searching for 
-          -- "Nation" in the "leadsTo" field would match for both "Imperial Nation" and "The Amazon Nation".
-          -- Other string fields (keywords and flags) require an exact match so searching for the
-          -- "evil" flag won't match on "anti-evil".
-
-          elseif (key == invStatFieldName) or (key == invStatFieldLeadsTo) or (key == invStatFieldFoundAt) then
+          -- Partial string match
+          --  - case insensitive
+          --  - substring match e.g. "gold" matches "imperial golden goose" (also "old" would match)
+          elseif dinv_db.partialStringMatchFields[key] then
+            -- Escape Lua pattern metacharacters in the search value so string.find treats
+            -- them literally (e.g., "-" in "anti-evil" matches as a hyphen, not a range).
             local escapedValue = string.gsub(value, "[%(%)%.%+%-%*%?%[%]%^%$%%]", "%%%1")
             local noMatch = (string.find(string.lower(statsVal), string.lower(escapedValue)) == nil)
             if ((invert == false) and noMatch) or ((invert == true) and not noMatch) then
@@ -3423,13 +3390,15 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
               break
             end -- if
 
-          elseif (key == invStatFieldKeywords) or (key == invStatFieldFlags)    or
-                 (key == invStatFieldClan)     or (key == invStatFieldWearable) then
-            local statField = statsVal or ""
-            local element
+          -- Whole-word match
+          --  - case insensitive
+          --  - search value must completely match an element in the whitespace-separated list of the field
+          --         (commas in the field are ignored)
+          --         e.g. "evil" matches "invis, evil, glowing" but not "anti-evil"
+          elseif dinv_db.exactStringMatchFields[key] then
             local isInField = false
 
-            for element in statField:gmatch("%S+") do
+            for element in statsVal:gmatch("%S+") do
               element = string.gsub(element, ",", "")
               if (string.lower(element) == string.lower(value)) then
                 isInField = true
@@ -3488,7 +3457,7 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
 
         end -- for
       end -- if
-      
+
       if (itemMatches == true) then
         table.insert(idArray, tonumber(itemId))
       end -- if
@@ -3511,7 +3480,7 @@ end -- inv.items.search
 --   name bob
 --   keyword shardblade
 -- Note: This must be called from within a co-routine because inv.items.convertRelative() can block
-function inv.items.searchCR(rawQueryString, allowIgnored) 
+function inv.items.searchCR(rawQueryString, allowIgnored)
   local retval = DRL_RET_SUCCESS
   local arrayOfKvArrays = {}
   local kvArray = {}
@@ -3584,7 +3553,7 @@ function inv.items.searchCR(rawQueryString, allowIgnored)
         end -- if
 
         -- If a query has a relative name or loc in it, convert the name or loc to an object ID here
-        if (key == invQueryKeyRelativeName) or (key == invQueryKeyRelativeLoc) or 
+        if (key == invQueryKeyRelativeName) or (key == invQueryKeyRelativeLoc) or
            (key == invQueryKeyRelativeLocation) then
           key, value, retval = inv.items.convertRelative(key, value) -- new value is ID of relative item
           if (retval ~= DRL_RET_SUCCESS) then
@@ -3593,7 +3562,7 @@ function inv.items.searchCR(rawQueryString, allowIgnored)
         end -- if
 
         -- Add shortcuts to some commonly used query keys
-        if (key == invQueryKeyKey) or (key == invQueryKeyKeyword) then
+        if (key == invQueryKeyKey) or (key == invQueryKeyKeyword) or (key == invQueryKeyKw) then
           key = invStatFieldKeywords
         elseif (key == invQueryKeyFlag) then
           key = invStatFieldFlags
@@ -3716,7 +3685,7 @@ function inv.items.compare(item1, item2)
     -- If we have two numbers, compare the two numbers.  If they are equal, move to the next sorting element.
     -- Otherwise, return with a boolean indicating which one is first.
     if (fieldNum1 ~= nil) and (fieldNum2 ~= nil) and (fieldNum1 ~= fieldNum2) then
-      if (isAscending) then 
+      if (isAscending) then
          return fieldNum1 < fieldNum2
       else
          return fieldNum1 > fieldNum2
@@ -3725,7 +3694,7 @@ function inv.items.compare(item1, item2)
 
    -- If we have two non-numerical strings, compare them!
    if (fieldNum == nil) and (fieldNum2 == nil) and (field1 ~= field2) then
-     if (isAscending) then 
+     if (isAscending) then
        return field1 < field2
      else
        return field1 > field2
@@ -3765,7 +3734,7 @@ function inv.items.convertRelative(relativeName, value)
   table.insert(commandArray, "identify " .. value)
   table.insert(commandArray, "echo " .. inv.items.identifyFence)
   retval = dbot.execute.safe.commands(commandArray, inv.items.convertSetupFn, nil,
-                                      dbot.callback.default, resultData) 
+                                      dbot.callback.default, resultData)
   if (retval ~= DRL_RET_SUCCESS) then
     dbot.warn("inv.items.convertRelative: Failed to submit safe identification call: " ..
               dbot.retval.getString(retval))
@@ -3792,7 +3761,7 @@ function inv.items.convertRelative(relativeName, value)
   end -- if
 
   inv.lastIdentifiedObjectId = nil
-  
+
   return key, id, retval
 end -- inv.items.convertRelative
 
@@ -3908,7 +3877,7 @@ function inv.items.reportItem(channel, name, level, itemType, itemTable)
 --                        { light = "@x144", dark = "@x136" },
 --                        { light = "@R", dark = "@r" },
                       }
-  
+
   local reportStr = (name or "Unidentified") .. "@c [@WL" .. level .. " " ..
                     Trim(itemType) .. "@c] @W: "
 
@@ -3978,86 +3947,74 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
   end -- if
 
   local colorName  = inv.items.getField(objId, invFieldColorName) or "@RName is not yet identified@w"
-  local level      = inv.items.getStatField(objId, invStatFieldLevel) or 0
-  local typeField  = inv.items.getStatField(objId, invStatFieldType) or "Unknown"
-  local weaponType = inv.items.getStatField(objId, invStatFieldWeaponType) or "Unknown"
-  local damtype    = inv.items.getStatField(objId, invStatFieldDamType)  or "none"
-  local specials   = inv.items.getStatField(objId, invStatFieldSpecials) or "none"
-  local wearable   = inv.items.getStatField(objId, invStatFieldWearable) or ""
-  local leadsTo    = inv.items.getStatField(objId, invStatFieldLeadsTo) or "Unknown"
+  local level      = inv.items.getStatNum(objId, invStatFieldLevel)
+  local typeField  = inv.items.getStatStr(objId, invStatFieldType, "Unknown")
+  local weaponType = inv.items.getStatStr(objId, invStatFieldWeaponType, "Unknown")
+  local damtype    = inv.items.getStatStr(objId, invStatFieldDamType, "none")
+  local specials   = inv.items.getStatStr(objId, invStatFieldSpecials, "none")
+  local wearable   = inv.items.getStatStr(objId, invStatFieldWearable)
+  local leadsTo    = inv.items.getStatStr(objId, invStatFieldLeadsTo, "Unknown")
   local spells     = inv.items.getStatField(objId, invStatFieldSpells) or {}
 
-  -- Highlight items that are currently worn (the location isn't a container or inventory)
-  local highlightOn = ""
-  local highlightOff = ""
-  local isCurrentlyWorn = false
-  if inv.items.isWorn(objId) and (inv.items.getField(objId, invFieldColorName) ~= "") then
-    isCurrentlyWorn = true
-    highlightOn = "@W"
-    highlightOff = "@w"
-  end -- if
+  local isCurrentlyWorn = inv.items.isWorn(objId) and (inv.items.getField(objId, invFieldColorName) ~= "")
 
-  local int      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldInt)      or "0")
-  local luck     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldLuck)     or "0")
-  local wis      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldWis)      or "0")
-  local str      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldStr)      or "0")
-  local dex      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldDex)      or "0")
-  local con      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldCon)      or "0")
-  local avedam   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldAveDam)   or "0")
-  local dam      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldDam)      or "0")
-  local hit      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldHit)      or "0")
-  local hp       = dbot.tonumber(inv.items.getStatField(objId, invStatFieldHP)       or "0")
-  local mana     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldMana)     or "0")
-  local moves    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldMoves)    or "0")
-  local weight   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldWeight)   or "0")
+  local int      = inv.items.getStatNum(objId, invStatFieldInt)
+  local luck     = inv.items.getStatNum(objId, invStatFieldLuck)
+  local wis      = inv.items.getStatNum(objId, invStatFieldWis)
+  local str      = inv.items.getStatNum(objId, invStatFieldStr)
+  local dex      = inv.items.getStatNum(objId, invStatFieldDex)
+  local con      = inv.items.getStatNum(objId, invStatFieldCon)
+  local avedam   = inv.items.getStatNum(objId, invStatFieldAveDam)
+  local dam      = inv.items.getStatNum(objId, invStatFieldDam)
+  local hit      = inv.items.getStatNum(objId, invStatFieldHit)
+  local hp       = inv.items.getStatNum(objId, invStatFieldHP)
+  local mana     = inv.items.getStatNum(objId, invStatFieldMana)
+  local moves    = inv.items.getStatNum(objId, invStatFieldMoves)
+  local weight   = inv.items.getStatNum(objId, invStatFieldWeight)
 
-  local allphys  = dbot.tonumber(inv.items.getStatField(objId, invStatFieldAllPhys)  or "0")
-  local allmagic = dbot.tonumber(inv.items.getStatField(objId, invStatFieldAllMagic) or "0")
+  local allphys  = inv.items.getStatNum(objId, invStatFieldAllPhys)
+  local allmagic = inv.items.getStatNum(objId, invStatFieldAllMagic)
 
-  local slash    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldSlash)    or "0")
-  local pierce   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldPierce)   or "0")
-  local bash     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldBash)     or "0")
+  local slash    = inv.items.getStatNum(objId, invStatFieldSlash)
+  local pierce   = inv.items.getStatNum(objId, invStatFieldPierce)
+  local bash     = inv.items.getStatNum(objId, invStatFieldBash)
 
-  local acid     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldAcid)     or "0")
-  local cold     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldCold)     or "0")
-  local energy   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldEnergy)   or "0")
-  local holy     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldHoly)     or "0")
-  local electric = dbot.tonumber(inv.items.getStatField(objId, invStatFieldElectric) or "0")
-  local negative = dbot.tonumber(inv.items.getStatField(objId, invStatFieldNegative) or "0")
-  local shadow   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldShadow)   or "0")
-  local magic    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldMagic)    or "0")
-  local air      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldAir)      or "0")
-  local earth    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldEarth)    or "0")
-  local fire     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldFire)     or "0")
-  local light    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldLight)    or "0")
-  local mental   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldMental)   or "0")
-  local sonic    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldSonic)    or "0")
-  local water    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldWater)    or "0")
-  local poison   = dbot.tonumber(inv.items.getStatField(objId, invStatFieldPoison)   or "0")
-  local disease  = dbot.tonumber(inv.items.getStatField(objId, invStatFieldDisease)  or "0")
+  local acid     = inv.items.getStatNum(objId, invStatFieldAcid)
+  local cold     = inv.items.getStatNum(objId, invStatFieldCold)
+  local energy   = inv.items.getStatNum(objId, invStatFieldEnergy)
+  local holy     = inv.items.getStatNum(objId, invStatFieldHoly)
+  local electric = inv.items.getStatNum(objId, invStatFieldElectric)
+  local negative = inv.items.getStatNum(objId, invStatFieldNegative)
+  local shadow   = inv.items.getStatNum(objId, invStatFieldShadow)
+  local magic    = inv.items.getStatNum(objId, invStatFieldMagic)
+  local air      = inv.items.getStatNum(objId, invStatFieldAir)
+  local earth    = inv.items.getStatNum(objId, invStatFieldEarth)
+  local fire     = inv.items.getStatNum(objId, invStatFieldFire)
+  local light    = inv.items.getStatNum(objId, invStatFieldLight)
+  local mental   = inv.items.getStatNum(objId, invStatFieldMental)
+  local sonic    = inv.items.getStatNum(objId, invStatFieldSonic)
+  local water    = inv.items.getStatNum(objId, invStatFieldWater)
+  local poison   = inv.items.getStatNum(objId, invStatFieldPoison)
+  local disease  = inv.items.getStatNum(objId, invStatFieldDisease)
 
   -- Calculate total physical and magical resists.  We weight a specific physical or magic resist
   -- relative to an "all" resist.  For example, 3 "slash" resists are equivalent to 1 "all" phys resist
   -- because there are 3 physical resist types.  Similarly, one specific magical resist is worth 1/17 of
   -- one "all" magical resist value because there are 17 magical resistance types.
   local physResists = allphys + (slash + pierce + bash) / 3
-  local magicResists = allmagic + (acid + cold + energy + holy + electric + negative + shadow + magic + 
+  local magicResists = allmagic + (acid + cold + energy + holy + electric + negative + shadow + magic +
                        air + earth + fire + light + mental + sonic + water + poison + disease) / 17
   local totResists = physResists + magicResists
 
-  local capacity        = dbot.tonumber(inv.items.getStatField(objId, invStatFieldCapacity)        or "0")
-  local holding         = dbot.tonumber(inv.items.getStatField(objId, invStatFieldHolding)         or "0")
-  local heaviestItem    = dbot.tonumber(inv.items.getStatField(objId, invStatFieldHeaviestItem)    or "0")
-  local itemsInside     = dbot.tonumber(inv.items.getStatField(objId, invStatFieldItemsInside)     or "0")
-  local totWeight       = dbot.tonumber(inv.items.getStatField(objId, invStatFieldTotWeight)       or "0")
-  local itemBurden      = dbot.tonumber(inv.items.getStatField(objId, invStatFieldItemBurden)      or "0")
-  local weightReduction = dbot.tonumber(inv.items.getStatField(objId, invStatFieldWeightReduction) or "0")
+  local capacity        = inv.items.getStatNum(objId, invStatFieldCapacity)
+  local holding         = inv.items.getStatNum(objId, invStatFieldHolding)
+  local heaviestItem    = inv.items.getStatNum(objId, invStatFieldHeaviestItem)
+  local itemsInside     = inv.items.getStatNum(objId, invStatFieldItemsInside)
+  local totWeight       = inv.items.getStatNum(objId, invStatFieldTotWeight)
+  local itemBurden      = inv.items.getStatNum(objId, invStatFieldItemBurden)
+  local weightReduction = inv.items.getStatNum(objId, invStatFieldWeightReduction)
 
-  -- If we are in basic display mode, don't print the object ID; otherwise print it
-  local displayObjId = false
-  if (verbosity == invDisplayVerbosityId) or (verbosity == invDisplayVerbosityFull) then
-    displayObjId = true
-  end -- if
+  local displayObjId = (verbosity == invDisplayVerbosityId) or (verbosity == invDisplayVerbosityFull)
 
   -- If we are in "diff" mode, we prepend the addition or removal indicator to the name of the item
   if (verbosity == invDisplayVerbosityDiffAdd) then
@@ -4066,26 +4023,22 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     colorName = "@R<<@W " .. colorName
   end -- if
 
-  -- We color-code the ID field as follows: unidentified = red, partial ID = yellow, full ID = green
-  local formattedId = ""
-  local colorizedId = ""
-  local idPrefix = DRL_ANSI_WHITE
-  local idSuffix = DRL_ANSI_WHITE
+  -- ID field is color-coded by identification level: red=none, yellow=partial, green=full
+  local idColors = {
+    [invIdLevelNone]    = DRL_ANSI_RED,
+    [invIdLevelPartial] = DRL_ANSI_YELLOW,
+    [invIdLevelFull]    = DRL_ANSI_GREEN,
+  }
+  local formattedId, colorizedId = "", ""
   local idLevel = inv.items.getField(objId, invFieldIdentifyLevel)
-  if (idLevel ~= nil) and (displayObjId == true)  then
-    if (idLevel == invIdLevelNone) then
-      idPrefix = DRL_ANSI_RED
-    elseif (idLevel == invIdLevelPartial) then
-      idPrefix = DRL_ANSI_YELLOW
-    elseif (idLevel == invIdLevelFull) then
-      idPrefix = DRL_ANSI_GREEN
-    else
-      dbot.error("inv.items.displayItem: Invalid identify level state detected: idLevel")
+  if (idLevel ~= nil) and displayObjId then
+    local idColor = idColors[idLevel]
+    if idColor == nil then
+      dbot.error("inv.items.displayItem: Invalid identify level state detected: " .. tostring(idLevel))
       return DRL_RET_INTERNAL_ERROR
     end -- if
-
     formattedId = "(" .. objId .. ") "
-    colorizedId = idPrefix .. formattedId .. idSuffix
+    colorizedId = idColor .. formattedId .. DRL_ANSI_WHITE
   end -- if
 
   -- Format the name field for the stat display.  This is complicated because we have a fixed
@@ -4107,7 +4060,7 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
 
   -- The trimmed name could end on an "@" which messes up color codes and spacing
   formattedName = string.gsub(formattedName, "@$", " ") .. " " .. DRL_XTERM_GREY
-  formattedName = formattedName .. colorizedId 
+  formattedName = formattedName .. colorizedId
 
   -- If we have a wearable location, use it in the display.  Otherwise, use the item's type.
   local typeExtended
@@ -4130,10 +4083,10 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
   else
     typeExtended = wearable
   end -- if
-  typeExtended = string.format("%-8s", typeExtended) 
+  typeExtended = string.format("%-8s", typeExtended)
 
   -- Make the item's type show up in bright green if the item is currently worn
-  if (isCurrentlyWorn == true) then
+  if isCurrentlyWorn then
     typeExtended = DRL_ANSI_GREEN .. typeExtended .. DRL_ANSI_WHITE
   end -- if
 
@@ -4146,8 +4099,8 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
   local header
   local statLine
   local reportLine = ""
-  if (typeField == invmon.typeStr[invmonTypePotion]) or 
-     (typeField == invmon.typeStr[invmonTypePill]) or 
+  if (typeField == invmon.typeStr[invmonTypePotion]) or
+     (typeField == invmon.typeStr[invmonTypePill]) or
      (typeField == invmon.typeStr[invmonTypeScroll]) then
     header = "@WLvl Name of " .. formattedType .. "Type    Lvl  # Spell name@w"
     local spellDetails = ""
@@ -4173,7 +4126,7 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
   -- we'd need to ID each item -- which defeats the purpose of caching the info in the first place.
   -- Trust me, if you buy 100 starburst staves, you'd rather have them in the frequent cache even if
   -- it means your inventory table doesn't know how many charges are on each instance.
-  elseif (typeField == invmon.typeStr[invmonTypeWand]) or 
+  elseif (typeField == invmon.typeStr[invmonTypeWand]) or
          (typeField == invmon.typeStr[invmonTypeStaff]) then
     header = "@WLvl Name of " .. formattedType .. "Type    Lvl  Spell name@w"
     local spellDetails = ""
@@ -4194,15 +4147,15 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
              "Type     Leads to            HR  DR Int Wis Lck Str Dex Con@w"
     statLine = string.format("@W%3d@w %s%s %-18s %s %s %s %s %s %s %s %s",
                              level, formattedName, typeExtended, formattedLeadsTo,
-                             inv.items.colorizeStat(hit, 3), inv.items.colorizeStat(dam, 3), 
-                             inv.items.colorizeStat(int, 3), inv.items.colorizeStat(wis, 3), 
+                             inv.items.colorizeStat(hit, 3), inv.items.colorizeStat(dam, 3),
+                             inv.items.colorizeStat(int, 3), inv.items.colorizeStat(wis, 3),
                              inv.items.colorizeStat(luck, 3), inv.items.colorizeStat(str, 3),
-                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3)) 
+                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3))
     if (channel ~= nil) then
       inv.items.reportItem(channel,
                            colorName, level, typeExtended,
                            { { To = formattedLeadsTo },
-                             { DR = dam }, { HR = hit }, 
+                             { DR = dam }, { HR = hit },
                              { Wgt = weight },
                              { Str = str }, { Int = int }, { Wis = wis },
                              { Dex = dex }, { Con = con }, { Lck = luck }
@@ -4210,15 +4163,15 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     end -- if
 
   elseif (typeField == invmon.typeStr[invmonTypeContainer]) then
-    header = "@WLvl Name of " .. formattedType .. 
+    header = "@WLvl Name of " .. formattedType ..
              "Type       HR   DR Int Wis Lck Str Dex Con Wght  Cap Hold Hvy #In Wgt%@w"
 
     statLine = string.format("@W%3d@w %s%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
                              level, formattedName, typeExtended,
-                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4), 
+                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4),
                              inv.items.colorizeStat(int, 3), inv.items.colorizeStat(wis, 3),
                              inv.items.colorizeStat(luck, 3), inv.items.colorizeStat(str, 3),
-                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3), 
+                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3),
                              inv.items.colorizeStat(totWeight, 4, true), inv.items.colorizeStat(capacity, 4),
                              inv.items.colorizeStat(holding, 4), inv.items.colorizeStat(heaviestItem, 3),
                              inv.items.colorizeStat(itemsInside, 3), inv.items.colorizeStat(weightReduction, 4))
@@ -4227,7 +4180,7 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
       inv.items.reportItem(channel,
                            colorName, level, typeExtended,
                            { { Capacity = capacity }, { WgtPct = weightReduction },
-                             { DR = dam }, { HR = hit }, 
+                             { DR = dam }, { HR = hit },
                              { Str = str }, { Int = int }, { Wis = wis },
                              { Dex = dex }, { Con = con }, { Lck = luck }
                            })
@@ -4240,7 +4193,7 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     statLine = string.format("@W%3d@w %s%s %s %s %s %s %-8s %-8s %s %s %s %s %s %s",
                              level, formattedName, typeExtended,
                              inv.items.colorizeStat(avedam, 3), inv.items.colorizeStat(weight, 3),
-                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4), 
+                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4),
                              damtype, specials,
                              inv.items.colorizeStat(int, 3), inv.items.colorizeStat(wis, 3),
                              inv.items.colorizeStat(luck, 3), inv.items.colorizeStat(str, 3),
@@ -4249,8 +4202,8 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     if (channel ~= nil) then
       inv.items.reportItem(channel,
                            colorName, level, typeExtended,
-                           { { Ave = avedam }, { DR = dam }, { HR = hit }, 
-                             { Wgt = weight }, 
+                           { { Ave = avedam }, { DR = dam }, { HR = hit },
+                             { Wgt = weight },
                              { Str = str }, { Int = int }, { Wis = wis },
                              { Dex = dex }, { Con = con }, { Lck = luck },
                              { Dam = damtype }, { Special = specials },
@@ -4262,23 +4215,23 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     statLine = string.format("@WN/A@w %sItem has not yet been identified", formattedName)
 
   else
-    header = "@WLvl Name of " .. formattedType .. 
+    header = "@WLvl Name of " .. formattedType ..
              "Type       HR   DR Int Wis Lck Str Dex Con Res HitP Mana Move@w"
 
     statLine = string.format("@W%3d@w %s%s %s %s %s %s %s %s %s %s %s %s %s %s",
                              level, formattedName, typeExtended,
-                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4), 
+                             inv.items.colorizeStat(hit, 4), inv.items.colorizeStat(dam, 4),
                              inv.items.colorizeStat(int, 3), inv.items.colorizeStat(wis, 3),
                              inv.items.colorizeStat(luck, 3), inv.items.colorizeStat(str, 3),
-                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3), 
+                             inv.items.colorizeStat(dex, 3), inv.items.colorizeStat(con, 3),
                              inv.items.colorizeStat(totResists, 3),
                              inv.items.colorizeStat(hp, 4), inv.items.colorizeStat(mana, 4),
-                             inv.items.colorizeStat(moves, 4)) 
+                             inv.items.colorizeStat(moves, 4))
 
     if (channel ~= nil) then
       inv.items.reportItem(channel,
                            colorName, level, typeExtended,
-                           { { DR = dam }, { HR = hit }, 
+                           { { DR = dam }, { HR = hit },
                              { Str = str }, { Int = int }, { Wis = wis },
                              { Dex = dex }, { Con = con }, { Lck = luck },
                              { Res = totResists }, { HP = hp }, { MN = mana }, { MV = moves }
@@ -4301,17 +4254,17 @@ function inv.items.displayItem(objId, verbosity, wearableLoc, channel)
     return DRL_RET_SUCCESS
   end -- if
 
-  local score = dbot.tonumber(inv.items.getStatField(objId, invStatFieldScore) or "0")
-  local worth = dbot.tonumber(inv.items.getStatField(objId, invStatFieldWorth) or "0")
-  local keywords = inv.items.getStatField(objId, invStatFieldKeywords) or ""
-  local flags = inv.items.getStatField(objId, invStatFieldFlags) or ""
-  local material = inv.items.getStatField(objId, invStatFieldMaterial) or ""
-  local foundAt = inv.items.getStatField(objId, invStatFieldFoundAt) or ""
-  local ownedBy = inv.items.getStatField(objId, invStatFieldOwnedBy) or ""
-  local clan = inv.items.getStatField(objId, invStatFieldClan) or ""
-  local affectMods = inv.items.getStatField(objId, invStatFieldAffectMods) or ""
-  local organize = inv.items.getStatField(objId, invQueryKeyOrganize) or ""
-  local inflicts = inv.items.getStatField(objId, invStatFieldInflicts) or ""
+  local score      = inv.items.getStatNum(objId, invStatFieldScore)
+  local worth      = inv.items.getStatNum(objId, invStatFieldWorth)
+  local keywords   = inv.items.getStatStr(objId, invStatFieldKeywords)
+  local flags      = inv.items.getStatStr(objId, invStatFieldFlags)
+  local material   = inv.items.getStatStr(objId, invStatFieldMaterial)
+  local foundAt    = inv.items.getStatStr(objId, invStatFieldFoundAt)
+  local ownedBy    = inv.items.getStatStr(objId, invStatFieldOwnedBy)
+  local clan       = inv.items.getStatStr(objId, invStatFieldClan)
+  local affectMods = inv.items.getStatStr(objId, invStatFieldAffectMods)
+  local organize   = inv.items.getStatStr(objId, invQueryKeyOrganize)
+  local inflicts   = inv.items.getStatStr(objId, invStatFieldInflicts)
 
   -- Helper: format a stat as "+N" or "-N", returns nil if zero
   local function fmtStat(name, value)
@@ -4463,7 +4416,7 @@ function inv.items.colorizeStat(value, numDigits, invertColors)
   numDigits = tonumber(numDigits)
 
   if (value == nil) or (numDigits == nil) then
-    dbot.warn("inv.items.colorizeStat: non-numeric parameter detected: value=\"" .. (value or "nil") .. 
+    dbot.warn("inv.items.colorizeStat: non-numeric parameter detected: value=\"" .. (value or "nil") ..
             "\", numDigits=\"" .. (numDigits or "nil") .. "\"")
     return nil
   end -- if
@@ -4508,7 +4461,7 @@ end -- inv.items.isInvis
 --       container priorities and the item could end up in any matching container.  For now, it is
 --       up to the user to not create conflicting container queries.
 -- TODO: Check if there is any overlap in the item arrays returned from container queries and
---       warn the user.  We could also implement a priority scheme for containers too, but that 
+--       warn the user.  We could also implement a priority scheme for containers too, but that
 --       seems like overkill...
 --
 -- dinv organize [add | clear] <container relative name or ID> <query>
@@ -4533,7 +4486,7 @@ inv.items.organize = {}
 
 
 inv.items.organize.addPkg = nil
-function inv.items.organize.add(containerName, queryString, endTag) 
+function inv.items.organize.add(containerName, queryString, endTag)
   if (containerName == nil) or (containerName == "") then
     dbot.warn("inv.items.organize.add: Missing container relative name or ID")
     return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
@@ -4549,14 +4502,14 @@ function inv.items.organize.add(containerName, queryString, endTag)
 
   if (inv.items.organize.addPkg ~= nil) then
     dbot.info("Skipping add request in organize package: another add request is in progress")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_BUSY)    
+    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_BUSY)
   end -- if
 
   inv.items.organize.addPkg           = {}
   inv.items.organize.addPkg.container = containerName
   inv.items.organize.addPkg.query     = queryString
   inv.items.organize.addPkg.endTag    = endTag
-  
+
   wait.make(inv.items.organize.addCR)
 
   return DRL_RET_SUCCESS
@@ -4615,13 +4568,13 @@ function inv.items.organize.clear(containerName, endTag)
 
   if (inv.items.organize.clearPkg ~= nil) then
     dbot.info("Skipping clear request in organize package: another clear request is in progress")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_BUSY)    
+    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_BUSY)
   end -- if
 
   inv.items.organize.clearPkg           = {}
   inv.items.organize.clearPkg.container = containerName
   inv.items.organize.clearPkg.endTag    = endTag
-  
+
   wait.make(inv.items.organize.clearCR)
 
   return DRL_RET_SUCCESS
@@ -4799,7 +4752,7 @@ function inv.items.organize.cleanupCR()
   -- Find all items that match the given inventory query
   invIdArray, retval = inv.items.searchCR(inv.items.organize.cleanupPkg.query)
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.items.organize.cleanupCR: failed to search inventory table: " .. 
+    dbot.warn("inv.items.organize.cleanupCR: failed to search inventory table: " ..
               dbot.retval.getString(retval))
     inv.items.organize.cleanupPkg = nil
     return inv.tags.stop(invTagsOrganize, endTag, retval)
@@ -4849,7 +4802,7 @@ function inv.items.organize.cleanupCR()
     if (organizeQuery ~= "") then
       local containerIdArray, retval = inv.items.searchCR(organizeQuery)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.warn("inv.items.organize.cleanupCR: failed to search inventory table: " .. 
+        dbot.warn("inv.items.organize.cleanupCR: failed to search inventory table: " ..
                   dbot.retval.getString(retval))
         inv.items.organize.cleanupPkg = nil
         return inv.tags.stop(invTagsOrganize, endTag, retval)
@@ -4861,7 +4814,7 @@ function inv.items.organize.cleanupCR()
       for _, invId in ipairs(invIdArray) do
         for _, containerId in ipairs(containerIdArray) do
           if (invId == containerId) and inv.items.organize.canGoInContainer(invId) then
-            dbot.debug("Found item to organize: \"" .. 
+            dbot.debug("Found item to organize: \"" ..
                        (inv.items.getField(invId, invFieldColorName) or "Unidentified") ..
                        DRL_ANSI_WHITE .. "@W\"")
 
@@ -4871,7 +4824,7 @@ function inv.items.organize.cleanupCR()
               retval = inv.items.putItem(invId, objId, commandArray, true)
               if (retval ~= DRL_RET_SUCCESS) then
                 dbot.debug("inv.items.organize.cleanupCR: failed to put item \"" ..
-                           (inv.items.getField(invId, invFieldColorName) or "Unidentified") .. 
+                           (inv.items.getField(invId, invFieldColorName) or "Unidentified") ..
                            "\" in container \"" ..
                            (inv.items.getField(objId, invFieldColorName) or "Unidentified") .. "\": " ..
                            dbot.retval.getString(retval))
@@ -4889,7 +4842,7 @@ function inv.items.organize.cleanupCR()
                 commandArray = dbot.execute.new()
               end -- if
 
-            end -- if          
+            end -- if
           end -- if
         end -- for
       end -- for
@@ -5076,8 +5029,7 @@ function inv.items.trigger.itemIdStart(line)
                "^" .. inv.items.identifyFence .. "$",
                "inv.items.trigger.itemIdEnd()",
                drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
-               custom_colour.Custom11,
-               0, "", "", sendto.script, 0)
+               custom_colour.Custom11, 0, "", "", sendto.script, 0)
 
   -- If the start trigger matched a content line (blindmode: no border lines),
   -- process it as the first stats line so we don't lose the data
@@ -5092,116 +5044,52 @@ inv.items.trigger.affectModsContinuation = false
 inv.items.trigger.keywordsContinuation   = false
 inv.items.trigger.nameContinuation       = false
 function inv.items.trigger.itemIdStats(line)
-  dbot.debug("stats for item " .. inv.items.identifyPkg.objId .. ":\"" .. line .. "\"")
+  local objId = inv.items.identifyPkg.objId
+  dbot.debug("stats for item " .. objId .. ":\"" .. line .. "\"")
 
-  local isPartialId, id, name, level, weight, wearable, score, keywords, itemType, worth, flags,
-        affectMods, continuation, material, foundAt, ownedBy, clan, rawMaterial
+  local function parseStatAsNum(pattern, statField)
+    local _, _, v = string.find(line, pattern)
+    if v == nil then return end
+    inv.items.setStatField(objId, statField, dbot.tonumber(v))
+    dbot.debug(statField .. " = \"" .. v .. "\"")
+  end
 
-  isPartialId = string.find(line, "A full appraisal will reveal further information on this item")
+  local function parseStatAsStr(pattern, statField)
+    local _, _, v = string.find(line, pattern)
+    if v == nil then return end
+    inv.items.setStatField(objId, statField, v)
+    dbot.debug(statField .. " = \"" .. v .. "\"")
+  end
 
-  _, _, id = string.find(line, "Id%s+:%s+(%d+)%s+")
-  _, _, name = string.find(line, "Name%s+:%s+(.-)%s*|$")
-  _, _, level = string.find(line, "Level%s+:%s+(%d+)%s+")
-  _, _, weight = string.find(line, "Weight%s+:%s+([0-9,-]+)%s+")
-  _, _, wearable = string.find(line, "Wearable%s+:%s+(.*) %s+")
-  _, _, score = string.find(line, "Score%s+:%s([0-9,]+)%s+")
-  _, _, keywords = string.find(line, "Keywords%s+:%s+(.-)%s*|")
-  _, _, itemType = string.find(line, "| Type%s+:%s+(%a+)%s+")
-  _, _, rawMaterial = string.find(line, "| Type%s+:%s+(Raw material:%a+)")
+  local function parseStatModAsNum(pattern, statField)
+    local _, _, v = string.find(line, pattern)
+    if v == nil then return end
+    local prior = inv.items.getStatField(objId, statField) or 0
+    inv.items.setStatField(objId, statField, dbot.tonumber(v) + prior)
+    dbot.debug("mod " .. statField .. " = \"" .. v .. "\"")
+  end
 
-  _, _, worth = string.find(line, "Worth%s+:%s+([0-9,]+)%s+")
-  _, _, flags = string.find(line, "Flags%s+:%s+(.-)%s*|")
-  _, _, affectMods = string.find(line, "Affect Mods:%s+(.-)%s*|")
-  _, _, continuation = string.find(line, "|%s+:%s+(.-)%s*|")
-  _, _, material = string.find(line, "Material%s+:%s+(.*)%s+")
-  _, _, foundAt = string.find(line, "Found at%s+:%s+(.-)%s*|")
-  _, _, ownedBy = string.find(line, "Owned By%s+:%s+(.-)%s*|")
-  _, _, clan = string.find(line, "Clan Item%s+:%s+(.-)%s*|")
+  -- Side-effect fields (continuation tracking, merges, coupled
+  -- itemType/rawMaterial, spell aggregation) are extracted and
+  -- applied inline below.
+  local isPartialId = string.find(line, "A full appraisal will reveal further information on this item")
 
-  -- Potions, pills, wands, and staves
-  local spellUses, spellLevel, spellName
-  _, _, spellUses, spellLevel, spellName = string.find(line, "([0-9]+) uses? of level ([0-9]+) '(.*)'")
-
-  -- Portal-only fields
-  local leadsTo
-  _, _, leadsTo = string.find(line, "Leads to%s+:%s+(.*)%s+")
-
-  -- Container-only fields
-  local capacity, holding, heaviestItem, itemsInside, totWeight, itemBurden, weightReduction
-  _, _, capacity = string.find(line, "Capacity%s+:%s+([0-9,]+)%s+")
-  _, _, holding = string.find(line, "Holding%s+:%s+([0-9,]+)%s+")
-  _, _, heaviestItem = string.find(line, "Heaviest Item:%s+([0-9,]+)%s+")
-  _, _, itemsInside = string.find(line, "Items Inside%s+:%s+([0-9,]+)%s+")
-  _, _, totWeight = string.find(line, "Tot Weight%s+:%s+([0-9,-]+)%s+")
-  _, _, itemBurden = string.find(line, "Item Burden%s+:%s+([0-9,]+)%s+")
-  _, _, weightReduction = string.find(line, "Items inside weigh (%d+). of their usual weight%s+")
-
-  local int, wis, luck, str, dex, con
-  _, _, int = string.find(line, "Intelligence%s+:%s+([+-]?%d+)%s+")
-  _, _, wis = string.find(line, "Wisdom%s+:%s+([+-]?%d+)%s+")
-  _, _, luck = string.find(line, "Luck%s+:%s+([+-]?%d+)%s+")
-  _, _, str = string.find(line, "Strength%s+:%s+([+-]?%d+)%s+")
-  _, _, dex = string.find(line, "Dexterity%s+:%s+([+-]?%d+)%s+")
-  _, _, con = string.find(line, "Constitution%s+:%s+([+-]?%d+)%s+")
-
-  local hp, mana, moves
-  _, _, hp = string.find(line, "Hit points%s+:%s+([+-]?%d+)%s+")
-  _, _, mana = string.find(line, "Mana%s+:%s+([+-]?%d+)%s+")
-  _, _, moves = string.find(line, "Moves%s+:%s+([+-]?%d+)%s+")
-
-  local hit, dam
-  _, _, hit = string.find(line, "Hit roll%s+:%s+([+-]?%d+)%s+")
-  _, _, dam = string.find(line, "Damage roll%s+:%s+([+-]?%d+)%s+")
-
-  local allphys, allmagic
-  _, _, allphys = string.find(line, "All physical%s+:%s+([+-]?%d+)%s+")
-  _, _, allmagic = string.find(line, "All magic%s+:%s+([+-]?%d+)%s+")
-
-  local acid, cold, energy, holy, electric, negative, shadow, magic, air, earth, fire, light, mental,
-        sonic, water, poison, disease
-  _, _, acid = string.find(line, "Acid%s+:%s+([+-]?%d+)%s+")
-  _, _, cold = string.find(line, "Cold%s+:%s+([+-]?%d+)%s+")
-  _, _, energy = string.find(line, "Energy%s+:%s+([+-]?%d+)%s+")
-  _, _, holy = string.find(line, "Holy%s+:%s+([+-]?%d+)%s+")
-  _, _, electric = string.find(line, "Electric%s+:%s+([+-]?%d+)%s+")
-  _, _, negative = string.find(line, "Negative%s+:%s+([+-]?%d+)%s+")
-  _, _, shadow = string.find(line, "Shadow%s+:%s+([+-]?%d+)%s+")
-  _, _, magic = string.find(line, "Magic%s+:%s+([+-]?%d+)%s+")
-  _, _, air = string.find(line, "Air%s+:%s+([+-]?%d+)%s+")
-  _, _, earth = string.find(line, "Earth%s+:%s+([+-]?%d+)%s+")
-  _, _, fire = string.find(line, "Fire%s+:%s+([+-]?%d+)%s+")
-  _, _, light = string.find(line, "Light%s+:%s+([+-]?%d+)%s+")
-  _, _, mental = string.find(line, "Mental%s+:%s+([+-]?%d+)%s+")
-  _, _, sonic = string.find(line, "Sonic%s+:%s+([+-]?%d+)%s+")
-  _, _, water = string.find(line, "Water%s+:%s+([+-]?%d+)%s+")
-  _, _, poison = string.find(line, "Poison%s+:%s+([+-]?%d+)%s+")
-  _, _, disease = string.find(line, "Disease%s+:%s+([+-]?%d+)%s+")
-
-  local slash, pierce, bash
-  _, _, slash = string.find(line, "Slash%s+:%s+([+-]?%d+)%s+")
-  _, _, pierce = string.find(line, "Pierce%s+:%s+([+-]?%d+)%s+")
-  _, _, bash = string.find(line, "Bash%s+:%s+([+-]?%d+)%s+")
-
-  local avedam, inflicts, damtype, weaponType, specials
-  _, _, avedam = string.find(line, "Average Dam%s+:%s+(%d+)%s+")
-  _, _, inflicts = string.find(line, "Inflicts%s+:%s+(%a+)%s+")
-  _, _, damtype = string.find(line, "Damage Type%s+:%s+(%a+)%s+")
-  _, _, weaponType = string.find(line, "Weapon Type:%s+(%a+)%s+")
-  _, _, specials = string.find(line, "Specials%s+:%s+(%a+)%s+")
-
-  local tmpAvedam, tmpHR, tmpDR, tmpInt, tmpWis, tmpLuck, tmpStr, tmpDex, tmpCon
-  _, _, tmpAvedam = string.find(line, ":%s+adds [+-](%d+) average damage%s+")
-  _, _, tmpHR = string.find(line, ":%s+hit roll [+-](%d+)")
-  _, _, tmpDR = string.find(line, ":%s+damage roll [+-](%d+)")
-  _, _, tmpInt = string.find(line, ":%s+intelligence [+-](%d+)")
-  _, _, tmpWis = string.find(line, ":%s+wisdom [+-](%d+)")
-  _, _, tmpLuck = string.find(line, ":%s+luck [+-](%d+)")
-  _, _, tmpStr = string.find(line, ":%s+strength [+-](%d+)")
-  _, _, tmpDex = string.find(line, ":%s+dexterity [+-](%d+)")
-  _, _, tmpCon = string.find(line, ":%s+constitution [+-](%d+)")
+  local _, _, id           = string.find(line, "Id%s+:%s+(%d+)%s+")
+  local _, _, name         = string.find(line, "Name%s+:%s+(.-)%s*|$")
+  local _, _, wearable     = string.find(line, "Wearable%s+:%s+(.*) %s+")
+  local _, _, keywords     = string.find(line, "Keywords%s+:%s+(.-)%s*|")
+  local _, _, itemType     = string.find(line, "| Type%s+:%s+(%a+)%s+")
+  local _, _, rawMaterial  = string.find(line, "| Type%s+:%s+(Raw material:%a+)")
+  local _, _, flags        = string.find(line, "Flags%s+:%s+(.-)%s*|")
+  local _, _, affectMods   = string.find(line, "Affect Mods:%s+(.-)%s*|")
+  local _, _, continuation = string.find(line, "|%s+:%s+(.-)%s*|")
+  local _, _, material     = string.find(line, "Material%s+:%s+(.*)%s+")
+  local _, _, spellUses, spellLevel, spellName =
+                             string.find(line, "([0-9]+) uses? of level ([0-9]+) '(.*)'")
+  local _, _, leadsTo      = string.find(line, "Leads to%s+:%s+(.*)%s+")
 
   if (id ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldId, dbot.tonumber(id or ""))
+    inv.items.setStatField(objId, invStatFieldId, dbot.tonumber(id))
     dbot.debug("Id = \"" .. id .. "\"")
 
     -- If we hit the id field, we know that there aren't any more name continuation lines
@@ -5209,7 +5097,7 @@ function inv.items.trigger.itemIdStats(line)
   end -- if
 
   if (name ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldName, name)
+    inv.items.setStatField(objId, invStatFieldName, name)
     dbot.debug("Name = \"" .. name .. "\"")
 
     -- If we hit the name field, we know that there aren't any more keyword continuation lines.
@@ -5218,37 +5106,22 @@ function inv.items.trigger.itemIdStats(line)
     inv.items.trigger.nameContinuation = true
   end -- if
 
-  if (level ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldLevel, dbot.tonumber(level or ""))
-    dbot.debug("Level = \"" .. level .. "\"")
-  end -- if
-
-  if (weight ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWeight, dbot.tonumber(weight or ""))
-    dbot.debug("Weight = \"" .. weight .. "\"")
-  end -- if
-
   if (wearable ~= nil) then
     -- Strip out spaces and commas for items that can have more than one wearable location (e.g., "hold, light")
     wearable = string.gsub(Trim(wearable), ",", "")
 
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWearable, wearable)
+    inv.items.setStatField(objId, invStatFieldWearable, wearable)
     dbot.debug("Wearable = \"" .. wearable .. "\"")
-  end -- if
-
-  if (score ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldScore, dbot.tonumber(score or ""))
-    dbot.debug("Score = \"" .. score .. "\"")
   end -- if
 
   if (keywords ~= nil) then
     -- Merge this with any previous keywords.  Someone may have added custom keywords to the
     -- item and then re-identified it for some reason.  For example, someone may have toggled the
     -- keep flag which would cause invitem to flag the item to be re-identified.
-    local oldKeywords = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldKeywords) or ""
+    local oldKeywords = inv.items.getStatField(objId, invStatFieldKeywords) or ""
     local mergedKeywords = dbot.mergeFields(keywords, oldKeywords) or keywords
 
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldKeywords, mergedKeywords)
+    inv.items.setStatField(objId, invStatFieldKeywords, mergedKeywords)
     dbot.debug("Keywords = \"" .. mergedKeywords .. "\"")
 
     -- Assume that the keywords keep continuing on additional lines until we finally hit the name
@@ -5263,108 +5136,65 @@ function inv.items.trigger.itemIdStats(line)
       itemType = string.gsub(rawMaterial, "Raw material", "RawMaterial")
     end -- if
 
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldType, itemType)
+    inv.items.setStatField(objId, invStatFieldType, itemType)
     dbot.debug("Type = \"" .. itemType .. "\"")
   end -- if
 
-  if (worth ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWorth, dbot.tonumber(worth))
-    dbot.debug("Worth = \"" .. worth .. "\"")
-  end -- if
-
   if (isPartialId ~= nil) then
-    inv.items.setField(inv.items.identifyPkg.objId, invFieldIdentifyLevel, invIdLevelPartial)
+    inv.items.setField(objId, invFieldIdentifyLevel, invIdLevelPartial)
     dbot.debug("Id level = \"" .. invIdLevelPartial .. "\"")
   end -- if
 
   if (flags ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldFlags, flags)
+    inv.items.setStatField(objId, invStatFieldFlags, flags)
     dbot.debug("Flags = \"" .. flags .. "\"")
 
-    -- If the flags are continued (they end in a ",") watch for the continuation
-    if (string.find(flags, ",$")) then
-      inv.items.trigger.flagsContinuation = true
-    else
-      inv.items.trigger.flagsContinuation = false
-    end -- if
+    -- A trailing comma means the flags wrap onto a continuation line
+    inv.items.trigger.flagsContinuation = string.find(flags, ",$") ~= nil
   end -- if
 
   if (affectMods ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAffectMods, affectMods)
+    inv.items.setStatField(objId, invStatFieldAffectMods, affectMods)
     dbot.debug("AffectMods = \"" .. affectMods .. "\"")
 
-    -- If the affectMods are continued (they end in a ",") watch for the continuation
-    if (string.find(affectMods, ",$")) then
-      inv.items.trigger.affectModsContinuation = true
-    else
-      inv.items.trigger.affectModsContinuation = false
-    end -- if
+    -- A trailing comma means the affectMods wrap onto a continuation line
+    inv.items.trigger.affectModsContinuation = string.find(affectMods, ",$") ~= nil
   end -- if
 
   if (continuation ~= nil) then
     dbot.debug("Continuation = \"" .. continuation .. "\"")
-    if (inv.items.trigger.flagsContinuation) then
-      -- Add the continuation to the existing flags
-      inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldFlags,
-                             (inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldFlags) or "") ..
-                             " " .. continuation)
 
-      -- If the continued flags end in a comma, keep the continuation going; otherwise stop it
-      if not (string.find(continuation, ",$")) then
-        inv.items.trigger.flagsContinuation = false
+    -- First flag in this list whose tracker is set claims the line.
+    -- stopOnNoComma fields turn their tracker off once the wrap ends.
+    -- (Trailing else of the original chain was an unused placeholder.)
+    local continuationTargets = {
+      { flag = "flagsContinuation",      field = invStatFieldFlags,      stopOnNoComma = true  },
+      { flag = "affectModsContinuation", field = invStatFieldAffectMods, stopOnNoComma = true  },
+      { flag = "keywordsContinuation",   field = invStatFieldKeywords,   stopOnNoComma = false },
+      { flag = "nameContinuation",       field = invStatFieldName,       stopOnNoComma = false },
+    }
+
+    for _, target in ipairs(continuationTargets) do
+      if inv.items.trigger[target.flag] then
+        inv.items.setStatField(objId, target.field,
+                               (inv.items.getStatField(objId, target.field) or "") ..
+                               " " .. continuation)
+        if target.stopOnNoComma and not string.find(continuation, ",$") then
+          inv.items.trigger[target.flag] = false
+        end -- if
+        break
       end -- if
-
-    elseif (inv.items.trigger.affectModsContinuation) then
-      -- Add the continuation to the existing affectMods
-      inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAffectMods,
-                            (inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldAffectMods) 
-                             or "") .. " " .. continuation)
-
-      -- If the continued affectMods end in a comma, keep the continuation going; otherwise stop it
-      if not (string.find(continuation, ",$")) then
-        inv.items.trigger.affectModsContinuation = false
-      end -- if
-
-    elseif (inv.items.trigger.keywordsContinuation) then
-      -- Add the continuation to the existing keywords
-      inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldKeywords,
-                            (inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldKeywords) 
-                             or "") .. " " .. continuation)
-
-    elseif (inv.items.trigger.nameContinuation) then
-      -- Add the continuation to the existing name
-      inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldName,
-                            (inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldName) 
-                             or "") .. " " .. continuation)
-
-    else
-      -- Placeholder to add continuation support for other things (notes? others?)
-    end -- if
+    end -- for
   end -- if
 
   if (material ~= nil) then
     material = Trim(material)
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldMaterial, material)
+    inv.items.setStatField(objId, invStatFieldMaterial, material)
     dbot.debug("Material = \"" .. material .. "\"")
   end -- if
 
-  if (foundAt ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldFoundAt, foundAt)
-    dbot.debug("Found at = \"" .. foundAt .. "\"")
-  end -- if
-
-  if (ownedBy ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldOwnedBy, ownedBy)
-    dbot.debug("Found at = \"" .. ownedBy .. "\"")
-  end -- if
-
-  if (clan ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldClan, clan)
-    dbot.debug("From clan \"" .. clan .. "\"")
-  end -- if
-
   if (spellUses ~= nil) and (spellLevel ~= nil) and (spellName ~= nil) then
-    local spellArray = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldSpells) or {}
+    local spellArray = inv.items.getStatField(objId, invStatFieldSpells) or {}
     spellUses = tonumber(spellUses) or 0
 
     -- If we already have an entry for this spell, update the count
@@ -5377,312 +5207,104 @@ function inv.items.trigger.itemIdStats(line)
       end -- if
     end -- if
 
-    -- If we don't have an entry yet for this spell, add one 
+    -- If we don't have an entry yet for this spell, add one
     if (foundSpellMatch == false) then
-      table.insert(spellArray, { level=spellLevel, name=spellName, count=spellUses }) 
+      table.insert(spellArray, { level=spellLevel, name=spellName, count=spellUses })
     end -- if
 
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldSpells, spellArray)
+    inv.items.setStatField(objId, invStatFieldSpells, spellArray)
   end -- if
 
   if (leadsTo ~= nil) then
     leadsTo = Trim(leadsTo)
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldLeadsTo, leadsTo)
+    inv.items.setStatField(objId, invStatFieldLeadsTo, leadsTo)
     dbot.debug("Leads to = \"" .. leadsTo .. "\"")
   end -- if
 
+  -- Identification numerics
+  parseStatAsNum("Level%s+:%s+(%d+)%s+",                              invStatFieldLevel)
+  parseStatAsNum("Weight%s+:%s+([0-9,-]+)%s+",                        invStatFieldWeight)
+  parseStatAsNum("Score%s+:%s([0-9,]+)%s+",                           invStatFieldScore)
+  parseStatAsNum("Worth%s+:%s+([0-9,]+)%s+",                          invStatFieldWorth)
+
   -- Container stats
-  if (capacity ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldCapacity, dbot.tonumber(capacity))
-    dbot.debug("Capacity = \"" .. capacity .. "\"")
-  end -- if
+  parseStatAsNum("Capacity%s+:%s+([0-9,]+)%s+",                       invStatFieldCapacity)
+  parseStatAsNum("Holding%s+:%s+([0-9,]+)%s+",                        invStatFieldHolding)
+  parseStatAsNum("Heaviest Item:%s+([0-9,]+)%s+",                     invStatFieldHeaviestItem)
+  parseStatAsNum("Items Inside%s+:%s+([0-9,]+)%s+",                   invStatFieldItemsInside)
+  parseStatAsNum("Tot Weight%s+:%s+([0-9,-]+)%s+",                    invStatFieldTotWeight)
+  parseStatAsNum("Item Burden%s+:%s+([0-9,]+)%s+",                    invStatFieldItemBurden)
+  parseStatAsNum("Items inside weigh (%d+). of their usual weight%s+", invStatFieldWeightReduction)
 
-  if (holding ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHolding, dbot.tonumber(holding))
-    dbot.debug("Holding = \"" .. holding .. "\"")
-  end -- if
+  -- Base stats
+  parseStatAsNum("Intelligence%s+:%s+([+-]?%d+)%s+",                  invStatFieldInt)
+  parseStatAsNum("Wisdom%s+:%s+([+-]?%d+)%s+",                        invStatFieldWis)
+  parseStatAsNum("Luck%s+:%s+([+-]?%d+)%s+",                          invStatFieldLuck)
+  parseStatAsNum("Strength%s+:%s+([+-]?%d+)%s+",                      invStatFieldStr)
+  parseStatAsNum("Dexterity%s+:%s+([+-]?%d+)%s+",                     invStatFieldDex)
+  parseStatAsNum("Constitution%s+:%s+([+-]?%d+)%s+",                  invStatFieldCon)
 
-  if (heaviestItem ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHeaviestItem, dbot.tonumber(heaviestItem))
-    dbot.debug("Container heaviest item = \"" .. heaviestItem .. "\"")
-  end -- if
+  -- Vitals
+  parseStatAsNum("Hit points%s+:%s+([+-]?%d+)%s+",                    invStatFieldHP)
+  parseStatAsNum("Mana%s+:%s+([+-]?%d+)%s+",                          invStatFieldMana)
+  parseStatAsNum("Moves%s+:%s+([+-]?%d+)%s+",                         invStatFieldMoves)
 
-  if (itemsInside ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldItemsInside, dbot.tonumber(itemsInside))
-    dbot.debug("Container items inside = \"" .. itemsInside .. "\"")
-  end -- if
+  -- Combat rolls
+  parseStatAsNum("Hit roll%s+:%s+([+-]?%d+)%s+",                      invStatFieldHit)
+  parseStatAsNum("Damage roll%s+:%s+([+-]?%d+)%s+",                   invStatFieldDam)
 
-  if (totWeight ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldTotWeight, dbot.tonumber(totWeight))
-    dbot.debug("Container total weight = \"" .. totWeight .. "\"")
-  end -- if
+  -- Umbrella resists
+  parseStatAsNum("All physical%s+:%s+([+-]?%d+)%s+",                  invStatFieldAllPhys)
+  parseStatAsNum("All magic%s+:%s+([+-]?%d+)%s+",                     invStatFieldAllMagic)
 
-  if (itemBurden ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldItemBurden, dbot.tonumber(itemBurden))
-    dbot.debug("Container item burden = \"" .. itemBurden .. "\"")
-  end -- if
+  -- Magical resists
+  parseStatAsNum("Acid%s+:%s+([+-]?%d+)%s+",                          invStatFieldAcid)
+  parseStatAsNum("Cold%s+:%s+([+-]?%d+)%s+",                          invStatFieldCold)
+  parseStatAsNum("Energy%s+:%s+([+-]?%d+)%s+",                        invStatFieldEnergy)
+  parseStatAsNum("Holy%s+:%s+([+-]?%d+)%s+",                          invStatFieldHoly)
+  parseStatAsNum("Electric%s+:%s+([+-]?%d+)%s+",                      invStatFieldElectric)
+  parseStatAsNum("Negative%s+:%s+([+-]?%d+)%s+",                      invStatFieldNegative)
+  parseStatAsNum("Shadow%s+:%s+([+-]?%d+)%s+",                        invStatFieldShadow)
+  parseStatAsNum("Magic%s+:%s+([+-]?%d+)%s+",                         invStatFieldMagic)
+  parseStatAsNum("Air%s+:%s+([+-]?%d+)%s+",                           invStatFieldAir)
+  parseStatAsNum("Earth%s+:%s+([+-]?%d+)%s+",                         invStatFieldEarth)
+  parseStatAsNum("Fire%s+:%s+([+-]?%d+)%s+",                          invStatFieldFire)
+  parseStatAsNum("Light%s+:%s+([+-]?%d+)%s+",                         invStatFieldLight)
+  parseStatAsNum("Mental%s+:%s+([+-]?%d+)%s+",                        invStatFieldMental)
+  parseStatAsNum("Sonic%s+:%s+([+-]?%d+)%s+",                         invStatFieldSonic)
+  parseStatAsNum("Water%s+:%s+([+-]?%d+)%s+",                         invStatFieldWater)
+  parseStatAsNum("Poison%s+:%s+([+-]?%d+)%s+",                        invStatFieldPoison)
+  parseStatAsNum("Disease%s+:%s+([+-]?%d+)%s+",                       invStatFieldDisease)
 
-  if (weightReduction ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWeightReduction,
-                           dbot.tonumber(weightReduction))
-    dbot.debug("Container weight reduction = \"" .. weightReduction .. "\"")
-  end -- if
+  -- Physical resists
+  parseStatAsNum("Slash%s+:%s+([+-]?%d+)%s+",                         invStatFieldSlash)
+  parseStatAsNum("Pierce%s+:%s+([+-]?%d+)%s+",                        invStatFieldPierce)
+  parseStatAsNum("Bash%s+:%s+([+-]?%d+)%s+",                          invStatFieldBash)
 
+  -- Weapon damage
+  parseStatAsNum("Average Dam%s+:%s+(%d+)%s+",                        invStatFieldAveDam)
 
-  if (int ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldInt, dbot.tonumber(int))
-    dbot.debug("int = \"" .. int .. "\"")
-  end -- if
+  -- Weapon descriptors
+  parseStatAsStr("Inflicts%s+:%s+(%a+)%s+",                           invStatFieldInflicts)
+  parseStatAsStr("Damage Type%s+:%s+(%a+)%s+",                        invStatFieldDamType)
+  parseStatAsStr("Weapon Type:%s+(%a+)%s+",                           invStatFieldWeaponType)
+  parseStatAsStr("Specials%s+:%s+(%a+)%s+",                           invStatFieldSpecials)
 
-  if (wis ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWis, dbot.tonumber(wis))
-    dbot.debug("wis = \"" .. wis .. "\"")
-  end -- if
+  -- Provenance
+  parseStatAsStr("Found at%s+:%s+(.-)%s*|",                           invStatFieldFoundAt)
+  parseStatAsStr("Owned By%s+:%s+(.-)%s*|",                           invStatFieldOwnedBy)
+  parseStatAsStr("Clan Item%s+:%s+(.-)%s*|",                          invStatFieldClan)
 
-  if (luck ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldLuck, dbot.tonumber(luck))
-    dbot.debug("luck = \"" .. luck .. "\"")
-  end -- if
-
-  if (str ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldStr, dbot.tonumber(str))
-    dbot.debug("str = \"" .. str .. "\"")
-  end -- if
-
-  if (dex ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDex, dbot.tonumber(dex))
-    dbot.debug("dex = \"" .. dex .. "\"")
-  end -- if
-
-  if (con ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldCon, dbot.tonumber(con))
-    dbot.debug("con = \"" .. con .. "\"")
-  end -- if
-
-  if (hp ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHP, dbot.tonumber(hp))
-    dbot.debug("hp = \"" .. hp .. "\"")
-  end -- if
-
-  if (mana ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldMana, dbot.tonumber(mana))
-    dbot.debug("mana = \"" .. mana .. "\"")
-  end -- if
-
-  if (moves ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldMoves, dbot.tonumber(moves))
-    dbot.debug("moves = \"" .. moves .. "\"")
-  end -- if
-
-  if (hit ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHit, dbot.tonumber(hit))
-    dbot.debug("hit = \"" .. hit .. "\"")
-  end -- if
-
-  if (dam ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDam, dbot.tonumber(dam))
-    dbot.debug("dam = \"" .. dam .. "\"")
-  end -- if
-
-  if (allphys ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAllPhys, dbot.tonumber(allphys))
-    dbot.debug("allphys = \"" .. allphys .. "\"")
-  end -- if
-
-  if (allmagic ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAllMagic, dbot.tonumber(allmagic))
-    dbot.debug("allmagic = \"" .. allmagic .. "\"")
-  end -- if
-
-
-  if (acid ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAcid, dbot.tonumber(acid))
-    dbot.debug("acid = \"" .. acid .. "\"")
-  end -- if
-
-  if (cold ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldCold, dbot.tonumber(cold))
-    dbot.debug("cold = \"" .. cold .. "\"")
-  end -- if
-
-  if (energy ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldEnergy, dbot.tonumber(energy))
-    dbot.debug("energy = \"" .. energy .. "\"")
-  end -- if
-
-  if (holy ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHoly, dbot.tonumber(holy))
-    dbot.debug("holy = \"" .. holy .. "\"")
-  end -- if
-
-  if (electric ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldElectric, dbot.tonumber(electric))
-    dbot.debug("electric = \"" .. electric .. "\"")
-  end -- if
-
-  if (negative ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldNegative, dbot.tonumber(negative))
-    dbot.debug("negative = \"" .. negative .. "\"")
-  end -- if
-
-  if (shadow ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldShadow, dbot.tonumber(shadow))
-    dbot.debug("shadow = \"" .. shadow .. "\"")
-  end -- if
-
-  if (magic ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldMagic, dbot.tonumber(magic))
-    dbot.debug("magic = \"" .. magic .. "\"")
-  end -- if
-
-  if (air ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAir, dbot.tonumber(air))
-    dbot.debug("air = \"" .. air .. "\"")
-  end -- if
-
-  if (earth ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldEarth, dbot.tonumber(earth))
-    dbot.debug("earth = \"" .. earth .. "\"")
-  end -- if
-
-  if (fire ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldFire, dbot.tonumber(fire))
-    dbot.debug("fire = \"" .. fire .. "\"")
-  end -- if
-
-  if (light ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldLight, dbot.tonumber(light))
-    dbot.debug("light = \"" .. light .. "\"")
-  end -- if
-
-  if (mental ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldMental, dbot.tonumber(mental))
-    dbot.debug("mental = \"" .. mental .. "\"")
-  end -- if
-
-  if (sonic ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldSonic, dbot.tonumber(sonic))
-    dbot.debug("sonic = \"" .. sonic .. "\"")
-  end -- if
-
-  if (water ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWater, dbot.tonumber(water))
-    dbot.debug("water = \"" .. water .. "\"")
-  end -- if
-
-  if (poison ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldPoison, dbot.tonumber(poison))
-    dbot.debug("poison = \"" .. poison .. "\"")
-  end -- if
-
-  if (disease ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDisease, dbot.tonumber(disease))
-    dbot.debug("disease = \"" .. disease .. "\"")
-  end -- if
-
-  if (slash ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldSlash, dbot.tonumber(slash))
-    dbot.debug("slash = \"" .. slash .. "\"")
-  end -- if
-
-  if (pierce ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldPierce, dbot.tonumber(pierce))
-    dbot.debug("pierce = \"" .. pierce .. "\"")
-  end -- if
-
-  if (bash ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldBash, dbot.tonumber(bash))
-    dbot.debug("bash = \"" .. bash .. "\"")
-  end -- if
-
-
-  if (avedam ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAveDam, dbot.tonumber(avedam))
-    dbot.debug("avedam = \"" .. avedam .. "\"")
-  end -- if
-
-  if (tmpAvedam ~= nil) then
-    local currentAvedam = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldAveDam) or 0
-    local newAvedam = dbot.tonumber(tmpAvedam) + currentAvedam
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldAveDam, newAvedam)
-    dbot.debug("tmpAvedam = \"" .. tmpAvedam .. "\"")
-  end -- if
-
-  if (tmpHR ~= nil) then
-    local currentHR = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldHit) or 0
-    local newHR = dbot.tonumber(tmpHR) + currentHR
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldHit, newHR)
-    dbot.debug("tmpHR = \"" .. tmpHR .. "\"")
-  end -- if
-
-  if (tmpDR ~= nil) then
-    local currentDR = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldDam) or 0
-    local newDR = dbot.tonumber(tmpDR) + currentDR
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDam, newDR)
-    dbot.debug("tmpDR = \"" .. tmpDR .. "\"")
-  end -- if
-
-  if (tmpInt ~= nil) then
-    local currentInt = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldInt) or 0
-    local newInt = dbot.tonumber(tmpInt) + currentInt
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldInt, newInt)
-    dbot.debug("tmpInt = \"" .. tmpInt .. "\"")
-  end -- if
-
-  if (tmpWis ~= nil) then
-    local currentWis = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldWis) or 0
-    local newWis = dbot.tonumber(tmpWis) + currentWis
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWis, newWis)
-    dbot.debug("tmpWis = \"" .. tmpWis .. "\"")
-  end -- if
-
-  if (tmpLuck ~= nil) then
-    local currentLuck = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldLuck) or 0
-    local newLuck = dbot.tonumber(tmpLuck) + currentLuck
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldLuck, newLuck)
-    dbot.debug("tmpLuck = \"" .. tmpLuck .. "\"")
-  end -- if
-
-  if (tmpStr ~= nil) then
-    local currentStr = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldStr) or 0
-    local newStr = dbot.tonumber(tmpStr) + currentStr
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldStr, newStr)
-    dbot.debug("tmpStr = \"" .. tmpStr .. "\"")
-  end -- if
-
-  if (tmpDex ~= nil) then
-    local currentDex = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldDex) or 0
-    local newDex = dbot.tonumber(tmpDex) + currentDex
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDex, newDex)
-    dbot.debug("tmpDex = \"" .. tmpDex .. "\"")
-  end -- if
-
-  if (tmpCon ~= nil) then
-    local currentCon = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldCon) or 0
-    local newCon = dbot.tonumber(tmpCon) + currentCon
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldCon, newCon)
-    dbot.debug("tmpCon = \"" .. tmpCon .. "\"")
-  end -- if
-
-  if (inflicts ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldInflicts, inflicts)
-    dbot.debug("inflicts = \"" .. inflicts .. "\"")
-  end -- if
-
-  if (damtype ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldDamType, damtype)
-    dbot.debug("damtype = \"" .. damtype .. "\"")
-  end -- if
-
-  if (weaponType ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldWeaponType, weaponType)
-    dbot.debug("weaponType = \"" .. weaponType .. "\"")
-  end -- if
-
-  if (specials ~= nil) then
-    inv.items.setStatField(inv.items.identifyPkg.objId, invStatFieldSpecials, specials)
-    dbot.debug("specials = \"" .. specials .. "\"")
-  end -- if
+  -- Affect-line modifiers (sign drop is intentional, matching prior behavior).
+  parseStatModAsNum(":%s+adds [+-](%d+) average damage%s+",           invStatFieldAveDam)
+  parseStatModAsNum(":%s+hit roll [+-](%d+)",                         invStatFieldHit)
+  parseStatModAsNum(":%s+damage roll [+-](%d+)",                      invStatFieldDam)
+  parseStatModAsNum(":%s+intelligence [+-](%d+)",                     invStatFieldInt)
+  parseStatModAsNum(":%s+wisdom [+-](%d+)",                           invStatFieldWis)
+  parseStatModAsNum(":%s+luck [+-](%d+)",                             invStatFieldLuck)
+  parseStatModAsNum(":%s+strength [+-](%d+)",                         invStatFieldStr)
+  parseStatModAsNum(":%s+dexterity [+-](%d+)",                        invStatFieldDex)
+  parseStatModAsNum(":%s+constitution [+-](%d+)",                     invStatFieldCon)
 
 end -- inv.items.trigger.itemIdStats
 
@@ -5708,16 +5330,16 @@ function inv.items.trigger.itemIdEnd()
   end -- if
 
   -- Check if something interferred with the identification.  The "dbot.execute" package
-  -- guarantees that the user can't manually try to ID something at the same moment we 
+  -- guarantees that the user can't manually try to ID something at the same moment we
   -- are doing our background identification.  In theory, there shouldn't be any potential
   -- conflict here (i.e., we get back ID results for a different item).  However, it's
-  -- probably still helpful to check if the ID we get back matches what we expect.  I'd 
+  -- probably still helpful to check if the ID we get back matches what we expect.  I'd
   -- rather find out what is happening the easy way than the hard way...
   -- Note: Auctions and shop items are not ID'ed with their objId (we don't know the objID
   --       until identification completes) so we don't worry about this check for those cases.
   local objId = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldId)
   local objLoc = inv.items.getField(inv.items.identifyPkg.objId, invFieldObjLoc)
-  if (objId ~= inv.items.identifyPkg.objId) and (objLoc ~= invItemLocAuction) and 
+  if (objId ~= inv.items.identifyPkg.objId) and (objLoc ~= invItemLocAuction) and
      (objLoc ~= invItemLocShopkeeper) then
     dbot.debug("Identification wasn't successful for item " .. inv.items.identifyPkg.objId ..
                ": Try again later...")
@@ -5744,7 +5366,7 @@ function inv.items.trigger.itemIdEnd()
 
   local itemType = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldType) or ""
   local itemName = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldName) or ""
-  local itemWearable = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldWearable) or "" 
+  local itemWearable = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldWearable) or ""
   local affectMods = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldAffectMods) or ""
 
   -- Add "pseudo-stats" based on item effects (aard terminology is "affect mods") and on
@@ -5838,7 +5460,7 @@ function inv.items.trigger.itemDataStart(dataType, containerId)
   AddTriggerEx(inv.items.trigger.itemDataEndName,
                "^{/(eqdata|invdata|keyring)}$",
                "inv.items.trigger.itemDataEnd()",
-               drlTriggerFlagsBaseline + trigger_flag.OneShot + trigger_flag.OmitFromOutput,
+               drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
                custom_colour.Custom11, 0, "", "", sendto.script, 0)
 
   -- Start watching for eqdata or invdata stat lines in the item description
@@ -5886,7 +5508,7 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
   unique = tonumber(unique)
   wearLoc = tonumber(wearLoc)
   timer = tonumber(timer)
-  if (objId == nil) or (level == nil) or (typeField == nil) or (unique == nil) or 
+  if (objId == nil) or (level == nil) or (typeField == nil) or (unique == nil) or
      (wearLoc == nil) or (timer == nil) then
     dbot.warn("inv.items.trigger.itemDataStats: Detected malformed invitem trigger: " ..
               "numeric parameters are not numbers")
@@ -5894,7 +5516,7 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
   end -- if
 
   -- Get a text name for the item type
-  assert((invmon.typeStr ~= nil) and (invmon.typeStr[typeField] ~= nil), 
+  assert((invmon.typeStr ~= nil) and (invmon.typeStr[typeField] ~= nil),
          "Invalid invdata item type " .. typeField)
   local typeName = invmon.typeStr[typeField]
 
@@ -5993,10 +5615,10 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
     if (item == nil) and (inv.items.discoverPkg ~= nil) then
       retval = inv.items.add(objId)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.warn("inv.items.trigger.itemDataStats: Failed to add item " .. objId .. 
+        dbot.warn("inv.items.trigger.itemDataStats: Failed to add item " .. objId ..
                   ": error " .. dbot.retval.getString(retval))
         return retval
-      end -- if 
+      end -- if
     end -- if
 
     -- Set the item's location: worn equipment slot, main inventory, keyring, or a container
@@ -6027,8 +5649,8 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
     inv.items.setStatField(objId, invStatFieldType, typeName)
   end -- if
 
-  dbot.debug("inv.items.trigger.itemDataStats: object " .. objId .. ", flags=\"" .. flags .. 
-             "\", itemName=\"" .. itemName .. "@W\", level=" .. level .. ", type=" .. typeName .. 
+  dbot.debug("inv.items.trigger.itemDataStats: object " .. objId .. ", flags=\"" .. flags ..
+             "\", itemName=\"" .. itemName .. "@W\", level=" .. level .. ", type=" .. typeName ..
              ", unique=" .. unique .. ", wearLoc=\"" .. wearLocText .. "\", timer=" .. timer)
 
   -- We're done!
@@ -6104,7 +5726,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
     return DRL_RET_INTERNAL_ERROR
   end -- if
 
-  dbot.debug("Invmon trigger: " .. invmon.action[action] .. " object " .. objId .. 
+  dbot.debug("Invmon trigger: " .. invmon.action[action] .. " object " .. objId ..
              ", container=" .. containerText .. ", wearLoc=" .. wearLocText)
 
   -- Add the current item to the inventory table if it doesn't exist yet
@@ -6115,7 +5737,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
       dbot.warn("inv.items.trigger.invmon: Failed to add item " .. objId .. ": error " ..
                 dbot.retval.getString(retval))
       return retval
-    end -- if 
+    end -- if
   end -- if
 
   -- If the item isn't identified and we aren't already in the middle of a refresh, schedule an
@@ -6149,7 +5771,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
       dbot.warn("inv.items.trigger.invmon: Failed to set location for " .. objId .. ": error "
                 .. dbot.retval.getString(retval))
       return retval
-    end -- if 
+    end -- if
 
   elseif (action == invmonActionTakenOutOfContainer) then
     if (idLevel == invIdLevelNone) then
@@ -6163,7 +5785,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
       inv.items.setField(containerId, invFieldIdentifyLevel, invIdLevelNone)
     else
       -- Update the container's stats based on this item's removal
-      if (holding == nil) or (itemsInside == nil) or (totWeight == nil) or 
+      if (holding == nil) or (itemsInside == nil) or (totWeight == nil) or
          (weightReduction == nil) or (weightReduction == 0) or (itemWeight == nil) then
         -- If we don't have all of the container's stats, force a full re-identification
         inv.items.setField(containerId, invFieldIdentifyLevel, invIdLevelNone)
@@ -6190,7 +5812,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
       inv.items.setField(containerId, invFieldIdentifyLevel, invIdLevelNone)
     else
       -- Update the container's stats based on this item's addition
-      if (holding == nil) or (itemsInside == nil) or (totWeight == nil) or 
+      if (holding == nil) or (itemsInside == nil) or (totWeight == nil) or
          (weightReduction == nil) or (weightReduction == 0) or (itemWeight == nil) then
         -- If we don't have all of the container's stats, force a full re-identification
         inv.items.setField(containerId, invFieldIdentifyLevel, invIdLevelNone)
@@ -6209,7 +5831,7 @@ function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
 
   elseif (action == invmonActionPutIntoVault) then
     -- If the item is a container, this will remove any items in the container too
-    retval = inv.items.remove(objId) 
+    retval = inv.items.remove(objId)
 
   elseif (action == invmonActionRemovedFromVault) then
     inv.items.mainState = invItemsRefreshDirty -- we want to rescan main inventory now

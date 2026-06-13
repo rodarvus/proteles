@@ -2,6 +2,97 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0122] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: lift foundAt/ownedBy/clan into the parseStatAsStr block in itemIdStats.]]
+  }
+}
+
+dbot.changelog[3.0121] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix resultString and refreshLocation global leaks; table-ify refreshCR retval messages.]]
+  }
+}
+
+dbot.changelog[3.0120] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Fix ownedBy debug log (was incorrectly "Found at = ...").]]
+  }
+}
+
+dbot.changelog[3.0119] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: in inv.items.trigger.itemIdStats.]]
+  }
+}
+
+dbot.changelog[3.0118] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: collapse itemIdStats stat blocks via parseStat helpers (net -280 lines).]]
+  }
+}
+
+dbot.changelog[3.0117] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: add inv.items.getStatNum / .getStatStr helpers and
+           apply them across inv.items.displayItem.  Drop a pair of dead
+           highlight variables, simplify the displayObjId guard, and convert
+           the id-color if/elseif chain to a dispatch table.  Apply the
+           same id-color cleanup to inv.usage.displayItem.  Also fix the
+           invalid-idLevel error message, which printed the literal string
+           "idLevel" instead of the actual value.]]
+  }
+}
+
+dbot.changelog[3.0116] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: extract a local addTrigger helper in
+           inv.items.init.atInstall to collapse 16 copy-pasted
+           AddTriggerEx/EnableTrigger registrations.  No behavior
+           change.]]
+  }
+}
+
+dbot.changelog[3.0115] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[Refactor: extract inv.cli.requireReadyStateFor /
+           .requireActiveStateFor helpers to replace 20 copy-pasted
+           state-readiness guards.  No behavior change.]]
+  }
+}
+
+dbot.changelog[3.0114] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[CLI: add missing return on the invalid-param branches of
+           compare/notify/organize handlers so they propagate the
+           DRL_RET_INVALID_PARAM retval instead of returning nil.
+           Simplify compare.fn and organize.fn2 with early exit
+           guard pattern.]]
+  },
+  { change = drlDbotChangeLogTypeMisc,
+    desc   = [[CLI: fix wording in covet.fn and typo in the consume help.]]
+  }
+}
+
+dbot.changelog[3.0113] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Keywords search is now partial, so "dinv search keywords key"
+           will match keywords like "ironkey".  Added "kw" as a
+           shorthand for the "keywords" search key.  "flag", "clan",
+           and "wearable" searches still require an exact word match.]]
+  }
+}
+
 dbot.changelog[3.0112] =
 {
   { change = drlDbotChangeLogTypeMisc,

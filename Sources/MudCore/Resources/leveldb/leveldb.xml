@@ -11,7 +11,7 @@
    purpose="A simple leveling database for Aardwolf"
    date_written="2026-02-17 08:09:56"
    requires="5.07"
-   version="9.3"
+   version="9.4"
    save_state="y"
    >
 
@@ -3126,17 +3126,12 @@ end
 -- =============================================================================
 function ldb_on(name, line, wildcards)
    enabled = true
-   -- Proteles patch: persist immediately (upstream relies on OnPluginSaveState,
-   -- which only ran on disconnect/quit; a crash after `ldb on` lost it).
-   SetVariable("enabled", "true")
    if not db then open_db() end
    ColourNote("cyan", "", PREFIX .. "Data collection enabled.")
 end
 
 function ldb_off(name, line, wildcards)
    enabled = false
-   -- Proteles patch: see ldb_on.
-   SetVariable("enabled", "false")
    ColourNote("cyan", "", PREFIX .. "Data collection disabled.")
 end
 

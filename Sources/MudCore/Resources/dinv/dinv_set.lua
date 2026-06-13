@@ -330,7 +330,7 @@ function inv.set.createCR()
 
       for wearLoc,itemStruct in pairs(newSet) do
         if (bestSet ~= nil) and (bestSet[wearLoc] ~= nil) and (bestSet[wearLoc].id ~= itemStruct.id) then
-          dbot.debug("Updating set: " .. wearLoc .. " from " .. bestSet[wearLoc].id .. ", to " .. 
+          dbot.debug("Updating set: " .. wearLoc .. " from " .. bestSet[wearLoc].id .. ", to " ..
                      itemStruct.id)
         end -- if
       end -- for
@@ -402,7 +402,7 @@ function inv.set.createCR()
     end -- if
   end -- for
 
-  -- If our best set is empty (maybe we don't have anything in our inventory) then treat that as a 
+  -- If our best set is empty (maybe we don't have anything in our inventory) then treat that as a
   -- special case and let the caller know about it
   if (bestSet == nil) then
     dbot.warn("inv.set.createCR: No items in your inventory fit the set.")
@@ -515,7 +515,7 @@ function inv.set.createWithHandicap(priorityName, level, handicap)
           dbot.debug("Skipping item " .. objId .. " for hold slot because it is a portal and user has portal wish")
 
         -- Check if the item is a weapon with a disallowed damage type
-        elseif (objDamType ~= nil) and (objDamType ~= "") and 
+        elseif (objDamType ~= nil) and (objDamType ~= "") and
                (not inv.priority.damTypeIsAllowed(objDamType, priorityName, level)) then
           -- Skip the current object because it is a weapon with a damtype we don't want
 
@@ -557,14 +557,14 @@ function inv.set.createWithHandicap(priorityName, level, handicap)
               nextBest = tmp
               foundUpdate = true
             end -- if
-          end -- for        
+          end -- for
 
           -- prune slots that don't have any items or slots that are ignored
           for _,w in ipairs(inv.wearables[objWearable]) do
             if (newSet[w].id == -1) or (not inv.priority.locIsAllowed(w, priorityName, level)) then
               newSet[w] = nil
             end -- if
-          end -- for        
+          end -- for
 
           -- If an item was best-in-slot for one wearable location, don't try to use it in
           -- another wearable location.  For example, this covers the case where an item might
@@ -702,7 +702,7 @@ function inv.set.createWithHandicap(priorityName, level, handicap)
 
   setScore, setStats = inv.score.set(newSet, priorityName, level)
 
-  return newSet, setStats, setScore 
+  return newSet, setStats, setScore
 
 end -- inv.set.createWithHandicap
 
@@ -812,7 +812,7 @@ function inv.set.displaySet(setName, level, equipSet, channel)
     if (level == nil) then
       dbot.print("\n@WEquipment set: \"@C" .. setName .. "@W\"\n")
     else
-      dbot.print("\n@WEquipment set:    @GLevel " .. string.format("%3d", level) .. 
+      dbot.print("\n@WEquipment set:    @GLevel " .. string.format("%3d", level) ..
                  " @C" .. setName .. "@w\n")
     end -- if
   end -- if
@@ -831,8 +831,8 @@ function inv.set.displaySet(setName, level, equipSet, channel)
 
       local objName = inv.items.getField(objId, invFieldColorName)
       if (objName ~= nil) and (objName  ~= "") and (channel == nil) then
-        dbot.print(locColor .. "  " .. string.format("%08s", v) .. "@W(" .. string.format("%4d", score) .. 
-                   "): @GLevel " .. 
+        dbot.print(locColor .. "  " .. string.format("%08s", v) .. "@W(" .. string.format("%4d", score) ..
+                   "): @GLevel " ..
                    string.format("%3d", inv.items.getStatField(objId, invStatFieldLevel) or 0) ..
                    "@W \"" .. objName .. "\"")
       end -- if
@@ -1059,14 +1059,14 @@ function inv.set.wear(equipSet)
   for itemLoc, itemInfo in pairs(equipSet) do
     table.insert(sortedEq, { itemLoc = itemLoc, itemInfo = itemInfo })
   end -- for
-  table.sort(sortedEq, function (v1, v2) return v1.itemLoc < v2.itemLoc end) 
+  table.sort(sortedEq, function (v1, v2) return v1.itemLoc < v2.itemLoc end)
 
   -- For each item in the new set, we get the item's object ID and location and then check
   -- what is at that item's desired location.  If it is already worn at that location, we're
   -- done.  Otherwise, store the item that is currently worn.  It would be convenient if we
   -- could simply wear the new item at this point.  However, some items conflict with other
   -- items (e.g., weapon weights, shields, held items, etc.) and it is easier to simply store
-  -- everything first and then wear everything in the new set.  We know that there are no 
+  -- everything first and then wear everything in the new set.  We know that there are no
   -- conflicts with the new set (otherwise it wouldn't be a set!) so we don't have to worry
   -- about interference between items in the middle of swapping equipment.
   for _, entry in ipairs(sortedEq) do
@@ -1109,7 +1109,7 @@ function inv.set.wear(equipSet)
   local numNewWornItems = 0
 
   -- Get all of the new items to wear and wear them!  Yes, we are doing the exact same for loop
-  -- that we did above.  It is a little redundant, but it really simplifies things if we can 
+  -- that we did above.  It is a little redundant, but it really simplifies things if we can
   -- separate storing old items and wearing new items.  If we mix those two steps, we can have
   -- conflicts where a new item is conflicting with another item worn in a different location
   -- from the previous set (e.g., weapon weights).
@@ -1142,7 +1142,7 @@ function inv.set.wear(equipSet)
     local suffix = ""
     if (numNewWornItems ~= 1) then
       suffix = "s"
-    end -- if 
+    end -- if
     dbot.info("Wore " .. numNewWornItems .. " new item" .. suffix)
   end -- if
 
@@ -1242,12 +1242,12 @@ function inv.set.getStats(set, level)
                      hit = 0, dam = 0,
                      avedam = 0, offhandDam = 0,
                      slash = 0, pierce = 0, bash = 0,
-                     acid = 0, cold = 0, energy = 0, holy = 0, electric = 0, negative = 0, shadow = 0, 
+                     acid = 0, cold = 0, energy = 0, holy = 0, electric = 0, negative = 0, shadow = 0,
                      poison = 0, disease = 0, magic = 0, air = 0, earth = 0, fire = 0, light = 0,
                      mental = 0, sonic = 0, water = 0,
                      allphys = 0, allmagic = 0,
 
-                     haste = 0, regeneration = 0, sanctuary = 0, invis = 0, flying = 0, 
+                     haste = 0, regeneration = 0, sanctuary = 0, invis = 0, flying = 0,
                      detectgood = 0, detectevil = 0, detecthidden = 0, detectinvis = 0, detectmagic = 0,
                      dualwield = 0, irongrip = 0, shield = 0, hammerswing = 0 -- these last 4 are not official "affect mods"
                    }
@@ -1277,11 +1277,11 @@ function inv.set.getStats(set, level)
     for statName in statsWithCaps:gmatch("%S+") do
       if (inv.statBonus.equipBonus[level] ~= nil) and
          (inv.statBonus.equipBonus[level][statName] ~= nil) and
-         (tonumber(setStats[statName] or 0) > inv.statBonus.equipBonus[level][statName]) then   
-          dbot.debug("inv.set.getStats: capping " .. statName .. " from " .. setStats[statName] .. " to " .. 
-          inv.statBonus.equipBonus[level][statName])      
+         (tonumber(setStats[statName] or 0) > inv.statBonus.equipBonus[level][statName]) then
+          dbot.debug("inv.set.getStats: capping " .. statName .. " from " .. setStats[statName] .. " to " ..
+          inv.statBonus.equipBonus[level][statName])
         setStats[statName] = inv.statBonus.equipBonus[level][statName]
-      end -- if   
+      end -- if
     end -- for
   end -- if
 
@@ -1311,9 +1311,9 @@ function inv.set.displayStats(setStats, msgString, doPrintHeader, doDisplayIfZer
   resistNames[1]  = { invStatFieldAllPhys, invStatFieldAllMagic }
   resistNames[3]  = { invStatFieldBash,    invStatFieldPierce,   invStatFieldSlash }
   resistNames[17] = { invStatFieldAcid,    invStatFieldCold,     invStatFieldEnergy,
-                      invStatFieldHoly,    invStatFieldElectric, invStatFieldNegative, 
+                      invStatFieldHoly,    invStatFieldElectric, invStatFieldNegative,
                       invStatFieldShadow,  invStatFieldMagic,    invStatFieldAir,
-                      invStatFieldEarth,   invStatFieldFire,     invStatFieldLight, 
+                      invStatFieldEarth,   invStatFieldFire,     invStatFieldLight,
                       invStatFieldMental,  invStatFieldSonic,    invStatFieldWater,
                       invStatFieldDisease, invStatFieldPoison }
 
@@ -1326,7 +1326,7 @@ function inv.set.displayStats(setStats, msgString, doPrintHeader, doDisplayIfZer
 
   local statSizes = { { avedam = 4 }, { offhandDam = 4 }, { hit = 3 }, { dam = 3 },
                       { str = 3 }, { int = 3 }, { wis = 3 }, { dex = 3 }, { con = 3 }, { luck = 3 },
-                      { totResists = 3 }, { hp = 4 }, { mana = 4 }, { moves = 4 } } 
+                      { totResists = 3 }, { hp = 4 }, { mana = 4 }, { moves = 4 } }
 
   local basicHeader = "@W" .. string.rep(" ", #msgString) ..
                       " Ave  Sec  HR  DR Str Int Wis Dex Con Lck Res HitP Mana Move Effects"
@@ -1357,7 +1357,7 @@ function inv.set.displayStats(setStats, msgString, doPrintHeader, doDisplayIfZer
 
   setStr = setStr .. effectStr
 
-  local colorIndex = 1 
+  local colorIndex = 1
   local colorScheme = { { light = "@x083", dark = "@x002" },
                         { light = "@x039", dark = "@x025" }
                       }
@@ -1446,7 +1446,7 @@ function inv.set.compare(priorityName, relativeName, levelSkip, endTag)
   end -- if
 
   if (inv.set.comparePkg ~= nil) then
-    dbot.info("Skipping comparison of \"" .. relativeName .. "\" for priority \"" .. priorityName .. 
+    dbot.info("Skipping comparison of \"" .. relativeName .. "\" for priority \"" .. priorityName ..
               "\": another comparison is in progress")
     return inv.tags.stop(invTagsCompare, endTag, DRL_RET_BUSY)
   end -- if
@@ -1492,7 +1492,7 @@ function inv.set.compareCR()
       end -- if
     end -- for
 
-    -- Save the previous set analysis that includes the target item so that we have something to compare 
+    -- Save the previous set analysis that includes the target item so that we have something to compare
     local tmpAnalysis = inv.set.table[inv.set.comparePkg.priorityName]
     if (tmpAnalysis == nil) then
       dbot.warn("inv.set.compareCR: Failed to find analysis table for priority \"" ..
@@ -1528,7 +1528,7 @@ function inv.set.compareCR()
       dbot.warn("inv.set.compareCR: Failed to remove objId " .. (objId or "nil") .. ": " ..
                 dbot.retval.getString(retval))
     else
-      dbot.print("@WAnalyzing optimal \"@C" .. inv.set.comparePkg.priorityName .. 
+      dbot.print("@WAnalyzing optimal \"@C" .. inv.set.comparePkg.priorityName ..
                  "@W\" equipment sets with and without \"" .. itemName .. "\"\n")
 
       -- Analyze the priority with the item removed so that we can compare the results with what
@@ -1553,7 +1553,7 @@ function inv.set.compareCR()
                   dbot.retval.getString(retval))
       end -- if
 
-      dbot.print("\n@WPriority \"@C" .. inv.set.comparePkg.priorityName .. "@W\" advantages with \"" .. 
+      dbot.print("\n@WPriority \"@C" .. inv.set.comparePkg.priorityName .. "@W\" advantages with \"" ..
                  itemName .. DRL_ANSI_WHITE .. "@W\":\n")
 
       -- Display the difference between when the item was present and when it was removed
@@ -1587,7 +1587,7 @@ function inv.set.compareCR()
       end -- if
 
       if (doDisplayHeader) then
-        dbot.print("No set with item \"" .. itemName .. DRL_ANSI_WHITE .. 
+        dbot.print("No set with item \"" .. itemName .. DRL_ANSI_WHITE ..
                    "\" is optimal between levels " .. minCharLevel .. " and " .. maxCharLevel)
       end -- if
 
@@ -1676,7 +1676,7 @@ function inv.set.covetCR()
     end -- if
   end -- for
 
-  -- Save the previous set analysis that includes the target item so that we have something to compare 
+  -- Save the previous set analysis that includes the target item so that we have something to compare
   local tmpAnalysis = inv.set.table[inv.set.covetPkg.priorityName]
   if (tmpAnalysis == nil) then
     dbot.warn("inv.set.covetCR: Failed to find analysis table for priority \"" ..
@@ -1722,7 +1722,7 @@ function inv.set.covetCR()
 
   -- Attempt to identify the auction item and wait until we have confirmation that the ID completed
   local resultData = dbot.callback.new()
-  retval = inv.items.identifyItem(objId, auctionCmd, resultData) 
+  retval = inv.items.identifyItem(objId, auctionCmd, resultData)
   if (retval == DRL_RET_SUCCESS) then
     retval = dbot.callback.wait(resultData, inv.items.timer.idTimeoutThresholdSec)
     if (retval ~= DRL_RET_SUCCESS) then
@@ -1754,7 +1754,7 @@ function inv.set.covetCR()
     -- We have a temporary copy of this that we will restore after we are done comparing the new analysis
     inv.set.table[inv.set.covetPkg.priorityName] = nil
 
-    dbot.print("@WAnalyzing optimal \"@C" .. inv.set.covetPkg.priorityName .. 
+    dbot.print("@WAnalyzing optimal \"@C" .. inv.set.covetPkg.priorityName ..
                "@W\" equipment sets with and without @Gauction " .. inv.set.covetPkg.auctionNum .. "@w\n")
 
     -- Analyze the priority with the item added so that we can compare the results with what
@@ -1810,7 +1810,7 @@ function inv.set.covetCR()
     end -- if
 
     if (doDisplayHeader) then
-      dbot.print("@WNo set with item \"" .. itemName .. DRL_ANSI_WHITE .. 
+      dbot.print("@WNo set with item \"" .. itemName .. DRL_ANSI_WHITE ..
                  "\" is optimal between levels " .. minCharLevel .. " and " .. maxCharLevel)
     end -- if
   end -- if

@@ -35,7 +35,7 @@ inv.tags.cleanup   = {}
 
 invTagsRefresh   = "refresh"
 invTagsBuild     = "build"
-invTagsSearch    = "search" 
+invTagsSearch    = "search"
 invTagsGet       = "get"
 invTagsPut       = "put"
 invTagsStore     = "store"
@@ -299,10 +299,10 @@ function inv.tags.stop(moduleName, endTag, retval)
   end -- if
 
   -- Output the end tag's message if the specified module tag is enabled
-  if (moduleName ~= nil) and (endTag.tagMsg ~= nil) and (endTag.tagMsg ~= "") and 
+  if (moduleName ~= nil) and (endTag.tagMsg ~= nil) and (endTag.tagMsg ~= "") and
      (inv.tags.table ~= nil) and (inv.tags.table[moduleName] == drlInvTagOn) and
      inv.tags.isEnabled() then
-    local tagMsg = "{/" .. endTag.tagMsg .. ":" .. dbot.getTime() - endTag.startTime .. ":" .. retval .. 
+    local tagMsg = "{/" .. endTag.tagMsg .. ":" .. dbot.getTime() - endTag.startTime .. ":" .. retval ..
                    ":" .. dbot.retval.getString(retval) .. "}"
     local charState = dbot.gmcp.getState()
 

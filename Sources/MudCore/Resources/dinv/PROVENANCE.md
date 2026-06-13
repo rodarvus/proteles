@@ -3,11 +3,20 @@
 These files are the **dinv** inventory-manager plugin for Aardwolf, vendored
 verbatim and run through Proteles' MUSHclient compatibility shim (D-32).
 
-- **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin)
-- **Vendored version:** 3.0112 (see `dinv.manifest`)
+- **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin),
+  tracked as the repo submodule at `plugins/dinv`.
+- **Vendored version:** 3.0122 (submodule commit `6820265`; see `dinv.manifest`).
 - **License:** MIT (see `LICENSE`) — author: Durel (original `aard_inventory`),
   Rodarvus (the v3.x SQLite/modular fork). Bundling is unambiguous: MIT, and the
   Proteles author is the fork maintainer.
+
+**Re-vendoring is reproducible and CI-guarded (GitHub #67).**
+`scripts/vendor-plugins.sh` copies the runtime files verbatim from the submodule
+(LF line endings, as upstream) and applies the Proteles-local edits in
+`scripts/vendor-patches/dinv.patch`. `scripts/vendor-plugins.sh --check` runs in
+CI and fails if this copy drifts from the pinned submodule + patch. To pick up a
+new release: bump the submodule, re-run the script (re-derive the patch if a hunk
+no longer applies), update the version/commit above, then rebuild + test.
 
 dinv is a fork of Durel's `aard_inventory`, modernized with a modular Lua
 codebase (`dinv.xml` bootstraps `dinv_init.lua`, which `dofile`s 20 modules),
@@ -29,10 +38,16 @@ check/update` is a no-op here.
 
 ## Local modifications
 
-These files are vendored *near*-verbatim; the only divergence from upstream is
-a small set of removed user-command **aliases** in `dinv.xml`. The underlying
-Lua handlers are left untouched (so re-syncing upstream is a matter of
-re-deleting these alias blocks):
+These files are vendored *near*-verbatim. The exact divergence from upstream is
+captured in **`scripts/vendor-patches/dinv.patch`** (applied by
+`scripts/vendor-plugins.sh`), so re-syncing a new upstream release is mechanical:
+re-run the script, and re-derive the patch only if a hunk no longer applies. The
+edits are a small set of removed user-command **aliases** in `dinv.xml` (the
+underlying Lua handlers are left untouched) plus two `dinv_dbot.lua` tweaks. (The
+flat per-character DB path via `proteles.databaseDir()` is **no longer a local
+edit** — upstream adopted it natively as of this version.)
+
+Removed aliases (`dinv.xml`):
 
 - **`dinv version`** (check / changelog / update confirm) — removed. The
   handlers fetch over HTTP from GitHub, which the native host doesn't provide,

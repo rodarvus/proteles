@@ -28,7 +28,7 @@ Description
 This plugin includes two primary packages: dinv and dbot.  The dinv package
 provides options to manage inventory and analyze equipment sets.  The dbot
 package is a framework of common code that could be shared among multiple
-plugins.  
+plugins.
 
 
 Durel's Inventory (dinv) Layout
@@ -90,7 +90,7 @@ dbot.version  : Module to track version and changelog information and update the
    save_state="y"
    date_written="2017-08-12 08:45:15"
    requires="4.98"
-   version="3.0112"
+   version="3.0122"
    >
 <description trim="y">
 <![CDATA[
@@ -111,7 +111,7 @@ carrying.
 Once you have a completed inventory table available, I recommend making a
 manual backup in case something goes wrong in the future.  You can restore
 from the backup and avoid the long build process again.  If anything in
-your inventory has changed since the backup, your next refresh will simply 
+your inventory has changed since the backup, your next refresh will simply
 update it to what you currently have.  To make a manual backup named
 "my_first_awesome_backup" type "dinv backup create my_first_awesome_backup".
 See "dinv help backup" for more details about creating, viewing, and restoring
@@ -179,7 +179,7 @@ Release Notes
    the "dinv forget <query>" option to remove that item from your inventory table and its related caches.
    The next inventory refresh will pick up the new stats for the item.
 
-2) Most aard operations that modify an item's stats are detected and automatically trigger a 
+2) Most aard operations that modify an item's stats are detected and automatically trigger a
    re-identification.  For example, enchantment spells, sharpening, reinforcing, tpenchanting, and wset
    all are handled transparently.  There are two known exceptions to this.  First, the setweight
    command does not result in an invitem update from aard's invitem system.  Second, scribing a scroll
@@ -694,7 +694,7 @@ function OnHelp ()
   world.Note (world.GetPluginInfo (world.GetPluginID (), 3))
 end
 ]]>
-</script> 
+</script>
 
 </muclient
 >
