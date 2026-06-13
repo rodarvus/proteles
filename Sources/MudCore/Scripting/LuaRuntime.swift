@@ -199,6 +199,17 @@ public actor LuaRuntime {
     nonisolated(unsafe) var pendingHTTP: [Int: (callback: Int32?, onTimeout: Int32?)] = [:]
     nonisolated(unsafe) var nextHTTPRequestID = 0
 
+    /// Live miniwindow scenes by name (see `LuaRuntime+MiniWindow`). Persisted
+    /// across runs — geometry/flags/fonts survive between draw passes — and
+    /// flushed to `.updateMiniWindow` effects at the end of each run/callback.
+    nonisolated(unsafe) var miniWindows: [String: MiniWindowScene] = [:]
+    /// Windows whose scene changed this run; flushed (one effect each) at run end.
+    nonisolated(unsafe) var miniWindowsDirty: Set<String> = []
+    /// Windows whose current frame has begun this run — the first draw/hotspot
+    /// op of a run clears the prior frame's commands/hotspots, so a re-draw pass
+    /// replaces wholesale (one `.updateMiniWindow` == one frame), bounding growth.
+    nonisolated(unsafe) var miniWindowFramePainted: Set<String> = []
+
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before use (see ``sandboxScript``);
     /// pass `false` only for fully-trusted internal scripts.
@@ -225,9 +236,11 @@ public actor LuaRuntime {
     @discardableResult
     public func run(_ script: String) throws -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        beginMiniWindowPass()
         defer { releaseTransientRefs() }
         try load(script)
         try call(argumentCount: 0, resultCount: 0)
+        flushMiniWindows()
         return effects
     }
 
@@ -252,18 +265,6 @@ public actor LuaRuntime {
         setMatchGlobals(captures, named)
         setStyleGlobal(styles)
         return try run(script)
-    }
-
-    /// Set a global to a number.
-    public func setGlobal(_ name: String, to value: Double) {
-        lua_pushnumber(state, value)
-        clua_setglobal(state, name)
-    }
-
-    /// Set a global to a string.
-    public func setGlobal(_ name: String, to value: String) {
-        lua_pushstring(state, value)
-        clua_setglobal(state, name)
     }
 
     // MARK: - Sandbox
@@ -388,13 +389,15 @@ public actor LuaRuntime {
         setHostFunction("databaseDir", .databaseDir)
         setHostFunction("playSound", .playSound)
         setHostFunction("speak", .speak)
+        installProtelesAPIMiniWindow()
         lua_createtable(state, 0, 0) // `proteles.gmcp`: live GMCP view (applyGMCP fills it)
         lua_setfield(state, -2, "gmcp")
         clua_setglobal(state, "proteles")
     }
 
     /// Set `proteles[name]` (table on stack top) to a C closure routing to `id`.
-    private nonisolated func setHostFunction(_ name: String, _ id: HostFunction) {
+    /// Module-internal so the miniwindow registration extension can reuse it.
+    nonisolated func setHostFunction(_ name: String, _ id: HostFunction) {
         lua_pushlightuserdata(state, Unmanaged.passUnretained(self).toOpaque())
         lua_pushinteger(state, lua_Integer(id.rawValue))
         lua_pushcclosure(state, luaHostDispatch, 2)
@@ -430,8 +433,9 @@ public actor LuaRuntime {
              .isPluginInstalled:
             return queryValue(function, arguments)
         default:
-            registerOrRaise(function, arguments)
-            return []
+            // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
+            // event-bus/RPC registration functions both land here.
+            return miniWindowOrRegister(function, arguments)
         }
     }
 
@@ -459,7 +463,7 @@ public actor LuaRuntime {
     }
 
     /// The event-bus / RPC registration & firing functions (no return value).
-    private nonisolated func registerOrRaise(_ function: HostFunction, _ arguments: [LuaValue]) {
+    nonisolated func registerOrRaise(_ function: HostFunction, _ arguments: [LuaValue]) {
         switch function {
         case .onEvent:
             if let ref = Self.argFunctionRef(arguments, 1) {

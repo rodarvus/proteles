@@ -16,6 +16,14 @@ public extension LuaRuntime {
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
 
+    /// Raw file bytes (no string conversion), sandbox-gated like
+    /// ``readFileContents(_:)`` — used to load a miniwindow image (PNG/BMP) from
+    /// the plugin's data dir without NUL-truncating the binary.
+    nonisolated func readFileData(_ path: String) -> Data? {
+        guard sqliteAllows(path) else { return nil }
+        return FileManager.default.contents(atPath: normalizedPath(path))
+    }
+
     /// `proteles.writeFile(path, content)` → write atomically, returning success.
     /// nil/false if the path is outside the sandbox.
     nonisolated func writeFileAllowed(_ path: String, _ content: String) -> Bool {

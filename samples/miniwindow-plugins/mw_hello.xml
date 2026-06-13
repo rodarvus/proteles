@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Miniwindow demo 1/4 — a static panel: background, frame, fonts, text, line.
+     Exercises Phase 1 (WindowCreate / WindowRectOp / WindowFont / WindowText /
+     WindowLine). Drawn once on install + on connect. -->
+
+<muclient>
+<plugin
+   name="MW_Hello"
+   author="Proteles"
+   id="a1b2c3d4e5f600000000aa01"
+   language="Lua"
+   purpose="Miniwindow spike demo: a static drawn panel"
+   date_written="2026-06-13 00:00:00"
+   requires="5.07"
+   version="1.0"
+   >
+</plugin>
+
+<script>
+<![CDATA[
+local win = "mw_hello_" .. GetPluginID()
+
+-- BGR colour ints (red low byte) — see MUSHColour / WindowCreate docs.
+local BG     = 0x1A1A1A   -- near-black
+local FRAME  = 0x808080   -- grey
+local TITLE  = 0x00D7FF   -- amber (BGR)
+local TEXT   = 0xE0E0E0   -- light grey
+local ACCENT = 0x40C040   -- green
+
+function draw()
+  -- Clear to the background (full-window fill = the standard "clear").
+  WindowRectOp(win, miniwin.rect_fill, 0, 0, 0, 0, BG)
+  -- A 1px frame just inside the edge.
+  WindowRectOp(win, miniwin.rect_frame, 0, 0, 0, 0, FRAME)
+  -- Title + body using two fonts.
+  WindowText(win, "title", "Proteles Miniwindows", 10, 8, 0, 0, TITLE)
+  WindowLine(win, 8, 28, WindowInfo(win, 3) - 8, 28, ACCENT, miniwin.pen_solid, 1)
+  WindowText(win, "body", "WindowCreate + RectOp + Text + Line", 10, 36, 0, 0, TEXT)
+  WindowText(win, "body", "all drawn natively, antialiased.", 10, 52, 0, 0, TEXT)
+end
+
+function OnPluginInstall()
+  -- 320x80, anchored top-left of the output, opaque.
+  WindowCreate(win, 0, 0, 320, 80, miniwin.pos_top_left, 0, 0)
+  WindowFont(win, "title", "Menlo", 13, true, false, false, false)
+  WindowFont(win, "body", "Menlo", 11, false, false, false, false)
+  draw()
+  WindowShow(win, true)
+end
+
+function OnPluginConnect() draw() end
+]]>
+</script>
+</muclient>

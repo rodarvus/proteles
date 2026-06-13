@@ -48,5 +48,16 @@ extension LuaRuntime {
         case sndCall
         case playSound
         case speak
+        // MUSHclient miniwindow surface (see LuaRuntime+MiniWindow.swift). The
+        // draw/lifecycle calls mutate the runtime's retained scene state; the
+        // *Info/*Width calls are synchronous queries that return a value.
+        case windowCreate, windowShow, windowDelete, windowResize, windowPosition
+        case windowRectOp, windowText, windowLine, windowSetPixel, windowFont
+        case windowTextWidth, windowInfo, windowFontInfo
+        case windowAddHotspot, windowDeleteHotspot, windowDeleteAllHotspots
+        case windowMoveHotspot, windowHotspotInfo
+        case windowDragHandler, windowScrollwheelHandler, windowMenu
+        case windowLoadImage, windowDrawImage, windowImageInfo
+        case windowCircleOp, windowGradient, windowPolygon, windowArc, windowBezier
     }
 }

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Miniwindow demo 3/4 — clickable hotspots (Phase 2). Three "buttons" drawn
+     with RectOp + Text, each a WindowAddHotspot whose mouse-up callback runs a
+     Lua function (here: echo a line / send a command). Demonstrates the
+     UI-gesture -> session -> named-Lua-callback round trip. -->
+
+<muclient>
+<plugin
+   name="MW_Buttons"
+   author="Proteles"
+   id="a1b2c3d4e5f600000000aa03"
+   language="Lua"
+   purpose="Miniwindow spike demo: clickable hotspot buttons"
+   date_written="2026-06-13 00:00:00"
+   requires="5.07"
+   version="1.0"
+   >
+</plugin>
+
+<script>
+<![CDATA[
+local win = "mw_buttons_" .. GetPluginID()
+local WIDTH, HEIGHT = 200, 132
+local hover = nil   -- id of the hovered button (for a highlight)
+
+local BG     = 0x242424
+local FRAME  = 0x707070
+local BTN     = 0x4A4A4A
+local BTN_HI  = 0x6A6A6A
+local LABEL   = 0xF0F0F0
+local TITLE   = 0x00D7FF
+
+local buttons = {
+  { id = "look",  label = "look",       y = 28 },
+  { id = "score", label = "score",      y = 64 },
+  { id = "hi",    label = "say hello",  y = 100 },
+}
+
+-- Hotspot callbacks (named globals the host invokes with (flags, hotspotId)).
+function on_click(flags, id)
+  if id == "look" then Send("look")
+  elseif id == "score" then Send("score")
+  else Note("MW_Buttons: hello from a miniwindow hotspot!") end
+end
+function on_enter(flags, id) hover = id; draw() end
+function on_leave(flags, id) if hover == id then hover = nil end; draw() end
+
+function draw()
+  WindowRectOp(win, miniwin.rect_fill, 0, 0, 0, 0, BG)
+  WindowRectOp(win, miniwin.rect_frame, 0, 0, 0, 0, FRAME)
+  WindowText(win, "title", "Click a button", 12, 7, 0, 0, TITLE)
+  for _, b in ipairs(buttons) do
+    local fill = (hover == b.id) and BTN_HI or BTN
+    WindowRectOp(win, miniwin.rect_fill, 12, b.y, WIDTH - 12, b.y + 24, fill)
+    WindowRectOp(win, miniwin.rect_frame, 12, b.y, WIDTH - 12, b.y + 24, FRAME)
+    WindowText(win, "body", b.label, 22, b.y + 5, WIDTH - 12, b.y + 24, LABEL)
+    -- Hotspot: mouse-over/leave highlight + mouse-up action, hand cursor + tip.
+    WindowAddHotspot(win, b.id, 12, b.y, WIDTH - 12, b.y + 24,
+      "on_enter", "on_leave", "", "", "on_click",
+      "Run: " .. b.label, miniwin.cursor_hand, 0)
+  end
+  WindowShow(win, true)
+end
+
+function OnPluginInstall()
+  WindowCreate(win, 0, 0, WIDTH, HEIGHT, miniwin.pos_center_left, 0, 0)
+  WindowFont(win, "title", "Menlo", 12, true, false, false, false)
+  WindowFont(win, "body", "Menlo", 12, false, false, false, false)
+  draw()
+end
+]]>
+</script>
+</muclient>

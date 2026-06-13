@@ -76,6 +76,7 @@ public extension LuaRuntime {
         _ arguments: [LuaValue] = []
     ) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        beginMiniWindowPass() // lifecycle/hotspot callbacks commonly draw
         // Bind the variable scope AND ambient context (GetPluginID/GetInfo(60)/…)
         // to THIS plugin for the duration of the call, then restore. Both are
         // process-global and were otherwise set only at load time (to whichever
@@ -107,6 +108,7 @@ public extension LuaRuntime {
                 "Lua callback error in \(name): \(Self.popMessage(state))", pluginID: pluginID
             ))
         }
+        flushMiniWindows()
         return effects
     }
 
@@ -158,6 +160,7 @@ public extension LuaRuntime {
         errorLabel: String
     ) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        beginMiniWindowPass()
         // Owned trigger/alias/timer scripts read/write THIS plugin's variables
         // (see callPluginCallback) — scope for the run, then restore.
         let previousScope = currentVariableScope
@@ -183,6 +186,7 @@ public extension LuaRuntime {
                 "\(errorLabel): \(Self.popMessage(state))", pluginID: pluginID
             ))
         }
+        flushMiniWindows()
         return effects
     }
 

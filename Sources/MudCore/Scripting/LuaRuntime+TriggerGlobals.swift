@@ -6,6 +6,18 @@ import Foundation
 /// 4th script argument). Split out of ``LuaRuntime`` to keep its body within
 /// the type-length budget.
 extension LuaRuntime {
+    /// Set a global to a number.
+    public func setGlobal(_ name: String, to value: Double) {
+        lua_pushnumber(state, value)
+        clua_setglobal(state, name)
+    }
+
+    /// Set a global to a string.
+    public func setGlobal(_ name: String, to value: String) {
+        lua_pushstring(state, value)
+        clua_setglobal(state, name)
+    }
+
     /// Set the `matches` (0-based) + `named` globals from trigger captures.
     /// Named captures also go on `matches` by name (MUSHclient's wildcards
     /// table carries both, read as `wildcards.<name>`).

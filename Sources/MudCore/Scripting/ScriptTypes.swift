@@ -272,6 +272,18 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `.playSound` cue on it (so Settings' "Play event sounds: off" also
     /// silences S&D's direct cues and any shim plugin's PlaySound).
     case setSoundCuesMuted(Bool)
+    /// A miniwindow's complete scene after a draw pass (`WindowCreate` +
+    /// `Window*` draw calls) — the retained command list a SwiftUI `Canvas`
+    /// replays. Emitted once per draw pass by the runtime's miniwindow flush,
+    /// not once per primitive. See `MiniWindow.swift`.
+    case updateMiniWindow(MiniWindowScene)
+    /// Remove a miniwindow (`WindowDelete`, or `WindowShow(name, false)` →
+    /// a hidden scene is sent instead; an outright delete uses this).
+    case deleteMiniWindow(name: String)
+    /// Decoded image bytes for a miniwindow (`WindowLoadImage`/`…Memory`, Phase
+    /// 3) — the renderer's image store keys them by `(pluginID, imageID)`. The
+    /// bytes travel once at load; draw commands then reference only the id.
+    case loadMiniWindowImage(pluginID: String, imageID: String, data: Data)
 }
 
 /// An outbound HTTP request a plugin's `async` helper asked for (the network
