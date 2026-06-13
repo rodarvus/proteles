@@ -29,15 +29,15 @@
 -- inv.consume.use(typeName, size, numItems, containerName)
 -- inv.consume.useCR()
 -- inv.consume.useItem(objId, commandArray)
--- 
+--
 -- Consumable table format:
---   table[typeName] = 
+--   table[typeName] =
 --     { heal  = { { level=1,   name="light relief",   room="32476", fullName="(!(Light Relief)!)" },
 --                 { level=20,  name="serious relief", room="32476", fullName="(!(Serious Relief)!)" } },
 --       mana  = { { level=1,   name="lotus rush",     room="32476", fullName="(!(Lotus Rush)!)" } },
 --       fly   = { { level=1,   name="griff",          room="32476", fullName="(!(Griffon's Blood)!)" } }
 --     }
--- 
+--
 ----------------------------------------------------------------------------------------------------
 
 inv.consume           = {}
@@ -50,7 +50,7 @@ function inv.consume.init.atActive()
 
   retval = inv.consume.load()
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.consume.init.atActive: failed to load consume data from storage: " .. 
+    dbot.warn("inv.consume.init.atActive: failed to load consume data from storage: " ..
               dbot.retval.getString(retval))
   end -- if
 
@@ -259,7 +259,7 @@ function inv.consume.addCR()
     local itemExists = false
     for i, entry in ipairs(inv.consume.table[typeName]) do
       if (entry.level == itemLevel) and (entry.name == itemName) then
-        dbot.note("Skipping addition of consumable item \"" .. itemName .. "\" of type \"" .. 
+        dbot.note("Skipping addition of consumable item \"" .. itemName .. "\" of type \"" ..
                   typeName .. "\": item already exists")
         itemExists = true
         break
@@ -367,9 +367,9 @@ end -- inv.consume.display
 function inv.consume.displayType(typeName, isOwned)
   local numEntries = 0
 
-  if (inv.consume.table == nil) or (typeName == nil) or (typeName == "") or 
+  if (inv.consume.table == nil) or (typeName == nil) or (typeName == "") or
      (inv.consume.table[typeName] == nil) then
-    dbot.warn("inv.consume.displayType: Type \"" .. (typeName or "nil") .. 
+    dbot.warn("inv.consume.displayType: Type \"" .. (typeName or "nil") ..
               "\" is not in the consumable table")
     return numEntries, DRL_RET_MISSING_ENTRY
   end -- if
@@ -395,7 +395,7 @@ function inv.consume.displayType(typeName, isOwned)
 
       local countColor = ""
       if (count > 0) then
-        countColor = "@M" 
+        countColor = "@M"
       end -- if
 
       if (isOwned == nil) or (isOwned == false) or (isOwned and (count > 0)) then
@@ -478,7 +478,7 @@ end -- inv.consume.buy
 
 
 -- need to block so that we can run to the shopkeeper
-function inv.consume.buyCR() 
+function inv.consume.buyCR()
   local retval = DRL_RET_SUCCESS
   local room = tonumber(inv.consume.buyPkg.room or "")
 
@@ -506,7 +506,7 @@ function inv.consume.buyCR()
       retval = DRL_RET_TIMEOUT
       break
     end -- if
-  end -- if 
+  end -- if
 
   -- Buy the items if no problems came up going to the room
   if (retval == DRL_RET_SUCCESS) then
@@ -535,7 +535,7 @@ function inv.consume.buyCR()
 end -- inv.consume.buyCR
 
 
--- Returns objId for an item 
+-- Returns objId for an item
 function inv.consume.get(typeName, size, containerId)
   local curLevel = dbot.gmcp.getLevel()
 
@@ -659,12 +659,12 @@ function inv.consume.use(typeName, size, numItems, containerName)
   end -- if
 
   if (size ~= drlConsumeBig) and (size ~= drlConsumeSmall) then
-    dbot.warn("inv.consume.use: size must be either \"" .. drlConsumeBig .. "\" or \"" .. 
+    dbot.warn("inv.consume.use: size must be either \"" .. drlConsumeBig .. "\" or \"" ..
               drlConsumeSmall .. "\"")
     return DRL_RET_INVALID_PARAM
   end -- if
 
-  -- The containerName parameter is optional.  If it is present, we use items from the 
+  -- The containerName parameter is optional.  If it is present, we use items from the
   -- specified container before we items outside of that container.
   containerName = containerName or ""
 
@@ -684,7 +684,7 @@ function inv.consume.useCR()
   local retval = DRL_RET_SUCCESS
   local objId
 
-  if (inv.consume.usePkg == nil) or (inv.consume.usePkg.size == nil) or 
+  if (inv.consume.usePkg == nil) or (inv.consume.usePkg.size == nil) or
      (inv.consume.usePkg.numItems == nil) or (inv.consume.usePkg.typeName == nil) then
     dbot.error("inv.consume.useCR: usePkg is nil or contains nil components")
     return DRL_RET_INTERNAL_ERROR
@@ -704,7 +704,7 @@ function inv.consume.useCR()
       dbot.warn("inv.consume.useCR: failed to search inventory table: " .. dbot.retval.getString(retval))
     elseif (#idArray ~= 1) then
       -- There should only be a single match to the container's relative name (e.g., "2.bag")
-      dbot.warn("Container relative name \"" .. inv.consume.usePkg.container .. 
+      dbot.warn("Container relative name \"" .. inv.consume.usePkg.container ..
                 "\" did not have a unique match: no preferred container will be used for consume request")
     else
       -- We found a single unique match for the relative name
@@ -771,7 +771,7 @@ function inv.consume.useItem(objId, commandArray)
   else
     dbot.warn("inv.consume.useItem: Unsupported item type \"" .. itemType .. "\"")
     return DRL_RET_UNSUPPORTED
-  end -- if  
+  end -- if
 
   -- If the item isn't already in the main inventory, get it so that we can consume it!
   if (inv.items.getField(objId, invFieldObjLoc) ~= invItemLocInventory) then
@@ -793,7 +793,7 @@ function inv.consume.useItem(objId, commandArray)
     -- in-game. A "dinv refresh" will re-identify it. This trade-off favors combat speed over
     -- perfect tracking accuracy.
     if (itemType == "Potion") or (itemType == "Pill") or (itemType == "Food") then
-      retval = inv.items.remove(objId) 
+      retval = inv.items.remove(objId)
     end -- if
   end -- if
 

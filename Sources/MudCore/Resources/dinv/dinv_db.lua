@@ -329,13 +329,18 @@ dinv_db.envelopeColumns = {
 
 -- SQL-translatable field sets for search pre-filtering.
 -- Partial match fields use LIKE '%value%'; all others use exact match or numeric comparison.
-dinv_db.partialMatchFields = {
-  name = true, leadsto = true, foundat = true,
+dinv_db.partialStringMatchFields = {
+  name = true, leadsto = true, foundat = true, keywords = true,
+}
+
+-- Fields stored as whitespace-separated word lists; matched by exact word-element comparison.
+dinv_db.exactStringMatchFields = {
+  flags = true, clan = true, wearable = true,
 }
 
 -- Fields that require Lua post-filtering (not translatable to simple SQL).
 dinv_db.luaOnlyFields = {
-  keywords = true, flags = true, wearable = true, clan = true, spells = true,
+  flags = true, wearable = true, clan = true, spells = true,
   custom = true, rname = true, rloc = true, rlocation = true,
   location = true, loc = true,  -- location uses invFieldObjLoc, not a stat column
   unused = true,                -- queries inv.set.table, not a stat column
@@ -394,7 +399,7 @@ function dinv_db.searchItems(kvArray)
         table.insert(conditions, sqlCol .. " <= " .. tostring(valueNum))
       end
 
-    elseif dinv_db.partialMatchFields[key] then
+    elseif dinv_db.partialStringMatchFields[key] then
       -- Partial string match: LIKE '%value%'
       local sqlCol = nil
       for sc, lf in pairs(dinv_db.sqlToLuaStat) do

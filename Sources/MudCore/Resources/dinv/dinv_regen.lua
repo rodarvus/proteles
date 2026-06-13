@@ -265,7 +265,7 @@ function inv.regen.onWakeCR()
         end -- if
       end -- if
     end -- if
-    
+
   end -- if
 
   -- We are done with this sleep/wake phase.  Clear out which items to swap.

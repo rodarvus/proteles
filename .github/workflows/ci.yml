@@ -133,3 +133,24 @@ jobs:
 
       - name: SwiftLint (strict)
         run: swiftlint --strict --quiet
+
+  vendor-check:
+    # The dinv/leveldb plugins the app SHIPS live under
+    # Sources/MudCore/Resources/, vendored from the plugins/ submodules. This
+    # job fails if those shipped copies drift from the pinned submodules + the
+    # local-edit patches (GitHub #67). Pure bash/git/diff — no macOS toolchain
+    # needed, and it only fetches the two small plugin submodules (not the large
+    # reference clients).
+    name: Vendored plugins in sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Check out the vendored plugin submodules
+        run: git submodule update --init plugins/dinv plugins/leveldb
+
+      - name: Verify shipped copies match submodules + patches
+        run: scripts/vendor-plugins.sh --check

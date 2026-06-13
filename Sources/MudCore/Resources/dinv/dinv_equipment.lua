@@ -135,7 +135,7 @@ end -- inv.weapon.next
 -- moment and easily go back to re-wear the exact same items at a later date.  That's where this
 -- snapshot module comes in.
 --
--- You can add and remove snapshots (big surprise) with the cleverly named inv.snapshot.add and 
+-- You can add and remove snapshots (big surprise) with the cleverly named inv.snapshot.add and
 -- inv.snapshot.remove functions.  You can also re-wear the items from an existing snapshot by
 -- calling inv.snapshot.wear.  The inv.snapshot.list function prints a listing of all existing
 -- saved snapshots.  The inv.snapshot.display function prints details about a specific snapshot.
@@ -268,7 +268,7 @@ function inv.snapshot.add(snapshotName, endTag)
 
   if (snapshotName == nil) or (snapshotName == "") then
     dbot.warn("inv.snapshot.add: Missing snapshot name")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
   for objId, _ in pairs(inv.items.table) do
@@ -309,13 +309,13 @@ function inv.snapshot.remove(snapshotName, endTag)
 
   if (snapshotName == nil) or (snapshotName == "") then
     dbot.warn("inv.snapshot.remove: Missing snapshot name")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
   if (inv.snapshot.table[snapshotName] == nil) then
-    dbot.warn("inv.snapshot.remove: Failed to remove snapshot \"@C" .. snapshotName .. 
+    dbot.warn("inv.snapshot.remove: Failed to remove snapshot \"@C" .. snapshotName ..
               "@W\": it does not exist")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)
   end -- if
 
   -- Remove the snapshot
@@ -360,18 +360,18 @@ function inv.snapshot.display(snapshotName, endTag)
 
   if (snapshotName == nil) or (snapshotName == "") then
     dbot.warn("inv.snapshot.display: Missing snapshot name")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
   if (inv.snapshot.table[snapshotName] == nil) then
-    dbot.warn("inv.snapshot.display: Failed to display snapshot \"@C" .. snapshotName .. 
+    dbot.warn("inv.snapshot.display: Failed to display snapshot \"@C" .. snapshotName ..
               "@W\": it does not exist")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)
   end -- if
 
   retval = inv.set.displaySet(snapshotName, nil, inv.snapshot.table[snapshotName], nil)
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.snapshot.display: Failed to display snapshot \"@C" .. snapshotName .. 
+    dbot.warn("inv.snapshot.display: Failed to display snapshot \"@C" .. snapshotName ..
               "@W\": " .. dbot.retval.getString(retval))
   end -- if
 
@@ -385,19 +385,19 @@ function inv.snapshot.wear(snapshotName, endTag)
 
   if (snapshotName == nil) or (snapshotName == "") then
     dbot.warn("inv.snapshot.wear: Missing snapshot name")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
   if (inv.snapshot.table[snapshotName] == nil) then
-    dbot.warn("inv.snapshot.wear: Failed to wear snapshot \"@C" .. snapshotName .. 
+    dbot.warn("inv.snapshot.wear: Failed to wear snapshot \"@C" .. snapshotName ..
               "@W\": it does not exist")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)
   end -- if
 
   if (inv.snapshot.wearPkg ~= nil) then
     dbot.info("Skipping request to wear snapshot \"@C" .. snapshotName .. "@W\": " ..
               dbot.retval.getString(retval))
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_BUSY)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_BUSY)
   end -- if
 
   inv.snapshot.wearPkg              = {}
@@ -422,9 +422,9 @@ function inv.snapshot.wearCR()
   local snapshotName = inv.snapshot.wearPkg.snapshotName
 
   if (inv.snapshot.table[snapshotName] == nil) then
-    dbot.warn("inv.snapshot.wearCR: Failed to wear snapshot \"@C" .. snapshotName .. 
+    dbot.warn("inv.snapshot.wearCR: Failed to wear snapshot \"@C" .. snapshotName ..
               "@W\": it does not exist")
-    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)  
+    return inv.tags.stop(invTagsSnapshot, endTag, DRL_RET_MISSING_ENTRY)
   end -- if
 
   retval = inv.set.wear(inv.snapshot.table[snapshotName])

@@ -83,7 +83,7 @@ function inv.report.itemCR()
       inv.items.displayItem(objId, invDisplayVerbosityBasic, nil, channel)
 
     end -- if
-    
+
   end -- if
 
   inv.report.itemPkg = nil

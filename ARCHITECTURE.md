@@ -301,6 +301,15 @@ under `Resources/dinv`. Closing its API surface added shared infrastructure for
 the whole corpus (a `utils` library, dynamic `AddAlias`, `OnPluginSend`,
 gmcphelper scalar-stringification, Windows-path normalisation).
 
+**Vendoring (dinv + leveldb).** The shipped copies under `Resources/` are
+regenerated from the `plugins/` submodules by `scripts/vendor-plugins.sh` —
+verbatim files plus the Proteles-local edits in `scripts/vendor-patches/<plugin>.patch`
+(leveldb is unmodified; dinv removes a few admin-command aliases, no-ops the
+`io`-based pre-build backup, and arms the wish-list gag eagerly — D-77). A
+`--check` mode is a CI gate so the shipped copies can't silently drift from the
+pinned submodules (the lesson of #67); each `PROVENANCE.md` records the pinned
+commit + version.
+
 ### 7.8 The Lua sandbox & SQLite (D-26)
 `installSQLite` exposes lsqlite3 as a `sqlite3` global with `sqlite3.open`
 constrained to `:memory:`/temp and files under the data tree. The open-path

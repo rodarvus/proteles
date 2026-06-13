@@ -45,9 +45,9 @@ function inv.usage.displayCR()
   if (inv.usage.displayPkg == nil) then
     dbot.error("inv.usage.displayCR: inv.usage.displayPkg is nil!")
     return DRL_RET_INTERNAL_ERROR
-  end -- if    
+  end -- if
 
-  local retval  
+  local retval
   local idArray
   local priorityName = inv.usage.displayPkg.priorityName or ""
   local query        = inv.usage.displayPkg.query or ""
@@ -76,11 +76,11 @@ function inv.usage.displayCR()
 
       -- Only consider an item available to be used if it has a wearable location,
       -- is not a potion, pill, or food, and if it is not both a treasure and hold item.
-      if (wearableField ~= nil) and 
-         (typeField ~= invmon.typeStr[invmonTypePotion]) and 
-         (typeField ~= invmon.typeStr[invmonTypePill]) and 
+      if (wearableField ~= nil) and
+         (typeField ~= invmon.typeStr[invmonTypePotion]) and
+         (typeField ~= invmon.typeStr[invmonTypePill]) and
          (typeField ~= invmon.typeStr[invmonTypeFood]) and
-         ((typeField ~= invmon.typeStr[invmonTypeTreasure]) or 
+         ((typeField ~= invmon.typeStr[invmonTypeTreasure]) or
           (wearableField ~= inv.wearLoc[invWearableLocHold])) then
 
         if (priorityName == "all") then
@@ -114,23 +114,19 @@ function inv.usage.displayItem(priorityName, objId, doDisplayUnused)
   local colorName = inv.items.getField(objId, invFieldColorName) or "Unknown"
   local maxNameLen = 44
 
-  -- We color-code the ID field as follows: unidentified = red, partial ID = yellow, full ID = green
-  local formattedId = ""
-  local colorizedId = ""
-  local idPrefix = DRL_ANSI_WHITE
-  local idSuffix = DRL_ANSI_WHITE
+  -- ID field is color-coded by identification level: red=none, yellow=partial, green=full.
+  -- An unrecognized level falls back to white rather than erroring (unlike inv.items.displayItem).
+  local idColors = {
+    [invIdLevelNone]    = DRL_ANSI_RED,
+    [invIdLevelPartial] = DRL_ANSI_YELLOW,
+    [invIdLevelFull]    = DRL_ANSI_GREEN,
+  }
+  local formattedId, colorizedId = "", ""
   local idLevel = inv.items.getField(objId, invFieldIdentifyLevel)
   if (idLevel ~= nil) then
-    if (idLevel == invIdLevelNone) then
-      idPrefix = DRL_ANSI_RED
-    elseif (idLevel == invIdLevelPartial) then
-      idPrefix = DRL_ANSI_YELLOW
-    elseif (idLevel == invIdLevelFull) then
-      idPrefix = DRL_ANSI_GREEN
-    end -- if
-
+    local idColor = idColors[idLevel] or DRL_ANSI_WHITE
     formattedId = "(" .. objId .. ") "
-    colorizedId = idPrefix .. formattedId .. idSuffix
+    colorizedId = idColor .. formattedId .. DRL_ANSI_WHITE
   end -- if
 
   -- Format the name field for the stat display.  This is complicated because we have a fixed
@@ -154,7 +150,7 @@ function inv.usage.displayItem(priorityName, objId, doDisplayUnused)
   end -- if
   -- The trimmed name could end on an "@" which messes up color codes and spacing
   formattedName = string.gsub(formattedName, "@$", " ") .. " " .. DRL_XTERM_GREY
-  formattedName = formattedName .. colorizedId 
+  formattedName = formattedName .. colorizedId
 
   local levelUsage  = inv.usage.get(priorityName, objId)
   local itemLevel   = inv.items.getStatField(objId, invStatFieldLevel) or "N/A"
@@ -172,7 +168,7 @@ function inv.usage.displayItem(priorityName, objId, doDisplayUnused)
     -- Convert the list of levels into a string with ranges
     for i = 1, #levelUsage do
       -- If we have consecutive numbers on either side, we are in a range and can whack this item
-      if (levelUsage[i - 1] ~= nil) and 
+      if (levelUsage[i - 1] ~= nil) and
          ((levelUsage[i] == levelUsage[i - 1] + 1) or (levelUsage[i - 1] == 0 )) and
          (levelUsage[i + 1] ~= nil) and (levelUsage[i] == levelUsage[i + 1] - 1) then
         levelUsage[i] = 0
@@ -237,7 +233,7 @@ function inv.usage.get(priorityName, objId)
       for _, wearLoc in ipairs(inv.wearables[wearType]) do
         if (wearLoc ~= nil) and (startLevel ~= nil) and (inv.set.table[priorityName] ~= nil) then
           for level = startLevel, endLevel do
-            if (inv.set.table[priorityName][level] ~= nil) and 
+            if (inv.set.table[priorityName][level] ~= nil) and
                (inv.set.table[priorityName][level][wearLoc] ~= nil) and
                (inv.set.table[priorityName][level][wearLoc].id == objId) then
               table.insert(levelArray, level)

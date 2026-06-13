@@ -15,7 +15,7 @@
 --
 -- Functions
 --   inv.cli.fullUsage()
--- 
+--
 --   inv.cli.build.fn(name, line, wildcards)
 --   inv.cli.build.usage()
 --   inv.cli.build.examples()
@@ -25,7 +25,7 @@
 --   inv.cli.search.fn(name, line, wildcards)
 --   inv.cli.search.usage()
 --   inv.cli.search.examples()
--- 
+--
 --   inv.cli.get.fn(name, line, wildcards)
 --   inv.cli.get.usage()
 --   inv.cli.get.examples()
@@ -38,7 +38,7 @@
 --   inv.cli.keyword.fn(name, line, wildcards)
 --   inv.cli.keyword.usage()
 --   inv.cli.keyword.examples()
--- 
+--
 --   inv.cli.set.fn(name, line, wildcards)
 --   inv.cli.set.usage()
 --   inv.cli.set.examples()
@@ -52,7 +52,7 @@
 --   inv.cli.snapshot.fn(name, line, wildcards)
 --   inv.cli.snapshot.usage()
 --   inv.cli.snapshot.examples()
--- 
+--
 --   inv.cli.analyze.fn(name, line, wildcards)
 --   inv.cli.analyze.fn2(name, line, wildcards)
 --   inv.cli.analyze.usage()
@@ -69,7 +69,7 @@
 --   inv.cli.covet.fn(name, line, wildcards)
 --   inv.cli.covet.usage()
 --   inv.cli.covet.examples()
--- 
+--
 --   inv.cli.notify.fn(name, line, wildcards)
 --   inv.cli.notify.usage()
 --   inv.cli.notify.examples()
@@ -91,14 +91,14 @@
 --   inv.cli.tags.fn(name, line, wildcards)
 --   inv.cli.tags.usage()
 --   inv.cli.tags.examples()
--- 
+--
 --   inv.cli.portal.fn(name, line, wildcards)
 --   inv.cli.portal.usage()
 --   inv.cli.portal.examples()
 --   inv.cli.consume.fn(name, line, wildcards)
 --   inv.cli.consume.usage()
 --   inv.cli.consume.examples()
--- 
+--
 --   inv.cli.organize.fn1(name, line, wildcards)
 --   inv.cli.organize.fn2(name, line, wildcards)
 --   inv.cli.organize.fn3(name, line, wildcards)
@@ -118,7 +118,7 @@
 --   inv.cli.help.fn(name, line, wildcards)
 --   inv.cli.help.usage()
 --   inv.cli.help.examples()
--- 
+--
 ----------------------------------------------------------------------------------------------------
 
 inv.cli = {}
@@ -176,6 +176,31 @@ function inv.cli.fullUsage()
 end -- inv.cli.fullUsage
 
 
+-- Returns nil if ready, or a DRL_RET_* failure code the caller should
+-- propagate (typically via inv.tags.stop for tracked commands).
+function inv.cli.requireReadyStateFor(noun)
+  if (not inv.init.initializedActive) then
+    dbot.info("Skipping " .. noun .. " request: plugin is not yet initialized (are you AFK or sleeping?)")
+    return DRL_RET_UNINITIALIZED
+  elseif dbot.gmcp.statePreventsActions() then
+    dbot.info("Skipping " .. noun .. " request: character's state does not allow actions")
+    return DRL_RET_NOT_ACTIVE
+  end -- if
+end -- inv.cli.requireReadyStateFor
+
+
+-- Like requireReadyStateFor, but rejects the combat state too.
+function inv.cli.requireActiveStateFor(noun)
+  if (not inv.init.initializedActive) then
+    dbot.info("Skipping " .. noun .. " request: plugin is not yet initialized (are you AFK or sleeping?)")
+    return DRL_RET_UNINITIALIZED
+  elseif (not dbot.gmcp.stateIsActive()) then
+    dbot.info("Skipping " .. noun .. " request: character is not in the active state")
+    return DRL_RET_NOT_ACTIVE
+  end -- if
+end -- inv.cli.requireActiveStateFor
+
+
 inv.cli.build = {}
 function inv.cli.build.fn(name, line, wildcards)
   local confirmation = Trim(wildcards[1] or "")
@@ -193,7 +218,7 @@ function inv.cli.build.fn(name, line, wildcards)
   If you truly want to build your inventory table:
     1) Go to a room where you won't disturb other people]])
    dbot.print("    2) Enter \"" .. pluginNameCmd .. " build confirm\"")
-   dbot.print("    3) Wait for the build to complete or enter \"" .. pluginNameCmd .. 
+   dbot.print("    3) Wait for the build to complete or enter \"" .. pluginNameCmd ..
               " refresh off\" to halt early\n")
     inv.tags.stop(invTagsBuild, endTag, DRL_RET_UNINITIALIZED)
 
@@ -234,7 +259,7 @@ a connection with a ~130 ms latency completed the same build in 8 minutes and
 a ~440 ms latency connection (thank you New Zealand!) took 18 minutes to
 complete a full build.  Fortunately, building your inventory table should be
 a one-time operation and subsequent changes to your table will be quick and
-easy.  
+easy.
 
 Building your inventory table requires the plugin to run the "identify"
 operation on all of your items.  If an item is in a container, it will first
@@ -299,7 +324,7 @@ function inv.cli.refresh.fn(name, line, wildcards)
 
   if (command == "off") then
     retval = inv.items.refreshOff()
-    dbot.info("Automatic inventory refresh is disabled: run \"@G" .. pluginNameCmd .. 
+    dbot.info("Automatic inventory refresh is disabled: run \"@G" .. pluginNameCmd ..
               " refresh on@W\" to re-enable it")
     inv.tags.stop(invTagsRefresh, endTag, retval)
 
@@ -356,7 +381,7 @@ anything that has changed.
 
 A refresh operation may require the plugin to get an item from a container or remove a worn item
 in order to identify the item.  If the plugin moves (or removes) the item, it will automatically
-put the item back when the identification completes.  The plugin suppresses mud output related 
+put the item back when the identification completes.  The plugin suppresses mud output related
 to this moving and identification so it will appear to happen transparently from the user's
 perspective.
 
@@ -389,7 +414,7 @@ Examples:
      "@Gdinv refresh off@W"
   3) Enable automatic refreshes with the default period (5 minutes since the last refresh)
      "@Gdinv refresh on@W"
-  4) Enable automatic refreshes with a 10-minute delay between refreshes 
+  4) Enable automatic refreshes with a 10-minute delay between refreshes
      "@Gdinv refresh on 10@W"
   5) Enable automatic refreshes with a 7-minute delay between refreshes and an "eager" refresh
      a few seconds after a new item is added to your inventory
@@ -438,7 +463,7 @@ example, the "@Cget@W", "@Cput@W", "@Cstore@W", "@Ckeyword@W", "@Corganize@W", a
 arguments and then get, put, store, etc. whatever items match the query.  See the helpfile at
 "@Gdinv help query@W" for more details and examples.
 
-A query consists of one or more sets of key-value pairs where the key can be any key listed 
+A query consists of one or more sets of key-value pairs where the key can be any key listed
 when you identify/lore an item.  For example, a query could be "@Gtype container keyword box@W"
 if you wanted to find everything with a type value of "container" that has a keyword "box".
 
@@ -459,7 +484,7 @@ everything in your inventory that is not currently equipped.
 
 Search queries support both absolute and relative names and locations.  If you want to specify
 all weapons that have "axe" in their name, use "@Gtype weapon name axe@W".  If you want to
-specifically target the third axe in your main inventory, use "@Gtype weapon rname 3.axe@W" 
+specifically target the third axe in your main inventory, use "@Gtype weapon rname 3.axe@W"
 (or you could just get by with "@Grname 3.axe@W" and skip the "@Gtype weapon@W" clause.)  The use
 of the key "rname" instead of "name" means that the search is relative to your main inventory
 and you can use the format [number].[name] to target a specific item.  Similarly, you can use
@@ -469,8 +494,8 @@ and you can use the format [number].[name] to target a specific item.  Similarly
 There are a few "one-off" query modes for convenience.  It is so common to search for just a
 name that the default is to assume you are searching within an item's name if no other data
 is supplied.  In other words, "@Gdinv search sunstone@W" will find any item with "sunstone" in
-its name.  Also, queries will accept "key" instead of "keywords", "loc" instead of "location",
-and "rloc" instead of "rlocation".  Yeah, I'm lazy sometimes...
+its name.  Also, 'keyword', 'key' and 'kw' are accepted aliases for 'keywords', 'loc' is an
+alias for 'location' and 'rloc' is an alias for 'rlocation'.  Yeah, I'm lazy sometimes...
 
 Performing a search will display relevant information about the items whose characteristics match
 the query.  There are three modes of searches: "@Cbasic@W", "@Cobjid@W", and "@Cfull@W".  A basic search displays
@@ -674,13 +699,8 @@ function inv.cli.get.fn(name, line, wildcards)
 
   dbot.debug("CLI: " .. pluginNameCmd .. " get \"" .. query .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping get request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsGet, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping get request: character's state does not allow actions")
-    return inv.tags.stop(invTagsGet, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("get")
+  if guardFail then return inv.tags.stop(invTagsGet, endTag, guardFail) end
 
   inv.items.get(query, endTag)
 end -- inv.cli.get.fn
@@ -740,13 +760,8 @@ function inv.cli.put.fn(name, line, wildcards)
 
   dbot.debug("CLI: " .. pluginNameCmd .. " put \"" .. container .. "\", \"" .. query .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping put request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsPut, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping put request: character's state does not allow actions")
-    return inv.tags.stop(invTagsPut, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("put")
+  if guardFail then return inv.tags.stop(invTagsPut, endTag, guardFail) end
 
   inv.items.put(container, query, endTag)
 end -- inv.cli.put.fn
@@ -801,13 +816,8 @@ function inv.cli.store.fn(name, line, wildcards)
 
   dbot.debug("CLI: " .. pluginNameCmd .. " store \"" .. query .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping store request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsStore, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping store request: character's state does not allow actions")
-    return inv.tags.stop(invTagsStore, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("store")
+  if guardFail then return inv.tags.stop(invTagsStore, endTag, guardFail) end
 
   inv.items.store(query, endTag)
 end -- inv.cli.store.fn
@@ -902,13 +912,8 @@ function inv.cli.set.fn(name, line, wildcards)
   local level = wildcards[3] or ""
   local endTag = inv.tags.new(line)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping set request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsSet, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping set request: character's state does not allow actions")
-    return inv.tags.stop(invTagsSet, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("set")
+  if guardFail then return inv.tags.stop(invTagsSet, endTag, guardFail) end
 
   -- If the user doesn't provide a level, use the current level
   level = tonumber(level) or dbot.gmcp.getLevel()
@@ -941,7 +946,7 @@ function inv.cli.set.examples()
 This plugin can automatically generate equipment sets based on statistic priorities
 defined by the user.  This is similar to aardwolf's default "score" value for items.
 If you enter "@Gcompare set all@W", you will see aardwolf's default weighting for each
-statistic based on your class.  
+statistic based on your class.
 
 The plugin implements a similar approach, but with many more options.  For example, the
 plugin's "priority" feature allows you to define statistic weightings for particular levels
@@ -954,7 +959,7 @@ examples using stat priorities.
 Once you define a group of priorities, you have the ability to create equipment sets based
 on those priorities.  The plugin finds the optimal (OK, technically it is near-optimal)
 set of items that maximizes your equipment set's score relative to the specified priority.
-The plugin accounts for overmaxing stats and at times may use items that superficially 
+The plugin accounts for overmaxing stats and at times may use items that superficially
 appear to be worse than other items in your inventory.  An item that looks "better" may
 be contributing points to stats that are already maxed and alternative "lesser" items may
 be more valuable when combined with your other equipment.
@@ -994,7 +999,7 @@ I normally use -- psis are awesome if you haven't noticed :)).  The following ex
 will use this priority.
 
 Examples:
-  1) Display what equipment set best matches the psi-melee priority for level 20.  The 
+  1) Display what equipment set best matches the psi-melee priority for level 20.  The
      stat summary listed on the last line indicates the cumulative stats for the entire
      set.  This reflects just the stats provided directly by the equipment and it does not
      include any bonuses you may get naturally or via spells.  Also, note the long list
@@ -1092,13 +1097,8 @@ function inv.cli.weapon.fn(name, line, wildcards)
   local damTypes = wildcards[2] or ""
   local endTag = inv.tags.new(line)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping weapon request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsSet, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping weapon request: character's state does not allow actions")
-    return inv.tags.stop(invTagsSet, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("weapon")
+  if guardFail then return inv.tags.stop(invTagsSet, endTag, guardFail) end
 
   if (priority == "next") then
     inv.weapon.next(endTag)
@@ -1148,7 +1148,7 @@ to rotate through the types.  Each time the "next" command is given the plugin w
 one of the available damage types from the originally provided list and generate and wear
 the best possible equipment set that is compatible with the remaining damage types.  The
 plugin's algorithm starts with highest scoring equipment set and then removes the damage
-type of that set's primary weapon to find the next best equipment set.  
+type of that set's primary weapon to find the next best equipment set.
 
 In most cases, using the "@Cweapon@W" mode will just swap your weapons (and possibly your
 shield and/or held item if that's your priority's preference).  However, it is possible that
@@ -1288,7 +1288,7 @@ end -- inv.cli.priority.fn2
 
 
 function inv.cli.priority.usage()
-  dbot.print("@W    " .. pluginNameCmd .. 
+  dbot.print("@W    " .. pluginNameCmd ..
              " priority @G[list | display | create | clone | delete | edit | copy | paste | compare] " ..
              "@Y<name 1> <name 2>@w")
 end -- inv.cli.priority.usage
@@ -1305,7 +1305,7 @@ are you to.  Run "@Gcompare set@W" to see the current scoring weighting for your
 This is a great system and it allows you to customize how important particular statistics are
 to you and your particular playing style.
 
-However, this system has several limitations.  This plugin addresses those limitations by 
+However, this system has several limitations.  This plugin addresses those limitations by
 giving users the ability to implement one or more customizable "priority" groups.  Extensions
 to the mud's scoring system include:
   1) Entire equipment sets are scored collectively.  Knowing how a particular item is scored is
@@ -1325,7 +1325,7 @@ to the mud's scoring system include:
      or a range of levels.  For example, a primary spellcaster may want to emphasize str and dex
      more at lower levels and emphasize int and luck more at higher levels.  You might also give
      the "haste" effect a high priority at lower levels and a lower priority once you have access
-     to the haste spell.  Your priorities will change relative to your level and this plugin 
+     to the haste spell.  Your priorities will change relative to your level and this plugin
      gives you that opportunity.
   5) We provide the ability to prioritize item effects such as sanctuary, haste, or detect invis.
   6) We also allow you to specify the importance of the dual wield and irongrip effects given
@@ -1380,15 +1380,15 @@ Examples:
 @C  offhandDam@r   0.33   0.40@y   0.50   0.60   0.70@w   0.85@W  : @cValue of 1 point of offhand weapon ave damage
 @C          hp@r   0.02   0.01   0.01   0.01   0.01   0.01@W  : @cValue of 1 hit point
 @C        mana@r   0.01   0.01   0.01   0.01   0.01   0.01@W  : @cValue of 1 mana point
-@C   sanctuary@G  50.00  10.00  10.00  10.00  10.00   5.00@W  : @cValue placed on the sanctuary effect 
-@C       haste@G  20.00   5.00@g   2.00   2.00   2.00   2.00@W  : @cValue placed on the haste effect 
-@C      flying@G   5.00@g   4.00   2.00@w   1.00   1.00   1.00@W  : @cValue placed on the flying effect 
-@C       invis@G  10.00   5.00@g   3.00@w   1.00   1.00   1.00@W  : @cValue placed on the invisible effect 
+@C   sanctuary@G  50.00  10.00  10.00  10.00  10.00   5.00@W  : @cValue placed on the sanctuary effect
+@C       haste@G  20.00   5.00@g   2.00   2.00   2.00   2.00@W  : @cValue placed on the haste effect
+@C      flying@G   5.00@g   4.00   2.00@w   1.00   1.00   1.00@W  : @cValue placed on the flying effect
+@C       invis@G  10.00   5.00@g   3.00@w   1.00   1.00   1.00@W  : @cValue placed on the invisible effect
 @Cregeneration@G   5.00   5.00   5.00   5.00   5.00@g   2.00@W  : @cValue placed on the regeneration effect
-@C detectinvis@g   4.00   4.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect invis effect 
-@Cdetecthidden@g   3.00   3.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect hidden effect 
-@C  detectevil@g   2.00   2.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect evil effect 
-@C  detectgood@g   2.00   2.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect good effect 
+@C detectinvis@g   4.00   4.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect invis effect
+@Cdetecthidden@g   3.00   3.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect hidden effect
+@C  detectevil@g   2.00   2.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect evil effect
+@C  detectgood@g   2.00   2.00   2.00   2.00   2.00   2.00@W  : @cValue placed on the detect good effect
 @C   dualwield@G  20.00@R   0.00   0.00   0.00   0.00   0.00@W  : @cValue of an item's dual wield effect
 @C    irongrip@g   2.00   3.00@G  20.00  20.00  25.00  30.00@W  : @cValue of an item's irongrip effect
 @C      shield@G   5.00   5.00  10.00  20.00  25.00  40.00@W  : @cValue of a shield's damage reduction effect
@@ -1447,15 +1447,15 @@ Examples:
 @WSwitching from priority "@Gpsi@W" to priority "@Gpsi-melee@W" would result in these changes:
 
 @W            Ave  Sec  HR  DR Int Wis Lck Str Dex Con Res HitP Mana Move Effects
-@WLevel  11: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  12: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  13: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  14: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  15: @G  23@W @G   4@W @R -3@W @G 22@W   0   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  16: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  17: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  18: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W 
-@WLevel  19: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -3@W   0    0    0    0 @Gregeneration@W @Rshield@W 
+@WLevel  11: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  12: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  13: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  14: @G  23@W @G   4@W @R -6@W @G 26@W @G  2@W   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  15: @G  23@W @G   4@W @R -3@W @G 22@W   0   0   0   0   0 @R -4@W @R -2@W    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  16: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  17: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  18: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -4@W   0    0    0    0 @Gregeneration@W @Rshield@W
+@WLevel  19: @G  23@W @G   4@W @R -9@W @G 32@W   0   0   0   0   0 @R -3@W   0    0    0    0 @Gregeneration@W @Rshield@W
 ]])
 
 end -- inv.cli.priority.examples
@@ -1504,7 +1504,7 @@ end -- inv.cli.snapshot.fn
 
 
 function inv.cli.snapshot.usage()
-  dbot.print("@W    " .. pluginNameCmd .. 
+  dbot.print("@W    " .. pluginNameCmd ..
              " snapshot @G[create | delete | list | display | wear] @Y<snapshot name>")
 end -- inv.cli.snapshot.usage
 
@@ -1516,10 +1516,10 @@ function inv.cli.snapshot.examples()
   dbot.print(
 [[@W
 It's quite easy to take an equipment "snapshot" consisting of everything you are wearing
-at the time of the snapshot.  You can then easily re-wear the items contained in the 
+at the time of the snapshot.  You can then easily re-wear the items contained in the
 snapshot at a later time.  My guess is that most people will want to use automatically
 generated equipment sets (see "@Gdinv help set@W") in most cases.  However, it could also
-be very convenient to explicitly manage what is in a particular set and that is where 
+be very convenient to explicitly manage what is in a particular set and that is where
 snapshots come into play.
 
 If you wear a snapshot, it will remove any currently worn items that are not in the
@@ -1598,13 +1598,8 @@ function inv.cli.analyze.fn(name, line, wildcards)
 
   dbot.debug("inv.cli.analyze.fn: priority=\"" .. priorityName .. "\", loc=\"" .. wearableLocs .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping analyze request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsAnalyze, endTag, DRL_RET_UNINITIALIZED)
-  elseif (not dbot.gmcp.stateIsActive()) then
-    dbot.info("Skipping analyze request: character is not in the active state")
-    return inv.tags.stop(invTagsAnalyze, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireActiveStateFor("analyze")
+  if guardFail then return inv.tags.stop(invTagsAnalyze, endTag, guardFail) end
 
   -- If the user gave a wearable location, check if it is actually valid.  We also support the
   -- user giving us wearable types (e.g., "neck") in addition to wearable locations (e.g., "neck1 neck2").
@@ -1632,7 +1627,7 @@ function inv.cli.analyze.fn(name, line, wildcards)
 
   if (command == "create") then
     if (inv.cli.analyzePkg ~= nil) then
-      dbot.info("Skipping analysis of priority \"@C" .. priorityName .. 
+      dbot.info("Skipping analysis of priority \"@C" .. priorityName ..
                 "@W\": another analysis is in progress")
       return inv.tags.stop(invTagsAnalyze, endTag, DRL_RET_BUSY)
     else
@@ -1759,7 +1754,7 @@ You can "@Cdelete@W" an existing analysis by providing the name of the analysis.
 
 The default behavior is to analyze every possible level.  However, this can take considerable
 time to complete.  You may optionally request an analysis for every N levels and skip the
-analysis for other levels.  For example, "@Gdinv analyze create psi-melee 10@W" will only 
+analysis for other levels.  For example, "@Gdinv analyze create psi-melee 10@W" will only
 perform an analysis every 10 levels.
 
 Examples:
@@ -1879,13 +1874,8 @@ function inv.cli.usage.fn(name, line, wildcards)
 
   dbot.debug("inv.cli.usage.fn: priority=\"" .. priorityName .. "\", query=\"" .. query .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping usage request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsUsage, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping usage request: character's state does not allow actions")
-    return inv.tags.stop(invTagsUsage, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("usage")
+  if guardFail then return inv.tags.stop(invTagsUsage, endTag, guardFail) end
 
   if (priorityName == "") then
     inv.cli.usage.usage()
@@ -1991,13 +1981,8 @@ function inv.cli.unused.fn(name, line, wildcards)
 
   dbot.debug("inv.cli.unused.fn: priority=\"" .. priorityName .. "\", options=\"" .. options .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping unused request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsUnused, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping unused request: character's state does not allow actions")
-    return inv.tags.stop(invTagsUnused, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("unused")
+  if guardFail then return inv.tags.stop(invTagsUnused, endTag, guardFail) end
 
   if (priorityName == "") then
     inv.cli.unused.usage()
@@ -2080,13 +2065,8 @@ function inv.cli.compare.fn(name, line, wildcards)
   dbot.debug("inv.cli.compare.fn: priority=\"" .. priorityName .. "\", relativeName=\"" ..
              relativeName .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping compare request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsCompare, endTag, DRL_RET_UNINITIALIZED)
-  elseif (not dbot.gmcp.stateIsActive()) then
-    dbot.info("Skipping compare request: character is not in the active state")
-    return inv.tags.stop(invTagsCompare, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireActiveStateFor("compare")
+  if guardFail then return inv.tags.stop(invTagsCompare, endTag, guardFail) end
 
   if (levelSkip < 1) then
     levelSkip = 1
@@ -2096,11 +2076,10 @@ function inv.cli.compare.fn(name, line, wildcards)
 
   if (priorityName == "") or (relativeName == "") then
     inv.cli.compare.usage()
-    inv.tags.stop(invTagsCompare, endTag, DRL_RET_INVALID_PARAM)
-  else
-    inv.set.compare(priorityName, relativeName, levelSkip, endTag)
+    return inv.tags.stop(invTagsCompare, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
+  inv.set.compare(priorityName, relativeName, levelSkip, endTag)
 end -- inv.cli.compare.fn
 
 
@@ -2155,17 +2134,17 @@ Example:
 @WPriority "@Cpsi-melee@W" advantages with "-@m=@W*@m)@WA @MP@mure @Ma@mnd @MT@mrue @WHeart@m(@W*@m=@W-":
 @w
 @W           Ave Sec  HR  DR Int Wis Lck Str Dex Con Res HitP Mana Move Effects
-@WLevel 200:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 201:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 202:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 203:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 204:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 205:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 206:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 207:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 208:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 209:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
-@WLevel 210:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 
+@WLevel 200:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 201:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 202:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 203:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 204:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 205:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 206:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 207:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 208:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 209:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
+@WLevel 210:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0
 @WLevel 211:   0   0   0 @G  7@W @G  8@W @R -2@W @G  2@W @R -7@W @R -2@W @R -5@W   0    0    0    0 @W
 ]])
 
@@ -2179,13 +2158,8 @@ function inv.cli.covet.fn(name, line, wildcards)
   local levelSkip    = tonumber(wildcards[3] or "1") or 1
   local endTag       = inv.tags.new(line, "Covet results", nil, inv.tags.cleanup.timed)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping covet request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsCovet, endTag, DRL_RET_UNINITIALIZED)
-  elseif (not dbot.gmcp.stateIsActive()) then
-    dbot.info("Skipping covet request: character is not in the active state")
-    return inv.tags.stop(invTagsCovet, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireActiveStateFor("covet")
+  if guardFail then return inv.tags.stop(invTagsCovet, endTag, guardFail) end
 
   if (auctionNum == nil) then
     dbot.warn("inv.cli.covet: auction # is not a number")
@@ -2194,7 +2168,7 @@ function inv.cli.covet.fn(name, line, wildcards)
   end -- if
 
   if (priorityName == "") then
-    dbot.warn("inv.cli.covet: priorityName is nil")
+    dbot.warn("inv.cli.covet: priorityName is empty")
     inv.cli.covet.usage()
     return inv.tags.stop(invTagsCovet, endTag, DRL_RET_INVALID_PARAM)
   end -- if
@@ -2261,19 +2235,14 @@ function inv.cli.notify.fn(name, line, wildcards)
   local level  = wildcards[1] or ""
   local endTag = inv.tags.new(line)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping notify request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsNotify, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping notify request: character's state does not allow actions")
-    return inv.tags.stop(invTagsNotify, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("notify")
+  if guardFail then return inv.tags.stop(invTagsNotify, endTag, guardFail) end
 
   if (level == "none") or (level == "light") or (level == "standard") or (level == "all") then
     dbot.notify.setLevel(level, endTag, true)
   else
     inv.cli.notify.usage()
-    inv.tags.stop(invTagsNotify, endTag, DRL_RET_INVALID_PARAM)
+    return inv.tags.stop(invTagsNotify, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 end -- inv.cli.notify.fn
 
@@ -2383,14 +2352,14 @@ automatically swap back your previous ring and store the regeneration ring.
 
 If you do not have any items providing regeneration, this mode will not do anything.  Similarly,
 if you have multiple regeneration rings, this mode will only attempt to wear one of them when you
-sleep.  Your regeneration ring(s) can be in your main inventory or in any open container.  Dinv 
+sleep.  Your regeneration ring(s) can be in your main inventory or in any open container.  Dinv
 will find them and put them back when it is done.
 
 @YNote@W: This mode will not detect when you sleep if you use an alias to sleep.  In other words, if
 you alias sleep to "goNightNight" and then type "goNightNight" you won't auto-wear your regen ring.
 
 @YNote@W: Some custom exits (e.g., fantasy fields) use the "sleep" command to enter a room.  This
-will conflict with the regen mode because that custom exit will not actually put you to sleep. 
+will conflict with the regen mode because that custom exit will not actually put you to sleep.
 As a result, you will not re-wear your original finger equipment until you sleep and wake.  It
 is recommended that you use " sleep" (add a space before sleep) for custom exits.  The regen
 "sleep" alias will not trigger if one or more spaces is before the sleep command.
@@ -2411,13 +2380,8 @@ function inv.cli.forget.fn(name, line, wildcards)
   local query  = wildcards[1] or ""
   local endTag = inv.tags.new(line)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping forget request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsForget, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping forget request: character's state does not allow actions")
-    return inv.tags.stop(invTagsForget, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("forget")
+  if guardFail then return inv.tags.stop(invTagsForget, endTag, guardFail) end
 
   inv.items.forget(query, endTag)
 end -- inv.cli.forget.fn
@@ -2434,7 +2398,7 @@ function inv.cli.forget.examples()
 
   dbot.print(
 [[@W
-You may occasionally want to "forget" everything you know about an item and 
+You may occasionally want to "forget" everything you know about an item and
 re-identify it for your inventory table.  As noted in the plugin release notes,
 there are a few situations where this may occur.
 
@@ -2478,13 +2442,8 @@ function inv.cli.ignore.fn(name, line, wildcards)
   local container = wildcards[2] or ""
   local endTag    = inv.tags.new(line)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping ignore request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsIgnore, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping ignore request: character's state does not allow actions")
-    return inv.tags.stop(invTagsIgnore, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("ignore")
+  if guardFail then return inv.tags.stop(invTagsIgnore, endTag, guardFail) end
 
   if (string.lower(mode) == "list") then
     return inv.tags.stop(invTagsIgnore, endTag, inv.items.listIgnored())
@@ -2570,7 +2529,7 @@ notes complaining about losing something because you reset it :).
 
 The following plugin components currently have the ability to be individually
 reset back to default values:
-  @Cconfig@W:    This holds version info and some of your preferences.  You will 
+  @Cconfig@W:    This holds version info and some of your preferences.  You will
              need to rebuild your inventory table if you reset this.
   @Citems@W:     This is your inventory table.  You'll need to rebuild it if you
              reset this.
@@ -2578,14 +2537,14 @@ reset back to default values:
              and "customization item cache".
   @Csnapshot@W:  This table stores all custom equipment set snapshots that you have
              created.
-  @Cpriority@W:  This wipes out all custom stat priorities and implements the 
+  @Cpriority@W:  This wipes out all custom stat priorities and implements the
              default values.
   @Cset@W:       This is where all of your equipment set data is stored when you
              run a "@Gdinv analyze create [...]@W" operation.  If your backups
              are getting a little big, you may want to wipe the equipment sets
              and regenerate just the ones you currently care about.
   @CstatBonus@W: This table maintains a weighted average of your spell bonuses at
-             each level.  
+             each level.
   @Cconsume@W:   This table keeps track of which consumable items (typically pills
              and potions) you use and where you can buy the items.
   @Ctags@W:      This table tracks which plugin tags are enabled and if the tag
@@ -2713,16 +2672,11 @@ function inv.cli.cache.fn(name, line, wildcards)
 
   dbot.debug("command=\"" .. cacheCommand .. "\", type=\"" .. cacheType .. "\", size=" .. cacheSize)
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping cache request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsCache, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping cache request: character's state does not allow actions")
-    return inv.tags.stop(invTagsCache, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("cache")
+  if guardFail then return inv.tags.stop(invTagsCache, endTag, guardFail) end
 
   if (cacheCommand == "reset") then
-    if (cacheType == "recent") or (cacheType == "all") then 
+    if (cacheType == "recent") or (cacheType == "all") then
       retval = inv.cache.resetCache(inv.cache.recent.name)
     end -- if
     if (cacheType == "frequent") or (cacheType == "all") then
@@ -2784,7 +2738,7 @@ end -- inv.cli.cache.fn
 
 
 function inv.cli.cache.usage()
-  dbot.print("@W    " .. pluginNameCmd .. 
+  dbot.print("@W    " .. pluginNameCmd ..
                 " cache @G[reset | size] [recent | frequent | custom | all] @Y<# entries>@w")
 end -- inv.cli.cache.usage
 
@@ -2958,13 +2912,8 @@ function inv.cli.portal.fn(name, line, wildcards)
   local command = wildcards[1] or ""
   local portalQuery = wildcards[2] or ""
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping portal request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return DRL_RET_UNINITIALIZED
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping portal request: character's state does not allow actions")
-    return DRL_RET_NOT_ACTIVE
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("portal")
+  if guardFail then return guardFail end
 
   dbot.debug("CLI: " .. pluginNameCmd .. " portal " .. command .. " " .. portalQuery)
   inv.portal.use(portalQuery)
@@ -3008,7 +2957,7 @@ can find this ID by searching with the "objid" query mode.  See the
 of all of your portals by typing "@Gdinv search objid type portal@W".
 
 The plugin's portal mode is particularly convenient when used in conjuction with the
-mapper's portal mode.  
+mapper's portal mode.
 
 Examples:
   1) Use the portal with a unique ID of 123456789
@@ -3038,13 +2987,8 @@ function inv.cli.pass.fn(name, line, wildcards)
   local passNameOrId = wildcards[1] or ""
   local useTimeSec = tonumber(wildcards[2] or "")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping pass request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return DRL_RET_UNINITIALIZED
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping pass request: character's state does not allow actions")
-    return DRL_RET_NOT_ACTIVE
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("pass")
+  if guardFail then return guardFail end
 
   if (useTimeSec == nil) then
     dbot.warn("inv.cli.pass.fn: # of seconds to use the pass is a required parameter")
@@ -3069,7 +3013,7 @@ function inv.cli.pass.examples()
 [[@W
 Some areas require specific items to be in your main inventory in order for you to
 pass through certain rooms or doors.  These are not keys.  This plugin refers to
-such items as "passes".  A pass is saveable (unlike a key) and can be kept in a 
+such items as "passes".  A pass is saveable (unlike a key) and can be kept in a
 container.
 
 What we want is the ability to quickly pull a pass out of its container, keep it
@@ -3098,17 +3042,12 @@ function inv.cli.consume.fn(name, line, wildcards)
   local itemNum = tonumber(itemName)
   local container = wildcards[4] or ""
 
-  dbot.debug("CLI: " .. pluginNameCmd .. " consume command=\"" .. (command or "") .. "\", itemType=\"" .. 
-             (itemType or "") .. "\", itemName/Num=\"" .. (itemName or "") .. "\", container=\"" .. 
+  dbot.debug("CLI: " .. pluginNameCmd .. " consume command=\"" .. (command or "") .. "\", itemType=\"" ..
+             (itemType or "") .. "\", itemName/Num=\"" .. (itemName or "") .. "\", container=\"" ..
              container .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping consume request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return DRL_RET_UNINITIALIZED
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping consume request: character's state does not allow actions")
-    return DRL_RET_NOT_ACTIVE
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("consume")
+  if guardFail then return guardFail end
 
   if (command == "add") then
     inv.consume.add(itemType, itemName)
@@ -3144,9 +3083,9 @@ function inv.cli.consume.examples()
   dbot.print(
 [[@W
 Using consumable items such as potions, pills, and scrolls is a very common
-occurance.  The plugin facilitates this by giving users the ability to specify
-types and locations of consumable items.  Users can then ask the plugin to 
-restock or use particular types of things.  Confused yet?  Let me explain by 
+occurrence.  The plugin facilitates this by giving users the ability to specify
+types and locations of consumable items.  Users can then ask the plugin to
+restock or use particular types of things.  Confused yet?  Let me explain by
 giving you a walk-through.
 
 Run to the Aylor potion shop, define a new type of consumable named "@Cfly@W", and
@@ -3341,16 +3280,11 @@ function inv.cli.organize.fn1(name, line, wildcards)
   local queryString = wildcards[3] or ""
   local endTag      = inv.tags.new(line)
 
-  dbot.debug("CLI: " .. pluginNameCmd .. " organize command=\"" .. (command or "") .. "\", container=\"" .. 
+  dbot.debug("CLI: " .. pluginNameCmd .. " organize command=\"" .. (command or "") .. "\", container=\"" ..
              container .. "\", query=\"" .. queryString .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping organize request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping organize request: character's state does not allow actions")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("organize")
+  if guardFail then return inv.tags.stop(invTagsOrganize, endTag, guardFail) end
 
   if (command == "add") then
     inv.items.organize.add(container, queryString, endTag)
@@ -3358,7 +3292,7 @@ function inv.cli.organize.fn1(name, line, wildcards)
     inv.items.organize.clear(container, endTag)
   else
     inv.cli.organize.usage()
-    inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
+    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
 end -- inv.cli.organize.fn1
@@ -3370,21 +3304,15 @@ function inv.cli.organize.fn2(name, line, wildcards)
 
   dbot.debug("CLI: " .. pluginNameCmd .. " organize command=\"" .. (command or "") .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping organize request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping organize request: character's state does not allow actions")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("organize")
+  if guardFail then return inv.tags.stop(invTagsOrganize, endTag, guardFail) end
 
-  if (command == "display") then
-    inv.items.organize.display(endTag)
-  else
+  if (command ~= "display") then
     inv.cli.organize.usage()
-    inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
+    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
+  inv.items.organize.display(endTag)
 end -- inv.cli.organize.fn2
 
 
@@ -3394,13 +3322,8 @@ function inv.cli.organize.fn3(name, line, wildcards)
 
   dbot.debug("CLI: " .. pluginNameCmd .. " organize query=\"" .. queryString .. "\"")
 
-  if (not inv.init.initializedActive) then
-    dbot.info("Skipping organize request: plugin is not yet initialized (are you AFK or sleeping?)")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_UNINITIALIZED)
-  elseif dbot.gmcp.statePreventsActions() then
-    dbot.info("Skipping organize request: character's state does not allow actions")
-    return inv.tags.stop(invTagsOrganize, endTag, DRL_RET_NOT_ACTIVE)
-  end -- if
+  local guardFail = inv.cli.requireReadyStateFor("organize")
+  if guardFail then return inv.tags.stop(invTagsOrganize, endTag, guardFail) end
 
   inv.items.organize.cleanup(queryString, endTag)
 end -- inv.cli.organize.fn3
@@ -3470,7 +3393,7 @@ Let's see what that looks like:
   4) If I want to put everything away, I would use an empty search query to match everything
      in my inventory.  Bingo.  Everything is now tucked away in containers.  This will also put
      away your worn equipment so you may want to take an equipment snapshot or ensure you have
-     a priority set available to re-wear your equipment before you do this.  
+     a priority set available to re-wear your equipment before you do this.
      "@Gdinv organize@W"
 
   5) You can clear a container's organize queries like this:
@@ -3554,7 +3477,7 @@ Examples:
   3) Display the entire plugin changelog
      "@Gdinv version changelog@W"
 
-  4) Check if you have the latest plugin version.  If your version is not the 
+  4) Check if you have the latest plugin version.  If your version is not the
      latest and greatest, download the latest release and install it.  You do
      not need to log out or restart mush.
      "@Gdinv version update confirm@W"
@@ -3576,7 +3499,7 @@ function inv.cli.help.fn(name, line, wildcards)
     inv.cli.fullUsage()
   end -- if
 
-  inv.tags.stop(invTagsHelp, endTag, DRL_RET_SUCCESS) 
+  inv.tags.stop(invTagsHelp, endTag, DRL_RET_SUCCESS)
 end -- inv.cli.help.fn
 
 

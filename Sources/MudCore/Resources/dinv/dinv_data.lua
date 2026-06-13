@@ -112,7 +112,7 @@ inv.wearables = { light    = { "light" },
                   above    = { "above" },
                   portal   = { "portal" },
                   sleeping = { "sleeping" },
-                  ready    = { "ready" } }              
+                  ready    = { "ready" } }
 
 
 ----------------------------------------------------------------------------------------------------
@@ -269,6 +269,8 @@ inv.stats.key             = { name = "key",
                               desc = "Shorthand for the \"@G" .. inv.stats.keywords.name .. "@W\" search key" }
 inv.stats.keyword         = { name = "keyword",
                               desc = "Shorthand for the \"@G" .. inv.stats.keywords.name .. "@W\" search key" }
+inv.stats.kw              = { name = "kw",
+                              desc = "Shorthand for the \"@G" .. inv.stats.keywords.name .. "@W\" search key" }
 inv.stats.flag            = { name = "flag",
                               desc = "Shorthand for the \"@G" .. inv.stats.flags.name .. "@W\" search key" }
 
@@ -360,6 +362,7 @@ invQueryKeyLoc              = string.lower(inv.stats.loc.name)
 invQueryKeyRelativeLoc      = string.lower(inv.stats.rloc.name)
 invQueryKeyKey              = string.lower(inv.stats.key.name)
 invQueryKeyKeyword          = string.lower(inv.stats.keyword.name)
+invQueryKeyKw               = string.lower(inv.stats.kw.name)
 invQueryKeyFlag             = string.lower(inv.stats.flag.name)
 
 invQueryKeyCustom           = "custom"

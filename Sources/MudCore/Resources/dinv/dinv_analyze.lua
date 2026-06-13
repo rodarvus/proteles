@@ -29,7 +29,7 @@ function inv.analyze.sets(priorityName, minLevel, skipLevel, resultData, intensi
     return DRL_RET_INVALID_PARAM
   end -- if
 
-  -- Ensure we don't have multiple analyses in progress 
+  -- Ensure we don't have multiple analyses in progress
   if (inv.analyze.setsPkg ~= nil) then
     dbot.info("Skipping analysis of sets: another analysis is in progress")
     return DRL_RET_BUSY
@@ -60,12 +60,12 @@ function inv.analyze.setsCR()
   if (inv.state == invStateRunning) then
     dbot.info("Skipping set analysis: you are in the middle of an inventory refresh")
     retval = DRL_RET_BUSY
-  else   
+  else
     totalLevels = maxLevel - inv.analyze.setsPkg.minLevel
     if (totalLevels == 0) then
       totalLevels = 1 -- we don't want to divide by zero in our analysis
     elseif (totalLevels < 0) then
-      dbot.info("Skipping set analysis: minLevel " .. inv.analyze.setsPkg.minLevel .. 
+      dbot.info("Skipping set analysis: minLevel " .. inv.analyze.setsPkg.minLevel ..
                 " exceeds your current maxLevel " .. maxLevel)
       retval = DRL_RET_SUCCESS
     end -- if
@@ -114,7 +114,7 @@ function inv.analyze.setsCR()
     end -- if
 
     -- Show progress and let something else run occasionally
-    local levelsChecked = currentLevel - inv.analyze.setsPkg.minLevel 
+    local levelsChecked = currentLevel - inv.analyze.setsPkg.minLevel
     local progressPercent
     if (inv.analyze.setsPkg.minLevel == maxLevel) then
       progressPercent = 100
@@ -209,7 +209,7 @@ function inv.analyze.list()
   for name, _ in pairs(inv.set.table) do
     table.insert(sortedNames, name)
   end -- for
-  table.sort(sortedNames, function (v1, v2) return v1 < v2 end) 
+  table.sort(sortedNames, function (v1, v2) return v1 < v2 end)
 
   dbot.print("@WSet analysis: @Gcomplete@W or @Ypartial@W")
   for _, name in ipairs(sortedNames) do
@@ -222,7 +222,7 @@ function inv.analyze.list()
     for level = minLevel, maxLevel do
       if (inv.set.table[name][level] == nil) then
         analysisPrefix = "@Y"
-        analysisSuffix = "@W -- Run \"@Gdinv analyze create " .. name .. "@W\" to complete the analysis"      
+        analysisSuffix = "@W -- Run \"@Gdinv analyze create " .. name .. "@W\" to complete the analysis"
         break
       end -- if
     end -- for
@@ -288,7 +288,7 @@ function inv.analyze.display(priorityName, wearableLoc, endTag)
           local prevObjId
           if (prevSet ~= nil) and (prevSet[setWearLoc] ~= nil) then
             prevObjId = tonumber(prevSet[setWearLoc].id or "")
-          end -- if 
+          end -- if
 
           -- Display the item if this is our first level or if something changed from the previous level
           if (objId ~= nil) and ((objId ~= prevObjId) or (currentLevel == startLevel)) then

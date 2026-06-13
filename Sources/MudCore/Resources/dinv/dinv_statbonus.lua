@@ -6,7 +6,7 @@
 -- on a character's level and the spell bonuses that are active for the character.  This module
 -- checks the current stats and determines how many stats can be provided by equipment.
 --
--- This is not an exact science.  The equipment bonuses can be very different for the same 
+-- This is not an exact science.  The equipment bonuses can be very different for the same
 -- character at the same level if the character has a good spellup on one call and a poor spellup
 -- on another call.  Our policy is to assume that the character has done their best to spellup
 -- prior to wearing a set.  They can always re-wear a set to pick up the optimal available equipment
@@ -206,7 +206,7 @@ end -- inv.statBonus.reset
 -- timer will periodically check what spell bonuses are present on the character and track a weighted
 -- average and also the max value for each stat over time.  Those values will help improve accuracy
 -- the longer someone uses this plugin.  If someone frequently has SH spellups their estimates will
--- eventually reflect that.  Similarly, if someone never bothers to spellup, that character's 
+-- eventually reflect that.  Similarly, if someone never bothers to spellup, that character's
 -- estimated stats will reflect that too after enough time passes.
 --
 -- Also, you should note that the spellup estimates are only used when real spellup values aren't
@@ -607,7 +607,7 @@ function inv.statBonus.setCR()
     dbot.prompt.show()
 
   else
-    dbot.debug("Skipping @Glevel " .. level .. " @Wspell bonus update: you are in state \"@C" .. 
+    dbot.debug("Skipping @Glevel " .. level .. " @Wspell bonus update: you are in state \"@C" ..
                dbot.gmcp.getStateString(charState) .. "@W\"")
     retval = DRL_RET_NOT_ACTIVE
   end -- if
@@ -627,8 +627,8 @@ function inv.statBonus.setCR()
       local statList = "int luck wis str dex con"
       for spellStat in statList:gmatch("%S+") do
         -- Update the weighted average (current stats are weighted 50% by default)
-        inv.statBonus.spellBonus[level].ave[spellStat] = 
-          (inv.statBonus.currentBonus[spellStat] + inv.statBonus.spellBonus[level].ave[spellStat]) / 2  
+        inv.statBonus.spellBonus[level].ave[spellStat] =
+          (inv.statBonus.currentBonus[spellStat] + inv.statBonus.spellBonus[level].ave[spellStat]) / 2
 
         -- Update the max stats
         if (inv.statBonus.currentBonus[spellStat] > inv.statBonus.spellBonus[level].max[spellStat]) then
@@ -637,7 +637,7 @@ function inv.statBonus.setCR()
       end -- for
     end -- if
 
-    dbot.debug("Updated @GL" .. level .. "@W spell bonuses: " .. 
+    dbot.debug("Updated @GL" .. level .. "@W spell bonuses: " ..
                string.format("@Cint@W=@G%.2f@W, @Cluck@W=@G%.2f@W, @Cwis@W=@G%.2f@W, " ..
                              "@Cstr@W=@G%.2f@W, @Cdex@W=@G%.2f@W, @Ccon@W=@G%.2f@w",
                              inv.statBonus.spellBonus[level].ave.int,
@@ -714,7 +714,7 @@ inv.statBonus.trigger.startName = "drlInvStatBonusTriggerStart"
 function inv.statBonus.trigger.get(line)
 
   -- Look for the current spells bonus
-  local matchStart, matchEnd, eqStr, eqInt, eqWis, eqDex, eqCon, eqLuck = 
+  local matchStart, matchEnd, eqStr, eqInt, eqWis, eqDex, eqCon, eqLuck =
     string.find(line, "Spells Bonus%s+:%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+.*$")
 
   if (matchStart ~= nil) then

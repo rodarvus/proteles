@@ -11,7 +11,7 @@
 --
 -- inv.priority.create(priorityName, endTag)
 -- inv.priority.clone(origPriorityName, clonedPriorityName, useVerbose, endTag)
--- inv.priority.delete(priorityName, endTag) 
+-- inv.priority.delete(priorityName, endTag)
 --
 -- inv.priority.list(endTag)
 -- inv.priority.display(priorityName, endTag)
@@ -33,7 +33,7 @@
 --
 -- inv.priority.damTypeIsAllowed(damType, priorityName, level)
 -- inv.priority.locIsAllowed(wearableLoc, priorityName, level)
--- 
+--
 -- inv.priority.addDefault() -- add some default priorities
 --
 -- Data:
@@ -292,7 +292,7 @@ function inv.priority.clone(origPriorityName, clonedPriorityName, useVerbose, en
   end -- if
 
   if (inv.priority.table[clonedPriorityName] ~= nil) then
-    dbot.warn("inv.priority.clone: cloned priority \"@C" .. clonedPriorityName .. "@W\" already exists") 
+    dbot.warn("inv.priority.clone: cloned priority \"@C" .. clonedPriorityName .. "@W\" already exists")
     return inv.tags.stop(invTagsPriority, endTag, DRL_RET_BUSY)
   end -- if
 
@@ -369,7 +369,7 @@ function inv.priority.display(priorityName, endTag)
   local retval = DRL_RET_SUCCESS
 
   if (priorityName == nil) or (priorityName == "") then
-    dbot.warn("inv.priority.display: Missing priorityName parameter") 
+    dbot.warn("inv.priority.display: Missing priorityName parameter")
     return inv.tags.stop(invTagsPriority, endTag, DRL_RET_INVALID_PARAM)
   end -- if
 
@@ -412,7 +412,7 @@ function inv.priority.edit(priorityName, useAllFields, isQuiet, endTag)
     return inv.tags.stop(invTagsPriority, endTag, retval)
   end -- if
 
-  local instructions = 
+  local instructions =
 [[Edit your priority!  See "dinv help priority" for more details.
 
 The first column lists the names of each available priority field.  Subsequent columns specify the numeric values of that field for a level range.  You may have as many level ranges as you wish, but ranges should not overlap and they should cover all levels between 1 - 291.
@@ -538,7 +538,7 @@ function inv.priority.paste(priorityName, endTag)
 
   retval = inv.priority.update(priorityName, priorityString, true)
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.priority.paste: Failed to update priority from clipboard data: " .. 
+    dbot.warn("inv.priority.paste: Failed to update priority from clipboard data: " ..
               dbot.retval.getString(retval))
   else
     dbot.info(operation .. " priority \"@C" .. priorityName .. "@W\" from clipboard data")
@@ -669,7 +669,7 @@ function inv.priority.remove(priorityName)
   end -- if
 
   if (inv.priority.table[priorityName] == nil) then
-    dbot.warn("inv.priority.remove: Priority table does not contain an entry for priority \"" .. 
+    dbot.warn("inv.priority.remove: Priority table does not contain an entry for priority \"" ..
             priorityName .. "\"")
     return DRL_RET_MISSING_ENTRY
   end -- if
@@ -717,7 +717,7 @@ function inv.priority.get(priorityName, level)
 
   -- Verify that we found an appropriate priority block for our level
   if (priorityBlock == nil) then
-    dbot.warn("inv.priority.get: Failed to find a priority block for level " .. 
+    dbot.warn("inv.priority.get: Failed to find a priority block for level " ..
             levelNum .. " in priority \"" .. priorityName .. "\"")
     return nil
   end -- if
@@ -843,7 +843,7 @@ function inv.priority.tableToString(priorityTable, doDisplayUnused, doDisplayCol
         priString = priString .. "  : " .. descPrefix .. fieldDesc .. descSuffix
       end -- if
     end -- if
-  end -- for  
+  end -- for
 
   return priString, retval
 end -- inv.priority.tableToString
@@ -872,7 +872,7 @@ function inv.priority.stringToTable(priorityString)
   for i, line in ipairs(lines) do
     local words, retval = dbot.wordsToArray(line)
     if (retval ~= DRL_RET_SUCCESS) then
-      dbot.warn("inv.priority.stringToTable: Failed to convert line into array: " .. 
+      dbot.warn("inv.priority.stringToTable: Failed to convert line into array: " ..
                 dbot.retval.getString(retval))
       return priEntry, retval
     end -- if
@@ -914,7 +914,7 @@ function inv.priority.stringToTable(priorityString)
   if (string.lower(header1[1] or "") ~= "minlevel") then
     dbot.warn("Missing or malformed minLevel header line in priority")
     return priEntry, DRL_RET_INVALID_PARAM
-  end -- if  
+  end -- if
 
   local header2, retval = dbot.wordsToArray(lines[2])
   if (retval ~= DRL_RET_SUCCESS) then
@@ -926,7 +926,7 @@ function inv.priority.stringToTable(priorityString)
   if (string.lower(header2[1] or "") ~= "maxlevel") then
     dbot.warn("Missing or malformed maxLevel header line in priority")
     return priEntry, DRL_RET_INVALID_PARAM
-  end -- if  
+  end -- if
 
   -- Set up the initial block entries and level ranges
   for i = 2, numColumns do -- Skip the first column (min/max levels and the field names)
@@ -939,7 +939,7 @@ function inv.priority.stringToTable(priorityString)
     -- should be exactly one more than the maxLevel from the previous block.
     if (#priEntry > 0) and (priEntry[#priEntry].maxLevel + 1 ~= minLevel) then
       dbot.warn("Detected level gap between consecutive priority blocks\n" ..
-                "     Previous level block [" .. priEntry[#priEntry].minLevel .. "-" .. 
+                "     Previous level block [" .. priEntry[#priEntry].minLevel .. "-" ..
                 priEntry[#priEntry].maxLevel .. "], current level block [" .. minLevel .. "-" ..
                 maxLevel .. "]")
       return priEntry, DRL_RET_INVALID_PARAM
@@ -967,7 +967,7 @@ function inv.priority.stringToTable(priorityString)
       local fieldName = string.lower(fieldLine[1] or "")
       local fieldIsValid = false
       for _, entry in ipairs(inv.priority.fieldTable) do
-        if (string.lower(entry[1] or "") == fieldName) then 
+        if (string.lower(entry[1] or "") == fieldName) then
           fieldIsValid = true
           break
         end -- if
@@ -1040,7 +1040,7 @@ function inv.priority.damTypeIsAllowed(damType, priorityName, level)
     return true
   else
     return false
-  end -- if  
+  end -- if
 
 end -- inv.priority.damTypeIsAllowed
 
@@ -1105,8 +1105,8 @@ function inv.priority.addDefault()
        you can do.  The table below was taken by running the "compare set" command on the
        Aardwolf mud using a primary psi character.  Hopefully it isn't copyrighted... :)
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          10       10
        Intelligence      int          15       15
@@ -1129,18 +1129,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "psi", -- Equipment priorities using the default psi weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.0,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.0,
                        int        = 1.5,
                        wis        = 1.5,
-                       dex        = 1.0, 
-                       con        = 1.0,  
-                       luck       = 1.2,  
-                       hit        = 0.5,  
+                       dex        = 1.0,
+                       con        = 1.0,
+                       luck       = 1.2,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1157,8 +1157,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary warrior.  This is what we will model in the "warrior" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          15       15
        Intelligence      int          10       10
@@ -1181,18 +1181,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "warrior", -- Equipment priorities using the default warrior weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.5,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.5,
                        int        = 1.0,
                        wis        = 1.0,
-                       dex        = 1.5, 
-                       con        = 1.0,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.5,
+                       con        = 1.0,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1210,8 +1210,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary mage.  This is what we will model in the "mage" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          10       10
        Intelligence      int          15       15
@@ -1234,18 +1234,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "mage", -- Equipment priorities using the default mage weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.0,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.0,
                        int        = 1.5,
                        wis        = 1.0,
-                       dex        = 1.0, 
-                       con        = 1.0,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.0,
+                       con        = 1.0,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1262,8 +1262,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary thief.  This is what we will model in the "thief" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          12       12
        Intelligence      int          10       10
@@ -1286,18 +1286,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "thief", -- Equipment priorities using the default thief weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.2,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.2,
                        int        = 1.0,
                        wis        = 1.0,
-                       dex        = 1.5, 
-                       con        = 1.0,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.5,
+                       con        = 1.0,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1315,8 +1315,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary ranger.  This is what we will model in the "ranger" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          10       10
        Intelligence      int          10       10
@@ -1339,18 +1339,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "ranger", -- Equipment priorities using the default ranger weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.0,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.0,
                        int        = 1.0,
                        wis        = 1.5,
-                       dex        = 1.0, 
-                       con        = 1.5,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.0,
+                       con        = 1.5,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1368,8 +1368,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary paladin.  This is what we will model in the "paladin" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          10       10
        Intelligence      int          15       15
@@ -1392,18 +1392,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "paladin", -- Equipment priorities using the default paladin weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.0,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.0,
                        int        = 1.5,
                        wis        = 1.0,
-                       dex        = 1.0, 
-                       con        = 1.5,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.0,
+                       con        = 1.5,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1420,8 +1420,8 @@ function inv.priority.addDefault()
   --[[ Here are the default statistic weightings from the Aardwolf scoring system for a
        primary cleric.  This is what we will model in the "cleric" priority.
 
-                                 Default   Your  
-       Affect Bonus      Keyword Score     Score  
+                                 Default   Your
+       Affect Bonus      Keyword Score     Score
        ----------------- ------- -------  -------
        Strength          str          10       10
        Intelligence      int          10       10
@@ -1444,18 +1444,18 @@ function inv.priority.addDefault()
   --]]
   retval = inv.priority.add(
     "cleric", -- Equipment priorities using the default cleric weightings from the aardwolf scoring system
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
-        priorities = { 
-                       str        = 1.0,  
+        minLevel = 1,
+        maxLevel = 291,
+        priorities = {
+                       str        = 1.0,
                        int        = 1.0,
                        wis        = 1.5,
-                       dex        = 1.0, 
-                       con        = 1.0,  
-                       luck       = 1.0,  
-                       hit        = 0.5,  
+                       dex        = 1.0,
+                       con        = 1.0,
+                       luck       = 1.0,
+                       hit        = 0.5,
                        dam        = 0.5,
                        avedam     = 0.4,
                        offhandDam = 0.4,
@@ -1474,23 +1474,23 @@ function inv.priority.addDefault()
   -- feel free to tweak it for your own use :)  Many additional options are available to tweak this
   -- even further.  See "dinv help priority" for more details.
   retval = inv.priority.add(
-  "psi-melee", 
-  { 
+  "psi-melee",
+  {
     { -- Priorities for levels 1 - 50
-      minLevel = 1, 
+      minLevel = 1,
       maxLevel = 50,
       priorities = {
-                     str          = 1,  
+                     str          = 1,
                      int          = 0.6,
                      wis          = 0.6,
-                     dex          = 0.8, 
-                     con          = 0.2,  
-                     luck         = 1, 
+                     dex          = 0.8,
+                     con          = 0.2,
+                     luck         = 1,
                      dam          = 0.9,
                      hit          = 0.4,
 
                      avedam       = 0.9,
-                     offhandDam   = 0.3, 
+                     offhandDam   = 0.3,
 
                      hp           = 0.02,
                      mana         = 0.01,
@@ -1500,7 +1500,7 @@ function inv.priority.addDefault()
                      haste        = 20,
                      flying       = 5,
                      invis        = 10,
-                     regeneration = 5, 
+                     regeneration = 5,
                      detectinvis  = 4,
                      detecthidden = 3,
                      detectevil   = 2,
@@ -1516,20 +1516,20 @@ function inv.priority.addDefault()
     },
 
     { -- Priorities for levels 51 - 100
-      minLevel = 51, 
-      maxLevel = 100, 
+      minLevel = 51,
+      maxLevel = 100,
       priorities = {
-                     str          = 0.9,  
+                     str          = 0.9,
                      int          = 0.8,
                      wis          = 0.8,
-                     dex          = 0.7, 
-                     con          = 0.3,  
-                     luck         = 1, 
+                     dex          = 0.7,
+                     con          = 0.3,
+                     luck         = 1,
                      dam          = 0.9,
                      hit          = 0.5,
 
                      avedam       = 0.9,
-                     offhandDam   = 0.4, 
+                     offhandDam   = 0.4,
 
                      hp           = 0.01,
                      mana         = 0.01,
@@ -1539,7 +1539,7 @@ function inv.priority.addDefault()
                      haste        = 5,
                      flying       = 4,
                      invis        = 5,
-                     regeneration = 5, 
+                     regeneration = 5,
                      detectinvis  = 4,
                      detecthidden = 3,
                      detectevil   = 2,
@@ -1562,20 +1562,20 @@ function inv.priority.addDefault()
     },
 
     { -- Priorities for levels 101 - 130
-      minLevel = 101, 
-      maxLevel = 130, 
+      minLevel = 101,
+      maxLevel = 130,
       priorities = {
-                     str          = 0.8,  
+                     str          = 0.8,
                      int          = 1.0,
                      wis          = 0.9,
-                     dex          = 0.7, 
-                     con          = 0.4,  
-                     luck         = 1.0, 
+                     dex          = 0.7,
+                     con          = 0.4,
+                     luck         = 1.0,
                      dam          = 0.8,
                      hit          = 0.6,
 
                      avedam       = 0.8,
-                     offhandDam   = 0.4, 
+                     offhandDam   = 0.4,
 
                      hp           = 0.01,
                      mana         = 0.01,
@@ -1585,7 +1585,7 @@ function inv.priority.addDefault()
                      haste        = 2,
                      flying       = 2,
                      invis        = 3,
-                     regeneration = 5, 
+                     regeneration = 5,
                      detectinvis  = 2,
                      detecthidden = 2,
                      detectevil   = 2,
@@ -1601,20 +1601,20 @@ function inv.priority.addDefault()
     },
 
     { -- Priorities for levels 131 - 170
-      minLevel = 131, 
-      maxLevel = 170, 
+      minLevel = 131,
+      maxLevel = 170,
       priorities = {
-                     str          = 0.7,  
+                     str          = 0.7,
                      int          = 1.0,
                      wis          = 1.0,
-                     dex          = 0.6, 
-                     con          = 0.5,  
-                     luck         = 1.0, 
+                     dex          = 0.6,
+                     con          = 0.5,
+                     luck         = 1.0,
                      dam          = 0.7,
                      hit          = 0.6,
 
                      avedam       = 0.7,
-                     offhandDam   = 0.4, 
+                     offhandDam   = 0.4,
 
                      hp           = 0.01,
                      mana         = 0.01,
@@ -1624,7 +1624,7 @@ function inv.priority.addDefault()
                      haste        = 2,
                      flying       = 1,
                      invis        = 1,
-                     regeneration = 5, 
+                     regeneration = 5,
                      detectinvis  = 2,
                      detecthidden = 2,
                      detectevil   = 2,
@@ -1640,20 +1640,20 @@ function inv.priority.addDefault()
     },
 
     { -- Priorities for levels 171 - 200
-      minLevel = 171, 
-      maxLevel = 200, 
+      minLevel = 171,
+      maxLevel = 200,
       priorities = {
-                     str          = 0.7,  
+                     str          = 0.7,
                      int          = 1.0,
                      wis          = 1.0,
-                     dex          = 0.5, 
-                     con          = 0.5,  
-                     luck         = 1.0, 
+                     dex          = 0.5,
+                     con          = 0.5,
+                     luck         = 1.0,
                      dam          = 0.6,
                      hit          = 0.6,
 
                      avedam       = 0.6,
-                     offhandDam   = 0.4, 
+                     offhandDam   = 0.4,
 
                      hp           = 0.01,
                      mana         = 0.01,
@@ -1663,7 +1663,7 @@ function inv.priority.addDefault()
                      haste        = 2,
                      flying       = 1,
                      invis        = 1,
-                     regeneration = 5, 
+                     regeneration = 5,
                      detectinvis  = 2,
                      detecthidden = 2,
                      detectevil   = 2,
@@ -1683,20 +1683,20 @@ function inv.priority.addDefault()
     },
 
     { -- Priorities for level 201 - 291
-      minLevel = 201, 
-      maxLevel = 291, 
+      minLevel = 201,
+      maxLevel = 291,
       priorities = {
-                     str          = 0.6,  
+                     str          = 0.6,
                      int          = 1.0,
                      wis          = 1.0,
-                     dex          = 0.5, 
-                     con          = 0.5,  
-                     luck         = 1.0, 
+                     dex          = 0.5,
+                     con          = 0.5,
+                     luck         = 1.0,
                      dam          = 0.5,
                      hit          = 0.4,
 
                      avedam       = 0.5,
-                     offhandDam   = 0.4, 
+                     offhandDam   = 0.4,
 
                      hp           = 0.01,
                      mana         = 0.01,
@@ -1706,7 +1706,7 @@ function inv.priority.addDefault()
                      haste        = 2,
                      flying       = 1,
                      invis        = 1,
-                     regeneration = 2, 
+                     regeneration = 2,
                      detectinvis  = 2,
                      detecthidden = 2,
                      detectevil   = 2,
@@ -1735,17 +1735,17 @@ function inv.priority.addDefault()
   ------------------------
   -- This prioritizes defensive aspects of an equipment set
   local psiDefensePriority = {
-                               str          = 0.6,  
+                               str          = 0.6,
                                int          = 1.0,
                                wis          = 1.0,
-                               dex          = 0.8, 
-                               con          = 0.8,  
-                               luck         = 1.0, 
+                               dex          = 0.8,
+                               con          = 0.8,
+                               luck         = 1.0,
                                dam          = 0.5,
                                hit          = 0.5,
 
                                avedam       = 1.0,
-                               offhandDam   = 0.0, 
+                               offhandDam   = 0.0,
 
                                hp           = 0.02,
                                mana         = 0.01,
@@ -1754,7 +1754,7 @@ function inv.priority.addDefault()
                                haste        = 0,
                                flying       = 0,
                                invis        = 1,
-                               regeneration = 5, 
+                               regeneration = 5,
                                detectinvis  = 0,
                                detecthidden = 0,
                                detectevil   = 0,
@@ -1773,11 +1773,11 @@ function inv.priority.addDefault()
                              }
   psiDefensePriority["~second"] = 1 -- Minor hack since the "~" messes up table keys
   retval = inv.priority.add(
-    "psi-defense", 
-    { 
+    "psi-defense",
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
+        minLevel = 1,
+        maxLevel = 291,
         priorities = psiDefensePriority
       }
     })
@@ -1794,10 +1794,10 @@ function inv.priority.addDefault()
   -- retaining the wis bonus.
   retval = inv.priority.add(
     "psi-balance", -- Equipment priorities to maximize benefits from the mental balance spell
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
+        minLevel = 1,
+        maxLevel = 291,
         priorities = { int = 1,
                        wis = -1
                      }
@@ -1816,10 +1816,10 @@ function inv.priority.addDefault()
   -- with a set based on this :)
   retval = inv.priority.add(
     "enchanter", -- Equipment priorities for an enchanter (only care about int, luck, wis)
-    { 
+    {
       { -- Priorities for levels 1 - 291
-        minLevel = 1, 
-        maxLevel = 291, 
+        minLevel = 1,
+        maxLevel = 291,
         priorities = { int  = 1,
                        luck = 1,
                        wis  = 1

@@ -19,7 +19,7 @@ function inv.portal.use(portalQuery)
   -- If the query is simply the object ID of a portal, use it.  Otherwise, search the inventory
   -- table to get an array of portals matching the query.  If there is more than one match, pick
   -- the first one found.
-  local portalId = tonumber(portalQuery) or "" 
+  local portalId = tonumber(portalQuery) or ""
   if (portalId == nil) or (portalId == "") then
     -- Catch any relative location keys because they are not compatible with inv.items.searchCR() used
     -- below.  By limiting this, we can use searchCR even when we aren't in a co-routine.  Yes, this

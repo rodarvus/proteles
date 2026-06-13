@@ -138,7 +138,7 @@ function inv.score.extended(itemOrSet, priorityName, handicap, level, isOffhand)
       end -- if
 
       score = score + (multiplier * v)
-      dbot.debug("Score: " .. string.format("%.3f", score) .. " after key \"" .. 
+      dbot.debug("Score: " .. string.format("%.3f", score) .. " after key \"" ..
                  statKey .. "\" with value \"" .. v .. "\", multiplier=" .. multiplier)
 
     -- Update the score for consolidated stats
@@ -155,9 +155,9 @@ function inv.score.extended(itemOrSet, priorityName, handicap, level, isOffhand)
       local dtype
       local physResists  = { invStatFieldBash,    invStatFieldPierce,   invStatFieldSlash }
       local magicResists = { invStatFieldAcid,    invStatFieldCold,     invStatFieldEnergy,
-                             invStatFieldHoly,    invStatFieldElectric, invStatFieldNegative, 
+                             invStatFieldHoly,    invStatFieldElectric, invStatFieldNegative,
                              invStatFieldShadow,  invStatFieldMagic,    invStatFieldAir,
-                             invStatFieldEarth,   invStatFieldFire,     invStatFieldLight, 
+                             invStatFieldEarth,   invStatFieldFire,     invStatFieldLight,
                              invStatFieldMental,  invStatFieldSonic,    invStatFieldWater,
                              invStatFieldDisease, invStatFieldPoison }
 
@@ -180,7 +180,7 @@ function inv.score.extended(itemOrSet, priorityName, handicap, level, isOffhand)
   end -- for
 
   -- In some situations, we may want to give a score bump if we have maxed a particular stat.
-  -- For example, navigators gain an extra bypassed area with maxed int and wis.  In that case, 
+  -- For example, navigators gain an extra bypassed area with maxed int and wis.  In that case,
   -- it is far more valuable to have maxed int and wis than to be "off-by-one" and be one less
   -- than the max.
   local statList = "int luck wis str dex con"
@@ -188,7 +188,7 @@ function inv.score.extended(itemOrSet, priorityName, handicap, level, isOffhand)
     local valueOfMaxStat = tonumber(priorityTable["max" .. stat] or 0)
     if (valueOfMaxStat > 0) and
        (inv.statBonus.equipBonus[level] ~= nil) and (inv.statBonus.equipBonus[level][stat] ~= nil) and
-       (tonumber(itemOrSet[stat] or 0) >= inv.statBonus.equipBonus[level][stat]) then        
+       (tonumber(itemOrSet[stat] or 0) >= inv.statBonus.equipBonus[level][stat]) then
       dbot.debug("Added " .. valueOfMaxStat .. " to score for maxing stat \"@G" .. stat .. "@W\"")
       score = score + valueOfMaxStat
     end -- if
