@@ -9,7 +9,8 @@ struct WorldProfileBasicsTests {
         let profile = WorldProfile.aardwolfDefault
         #expect(profile.name == "Aardwolf")
         #expect(profile.host == "aardmud.org")
-        #expect(profile.port == 4000)
+        #expect(profile.port == 23)
+        #expect(WorldProfile.knownAardwolfPorts.first == 23)
         #expect(profile.encoding == .utf8)
         #expect(!profile.autoconnect)
         #expect(profile.autologin == nil)

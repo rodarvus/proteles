@@ -2,7 +2,7 @@ import MudCore
 import SwiftUI
 
 /// Detail pane of the Connection Manager: edits one ``WorldProfile``
-/// (PLAN.md §8.4).
+/// (ARCHITECTURE.md §8.4).
 ///
 /// Binds directly to the model's profile (via
 /// ``WorldsModel/binding(for:)``), so edits persist live. Surfaces
@@ -30,27 +30,24 @@ struct WorldEditorView: View {
             Section {
                 TextField("Name", text: $profile.name)
                 TextField("Host", text: $profile.host)
-                TextField(
-                    "Port",
-                    value: $profile.port,
-                    format: .number.grouping(.never)
-                )
+                HStack {
+                    TextField(
+                        "Port",
+                        value: $profile.port,
+                        format: .number.grouping(.never)
+                    )
+                    // Quick-pick the ports Aardwolf answers on; free entry in
+                    // the field still works for any other world.
+                    Menu("Aardwolf ports") {
+                        ForEach(WorldProfile.knownAardwolfPorts, id: \.self) { knownPort in
+                            Button(Self.portMenuLabel(knownPort)) { profile.port = knownPort }
+                        }
+                    }
+                    .fixedSize()
+                }
                 Picker("Encoding", selection: $profile.encoding) {
                     Text("UTF-8").tag(TextEncoding.utf8)
                     Text("Latin-1 (ISO-8859-1)").tag(TextEncoding.latin1)
-                }
-                Picker("Transport", selection: $profile.transport) {
-                    ForEach(ConnectionTransport.allCases, id: \.self) { transport in
-                        Text(transport.displayName).tag(transport)
-                    }
-                }
-                if profile.transport == .webSocket {
-                    Label(
-                        "Limited GMCP: vitals, mapper & channels stay empty over WebSocket.",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.orange)
                 }
             } header: {
                 Text("Connection")
@@ -94,13 +91,14 @@ struct WorldEditorView: View {
         }
     }
 
-    /// Connection-section footer; warns about the WebSocket gateway's limited
-    /// GMCP when that transport is selected (#46).
+    /// Connection-section footer.
     private var connectionFooter: String {
-        guard profile.transport == .webSocket else { return "Changes are saved automatically." }
-        return "WebSocket uses Aardwolf's TLS gateway (the iOS path). The gateway forwards only "
-            + "limited GMCP, so the vitals HUD, mapper, and channels stay empty — use Direct for "
-            + "full features. Changes are saved automatically."
+        "Changes are saved automatically."
+    }
+
+    /// Label for a quick-pick port menu entry; annotates the default.
+    private static func portMenuLabel(_ port: UInt16) -> String {
+        port == WorldProfile.knownAardwolfPorts.first ? "\(port) (default)" : "\(port)"
     }
 
     private var autologinSection: some View {
