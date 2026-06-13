@@ -20,6 +20,16 @@ public final class ChatModel {
     private let maxLines: Int
     private var streamTask: Task<Void, Never>?
 
+    /// Coalescing buffer for streamed lines (same idea as the main output's
+    /// render coalescing, D-01). The store subscription appends here and
+    /// schedules a single flush on the next main-actor turn, so a burst — a
+    /// resume backlog restored via ``ChatStore/restoreBatch(_:)``, or heavy
+    /// channel spam — lands in ONE `lines` mutation (one SwiftUI update)
+    /// instead of one update per line. Without this the restored backlog
+    /// filled the panel line-by-line (#57 follow-up to the #42/#65 fixes).
+    private var pendingAppends: [ChatLine] = []
+    private var appendFlushScheduled = false
+
     public init(store: ChatStore, maxLines: Int = 5000) {
         self.store = store
         self.maxLines = maxLines
@@ -56,18 +66,33 @@ public final class ChatModel {
         streamTask = Task { [weak self] in
             for await line in stream {
                 if let lastBackfilledID, line.id <= lastBackfilledID { continue }
-                self?.append(line)
+                self?.scheduleAppend(line)
             }
         }
     }
 
-    private func append(_ line: ChatLine) {
-        lines.append(line)
+    /// Buffer a streamed line and schedule a single coalesced flush on the
+    /// next main-actor turn (see ``pendingAppends``).
+    private func scheduleAppend(_ line: ChatLine) {
+        pendingAppends.append(line)
+        guard !appendFlushScheduled else { return }
+        appendFlushScheduled = true
+        Task { @MainActor [weak self] in self?.flushAppends() }
+    }
+
+    /// Apply all buffered lines in one `lines` mutation.
+    private func flushAppends() {
+        appendFlushScheduled = false
+        guard !pendingAppends.isEmpty else { return }
+        let batch = pendingAppends
+        pendingAppends.removeAll(keepingCapacity: true)
+        lines.append(contentsOf: batch)
         if lines.count > maxLines {
             lines.removeFirst(lines.count - maxLines)
         }
-        if !channels.contains(line.channel) {
-            channels = (channels + [line.channel]).sorted()
+        let fresh = batch.map(\.channel).filter { !channels.contains($0) }
+        if !fresh.isEmpty {
+            channels = Array(Set(channels + fresh)).sorted()
         }
     }
 }

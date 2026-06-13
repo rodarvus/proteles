@@ -47,17 +47,24 @@ extension ProtelesApp {
         // Chat window resume (#57): same dance — seed, then attach. Unlike
         // scrollback the Chat window has no divider concept; restored lines
         // keep their original timestamps, which the window already shows.
+        // Seed as ONE batch (like scrollback's appendBatch) so the panel fills
+        // in a single pass rather than line-by-line.
         if let chatPersistence, let chatStore {
             Task {
                 let tail = await resuming ? ((try? chatPersistence.loadTail(limit: 500)) ?? []) : []
-                for row in tail {
-                    guard let line = try? row.toLine() else { continue }
-                    await chatStore.restore(
-                        timestamp: row.timestamp,
-                        channel: row.channel,
-                        player: row.player,
-                        line: line
-                    )
+                let rows = tail.compactMap { row -> ChatLine? in
+                    (try? row.toLine()).map {
+                        ChatLine(
+                            id: 0,
+                            timestamp: row.timestamp,
+                            channel: row.channel,
+                            player: row.player,
+                            line: $0
+                        )
+                    }
+                }
+                if !rows.isEmpty {
+                    await chatStore.restoreBatch(rows)
                 }
                 await chatPersistence.attach(to: chatStore)
             }
