@@ -36,8 +36,6 @@ public actor ScriptEngine {
     /// (runs in the shared globals).
     var automationOwners: [UUID: String] = [:]
 
-    private static let maxExecuteDepth = 20 // max .execute re-expansions (MUSHclient)
-
     /// The well-known id of the Aardwolf GMCP-handler plugin. Native GMCP is
     /// handled in Swift, but plugins gate `OnPluginBroadcast` on this id, so
     /// the bridge synthesises broadcasts as if they came from it.
@@ -355,13 +353,10 @@ public actor ScriptEngine {
     // MARK: - Input expansion
 
     /// Expand a typed line through the aliases → effects. No match → sent
-    /// verbatim. `.execute` re-expands (depth-guarded); `.script` runs Lua;
-    /// `.output` echoes locally.
+    /// verbatim. `.execute` re-dispatches each line through the session's full
+    /// command pipeline (native `mapper`/S&D interception, then alias
+    /// expansion); `.script` runs Lua; `.output` echoes locally.
     public func expandInput(_ input: String) async -> [ScriptEffect] {
-        await expandInput(input, depth: 0)
-    }
-
-    private func expandInput(_ input: String, depth: Int) async -> [ScriptEffect] {
         // While suspended (Note mode), input goes straight to the MUD.
         if suspended { return [.send(input)] }
         let firings = aliases.match(input)
@@ -388,14 +383,15 @@ public actor ScriptEngine {
                     named: firing.match.named
                 ))
             case .execute:
-                if depth < Self.maxExecuteDepth {
-                    await effects.append(contentsOf: expandInput(send, depth: depth + 1))
-                } else {
-                    effects.append(.note(
-                        text: "alias execute recursion limit (\(Self.maxExecuteDepth)) reached",
-                        foreground: "red",
-                        background: nil
-                    ))
+                // MUSHclient's Execute: re-parse each line through the FULL
+                // command pipeline, not a raw send. We emit `.execute` effects
+                // (one per line) rather than re-matching aliases here, because a
+                // client-only command like `mapper goto` is intercepted by the
+                // session's dispatch path (`dispatchCommand`), not the alias
+                // engine — re-expanding here would raw-send it to the MUD. The
+                // session bounds `.execute` re-entrancy.
+                for line in send.split(whereSeparator: { $0.isNewline }) {
+                    effects.append(.execute(String(line)))
                 }
             }
         }

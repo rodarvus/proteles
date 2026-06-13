@@ -82,25 +82,26 @@ struct ScriptEngineExpandInputTests {
         #expect(await engine.expandInput("gg gold") == [.send("get gold from corpse")])
     }
 
-    @Test("An execute alias re-expands through aliases")
+    @Test("An execute alias emits a .execute effect (the session re-dispatches it)")
     func executeAlias() async throws {
         let engine = try ScriptEngine()
-        // "run" expands (via execute) to "go", which is itself an alias.
+        // "run" → (execute) "go". Re-dispatching "go" through aliases / native
+        // commands now happens in the session's pipeline, not the engine — so a
+        // client-only command (`mapper goto`) is intercepted instead of raw-sent.
+        // expandInput just emits the `.execute`; see AliasExecuteRoutingTests for
+        // the end-to-end chaining and the recursion bound.
         try await engine.addAlias(Alias(pattern: .exact("run"), sendText: "go", sendTo: .execute))
-        try await engine.addAlias(Alias(pattern: .exact("go"), sendText: "north"))
-        #expect(await engine.expandInput("run") == [.send("north")])
+        #expect(await engine.expandInput("run") == [.execute("go")])
     }
 
-    @Test("Execute recursion is bounded")
-    func executeRecursionGuard() async throws {
+    @Test("An execute alias does not recurse inside the engine (no hang)")
+    func executeNoEngineRecursion() async throws {
         let engine = try ScriptEngine()
-        // A self-referential execute alias must terminate, not hang.
+        // A self-referential execute alias emits a single `.execute` rather than
+        // looping inside expandInput; the SessionController bounds the re-dispatch
+        // (see AliasExecuteRoutingTests.selfReferentialExecuteTerminates).
         try await engine.addAlias(Alias(pattern: .exact("loop"), sendText: "loop", sendTo: .execute))
-        let effects = await engine.expandInput("loop")
-        #expect(effects.contains { effect in
-            if case .note(let text, _, _) = effect { return text.contains("recursion limit") }
-            return false
-        })
+        #expect(await engine.expandInput("loop") == [.execute("loop")])
     }
 
     @Test("A script alias runs Lua with captures")

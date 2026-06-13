@@ -108,6 +108,12 @@ public actor SessionController {
     /// enter-interrupts) — pushed by the TextToSpeech plugin via
     /// `.setSpeechPolicy`. Everything off by default.
     var speechPolicy = SpeechPolicy()
+    /// Re-entrancy bound for `.execute` effects. An Execute alias/trigger whose
+    /// body re-dispatches into another `.execute` (possibly a cycle, e.g. two
+    /// aliases that Execute each other) would otherwise loop forever; MUSHclient
+    /// caps this, so we do too.
+    var executeDepth = 0
+    static let maxExecuteDepth = 20
     /// Whether the character is speedwalking (`char.status.state == 12`),
     /// for the policy's quiet-while-running gate.
     var charIsRunning = false

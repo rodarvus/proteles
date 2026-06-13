@@ -113,9 +113,7 @@ public extension SessionController {
             case .send(let command), .sendNoEcho(let command):
                 await sendLines(command)
             case .execute(let command):
-                // MUSHclient's Execute: re-parse through the command pipeline
-                // (native mapper / aliases), not a raw send.
-                try? await dispatchCommand(command)
+                await applyExecuteEffect(command)
             case .echo(let text):
                 await appendOutputLines(text) { Line(id: LineID(0), text: $0) }
             case .note(let text, let foreground, let background):
@@ -139,6 +137,21 @@ public extension SessionController {
                 await applyControlEffect(effect)
             }
         }
+    }
+
+    /// Apply a `.execute` effect: re-parse `command` through the full input
+    /// pipeline (native mapper / S&D / aliases), as MUSHclient's `Execute` does —
+    /// so an alias/trigger that Executes a client-only command like `mapper goto`
+    /// reaches the native handler instead of the MUD. Bounded so a
+    /// self-referential Execute alias/trigger can't loop forever.
+    private func applyExecuteEffect(_ command: String) async {
+        guard executeDepth < Self.maxExecuteDepth else {
+            logTranscript(.note, "execute recursion limit reached: \(command)")
+            return
+        }
+        executeDepth += 1
+        try? await dispatchCommand(command)
+        executeDepth -= 1
     }
 
     /// Append a Note/echo's text, splitting embedded `\n` into separate lines
