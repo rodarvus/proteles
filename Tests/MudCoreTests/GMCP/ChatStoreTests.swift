@@ -47,6 +47,26 @@ struct ChatStoreTests {
         #expect(texts == ["2", "3"])
     }
 
+    @Test("restoreBatch re-seeds many lines in order, preserving timestamps")
+    func restoreBatchSeedsBacklog() async {
+        let store = ChatStore()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let rows = (0..<3).map { index in
+            ChatLine(
+                id: 0,
+                timestamp: t0.addingTimeInterval(Double(index)),
+                channel: "chat",
+                player: "",
+                line: Line(id: LineID(0), text: "old \(index)")
+            )
+        }
+        await store.restoreBatch(rows)
+        let snapshot = await store.snapshot()
+        #expect(snapshot.map(\.line.text) == ["old 0", "old 1", "old 2"])
+        #expect(snapshot.map(\.timestamp) == rows.map(\.timestamp)) // originals kept
+        #expect(snapshot[0].id < snapshot[1].id) // fresh monotonic ids
+    }
+
     @Test("channels() returns distinct names, sorted")
     func distinctChannels() async {
         let store = ChatStore()

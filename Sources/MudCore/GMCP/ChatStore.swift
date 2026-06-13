@@ -106,6 +106,21 @@ public actor ChatStore {
         return chatLine
     }
 
+    /// Re-seed many previously-persisted lines in a single actor hop (session
+    /// resume, #57) — like ``restore`` but for the whole backlog at once, so
+    /// subscribers receive it as one rapid burst the UI can coalesce into a
+    /// single update rather than a per-line trickle. Each row's `id` is
+    /// ignored (fresh monotonic ids are assigned, as in ``restore``); its
+    /// timestamp/channel/player/line are kept. Call **before**
+    /// ``ChatPersistence`` attaches.
+    public func restoreBatch(_ rows: [ChatLine]) {
+        for row in rows {
+            _ = restore(
+                timestamp: row.timestamp, channel: row.channel, player: row.player, line: row.line
+            )
+        }
+    }
+
     /// All distinct channel names seen so far, sorted.
     public func channels() -> [String] {
         Set(lines.map(\.channel)).sorted()
