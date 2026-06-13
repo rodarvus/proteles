@@ -141,6 +141,10 @@ public struct CommandInputView: View {
             // Stable id so the output view can find + refocus the command field
             // when the user types after selecting text (always-focused input).
             field.identifier = NSUserInterfaceItemIdentifier("proteles.command")
+            // Accessibility: this is the player's primary control. A stable AX
+            // identifier doubles as the XCUITest hook (#26 Phase 0).
+            field.setAccessibilityIdentifier("command-input")
+            field.setAccessibilityLabel("Command input")
             field.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             field.isBordered = false
             field.drawsBackground = false
@@ -162,6 +166,8 @@ public struct CommandInputView: View {
             ghost.lineBreakMode = .byClipping
             ghost.isHidden = true
             ghost.refusesFirstResponder = true
+            // Decorative completion hint — never announced to VoiceOver.
+            ghost.setAccessibilityElement(false)
 
             let container = NSView()
             field.translatesAutoresizingMaskIntoConstraints = false

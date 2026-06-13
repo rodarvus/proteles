@@ -82,6 +82,14 @@
             textView.usesFindBar = findable
             textView.isIncrementalSearchingEnabled = findable
             scrollView.documentView = textView
+            // Accessibility / XCUITest hook (#26 Phase 0): label the live game
+            // output. The same component backs the Help reader (showsLiveTail ==
+            // false), which keeps the default NSTextView AX so it isn't
+            // mislabelled as game output.
+            if showsLiveTail {
+                textView.setAccessibilityIdentifier("mud-output")
+                textView.setAccessibilityLabel("MUD output")
+            }
 
             // Static content (the Help window): a plain scroll view, no live-tail
             // split — there's nothing "streaming" to mirror.
@@ -110,6 +118,8 @@
             tailScrollView.borderType = .noBorder
             let tailTextView = makeTextView()
             tailScrollView.documentView = tailTextView
+            tailTextView.setAccessibilityIdentifier("mud-output-tail")
+            tailTextView.setAccessibilityLabel("MUD output, recent lines")
 
             let lineHeight = NSLayoutManager().defaultLineHeight(for: tailTextView.font ?? baseFont)
             let tailHeight = ceil(lineHeight * CGFloat(Self.tailLineCount)) + 16 // inset slack
