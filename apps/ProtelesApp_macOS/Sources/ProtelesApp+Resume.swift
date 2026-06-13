@@ -25,12 +25,20 @@ extension ProtelesApp {
             Task {
                 // Seed the restored tail BEFORE attaching persistence so it isn't
                 // written to the sidecar again (it's already there).
+                //
+                // Seed as ONE batch, not a per-line loop: the render view
+                // attaches on its own Task and snapshots the store, so a
+                // per-line `append` raced it — if the view attached mid-seed,
+                // the remaining lines trickled in through the live event
+                // stream, rendering one-by-one interleaved with the freshly
+                // connecting session's output (regression 2026-06-13: removing
+                // the slow SQLite open sped launch up enough to lose the race).
+                // `appendBatch` appends in a single actor hop, so the backlog
+                // renders in one snapshot/flush however the race lands.
                 let tail = resuming ? await persistence.loadTail(limit: 400) : []
-                for line in tail {
-                    await store.append(text: line.text, runs: line.runs)
-                }
                 if !tail.isEmpty {
-                    await store.append(text: "") // blank divider before the fresh session
+                    // Trailing blank line = the divider before the fresh session.
+                    await store.appendBatch(tail + [Line(id: LineID(0), text: "")])
                 }
                 await persistence.attach(to: store)
             }
