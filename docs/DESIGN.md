@@ -103,8 +103,9 @@ The HUD is read in the corner of the eye.
   - **Docked** - tiled inside the main window's dock (split/tabbed).
   - **Floating miniwindow** - lifted out as a small, borderless, content-hugging
     overlay that hugs its content, anchors to a corner/edge, and can stack against
-    other miniwindows. This is the "Text Map" style. *(Today only the Text Map can
-    do this, and only fixed top-right - that is the gap.)*
+    other miniwindows. This is the "Text Map" style. *(Shipped for every panel via
+    `FloatingPlacement` + `FloatingPanelLayer` — drag, edge-snap, resize, and
+    per-world persistence; GitHub #33.)*
   - **Detached window** - the panel in its own standard titled window, for
     multi-monitor. This is the "Help-window-looking" style; useful, but it is NOT
     what most pop-outs should default to.
@@ -133,10 +134,9 @@ The HUD is read in the corner of the eye.
   **relative to each other** (above / below / left / right) so they **auto-stack**
   cleanly instead of overlapping. Anchors are obvious, reversible, remembered.
 - **Z-order that behaves.** A floating miniwindow stays above the *main window*
-  while Proteles is active, but must **not** sit above *other apps* when Proteles
-  is in the background (today's detached windows wrongly stay in front across an
-  app switch - a bug to fix).
-- **No drag artifacts.** Re-docking/moving panels must not leave stray drop-zone
+  while Proteles is active, but does **not** sit above *other apps* when Proteles
+  is in the background.
+- **No drag artifacts.** Re-docking/moving panels does not leave stray drop-zone
   rectangles ("the blue box") behind - the drag affordance appears and clears
   cleanly.
 - **Layout is the user's, and it persists** per world. Presets + Reset Layout make
@@ -145,9 +145,11 @@ The HUD is read in the corner of the eye.
   interaction (editing scripts, managing plugins) belongs in a *feature window*,
   not crammed into a dock tile.
 
-*The whole windowing story (floating miniwindows, anchoring/stacking, economical
-sizing, multi-panel docking, the blue-box and z-order bugs) is the top `ux`
-priority - tracked in the GitHub `ux` backlog.*
+*The windowing rework above shipped (GitHub #33): `FloatingPlacement` +
+`FloatingPanelLayer` give every panel borderless floating with drag, edge-snap,
+resize, and per-world persistence; plugin miniwindows are first-class panels; the
+blue-box and z-order bugs are resolved. Residual surface-by-surface polish
+surfaces as new `ux` issues as it's found.*
 
 ### 3.5 Power, made discoverable
 Scripting/plugins are first-class, but the depth shouldn't be a cliff.
@@ -229,18 +231,20 @@ A quick statement of what each surface is *for*, so reviews have a yardstick.
 The **out-of-box default theme is the MUSHclient default** — the colors the
 Aardwolf community already reads the game in. Faithfulness is a correctness
 requirement, not a taste call:
-- **Match the reference palette exactly.** Per the no-guessing rule, derive the
-  16/256 ANSI values from the references
-  (`aardwolfclientpackage/.../aardwolf_colors.lua`, MUSHclient's default world
-  colors, iTerm2 for sanity) — don't eyeball them. Our current "Aardwolf" theme is
-  *approximate*; several colors are off.
-- **Dark colors must be readable on a black background.** Today the darker ANSI
-  colors (e.g. dark blue/black-ish) are nearly invisible on black — a real
-  legibility bug. The fix follows MUSHclient's actual rendering (and any minimum
-  on-background contrast it applies), not an invented clamp. The **light** theme's
-  contrast clamp already exists; the **default/dark** path needs the same care.
-- Reviewing + fixing the reference-faithfulness of every shipped theme is `ux`
-  backlog, with the MUSHclient-default theme as the priority.
+- **Match the reference palette exactly.** Per the no-guessing rule, the 16/256
+  ANSI values are derived from the references
+  (`submodules/aardwolfclientpackage/.../aardwolf_colors.lua`, MUSHclient's default
+  world colors, iTerm2 for sanity) — not eyeballed. The ANSI-16 palette matches the
+  community default; the main window matches the Channels window and MUSHclient
+  (GitHub #34, D-99).
+- **Dark colors are readable on a black background.** The original legibility bug
+  was that **bold ANSI** (`\e[1;3Xm`) rendered as the dim *normal* color instead of
+  bright (so bold-black was invisible, bold-blue dark navy). The fix follows
+  MUSHclient's `<bold>` palette: `resolveForeground(_:bold:)` upgrades bold →
+  bright across all four render surfaces, and the darkest xterm codes are remapped
+  per Aardwolf's `x_not_too_dark`. The **light** theme keeps its contrast clamp.
+- Reviewing the reference-faithfulness of *additional* shipped themes is ongoing
+  `ux` polish; the MUSHclient-default theme — the one that matters — is done.
 - **Spacing is generous but not wasteful** — this is a dense app for a power user;
   we use standard macOS metrics, not cramped custom ones, but we don't pad a
   glance-HUD into needing a scroll.
@@ -251,12 +255,18 @@ requirement, not a taste call:
 
 - Honor **Increase Contrast, Reduce Motion, Reduce Transparency, Dark Mode**, and
   Dynamic Type in the chrome.
-- **VoiceOver:** controls are labeled; the output is navigable. (Tracked under the
-  `accessibility` label.)
+- **Text-to-speech shipped** (D-110): game lines, tells, and alerts are spoken via
+  an app voice or routed to VoiceOver (`announcementRequested`), configured in
+  Settings ▸ Audio. The speech *decision* pipeline is unit-tested end-to-end.
+- **VoiceOver:** controls should be labeled and the output navigable. This is the
+  current accessibility gap — most surfaces still lack explicit
+  `accessibilityIdentifier`/labels, so the planned work is an AX-labeling +
+  `performAccessibilityAudit` pass (the automatable half of #26) followed by
+  **validation with a real visually-impaired player** (the human half, #9). Color
+  is **never the only signal** (the align dot also has position/shape; HP has a
+  number mode), which already serves low-vision users.
 - **Full keyboard access:** see §3.2 — this overlaps heavily with our core
   audience's needs, so a11y and our north-star pull the same direction.
-- Color is **never the only signal** (the align dot also has position/shape; HP
-  has a number mode).
 
 ---
 
@@ -284,12 +294,12 @@ The founding calls, settled (2026-06; folded into the principles above):
    stack miniwindows — we allow that, but ship a comfortable single-panel start
    that's easy to extend + customise. (§3.4)
 2. **Default theme = the MUSHclient default**, matched faithfully from the
-   references. Current "Aardwolf" theme is approximate and has off / unreadable
-   colors; fixing it is priority `ux` work. (§5.1)
+   references. *Done* — the bold→bright fix (D-99) and palette matching landed in
+   v0.4.8; the default theme matches MUSHclient. (§5.1, #34)
 3. **Panel/float model:** start with one panel; make 2–3 simultaneous panels an
    easy option; **pop-out from panels** (incl. plugin miniwindows) with
-   **anchor-to-edge or free-float**. Today's floating-window story is weak and is
-   a priority rework. (§3.4)
+   **anchor-to-edge or free-float**. *Done* — the floating-miniwindow rework
+   shipped (`FloatingPlacement`/`FloatingPanelLayer`). (§3.4, #33)
 4. **Hand-holding:** sane defaults + discoverable UI, and *no more*. Assume
    competence; don't nanny. (§3.5)
 5. **Stay Mac-pure.** No designing to a cross-platform lowest common denominator.
@@ -302,14 +312,19 @@ The founding calls, settled (2026-06; folded into the principles above):
    theme. No skeuomorphism, no heavy branding, no decorative flourish. Revisit if
    it ever feels *too* anonymous.
 
-## 9. First polish pass — the papercuts
+## 9. First polish pass — delivered
 
-The two biggest daily-play papercuts, which anchor the initial `ux` work:
+The two biggest daily-play papercuts that anchored the initial `ux` work have
+both shipped:
 
-- **A. The panel / floating-window story is still broken.** Pop-out, anchoring,
-  and free-floating need a real rework to match §3.4. This is the top item.
-- **B. Window polish is thin** across the secondary windows — **Scripts /
-  Aliases / Commands (button bar) / Plugins / Settings**. Layout, spacing,
-  hierarchy, empty states, and Mac-native feel all need a pass.
+- **A. The panel / floating-window story.** *Done (#33).* Pop-out, anchoring,
+  free-floating, edge-snap, resize, and per-world persistence landed via
+  `FloatingPlacement`/`FloatingPanelLayer`, matching §3.4.
+- **B. Window polish across the secondary windows.** *Done (#35).* The
+  Scripts / Commands (button bar) / Plugins windows, the Settings reshape (seven
+  scoped tabs), and the menu-bar pass all landed.
 
-Each becomes one or more `ux` issues, reviewed against this doc.
+The `ux` backlog is currently clear; new polish items get their own `ux` issue,
+reviewed against this doc. With these and the audio/accessibility work (§6)
+shipped, Proteles is **feature-complete for 1.0**; remaining design work is
+incremental polish, not a gate.
