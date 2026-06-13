@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The parser preserves the precise form the server emitted; concrete RGB
 /// resolution happens in the rendering layer with the user's active palette
-/// (PLAN.md §6.6). Treating ``palette(_:)`` indices 0…15 and ``named(_:)`` /
+/// (ARCHITECTURE.md §6.6). Treating ``palette(_:)`` indices 0…15 and ``named(_:)`` /
 /// ``brightNamed(_:)`` as distinct lets the renderer apply the palette
 /// consistently regardless of which SGR form arrived.
 public enum ANSIColor: Sendable, Equatable, Hashable, Codable {

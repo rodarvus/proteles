@@ -1,8 +1,9 @@
 # Auto-update (Sparkle) + client-side copyover — feasibility & plan
 
-**Tracks GH #23.** Status: **proposal — no code yet** (per the "propose a plan
-first" workflow convention). This doc decides *what* to build and *in what
-order*; it does not implement anything.
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept for the rationale and trade-offs.** Both phases landed: **Phase 1** Sparkle auto-updater (#23, closed) and **Phase 2** seamless "update now" / client-side copyover (#42, closed). The interim GitHub-hosted appcast and the `proteles.net` migration tracked under "Before 1.0" remain release-engineering follow-ups for the wider rollout.
+
+**Tracks GH #23 (Phase 1) + #42 (Phase 2).** This doc decided *what* to build and *in what
+order*; the implementation followed it (see the status banner above).
 
 The 1.0 release-engineering gate has two parts that the user wants considered
 together:
@@ -78,7 +79,8 @@ process, MUD-server style).
   that survives `exec()` without a full serialize/restore that's far more complex
   and fragile than reconnecting.
 - **Reference check:** Mudlet itself does **not** preserve the socket on
-  client restart — its `cTelnet::reconnect()` (and `mAutoReconnect`) just drop
+  client restart — its `cTelnet::reconnect()` (`submodules/mudlet/src/ctelnet.cpp`,
+  and `mAutoReconnect`) just drop
   and re-establish. The established MUD-client pattern for resilience is **fast
   reconnect**, not FD preservation. We should follow the reference.
 

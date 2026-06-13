@@ -1,9 +1,14 @@
-# Sparkle auto-update — setup & release runbook (#23, Phase 1)
+# Sparkle auto-update — setup & release runbook (#23)
+
+> **Status: current — the release flow in use.** Sparkle ships and updates the
+> author's installed copy on every release. Phase 1 (#23) and the seamless
+> Phase-2 "update now" reconnect (#42) both landed; both issues are closed. The
+> setup + per-release steps below are the live runbook.
 
 Companion to `docs/plans/AUTOUPDATE_AND_COPYOVER.md` (the *why*). This is the
 *how*: the one-time setup and the per-release publishing steps. Phase 1 =
-**install-on-quit + manual check + background daily check**; the seamless
-"update now" reconnect is Phase 2.
+**install-on-quit + manual check + background daily check** (shipped); the
+seamless "update now" reconnect is Phase 2 (#42, shipped).
 
 ## What's already wired (in the repo)
 
@@ -74,10 +79,11 @@ is out of draft. Three hard rules learned the hard way:
 GitHub Pages redeploys ~1–2 min after the gh-pages push; installed copies then
 see the update on their next check.
 
-> **First Sparkle release — validate the round-trip.** The inside-out signing in
-> `release.sh` is correct in principle but unverified until the first run: confirm
-> `notarytool` accepts the bundle (the nested XPC services / Updater.app are the
-> usual culprits) and that `spctl` passes. Budget one notarization retry.
+> **The round-trip is validated** (since the first Sparkle release; it has
+> shipped on every release through v0.7.3). The inside-out signing in
+> `release.sh` notarizes cleanly — the nested XPC services / Updater.app are the
+> usual culprits if it ever regresses, so confirm `notarytool` accepts the bundle
+> and `spctl` passes, and budget one notarization retry.
 
 ## Proving Phase 1 works (the acceptance test)
 

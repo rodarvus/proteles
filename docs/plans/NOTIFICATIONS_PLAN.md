@@ -1,5 +1,11 @@
 # Notifications — extensible macOS notifications
 
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept for
+> the rationale and trade-offs.** Phase-1 (tells/mention + permission flow) landed
+> as D-49; phase-2 (`proteles.notify`, custom keyword + per-channel rules) closed
+> GitHub #14. `NotificationRule`/`NotificationMatcher`/`NotificationCoalescer` and
+> the Preferences ▸ Notifications UI all exist. See `../DECISIONS.md` (D-49).
+
 > Plan deliverable (no code). Native macOS notifications on tells / mentions /
 > named events, **extensible** so scripts and plugins can fire custom
 > notifications. Goal: know when something needs you while the window is in the
@@ -67,25 +73,26 @@ Everything else (keyword rules, HP thresholds) the user adds.
    rules + click-to-focus-panel.
 3. GMCP-threshold rules (low HP, quest ready) + coalescing/rate-limit polish.
 
-## Decisions for the user
-1. **MVP rule set** — tells + mention enough to start? (Recommended.)
-2. **Suppress-when-focused** default on? (Recommended — avoids banner spam while
-   actively playing.)
+## Decisions for the user (resolved as shipped)
+1. **MVP rule set** — tells + mention enough to start? → yes, shipped as the
+   phase-1 built-ins.
+2. **Suppress-when-focused** default on? → yes (with a delivery opt-out toggle).
 3. **Sounds** — use the system default, or bundle a subtle custom sound?
-4. Permission UX — request on first connect, or on first enabling in Preferences
-   (recommended: when the user enables it, so it's intentional)?
+4. Permission UX — request on first connect, or on first enabling in Preferences?
+   → request when the user enables it, so it's intentional.
 
-## Effort
-Medium. The matcher + rules + Preferences is the bulk; the UNUserNotifications
-layer is small. No new dependencies.
+## Effort (as built)
+Medium, as estimated. The matcher + rules + Preferences was the bulk; the
+UNUserNotifications layer was small. No new dependencies.
 
 ---
 
-## Phase-2 build decisions (for approval — 2026-05-28)
+## Phase-2 build decisions (resolved — shipped as GitHub #14)
 
 Phase-1 shipped (D-49) + the in-focus toggle (delivery opt-out of
 suppress-when-focused). Phase-2 = `proteles.notify` + custom keyword rules +
-per-channel, full set (user-chosen). Open decisions + my recommendations:
+per-channel, full set. The decisions below were resolved as recommended and
+shipped (#14):
 
 1. **Persistence — recommend GLOBAL (not per-world).** The plan said per-world,
    but the shipped phase-1 prefs (enabled/tells/mention/in-focus) are global

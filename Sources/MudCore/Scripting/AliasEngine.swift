@@ -76,7 +76,7 @@ public struct AliasFiring: Sendable, Equatable {
     public let target: AliasTarget
 }
 
-/// Matches typed input against a sorted set of aliases (PLAN.md §8.6).
+/// Matches typed input against a sorted set of aliases (ARCHITECTURE.md §8.6).
 ///
 /// Like ``TriggerEngine`` this is pure matching: it returns ``AliasFiring``s
 /// and the host orchestrates the actions (send / echo / script / re-expand).

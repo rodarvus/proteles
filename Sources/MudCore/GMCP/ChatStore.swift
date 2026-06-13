@@ -1,6 +1,6 @@
 import Foundation
 
-/// `Comm.Channel` GMCP payload — one channel/chat/tell line (PLAN.md §5.5).
+/// `Comm.Channel` GMCP payload — one channel/chat/tell line (ARCHITECTURE.md §5.5).
 /// `msg` carries Aardwolf `@`-colour codes (see ``AardwolfColor``).
 public struct CommChannel: Codable, Sendable, Equatable {
     public let chan: String

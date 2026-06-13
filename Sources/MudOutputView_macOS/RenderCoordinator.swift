@@ -7,7 +7,7 @@
     /// Bridges a ``ScrollbackStore`` to an `NSTextView`'s `NSTextStorage`
     /// with **render coalescing** and **eviction propagation**.
     ///
-    /// Render coalescing (PLAN.md §6.3 / **D-01**): events accumulate in a
+    /// Render coalescing (ARCHITECTURE.md §6.3 / **D-01**): events accumulate in a
     /// main-actor buffer and are flushed in a single
     /// `beginEditing` / `endEditing` transaction per frame. A burst of 100
     /// inbound lines arriving in 100 ms therefore produces ≈6 layout passes,

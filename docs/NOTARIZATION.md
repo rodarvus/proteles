@@ -1,6 +1,8 @@
 # Notarisation — what we need + how it changes the workflow
 
-> Phase 8 (v1.0 release) work, GH #22. Status: **DONE — live since `v0.4.5`**,
+> **Status: current — the release flow in use.**
+>
+> Phase 8 (v1.0 release) work, GH #22 (closed). Status: **DONE — live since `v0.4.5`**,
 > the first notarized Developer-ID release. The release flow is implemented in
 > **`scripts/release.sh`** (build → Developer-ID sign → notarise → staple →
 > package → verify) and runs with `PROTELES_SIGN_IDENTITY` (the `Developer ID
@@ -36,15 +38,15 @@ From `apps/ProtelesApp_macOS/project.yml` + `Proteles.entitlements`:
 | Hardened runtime (`ENABLE_HARDENED_RUNTIME: YES`) | ✅ already on |
 | Not debuggable in Release (`get-task-allow` absent) | ✅ `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO` |
 | Code signature with a stable identity | ⚠️ self-signed `Proteles Dev` (not Apple-trusted) |
-| App Sandbox | ❌ off — **fine for Developer ID**; only the Mac App Store requires it |
+| App Sandbox | ❌ off — **fine for Developer ID**; only the Mac App Store requires it (resolved: releases ship notarized, non-sandboxed) |
 | Entitlements | `network.client: true`, `app-sandbox: false` — minimal, notarisation-friendly |
 | Secure timestamp on signature | ⚠️ need `--timestamp` at release signing |
 | Notarised + stapled | ❌ not done |
 
 **Key point:** Developer-ID (direct download) notarisation does **not** require
 the App Sandbox. The sandbox only matters if/when we also target the Mac App
-Store (D-05, still undecided). So we can notarise the current non-sandboxed app
-as-is.
+Store (D-05 in `DECISIONS.md`, still undecided). So we can notarise the current
+non-sandboxed app as-is.
 
 ## What notarisation actually checks
 
@@ -75,9 +77,9 @@ So the expected entitlements set stays as-is (`network.client`, no sandbox). If
 notarisation or first-launch fails, read the failure (`notarytool log`) and add
 the narrowest exception.
 
-## The release workflow (proposed)
+## The release workflow
 
-A new `scripts/release.sh` (run on a machine with the Developer ID cert in its
+`scripts/release.sh` (run on a machine with the Developer ID cert in its
 keychain + notary credentials stored once):
 
 This is implemented in **`scripts/release.sh`** — build → Developer-ID sign →
@@ -126,17 +128,18 @@ Either works. A **zip** is simplest (what we attach today). A **DMG** gives a
 nicer install experience (drag-to-Applications) and can itself be signed +
 stapled. For v1.0 a stapled zip is fine; a DMG is a polish item.
 
-## Open decisions for the user
+## Decisions (resolved)
 
-1. **Apple Developer Program enrolment** — the one remaining blocker (enrolment
-   in progress). Individual vs. organisation account (affects the Team name shown
-   in the cert). Once the `Developer ID Application` cert is installed + notary
-   creds are stored, `scripts/release.sh` does the rest.
-2. **App Store Connect API key vs app-specific password** for `notarytool` — API
-   key is cleaner for scripting and doesn't expire like passwords.
-3. **Sparkle auto-updater** (Phase 8) interacts with signing — Sparkle requires
-   the update feed + the app to be Developer-ID signed; worth planning together.
-4. **DMG packaging** — nice-to-have for v1.0 or later.
+1. **Apple Developer Program enrolment** — DONE; the `Developer ID Application`
+   cert is installed and notary creds are stored, so `scripts/release.sh` does
+   the rest. (Was the one blocker; resolved at `v0.4.5`.)
+2. **App Store Connect API key vs app-specific password** for `notarytool` — an
+   API key is cleaner for scripting and doesn't expire like passwords; either
+   works via the keychain profile.
+3. **Sparkle auto-updater** — SHIPPED (#23). Sparkle requires the update feed +
+   the app to be Developer-ID signed; `release.sh` signs Sparkle's nested
+   helpers inside-out so the bundle notarizes. See `SPARKLE_SETUP.md`.
+4. **DMG packaging** — still a nice-to-have; releases ship a stapled zip.
 
 ## References
 

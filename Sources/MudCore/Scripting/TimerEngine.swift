@@ -82,7 +82,7 @@ public struct TimerFiring: Sendable, Equatable {
     public let script: String?
 }
 
-/// Schedules timed sends/scripts (PLAN.md §8.6). A pure value type: it tracks
+/// Schedules timed sends/scripts (ARCHITECTURE.md §8.6). A pure value type: it tracks
 /// each timer's next fire instant and reports which ones are due at a given
 /// `Date`, but never sleeps or sends — the host drives the clock.
 ///

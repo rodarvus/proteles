@@ -1,7 +1,13 @@
 # Phase-2 follow-ups (quick-wins batch) — decisions for approval
 
-> Small, low-risk items the user grouped as "quick wins." Each needs one
-> decision before I implement. Status: **plan / awaiting approval**.
+> **Status: historical analysis. The actionable items shipped or moved to GitHub
+> Issues.** All four items are resolved: #1 (S&D test flakiness), #2 (logging
+> retention/per-world), and #3 (inventory serials) shipped (D-68); the net-new
+> notifications phase-2 shipped (GitHub #14); and #4 (Levels visual polish) was
+> tracked and closed as GitHub #12. Kept for the rationale.
+
+> Small, low-risk items the user grouped as "quick wins." Each needed one
+> decision before implementation.
 
 ## 1. Search-and-Destroy test flakiness (DONE)
 `SearchAndDestroyAssetsTests` ("S&D data modules load from the install dir") and
@@ -31,21 +37,21 @@ color <@code>` (persisted via `persistentState`). No storage decision needed —
 serials are **stable** identifiers, not secrets, so the plain per-world file is
 correct (no Keychain). Nothing pending.
 
-## (Net-new) Notifications phase-2
-Not started (task #16): richer notification rules beyond tells/name-mentions
-(e.g. configurable patterns, per-channel). Small; only remaining net-new item
-from this batch.
+## (Net-new) Notifications phase-2 (DONE, GitHub #14)
+Shipped: richer notification rules beyond tells/name-mentions (configurable
+patterns, per-channel) plus the `proteles.notify` host call. This was the only
+net-new item from this batch; closed as GitHub #14.
 
-## 4. Levels window — visual polish (BACKLOG)
-The leveldb **Levels** window (D-71) works as intended, but the four faces are
-information-dense and could use a polish pass — spacing/hierarchy, the Reports
-table column sizing, chart legibility at small window sizes, and consistency
-with the rest of the app's panel chrome. **Deferred by the user** (2026-05-31):
-functional, not urgent; revisit as a dedicated polish task. No decision needed
-— purely visual refinement.
+## 4. Levels window — visual polish (DONE, GitHub #12)
+The leveldb **Levels** window (D-71) works as intended, but the four faces were
+information-dense and got a polish pass — spacing/hierarchy, the Reports table
+column sizing, chart legibility at small window sizes, and consistency with the
+rest of the app's panel chrome. Originally deferred by the user (2026-05-31) as
+functional-not-urgent; tracked and closed as GitHub #12.
 
-## Status (2026-06-01)
+## Status (final)
 #1 (S&D test flakiness), #2 (logging retention/per-world/redaction), and #3
 (inventory serials — colour/keyring/vault; no storage change, serials are stable
-non-secrets) are all **done** (D-68). #4 (Levels visual polish) is **parked**.
-The one net-new item is **Notifications phase-2** (small). This batch is closed.
+non-secrets) all **shipped** (D-68). #4 (Levels visual polish) shipped (GitHub
+#12). The net-new item, **Notifications phase-2**, shipped (GitHub #14). This
+batch is closed.

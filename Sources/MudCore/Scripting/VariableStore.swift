@@ -1,6 +1,6 @@
 import Foundation
 
-/// Persisted scoped script/plugin variables for one world (PLAN.md §8.7,
+/// Persisted scoped script/plugin variables for one world (ARCHITECTURE.md §8.7,
 /// the ≈ MUSHclient `Get/SetVariable` store). One JSON document per world,
 /// keyed `scope → name → value` — where a scope is a plugin id, or the
 /// shared `_user` scope for the user's own scripts.

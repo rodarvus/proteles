@@ -236,7 +236,7 @@ extension SearchAndDestroyHost {
     function GetPluginVariable(...) return nil end
     function SetClipboard(...) return 0 end
 
-    -- MUSHclient send-target constants (mushclient/OtherTypes.h). S&D passes
+    -- MUSHclient send-target constants (submodules/mushclient/OtherTypes.h). S&D passes
     -- e.g. sendto.script to DoAfterSpecial; without this it indexes a nil
     -- global and the calling chunk (e.g. cp_info_end) aborts.
     sendto = {
@@ -246,7 +246,7 @@ extension SearchAndDestroyHost {
       scriptafteromit = 14,
     }
 
-    -- MUSHclient AddTrigger flag bits (mushclient/flags.h). S&D's scan/consider
+    -- MUSHclient AddTrigger flag bits (submodules/mushclient/flags.h). S&D's scan/consider
     -- setup does arithmetic on these (flags = trigger_flag.OmitFromOutput + …),
     -- so they must be present + correct even though AddTriggerEx is currently
     -- a no-op (the dynamic scan/consider triggers are wired for real next).

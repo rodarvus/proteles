@@ -1,9 +1,11 @@
 # leveldb — native port + graphical representation
 
-> Plan deliverable (no code, PROPOSE-first per §11). leveldb is the user's
+> **Status: shipped (feature-complete for 1.0). Historical design doc — kept for the rationale and trade-offs.** Both parts landed: **Part A** runs leveldb verbatim via the shim (vendored at `Sources/MudCore/Resources/leveldb`); **Part B** is the native `PanelKind.levels` analytics panel (`Sources/MudUI/LevelDB/`, reading the DB via `LevelDBStore`). The shipped panel's tabs (Days / Insights / Live / Tables / Journey / Reports — see #12) differ from the view names proposed below.
+>
+> leveldb is the user's
 > "leveling database": passive data collection of kills/deaths/quests/
 > campaigns/powerups/global-quests into SQLite, with `ldb` query commands.
-> Research: `MUSHclient-live-from-windows/worlds/plugins/leveldb/leveldb.xml`
+> Research: `plugins/leveldb/leveldb.xml`
 > (6,150 lines), `require "gmcphelper"`, **no miniwindows**, `sqlite3.open`,
 > `EnableTriggerGroup`/`DoAfterSpecial`/`Set/GetVariable`, `io.open` (export) +
 > `os.execute` (mkdir). 23 aliases, 48 triggers, 8 tables, 25 indexes.
@@ -22,7 +24,7 @@ shim to *collect*; build a **native panel to *read + visualise*** its DB.
 
 ## Part A — run leveldb via the shim (collection)
 
-Mirror the dinv port (D-32/42/43), which is the proven path for a self-contained
+Mirror the dinv port (docs/DECISIONS.md D-32/42/43), which is the proven path for a self-contained
 SQLite shim plugin:
 1. Vendor `leveldb.xml` under `Resources/leveldb` (with provenance).
 2. Load via `ScriptEngine.loadPlugin`; per-character SQLite DB under the lsqlite3
@@ -69,23 +71,24 @@ Architecture:
 - Refresh on demand + when the panel becomes visible (cheap polling), since the
   Lua side writes asynchronously.
 
-## Open question: one DB or coordinate?
+## One DB or coordinate? (resolved)
 leveldb (Lua) writes; the native panel reads the same file. SQLite WAL +
 busy-timeout (already configured for lsqlite3) handles concurrent read/write.
-The panel is read-only, so no contention beyond a brief lock. Confirm the file
-path is stable + discoverable from the app (per-character, like dinv's).
+The panel is read-only, so no contention beyond a brief lock. The file
+path is per-character (like dinv's), stable and discoverable from the app —
+which is what `LevelDBStore` opens.
 
-## Decisions for the user
-1. **Run-via-shim + native reader** (recommended) vs a full native reimplementation
-   of collection (high-risk, not recommended)?
-2. **Graphical scope for v1**: which views matter most to you? (Overview +
-   XP/kills charts is the obvious MVP; campaigns/quests/pups follow.)
-3. **Swift Charts** (macOS 14 native, no dep) for the graphs — OK? (Recommended.)
-4. Should the panel be **always available** or only after leveldb is enabled +
-   has data?
-5. Is leveldb intended to be **bundled** (public) or **installed on request**
-   (download-on-request, like S&D)? That determines packaging. (A public repo,
-   `rodarvus/leveldb`, exists — confirm.)
+## Decisions (resolved)
+1. **Run-via-shim + native reader** *(adopted)* — not a full native
+   reimplementation of collection (high-risk, rejected).
+2. **Graphical scope**: shipped as the Days / Insights / Live / Tables / Journey /
+   Reports tabs (the proposed Overview/XP&kills MVP evolved into these; see #12
+   for the visual-polish pass).
+3. **Swift Charts** (macOS 14 native, no dep) for the graphs. *(Adopted.)*
+4. Panel availability: the **Levels** window is a dedicated window (not a
+   closable dock tile). *(Resolved.)*
+5. Packaging: leveldb is **bundled** (vendored at
+   `Sources/MudCore/Resources/leveldb` with provenance), like dinv. *(Resolved.)*
 
 ## Effort
 Part A: medium (shim port, dinv-style). Part B: medium–large (a new analytics

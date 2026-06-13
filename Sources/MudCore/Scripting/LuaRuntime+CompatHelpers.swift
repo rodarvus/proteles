@@ -1,6 +1,6 @@
 import Foundation
 
-/// The standard helper libraries Aardwolf plugins `require` (PLAN.md §7.7),
+/// The standard helper libraries Aardwolf plugins `require` (ARCHITECTURE.md §7.7),
 /// registered with the module loader whenever the compat shim is installed.
 ///
 /// These are clean-room Lua implementations (not copies of the

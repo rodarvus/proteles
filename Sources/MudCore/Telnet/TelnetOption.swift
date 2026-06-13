@@ -3,7 +3,7 @@ import Foundation
 /// Telnet option codes Proteles handles.
 ///
 /// Not exhaustive — only the options we accept, refuse intentionally, or
-/// otherwise need to recognise. See PLAN.md §5.2 for the negotiation
+/// otherwise need to recognise. See ARCHITECTURE.md §5.2 for the negotiation
 /// policy table.
 public enum TelnetOption {
     public static let echo: UInt8 = 1

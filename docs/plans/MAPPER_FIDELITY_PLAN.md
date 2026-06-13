@@ -1,13 +1,14 @@
 # Mapper command fidelity — bring our `mapper …` interface to MUSHclient parity
 
-> **STATUS: DONE (2026-06-02, D-90, shipped in `v0.4.3`).** All 8 phases landed
+> **Status: shipped (feature-complete for 1.0; D-90, `v0.4.3`). Historical
+> design doc — kept for the rationale and trade-offs.** All 8 phases landed
 > across commits `dca6d0b`…`2d83109`, 1188 tests, four gates green. Deferred
-> follow-ups + justified divergences are recorded in `docs/KNOWN_ISSUES.md`
+> follow-ups + justified divergences are recorded in `../KNOWN_ISSUES.md`
 > ("Mapper command-fidelity follow-ups"). The phase plan below is kept as the
-> historical record.
+> historical record. See `../DECISIONS.md` (D-90).
 
 **Goal (user):** every `mapper` command should behave and *look* exactly like the
-reference Aardwolf mapper (`aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
+reference Aardwolf mapper (`submodules/aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
 `worlds/plugins/aard_GMCP_mapper.xml`), not "our way." Three acceptance bars:
 1. **All** reference commands implemented.
 2. **Behaving identically.**
@@ -94,10 +95,10 @@ current room's note** via a dialog — use our `proteles.dialog` provider, or th
 `addnote`, `delete note`, `noportal`/`norecall` (reference `<room-id> true|false`
 form), `ignore mismatch [area] true|false`.
 
-> **Decision flag:** our current `mapper notes` *lists* all noted rooms — useful,
-> but not what the reference does. Proposal: make `notes`/`bookmarks` match the
-> reference (edit current), and move "list all notes" to a clearly-ours command
-> (e.g. keep it but rename) — confirm with the user.
+> **Decision flag (resolved as shipped):** our original `mapper notes` *listed*
+> all noted rooms — useful, but not what the reference does. Resolved by making
+> `notes`/`bookmarks` match the reference (edit current) and keeping "list all
+> notes" as a clearly-ours command.
 
 ## Phase 6 — Areas, zones & maintenance
 `purgezone` (`Purged <area> from the mapper database` + the syntax help),

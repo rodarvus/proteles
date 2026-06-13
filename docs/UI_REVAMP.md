@@ -1,8 +1,14 @@
 # Proteles UI revamp — layout system (proposal + design)
 
-Status: **in progress** (first implementation landing alongside this doc).
-Author: this session (2026-05-27). Decisions confirmed with the user up front
-(see "Confirmed decisions").
+> **Status: complete (feature-complete for 1.0). Historical — kept for the
+> rationale.** The tiled-dock layout system designed here shipped and was
+> extended by the floating-miniwindow rework (#33, also shipped). Kept for the
+> design rationale — the research, the value-tree data model, and why a layout
+> tree beats fixed rails.
+
+Status: **shipped** (the layout system landed and has since been extended;
+see #33). Author: this session (2026-05-27). Decisions confirmed with the user
+up front (see "Confirmed decisions").
 
 ## Problem
 

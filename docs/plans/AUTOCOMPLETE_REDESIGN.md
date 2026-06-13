@@ -1,5 +1,7 @@
 # Plan — Input autocomplete redesign
 
+> **Status: shipped (feature-complete for 1.0; #13 / D-96 closed). Historical design doc — kept for the rationale and trade-offs.** A whole-line **history ghost** (the "Deferred (v3)" item below) remains intentionally unbuilt.
+
 ## Problem
 
 The old input did **whole-line, history-only, word-blind** completion, presented
@@ -10,7 +12,7 @@ and can't complete a target that's on screen now (`kill Gal…` → `Galadon`).
 
 ## References (they converge)
 
-- **Mudlet** (`mudlet/src/TCommandLine.cpp`): two separate mechanisms —
+- **Mudlet** (`submodules/mudlet/src/TCommandLine.cpp`): two separate mechanisms —
   **Tab/Shift-Tab** completes the *current word* from the last ~500 lines of
   output (+ a settable suggestion list, minus a blacklist), cycling; **Up/Down**
   is whole-line history; **Enter just sends**.

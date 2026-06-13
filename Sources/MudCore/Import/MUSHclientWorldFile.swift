@@ -8,7 +8,7 @@ import Foundation
 /// plugins referenced by `<include name="…" plugin="y">`. Triggers/aliases/timers
 /// *can* live in the world file too, but in a package-based setup (the common
 /// case) they're all in plugins, so the world file is mostly config + macros +
-/// the enabled-plugin list. See `mushclient/xml/xml_load_world.cpp` for the
+/// the enabled-plugin list. See `submodules/mushclient/xml/xml_load_world.cpp` for the
 /// authoritative schema.
 public struct MUSHclientWorldFile: Sendable, Equatable {
     /// `<world id="…">` — the 24-hex world id; prefixes plugin state filenames

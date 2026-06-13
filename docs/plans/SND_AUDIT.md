@@ -1,15 +1,21 @@
 # Search-and-Destroy — audit + parity fix plan
 
-> Status: **audit / plan for review** (no code changed). Triggered by live
-> testing: commands die after the first `xcp 1`; `go`/`nx` navigation broken;
-> the target room-list isn't visible; `consider` unusable; the in-game panel
-> doesn't resemble MUSHclient's S&D. Goal: **feature/UI/UX parity** with the
-> reference, the way dinv reached parity. Scope: functional **and** UI together.
+> **Status: historical audit (work shipped; feature-complete for 1.0). Kept for
+> the diagnostic record + rationale.** The audit below was triggered by live
+> testing (commands dying after `xcp 1`, broken `go`/`nx`, an unusable
+> `consider`, a panel that didn't resemble MUSHclient's). The repro-driven pass
+> it called for was carried out: the live break was traced to S&D's `core.lua`
+> clobbering Lua's built-in `select` global (and a second `consider` crash on a
+> missing `styles` arg) and **fixed via curated-binding shims** (see the "ROOT
+> CAUSE FOUND + FIXED" section in §3, and [`../DECISIONS.md`](../DECISIONS.md)
+> D-108 for the related "S&D firings run under S&D's plugin context" fix). The
+> mapper wrong-place navigation was isolated to an empty dinv DB, not S&D. The
+> §4 fix plan and §5 "awaiting approval" reflect the pre-fix state.
 >
 > Hard rule (CLAUDE.md): no guessing on S&D — every claim below is anchored to
-> the reference (`search-and-destroy/`), our code, or the live `SnDdb.db`.
-> Where I could **not** prove a root cause from static reading, it's labelled
-> **SUSPECTED** and the plan says how to confirm it.
+> the reference (`plugins/search-and-destroy/`), our code, or the live
+> `SnDdb.db`. Where a root cause could **not** be proven from static reading,
+> it's labelled **SUSPECTED** (most were later CLEARED below).
 
 ## 1. How our port is built (so the gaps are legible)
 
@@ -32,7 +38,7 @@ stubbed and replaced by a native SwiftUI panel.
 
 ## 2. Reference behaviour (the parity target)
 
-Command surface (from `search-and-destroy/Search_and_Destroy.xml` + `lua/`):
+Command surface (from `plugins/search-and-destroy/Search_and_Destroy.xml` + `lua/`):
 - **Navigate:** `xcp` / `xcp <index>` / `xcp mode …` / `xcp q`, `xrt|xrun|xrunto
   <dest>`, `go|goto [<index>]`, `nx`, `nx-`. Listing: `cp i|ch`, `gq i|c`, `gg`,
   `qq`. Hunt/search: `ht …`, `qw …`, `qwx`, `qs`.
@@ -264,6 +270,12 @@ is safe across the board.
 
 ## 4. Fix plan (functional + UI parity, prioritised)
 
+*(Historical — this plan was approved and the repro-driven pass was carried
+out. P0's offline harness was built; the live break was reproduced and the
+root cause — the `select`/`styles` clobbers — fixed via curated-binding shims;
+see the "ROOT CAUSE FOUND + FIXED" section in §3 and D-108 for the plugin-
+context fix. The P1/P2 items below record the gaps the pass closed.)*
+
 **P0 — Get a deterministic repro (no guessing).**
 - Re-enable S&D's debug trace + capture a targeted transcript of `xcp 1` →
   `go`/`nx`/`consider`, and/or build an **offline harness** that drives the real
@@ -297,8 +309,10 @@ pure logic testable (host-level harness) and **never** edit `core.lua`; gaps get
 curated-binding fixes.
 
 ## 5. Bottom line
-The user's read is correct: the port wired a **partial** command/timer/UI
-subset of S&D (several bindings are admitted stubs), and the
-navigation→arrival→action chain + the panel's parity were left incomplete.
-Reaching dinv-level parity is a focused repro-driven pass over §4 — not a
-rewrite. **Awaiting approval before implementing.**
+The user's read was correct: the port had wired a **partial** command/timer/UI
+subset of S&D (several bindings were admitted stubs), and the
+navigation→arrival→action chain + the panel's parity were incomplete. Reaching
+dinv-level parity turned out to be a focused repro-driven pass over §4 — not a
+rewrite — and that pass was done: the live break reduced to two curated-binding
+shim fixes (the `select` clobber + the `consider` `styles` arg) plus the D-108
+plugin-context fix, with the mapper wrong-place isolated to an empty dinv DB.

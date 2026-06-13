@@ -260,7 +260,7 @@ public extension MacroEngine {
     /// The default keypad layout, seeded on first run (editable — not
     /// hardcoded behaviour). Reflects the canonical Aardwolf keypad mapping
     /// from the reference package's world file
-    /// (`aardwolfclientpackage/MUSHclient/worlds/Aardwolf.mcl`, `<keypad>`):
+    /// (`submodules/aardwolfclientpackage/MUSHclient/worlds/Aardwolf.mcl`, `<keypad>`):
     /// 8/2/4/6 cardinals, 5 look, 0 scan, `-` up, `+` down, `.` score,
     /// `/` inv, `*` eq. Keys 1/3/7/9 are intentionally unbound — Aardwolf has
     /// no diagonal movement (no ne/nw/se/sw).

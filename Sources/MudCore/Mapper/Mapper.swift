@@ -3,7 +3,7 @@ import Logging
 
 /// The live map: an in-memory ``RoomGraph`` kept warm for pathfinding and
 /// rendering, fed by Aardwolf GMCP and written through to a ``MapperStore``
-/// (PLAN.md §7.7). An independent Swift implementation of Aardwolf's GMCP
+/// (ARCHITECTURE.md §7.7). An independent Swift implementation of Aardwolf's GMCP
 /// mapping protocol (`room.info`/`room.area`/`room.sectors`); it reads/writes
 /// the same on-disk DB format for compatibility with `aard_GMCP_mapper`:
 ///

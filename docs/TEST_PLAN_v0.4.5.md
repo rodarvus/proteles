@@ -1,5 +1,10 @@
 # Proteles v0.4.5 — Test Plan
 
+> **Status: historical (tied to v0.4.5). Kept for the record.** All the features
+> below shipped and their issues are closed (#13, #14, #15, #17, #24, #33);
+> Proteles is now feature-complete for 1.0 (latest release v0.7.3). Kept as the
+> record of that round's live-play test matrix.
+
 Live-play test plan for the features shipped in **v0.4.5** (first notarized
 build): the as-you-type ghost hint (#13), command-button bar (#15), group-panel
 refinements (#17), opt-in crash diagnostics (#24), and notifications (#14).

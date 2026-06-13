@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure policy for pruning old session logs (PLAN.md §7 logging follow-up).
+/// Pure policy for pruning old session logs (ARCHITECTURE.md §7 logging follow-up).
 /// Session-log filenames embed a sortable timestamp (`session-YYYY-MM-DD-HHmmss`),
 /// so "newest" is just the lexicographically-largest name — no filesystem dates
 /// needed, which keeps this unit-testable.

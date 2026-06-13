@@ -8,7 +8,7 @@ import Foundation
 /// of a CSI sequence or a UTF-8 character; both cases are buffered and
 /// recombined transparently.
 ///
-/// SGR semantics (PLAN.md §5.4):
+/// SGR semantics (ARCHITECTURE.md §5.4):
 /// - SGR 0 / empty params: reset to default
 /// - SGR 1, 2, 3, 4, 7, 9: bold, dim, italic, underline, reverse, strike
 /// - SGR 22, 23, 24, 27, 29: corresponding resets (22 clears bold *and* dim)

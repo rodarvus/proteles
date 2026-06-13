@@ -2,7 +2,7 @@ import MudCore
 import SwiftUI
 
 /// The **Levels** dock panel: native reporting over the leveldb plugin's data
-/// (PLAN.md D-71). A mode picker switches between the live HUD, the faithful
+/// (DECISIONS.md D-71). A mode picker switches between the live HUD, the faithful
 /// tables, the analytics charts, and the journey — all fed by one read-only
 /// ``LevelDBPanelModel``. Read-only: the leveldb plugin remains the sole writer.
 public struct LevelDBPanelView: View {

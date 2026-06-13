@@ -1,6 +1,6 @@
 import Foundation
 
-// Typed Aardwolf GMCP modules (PLAN.md §5.5). Field names match exactly
+// Typed Aardwolf GMCP modules (ARCHITECTURE.md §5.5). Field names match exactly
 // what Aardwolf sends on the wire (verified against
 // aardwolfclientpackage's aard_statmon_gmcp.xml). Values arrive as JSON
 // numbers; non-essential fields are optional so a partial payload still

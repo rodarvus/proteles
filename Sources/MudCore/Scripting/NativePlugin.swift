@@ -83,7 +83,7 @@ public struct GMCPDispatchContext: Sendable, Equatable {
 }
 
 /// A self-contained, *native* (Swift) Proteles plugin: a value-type reducer
-/// that participates in the same effect pipeline as Lua plugins (PLAN.md
+/// that participates in the same effect pipeline as Lua plugins (ARCHITECTURE.md
 /// §7.6). It owns commands, reacts to incoming lines and GMCP, and exposes
 /// callable entry points for other plugins — but, like the trigger/alias/
 /// timer engines, it only *decides* (returns ``ScriptEffect``s); the host

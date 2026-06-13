@@ -23,7 +23,7 @@ public struct LineID: Sendable, Equatable, Hashable, Comparable {
 /// it. Lines are immutable once stored.
 ///
 /// ``text`` is the line content with control characters already stripped;
-/// it is what trigger engines match against (PLAN.md §6.2). ``runs`` are
+/// it is what trigger engines match against (ARCHITECTURE.md §6.2). ``runs`` are
 /// styled spans whose ranges index into ``text`` as UTF-16 code units.
 public struct Line: Sendable, Equatable {
     public let id: LineID

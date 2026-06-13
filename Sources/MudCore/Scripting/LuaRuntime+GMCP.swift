@@ -2,7 +2,7 @@ import CLua
 import Foundation
 
 /// Projecting GMCP into the Lua side: a live `proteles.gmcp` table plus
-/// per-level `gmcp.*` events, modelled on Mudlet (PLAN.md §8.6).
+/// per-level `gmcp.*` events, modelled on Mudlet (ARCHITECTURE.md §8.6).
 extension LuaRuntime {
     /// Project one GMCP message into the live `proteles.gmcp` table and fire
     /// the per-level `gmcp.*` events for it, returning any effects the

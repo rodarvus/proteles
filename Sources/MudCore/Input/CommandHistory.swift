@@ -1,7 +1,7 @@
 import Foundation
 
 /// Command-line history with up/down recall and prefix autocompletion —
-/// the model behind the input box (PLAN.md §8.4).
+/// the model behind the input box (ARCHITECTURE.md §8.4).
 ///
 /// Pure value type so it's unit-testable without the UI. The view layer
 /// owns one instance, feeds it submitted commands, and asks it what to
@@ -157,7 +157,7 @@ public struct CommandHistory: Sendable, Equatable {
 public extension CommandHistory {
     /// Aardwolf communication / chat command words excluded from
     /// autocompletion. Sourced from the channel list in
-    /// `aardwolfclientpackage/.../aard_channels_fiendish.xml` plus the
+    /// `submodules/aardwolfclientpackage/.../aard_channels_fiendish.xml` plus the
     /// directed-message verbs (`tell`/`reply`/`whisper`/`page` family),
     /// which carry private message bodies you never want re-offered.
     static let communicationCommands: Set<String> = [

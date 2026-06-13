@@ -3,7 +3,7 @@ import Foundation
 /// The plugin set shipped in **aardwolfclientpackage** — the standard Aardwolf
 /// MUSHclient package. Proteles provides this functionality itself, so the
 /// importer SKIPS these (by plugin id or filename) and offers the rest. Baked
-/// snapshot (regenerated from the `aardwolfclientpackage/` submodule); ids are
+/// snapshot (regenerated from the `submodules/aardwolfclientpackage/` submodule); ids are
 /// the actual `<plugin id>` attribute (not the first id in the file — plugins
 /// reference other plugins' ids via CallPlugin). Matched by id OR filename.
 public enum PackagePluginCatalog {

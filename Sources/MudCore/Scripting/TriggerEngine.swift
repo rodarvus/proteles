@@ -273,7 +273,7 @@ public struct TriggerFiring: Sendable, Equatable {
     public let highlight: TriggerHighlight?
 }
 
-/// Matches incoming lines against a sorted set of triggers (PLAN.md §8.6).
+/// Matches incoming lines against a sorted set of triggers (ARCHITECTURE.md §8.6).
 ///
 /// Evaluation order is explicit: triggers run in ascending ``Trigger/sequence``,
 /// ties in ascending **match text** (byte order) — MUSHclient's `CompareTrigger`

@@ -7,7 +7,7 @@
     ///
     /// Wraps an `NSTextView` inside an `NSScrollView` and binds it to a
     /// ``ScrollbackStore`` via ``RenderCoordinator``. The coordinator
-    /// coalesces per-line appends into one transaction per frame (PLAN.md
+    /// coalesces per-line appends into one transaction per frame (ARCHITECTURE.md
     /// §6.3 / **D-01**).
     public struct MudOutputView: NSViewRepresentable {
         private let store: ScrollbackStore

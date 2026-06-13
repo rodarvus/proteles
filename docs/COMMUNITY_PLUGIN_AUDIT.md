@@ -1,5 +1,12 @@
 # Community plugin shim-compatibility audit
 
+> **Status: complete (feature-complete for 1.0). Historical — kept for the
+> rationale.** The two quick-win shim gaps this audit flagged shipped (Gap 1
+> `addxml` and Gap 3 the Chat-Capture `CallPlugin` bridge, both marked DONE
+> below); the remaining gaps (a real `async`/HTTP helper, sandboxed user-file
+> reads) stayed deferred as low-value. Kept as the record of the per-plugin
+> static verdicts and the shim gaps they surfaced.
+
 > Static analysis of 12 community plugins against the Proteles `mush.lua`
 > compatibility shim, to predict whether each imports + runs seamlessly.
 > Date: 2026-05-28. **Static** verdicts — live confirmation (running each in

@@ -2,7 +2,7 @@ import Foundation
 
 /// A parsed MUSHclient plugin: its metadata, the triggers/aliases/timers it
 /// declares (already mapped to Proteles' value types), and its Lua script
-/// source (PLAN.md §7.4). Produced by ``MUSHclientPluginLoader`` from a
+/// source (ARCHITECTURE.md §7.4). Produced by ``MUSHclientPluginLoader`` from a
 /// `.xml` plugin file; the plugin *runtime host* (next increment) installs
 /// the script + helper libs and drives lifecycle callbacks.
 public struct MUSHclientPlugin: Sendable, Equatable {

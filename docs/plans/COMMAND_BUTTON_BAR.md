@@ -1,8 +1,10 @@
 # Command-button bar (#15) — design + status
 
+> **Status: shipped (feature-complete for 1.0; #15 closed, D-97). Historical design doc — kept for the rationale and trade-offs.** The hotkey-echo follow-up (#40) also landed.
+
 A configurable quick-command button bar: clickable buttons that fire a command
 (or a script), grouped into pages, in a dockable/floating panel. **Shipped
-v1–v3 (D-97).**
+v1–v3 (docs/DECISIONS.md D-97).**
 
 ## Reference (Mudlet)
 

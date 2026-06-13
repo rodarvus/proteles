@@ -1,15 +1,20 @@
 # Logging — per-session HTML/text logs + rotation + UI
 
+> **Status: shipped (feature-complete for 1.0; D-49 + D-68). Historical design
+> doc — kept for the rationale and trade-offs.** `SessionLogger` (text + HTML),
+> per-connect files, the Preferences ▸ Logging tab, rotation/retention, and the
+> per-world override all landed. See `../DECISIONS.md` (D-49, D-68).
+
 > Plan deliverable (no code). User-facing session logging, distinct from the two
 > things we already write per connect: the binary replay (`.jsonl`, raw wire
 > bytes) and the debug transcript (`.log`, local events for *our* debugging).
 > Logging is for the **player**: a readable record of what happened, with colour.
 
-## What exists vs what's missing
+## What existed vs what was missing (at planning time)
 - ✅ `SessionRecorder` → `.jsonl` (replay; not human-friendly).
 - ✅ `SessionTranscript` → `.log` (debug: RECV/SEND/INPUT/GMCP, ms stamps).
-- 🔴 **No user log** — no "save my session as readable text/HTML", no UI, no
-  rotation, no per-world control.
+- 🔴 (then) **No user log** — no "save my session as readable text/HTML", no UI,
+  no rotation, no per-world control. **Now shipped** (`SessionLogger`, D-49/D-68).
 
 We already have the encoders to make this cheap: `HTMLEncoder` (styled `<pre>`
 + `<span>` colour) and the plain-text path both exist (used by Copy-as-HTML /
@@ -60,14 +65,18 @@ contents). No UI coupling in MudCore.
 2. Rotation (size) + retention pruning + per-world override.
 3. Power options: log gagged lines, ANSI format, append-on-reconnect.
 
-## Decisions for the user
-1. **Default format** — plain text (recommended) or HTML?
+## Decisions for the user (resolved as shipped)
+1. **Default format** — plain text (recommended) or HTML? → shipped with both.
 2. **Default on or off?** Off by default (privacy; logs can contain tells);
-   easy to enable per world.
+   easy to enable per world. → as recommended.
 3. **Log input?** Default off (avoids logging passwords/whispers) with an opt-in.
+   → as recommended; autologin uses `sendLine` and echo-off prompts aren't echoed,
+   so passwords never reach the user log (verified, D-68).
 4. **Rotation policy** — per-session files (recommended, simplest) vs size-rolled
-   continuous logs?
+   continuous logs? → per-session files, plus a retention cap (keep newest N,
+   default 30; `LogRetention.filesToPrune`, D-68).
 
-## Effort
-Low–medium. The encoders + scrollback stream already exist; this is mostly an
-actor + file I/O + a Preferences tab. Lowest-risk of the Phase-7 features.
+## Effort (as built)
+Low–medium, as estimated. The encoders + scrollback stream already existed; the
+work was an actor + file I/O + a Preferences tab. Lowest-risk of the Phase-7
+features.

@@ -9,7 +9,7 @@ import Foundation
 ///
 /// Mirrors ``SearchAndDestroyHost``'s machinery, which proved the pattern.
 extension ScriptEngine {
-    /// MUSHclient `AddTrigger` flag bits (mushclient/flags.h).
+    /// MUSHclient `AddTrigger` flag bits (submodules/mushclient/flags.h).
     enum TriggerFlag {
         static let enabled = 0x01
         static let omitFromOutput = 0x04
@@ -19,7 +19,7 @@ extension ScriptEngine {
         static let oneShot = 0x8000
     }
 
-    /// MUSHclient `AddAlias` flag bits (mushclient/flags.h — note these differ
+    /// MUSHclient `AddAlias` flag bits (submodules/mushclient/flags.h — note these differ
     /// from the trigger bits: `eIgnoreAliasCase = 0x20`,
     /// `eAliasRegularExpression = 0x80`).
     enum AliasFlag {

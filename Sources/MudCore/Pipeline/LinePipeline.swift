@@ -7,7 +7,7 @@ import Foundation
 /// path:
 ///
 ///     wire bytes
-///       → (optional) Inflater     // MCCP2 (PLAN.md §5.3)
+///       → (optional) Inflater     // MCCP2 (ARCHITECTURE.md §5.3)
 ///       → TelnetProcessor          // option negotiation
 ///       → ANSIParser               // SGR / control chars
 ///       → LineBuilder              // line assembly
@@ -62,7 +62,7 @@ public struct LinePipeline {
         }
     }
 
-    /// Policy for option-negotiation replies (PLAN.md §5.2).
+    /// Policy for option-negotiation replies (ARCHITECTURE.md §5.2).
     public enum NegotiationPolicy: Sendable {
         /// Accept MCCP2, refuse everything else (the Phase 2 behaviour).
         case phase2Default

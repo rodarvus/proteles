@@ -1,7 +1,7 @@
 import CLua
 import Foundation
 
-/// Per-plugin Lua environments (PLAN.md §7.3). MUSHclient runs each plugin in
+/// Per-plugin Lua environments (ARCHITECTURE.md §7.3). MUSHclient runs each plugin in
 /// its own Lua state; we have one shared state, so instead each plugin gets
 /// its own *environment table* via `setfenv`. The env's metatable `__index`
 /// falls back to the real globals (`_G`), so a plugin reads the shared shim

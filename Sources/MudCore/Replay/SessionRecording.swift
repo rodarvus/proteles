@@ -1,6 +1,6 @@
 import Foundation
 
-/// File format for recorded MUD sessions (PLAN.md §8.3 replay
+/// File format for recorded MUD sessions (ARCHITECTURE.md §8.3 replay
 /// harness).
 ///
 /// The on-disk representation is **JSONL**: one JSON object per line,

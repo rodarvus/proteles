@@ -1,7 +1,7 @@
 import CZlib
 import Foundation
 
-/// Streaming zlib decompressor — the "inbound" half of MCCP2 (PLAN.md §5.3).
+/// Streaming zlib decompressor — the "inbound" half of MCCP2 (ARCHITECTURE.md §5.3).
 ///
 /// A single `Inflater` instance holds one `z_stream` for the lifetime of a
 /// compressed session. Compressed bytes arrive in arbitrary chunks (e.g.

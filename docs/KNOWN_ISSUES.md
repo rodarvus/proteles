@@ -44,9 +44,10 @@ is a snapshot, not the backlog:
 4. **Clipboard not wired (LOW).** → **FIXED** (#30). `GetClipboard`/`SetClipboard`
    route through an app-injected `NSPasteboard` provider (mirrors the dialog
    provider); degrades to `""`/no-op headless.
-5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).** → **#30** (open).
-   `PluginContext.swift:54-55,125-126` — deferred: needs the live output size
-   threaded MudCore→app, lowest impact, and no plugin we run consumes it.
+5. **`GetInfo(280/281)` output geometry hardcoded 800×600 (LOW).** → **FIXED**
+   (#30, c7cd794). The geometry is now answered live from the real output-view
+   size (reported via a `GeometryReader` in the app), not the hardcoded stub;
+   it defaults to 800×600 only until the app reports a size.
 
 ## Plugin outbound HTTP (`async`) — RESOLVED (D-67)
 

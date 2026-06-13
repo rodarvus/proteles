@@ -1,10 +1,19 @@
 # aardwolfclientpackage — native porting tracker
 
-Living status of the deliberate effort to bring the Aardwolf MUSHclient
-package's 43 plugins to Proteles. Source XMLs (reference only):
-`aardwolfclientpackage/MUSHclient/worlds/plugins/`.
+> **Status: complete (feature-complete for 1.0). Historical — kept for the
+> rationale.** All 43 package plugins are triaged and the active work is done:
+> native features/plugins shipped, the soundpack engine landed (#10, D-109, CC0
+> cues — no GPL exposure), the GPLv3 licensing question is resolved by **not
+> bundling GPL assets** (#6 and #11 closed). TTS has a recorded native design and
+> a Settings ▸ Audio surface; #9 stays open only to validate it with a real
+> visually-impaired player during beta. Kept for the per-plugin verdicts and
+> rationale.
 
-## Strategy (decided; see PLAN.md §7/§11, D-23/D-28/D-33/D-34)
+Status of the deliberate effort to bring the Aardwolf MUSHclient
+package's 43 plugins to Proteles. Source XMLs (reference only):
+`submodules/aardwolfclientpackage/MUSHclient/worlds/plugins/`.
+
+## Strategy (decided; see `ARCHITECTURE.md` §7/§11, D-23/D-28/D-33/D-34 in `DECISIONS.md`)
 
 - **None of these run through the generic `mush.lua` shim.** Each is brought
   over as a **native app feature** or a pure-Swift **`NativePlugin`** — or, for
@@ -14,8 +23,8 @@ package's 43 plugins to Proteles. Source XMLs (reference only):
   `vendor-verbatim` / `reimplement-differently`. Then PROPOSE a deep-dive plan
   and wait for approval before coding. **Not all plugins are relevant**, and
   some are good ideas best done the native way.
-- **No guessing:** research the reference XML + `mushclient/` + `mudlet/` and
-  use live transcripts/DBs.
+- **No guessing:** research the reference XML + `submodules/mushclient/` +
+  `submodules/mudlet/` and use live transcripts/DBs.
 
 ### Key dependency finding
 
@@ -47,11 +56,11 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_prompt_fixer | ✅ done (native, ⏳ live) | **dropped the plugin**; replaced with the protocol-correct native fix (D-35): `LinePipeline` flushes the pending line on `IAC GA` so a prompt is always its own `Line` and anchored triggers fire — no server-side prompt rewrite. Live-verify GA presence + rendering (batch). |
 | Aardwolf_Tick_Timer | ✅ done (native, ⏳ live) | `TickTimer` **NativePlugin** (D-36): `comm.tick` → `updateTick` effect → status-bar "Next tick: N" via `TimelineView`. Fixed 30s, unclamped (matches reference). Per-world **enable/disable** persists via `NativePluginStore` + Plugins window (drops the miniwindow + mode-toggle commands); self-hides when disabled/disconnected. Live-verify cadence/format (batch). |
 | aard_inventory_serials | 🧩 bundle w/ dinv | serial #s in inventory output. Both this and dinv consume Aardwolf's `invdata`/objectID stream (dinv_items.lua parses `invdata`), so the **work is bundled into the dinv finale** — they stay separate, useful plugins, but share the invdata-capture machinery. Not a Phase-A line-rewrite. |
-| aard_soundpack | ⏸️ deferred (licensing) | comm/event sound cues. Engine is easy natively (`AVAudioPlayer` for volume+pan; a `NativePlugin` matching the ~40 event lines), but the 65 default `.wav`s are **GPLv3** (`aardwolfclientpackage/COPYING.txt`), so bundling is gated on the licensing call. Plan: native **BYO-sounds** engine (ship only the event→filename mapping; user supplies a sounds dir) *or* bundle if GPL3 is cleared. **Drop** the remote `!!SOUND(url)` download (security). See "Licensing-gated assets" below. |
+| aard_soundpack | ✅ done (#10, D-109) | native soundpack engine (`AVAudioPlayer` for volume+pan; a `NativePlugin` matching the event lines), driven by `Settings/soundpack.json`. Ships **bundled CC0 cues** — the GPLv3 default `.wav`s (`submodules/aardwolfclientpackage/COPYING.txt`) are **not** bundled, so there's no GPL exposure (#11 resolved); a user can still BYO a sounds dir. The remote `!!SOUND(url)` download is **dropped** (security). |
 | aard_health_bars_gmcp | ✅ done (core, ⏳ live) | HP/MP/MV already in the status HUD (#29). Extended it (D-38) with the two additive pieces: a **combat-only Enemy gauge** (`char.status.enemy`/`enemypct` via `CharStatus.combatTarget`) and **TNL** in the summary. Configurable multi-bar panel (Align bar, stacked/graphical modes, colour/threshold config) deferred to the UI revamp (below). |
 | aard_statmon_gmcp | ✅ done (covered) | every field is already native: Info panel `statsSection` (Str/Int/Wis/Dex/Con/Luck + HR/DR), `characterSection` (level/TNL/align), `worthSection` (gold/QP/trivia/trains/pracs), `enemySection`; vitals in the status HUD. Nothing additive — the Info panel *is* the native statmon. Configurable grid/colours deferred to the UI revamp. |
 | Omit_Blank_Lines | ✅ done (native, ⏳ live) | native UI setting (D-37), **not** a plugin: `SessionController.omitBlankLines` gates the scrollback append (only truly-empty lines, matching `^$`); View-menu **"Omit Blank Lines"** toggle persisted via `@AppStorage`. Off by default. Live-verify toggle + persistence (batch). |
-| SAPI + universal_text_to_speech | ⏸️ deferred (design recorded) | accessibility TTS — **deferred until after polishing** (right idea, wrong priority now). Full investigation + native architecture captured in "Deferred: TTS (accessibility)" below. |
+| SAPI + universal_text_to_speech | ✅ shipped, ⏳ VI-validate (#9, D-110) | native text-to-speech (`Settings/speech.json`, Settings ▸ Audio). #9 stays open only to validate the screen-reader idioms with a real visually-impaired player during beta. Full investigation + native architecture captured in "TTS (accessibility)" below. |
 | Hyperlink_URL2 | ✅ done (⏳ live) | native URL auto-linkify (D-40): `URLLinkify` NativePlugin (`onLine` → `URLLinkifier` marks URL spans clickable; default on). Built on a **shared native hyperlink primitive** (`LineLink` on `StyledRun`; click opens URL or sends a command) exposed to **native plugins** (`proteles.hyperlink`, `NoteSegment.link`) and the **mush shim** (`Hyperlink`/`MakeHyperlink`). Live-verify clicking opens browser / sends command. |
 | aard_Copy_Colour_Codes | ✅ done (⏳ live) | four copy formats (D-39): **normal** (⌘C), **ANSI Colour Codes** (`SGREncoder`, ⌘⇧C), **Aardwolf Colour Codes** (`AardwolfCodeEncoder`, ⌘⌥C — `@r`/`@R`/`@xNNN`, `@@` escape, 256-colour via `@x`), **HTML** (`HTMLEncoder`, ⌘⌥H — `<pre>` + `<span style="color:#…">` runs, palette-resolved hex, HTML-escaped). All in the Edit menu + right-click menu. Backlog #1 + #2 done. |
 | aard_Theme_Controller | 🕓 defer | native theming — UI revamp |
@@ -78,11 +87,12 @@ Legend: ✅ done · 🔨 build (Phase A/B) · 🎨 reimplement-differently (nati
 | aard_translate_foreign_friends | 🗑️ drop | ftalk → online translation API (external service) |
 | aard_Command_Tag_Handler | 🗑️ drop | hides `{Command:…}` tags — moot unless we enable the command-tag stream |
 
-Counts: 16 done · 0 build · 1 bundled-w/-dinv (inventory_serials) · 8 deferred
-(6 UI-revamp + soundpack licensing + TTS) · 17 drop · 1 reimplement done
-(copy-codes D-39, hyperlinks D-40). **All 43 plugins triaged — no active plugin
-work remains.** Next: polishing, then the deferred buckets (TTS, soundpack,
-UI-revamp panels) and the **dinv finale**.
+Counts: 18 done (incl. soundpack #10/D-109 + TTS #9/D-110) · 0 build · 1
+bundled-w/-dinv (inventory_serials) · 6 deferred-to-UI-revamp · 17 drop · 1
+reimplement done (copy-codes D-39, hyperlinks D-40). **All 43 plugins triaged —
+the active porting work is complete.** The soundpack + TTS shipped; the remaining
+deferred items are the UI-revamp display panels and the **dinv finale**. (TTS
+#9 stays open only for live VI validation; the engine ships.)
 
 ## Work order
 
@@ -92,15 +102,17 @@ UI-revamp panels) and the **dinv finale**.
 dinv finale (shared `invdata` work — see below).
 
 **Phase B — native features with new subsystems:** HUD extensions done
-(health_bars D-38, statmon covered). `aard_soundpack` **deferred** (GPLv3
-assets — see below). Remaining: TTS (investigate first), copy-@-codes/HTML +
-hyperlinks.
+(health_bars D-38, statmon covered). `aard_soundpack` **shipped** (#10, D-109 —
+bundled CC0 cues, no GPL assets). copy-@-codes/HTML + hyperlinks done (D-39/D-40).
+TTS shipped (#9, D-110).
 
-### Deferred: TTS (accessibility) — design recorded (D-41)
+### TTS (accessibility) — design recorded (D-41), shipped (#9, D-110)
 
 `SAPI` + `universal_text_to_speech` are the same plugin id
-(`463242566069ebfd1b379ec1`) — mutually-exclusive backends. **Deferred until
-after polishing.** Full investigation so we can resume cold:
+(`463242566069ebfd1b379ec1`) — mutually-exclusive backends. **Shipped** as a
+native engine (#9, D-110; `Settings/speech.json`, Settings ▸ Audio); #9 remains
+open only to validate the screen-reader idioms with a real VI player during beta.
+The investigation below is the design of record:
 
 **What it does.** A queued speech engine: `sapi on/off` auto-speaks all MUD
 output (colour-stripped, punctuation-filtered); `skip`/`clear`; `faster`/
@@ -137,18 +149,18 @@ secondarily sighted audio cues via scripts' `say`.
 curated default; (3) off by default (yes); (4) voice/rate via `tts` commands now,
 picker UI with Preferences (UI revamp).
 
-### Licensing-gated assets (pending a GPLv3 enquiry)
+### Licensing-gated assets — RESOLVED (#11, #6 closed)
 
-`aardwolfclientpackage` is **GPL v3-or-higher** (`COPYING.txt`), so bundling its
-assets into Proteles is an open licensing question shared by several items:
-- **`aard_soundpack`** — the 65 default `.wav` sound cues.
-- Starter map DB (#6) and Search-and-Destroy data, already parked on the same call.
+`aardwolfclientpackage` is **GPL v3-or-higher** (`COPYING.txt`), which once made
+bundling its assets an open licensing question. **Resolved by not bundling any
+GPL asset** — Proteles ships its own:
+- **`aard_soundpack`** — bundles **CC0** cues, not the GPLv3 `.wav`s (#10, D-109);
+  a user can still BYO a sounds dir.
+- **Starter map DB (#6)** — no GPL DB is bundled; the mapper is BYO / import
+  (read-compatible with the user's own `Aardwolf.db`) and builds maps from play.
+- Search-and-Destroy data and any miniwindow textures are likewise from-scratch.
 
-**Plan (user):** after core work + polish, send an in-game note to the
-aardwolfclientpackage maintainers to share Proteles' status and enquire about
-GPL3 use of these assets. Until then: either defer, or ship engines that work
-with **user-supplied** assets (BYO sounds dir / map DB) so there's no GPL
-exposure. Decide soundpack's path (BYO vs. bundle) once the enquiry resolves.
+So there is **no GPL exposure** and no enquiry is needed; #11 and #6 are closed.
 
 **Phase C — deferred to the UI revamp:** theming, splitscreen scrollback,
 review buffers, command-output capture, in-game help window, bigmap, and the

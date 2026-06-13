@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-/// SQLite persistence for the map (PLAN.md §7.7). Deliberately uses the
+/// SQLite persistence for the map (ARCHITECTURE.md §7.7). Deliberately uses the
 /// **MUSHclient mapper schema as a read-compatible superset** so that:
 ///   - importing an existing `Aardwolf.db` is just opening it (we add our
 ///     extension tables/columns non-destructively, handling DBs at
