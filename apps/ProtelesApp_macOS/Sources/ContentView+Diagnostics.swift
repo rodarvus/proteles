@@ -57,18 +57,6 @@ extension ContentView {
             )
         }
     }
-
-    /// The self-healing rebuild's transcript record (#65): fired by the
-    /// coordinator when flush medians degrade and it resets the text storage
-    /// from the store snapshot.
-    func logStorageRebuild(lines: Int, utf16Length: Int, medianMs: Double) {
-        Task {
-            await session.recordNote(
-                "render: storage REBUILT (median flush \(Int(medianMs))ms, "
-                    + "doc was \(lines) lines/\(utf16Length) u16)"
-            )
-        }
-    }
 }
 
 /// Latest render-frame stats, held by reference so per-flush writes don't
