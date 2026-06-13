@@ -23,6 +23,7 @@ public extension LuaRuntime {
         _ = try run(Self.automationShimSource)
         _ = try run(Self.utilsShimSource)
         _ = try run(Self.ioShimSource)
+        _ = try run(Self.miniWindowShimSource)
         registerModules(Self.standardHelpers)
         // Nick Gammon's `wait` coroutine helper (and its `check` dependency),
         // bundled (see MUSHHelperAssets), so third-party plugins that
@@ -99,6 +100,7 @@ public extension LuaRuntime {
     @discardableResult
     func callGlobal(_ name: String, _ arguments: [LuaValue] = []) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        beginMiniWindowPass()
         defer { releaseTransientRefs() }
         clua_getglobal(state, name)
         guard lua_type(state, -1) == LUA_TFUNCTION else {
@@ -115,6 +117,7 @@ public extension LuaRuntime {
                 background: nil
             ))
         }
+        flushMiniWindows()
         return effects
     }
 

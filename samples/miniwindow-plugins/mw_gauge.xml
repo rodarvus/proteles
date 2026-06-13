@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Miniwindow demo 2/4 — a LIVE gauge that redraws every second via AddTimer.
+     Demonstrates the "re-publish on event" redraw model + a proportional bar
+     (RectOp fill) + centred text using WindowTextWidth for layout. -->
+
+<muclient>
+<plugin
+   name="MW_Gauge"
+   author="Proteles"
+   id="a1b2c3d4e5f600000000aa02"
+   language="Lua"
+   purpose="Miniwindow spike demo: a live, timer-driven gauge"
+   date_written="2026-06-13 00:00:00"
+   requires="5.07"
+   version="1.0"
+   >
+</plugin>
+
+<script>
+<![CDATA[
+local win = "mw_gauge_" .. GetPluginID()
+local WIDTH, HEIGHT = 260, 64
+local tick = 0
+
+local BG    = 0x202020
+local FRAME = 0x707070
+local TRACK = 0x3A3A3A
+local FILL  = 0x4080F0   -- orange-blue (BGR) bar
+local LABEL = 0xF0F0F0
+
+function draw()
+  tick = tick + 1
+  local fraction = (tick % 20) / 20        -- 0..1 sweep, ~20s period
+  WindowRectOp(win, miniwin.rect_fill, 0, 0, 0, 0, BG)
+  WindowRectOp(win, miniwin.rect_frame, 0, 0, 0, 0, FRAME)
+
+  -- Gauge track + proportional fill.
+  local left, top, right, bottom = 12, 34, WIDTH - 12, 50
+  WindowRectOp(win, miniwin.rect_fill, left, top, right, bottom, TRACK)
+  WindowRectOp(win, miniwin.rect_fill, left, top, left + (right - left) * fraction, bottom, FILL)
+
+  -- Centred label using WindowTextWidth (the layout-from-measurement pattern).
+  local label = string.format("tick %d  (%d%%)", tick, math.floor(fraction * 100))
+  local w = WindowTextWidth(win, "f", label)
+  WindowText(win, "f", label, (WIDTH - w) / 2, 10, 0, 0, LABEL)
+  WindowShow(win, true)
+end
+
+function OnPluginInstall()
+  WindowCreate(win, 0, 0, WIDTH, HEIGHT, miniwin.pos_top_center, 0, 0)
+  WindowFont(win, "f", "Menlo", 12, false, false, false, false)
+  draw()
+  -- Redraw once a second (MUSHclient AddTimer: h, m, s).
+  AddTimer("mw_gauge_tick", 0, 0, 1, "", timer_flag.Enabled, "draw()")
+end
+]]>
+</script>
+</muclient>

@@ -89,6 +89,12 @@ public actor SessionController {
     public nonisolated let publishedConsider: AsyncStream<ConsiderSnapshot>
     nonisolated let publishedConsiderContinuation: AsyncStream<ConsiderSnapshot>.Continuation
 
+    /// MUSHclient miniwindow scene updates/deletes (`WindowCreate` + `Window*`
+    /// draws from shim plugins) — the UI's `MiniWindowStore` subscribes and a
+    /// SwiftUI `Canvas` replays each scene. See `docs/plans/MINIWINDOW_FEASIBILITY.md`.
+    public nonisolated let miniWindowUpdates: AsyncStream<MiniWindowUpdate>
+    nonisolated let miniWindowUpdatesContinuation: AsyncStream<MiniWindowUpdate>.Continuation
+
     /// Captured in-game help articles (Rich Exits' sibling — see ``HelpParser``);
     /// the Help panel subscribes and renders the latest. Newest-only.
     public nonisolated let helpArticles: AsyncStream<HelpArticle>
@@ -414,6 +420,10 @@ public actor SessionController {
         publishedModelsContinuation = modelsContinuation
         (publishedConsider, publishedConsiderContinuation) =
             AsyncStream<ConsiderSnapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        // Buffer several so a multi-window draw pass (one update per window)
+        // isn't coalesced to a single newest scene.
+        (miniWindowUpdates, miniWindowUpdatesContinuation) =
+            AsyncStream<MiniWindowUpdate>.makeStream(bufferingPolicy: .bufferingNewest(64))
         (helpArticles, helpArticlesContinuation) =
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (notifications, notificationsContinuation) =

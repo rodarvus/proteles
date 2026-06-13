@@ -42,7 +42,9 @@ extension SessionController {
             // Script/plugin button-bar change (#15) → forwarded to the app.
             buttonCommandsContinuation.yield(command)
         default:
-            break
+            // Miniwindow scene/image updates (the miniwindow spike) — forwarded
+            // to the UI stream; a no-op for any other effect.
+            _ = applyMiniWindowEffect(effect)
         }
     }
 

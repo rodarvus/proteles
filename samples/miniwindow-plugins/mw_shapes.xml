@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Miniwindow demo 4/4 — the shape/gradient tail (Phase 4): WindowGradient,
+     WindowCircleOp (ellipse + filled rect + round-rect), WindowPolygon,
+     WindowArc, and dashed/dotted WindowLine pen styles. -->
+
+<muclient>
+<plugin
+   name="MW_Shapes"
+   author="Proteles"
+   id="a1b2c3d4e5f600000000aa04"
+   language="Lua"
+   purpose="Miniwindow spike demo: shapes, gradients, pen styles"
+   date_written="2026-06-13 00:00:00"
+   requires="5.07"
+   version="1.0"
+   >
+</plugin>
+
+<script>
+<![CDATA[
+local win = "mw_shapes_" .. GetPluginID()
+local WIDTH, HEIGHT = 240, 160
+
+local FRAME  = 0x808080
+local RED    = 0x0000FF   -- BGR
+local GREEN  = 0x00C000
+local BLUE   = 0xF0A000   -- (BGR: orange-ish blue)
+local YELLOW = 0x00E0E0
+local WHITE  = 0xFFFFFF
+
+function OnPluginInstall()
+  WindowCreate(win, 0, 0, WIDTH, HEIGHT, miniwin.pos_center_all, 0, 0)
+
+  -- Vertical gradient background.
+  WindowGradient(win, 0, 0, 0, 0, 0x301810, 0x100806, miniwin.gradient_vertical)
+  WindowRectOp(win, miniwin.rect_frame, 0, 0, 0, 0, FRAME)
+
+  -- Filled ellipse + outline (pen + brush).
+  WindowCircleOp(win, miniwin.circle_ellipse, 14, 14, 84, 64,
+    WHITE, miniwin.pen_solid, 2, RED, miniwin.brush_solid, 0, 0)
+
+  -- Round-rectangle with rounded corners (Extra1/Extra2 = corner ellipse).
+  WindowCircleOp(win, miniwin.circle_round_rectangle, 100, 14, 170, 64,
+    YELLOW, miniwin.pen_solid, 1, GREEN, miniwin.brush_solid, 16, 16)
+
+  -- A triangle via WindowPolygon (filled + outlined, closed).
+  WindowPolygon(win, "190,14, 226,64, 190,64", WHITE, miniwin.pen_solid, 1,
+    BLUE, miniwin.brush_solid, true, false)
+
+  -- Dashed + dotted lines.
+  WindowLine(win, 14, 86, 226, 86, GREEN, miniwin.pen_dash, 1)
+  WindowLine(win, 14, 96, 226, 96, YELLOW, miniwin.pen_dot, 1)
+
+  -- An arc (bounding ellipse outline in the spike).
+  WindowArc(win, 14, 104, 110, 150, 0, 0, 0, 0, RED, miniwin.pen_solid, 2)
+
+  WindowFont(win, "f", "Menlo", 11, false, false, false, false)
+  WindowText(win, "f", "shapes / gradient / pens", 120, 132, 0, 0, WHITE)
+  WindowShow(win, true)
+end
+]]>
+</script>
+</muclient>
