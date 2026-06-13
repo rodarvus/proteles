@@ -1,6 +1,6 @@
 import Foundation
 
-/// User-editable description of a MUD to connect to (PLAN.md §8.4).
+/// User-editable description of a MUD to connect to (ARCHITECTURE.md §8.4).
 ///
 /// Phase 3 establishes the data model; the Connection Manager UI lands
 /// alongside in MudUI, and the app rewires its **Connect to Aardwolf**
@@ -128,15 +128,23 @@ public struct WorldProfile: Codable, Sendable, Equatable, Identifiable {
 }
 
 public extension WorldProfile {
-    /// The starter profile every fresh install gets: plaintext Aardwolf
-    /// on the canonical public port. UI surfaces it as **Aardwolf**.
+    /// The starter profile every fresh install gets: plaintext Aardwolf on the
+    /// standard telnet port. UI surfaces it as **Aardwolf**. (An *imported*
+    /// MUSHclient world keeps its own host/port — the import builds its profile
+    /// from the world file, so this seed default never overrides it.)
     static let aardwolfDefault = WorldProfile(
         name: "Aardwolf",
         host: "aardmud.org",
-        port: 4000,
+        port: 23,
         encoding: .utf8,
         autoconnect: false
     )
+
+    /// The ports Aardwolf answers on, default first. Surfaced as quick-pick
+    /// suggestions beside the port field in the connection editor; new profiles
+    /// seed from the first (port 23, standard telnet). 4000/4010/4444/7777 are
+    /// Aardwolf's historical game ports, offered as alternatives.
+    static let knownAardwolfPorts: [UInt16] = [23, 4000, 4010, 4444, 7777]
 }
 
 /// Inbound byte encoding. UTF-8 is the universal modern default;
@@ -151,8 +159,11 @@ public enum ConnectionTransport: String, Codable, Sendable, Equatable, CaseItera
     /// Raw TCP telnet with MCCP2 (``NetworkConnection``). The classic path.
     case direct
     /// Aardwolf's WebSocket gateway (``WebSocketConnection``,
-    /// `wss://play.aardwolf.com:6200/`): TLS, no raw sockets — the iOS path, and
-    /// a selectable option on macOS. Bridges to this profile's host/port.
+    /// `wss://play.aardwolf.com:6200/`): TLS, no raw sockets — the future iOS
+    /// path. Bridges to this profile's host/port. **Not offered in the macOS UI**
+    /// (the gateway forwards only a GMCP subset, so most features stay dark — see
+    /// `docs/WEBSOCKET.md`); the code is retained but the connection editor
+    /// exposes Direct only.
     case webSocket
 
     /// Label for the connection editor.
