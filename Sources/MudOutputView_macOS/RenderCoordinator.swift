@@ -177,11 +177,16 @@
             // view (e.g. after a font-size change) isn't blank.
             let (snapshot, stream) = await store.eventsWithSnapshot()
             renderSnapshot(snapshot)
-            // Push events into the thread-safe inbox directly — NO per-event
-            // main-actor hop. The frame ticker drains the inbox, so a burst
-            // accumulates and flushes as one batch (see ``inbox``).
+            // Drain the stream OFF the main actor (Task.detached) into the
+            // thread-safe inbox. This is the load-bearing detail: a plain
+            // `Task {}` here would inherit this @MainActor method's isolation,
+            // so its `for await` would run ON the main actor and interleave
+            // with the frame ticker — flushing one event per frame (the
+            // line-by-line resume trickle, #42/#65). Detached, a burst (resume
+            // seeding via `appendBatch`) lands in the inbox at memory speed and
+            // the next frame drains the whole thing in one flush.
             let inbox = inbox
-            subscriptionTask = Task {
+            subscriptionTask = Task.detached {
                 for await event in stream {
                     inbox.push(event)
                 }
