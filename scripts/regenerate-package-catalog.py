@@ -13,7 +13,7 @@ Sources/MudCore/Import/PackagePluginCatalog.swift (review the diff). With
 import sys, re, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PLUGINS = ROOT / "aardwolfclientpackage/MUSHclient/worlds/plugins"
+PLUGINS = ROOT / "submodules/aardwolfclientpackage/MUSHclient/worlds/plugins"
 CATALOG = ROOT / "Sources/MudCore/Import/PackagePluginCatalog.swift"
 
 def plugin_id(text):

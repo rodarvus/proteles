@@ -1,3 +1,10 @@
+> **Historical.** The follow-up to the conversation that led me to start
+> thinking about writing Proteles — here, on whether one codebase could serve
+> both macOS and iOS. Kept for the record; not current design guidance. See
+> [ARCHITECTURE.md](../../ARCHITECTURE.md) for the project as it stands.
+
+---
+
 *Query:*
 
 Following-up on the thread above - would it be possible to use the same code base for macOS and iOS?

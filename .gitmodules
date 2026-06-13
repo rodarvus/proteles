@@ -1,22 +1,19 @@
 [submodule "mushclient"]
-	path = mushclient
+	path = submodules/mushclient
 	url = https://github.com/nickgammon/mushclient.git
 [submodule "aardwolfclientpackage"]
-	path = aardwolfclientpackage
+	path = submodules/aardwolfclientpackage
 	url = https://github.com/fiendish/aardwolfclientpackage
 [submodule "mudlet"]
-	path = mudlet
+	path = submodules/mudlet
 	url = https://github.com/mudlet/mudlet
-[submodule "iterm2"]
-	path = iterm2
-	url = https://github.com/gnachman/iterm2
 [submodule "search-and-destroy"]
-	path = search-and-destroy
+	path = plugins/search-and-destroy
 	url = https://github.com/AardCrowley/Search-and-Destroy.git
 	branch = beta
 [submodule "dinv"]
-	path = dinv
+	path = plugins/dinv
 	url = https://github.com/rodarvus/dinv.git
 [submodule "leveldb"]
-	path = leveldb
+	path = plugins/leveldb
 	url = https://github.com/rodarvus/leveldb

@@ -1,3 +1,11 @@
+> **Historical.** This is the original conversation (May 2026) that started me
+> thinking about building Proteles — the brainstorm about whether a native macOS
+> MUD client was worth writing, and what to build it with. Kept for the record;
+> nothing here is current design guidance. See [ARCHITECTURE.md](../../ARCHITECTURE.md)
+> for where the project actually landed.
+
+---
+
 *Query:*
 
 I am considering the idea of developing a native macOS MUD client. The two most versatile MUD clients are MUSHCLient, a native Windows application, and mudlet, a multi-platform client written in Qt. I'm thinking of a native Swift application. What are your thoughts on libraries and frameworks I should use? particularly for high-performance text output, and utility and networking libraries? I have programming experience in general, but limited experience with Swift and macOS development. Development is likely almost exclusively going to happen within Claude Code, but it would be nice to use an IDE. I want to explore my options there as well.
