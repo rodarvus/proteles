@@ -8,7 +8,7 @@ Proteles is built for one MUD: **Aardwolf**. It speaks Aardwolf's GMCP, maps its
 world, hunts campaign and quest targets, and can import your whole MUSHclient
 setup so switching costs you nothing. It's named after the genus of the aardwolf.
 
-> **Status:** feature-complete and daily-usable. Latest release **`v0.7.3`**,
+> **Status:** feature-complete and daily-usable. Latest release **`v0.8.0`**,
 > a notarized, Developer-ID-signed build. **[MIT-licensed](LICENSE)** and free.
 
 ---
