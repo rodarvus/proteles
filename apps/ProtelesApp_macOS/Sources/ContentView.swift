@@ -162,6 +162,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 460)
+        .accessibilityIdentifier("main-content")
         .overlay(alignment: .top) { resumeBannerView }
         .animation(.easeInOut(duration: 0.2), value: resumeBanner)
         .toolbar {

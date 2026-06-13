@@ -102,5 +102,21 @@ private struct WorldRow: View {
             Spacer()
         }
         .padding(.vertical, 2)
+        // Accessibility (#26 Phase 0): one element with a spoken label that
+        // carries the active state in words — the green dot is colour-only, and
+        // colour is never the sole signal (DESIGN §6). The identifier is a stable
+        // XCUITest hook.
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("world-row-\(name)")
+        .accessibilityLabel(axLabel)
+    }
+
+    private var name: String {
+        profile.name.isEmpty ? "New World" : profile.name
+    }
+
+    private var axLabel: String {
+        let endpoint = "\(profile.host.isEmpty ? "no host" : profile.host), port \(profile.port)"
+        return isActive ? "\(name), \(endpoint), active world" : "\(name), \(endpoint)"
     }
 }

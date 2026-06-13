@@ -111,6 +111,12 @@ public struct MapPanelView: View {
                         draw(marker, in: context, geometry: geometry)
                     }
                 }
+                // The map drawing is visual; summarise the current location in
+                // words for VoiceOver (the header overlay also shows it). #26 Ph.0.
+                .accessibilityElement()
+                .accessibilityIdentifier("map-canvas")
+                .accessibilityLabel("Map")
+                .accessibilityValue(mapAccessibilityValue(layout))
                 pulse(for: layout, geometry: geometry)
             }
             .contentShape(Rectangle())
@@ -161,6 +167,17 @@ public struct MapPanelView: View {
     }
 
     // MARK: - Overlays
+
+    /// Spoken summary of where the map is centred, for VoiceOver (#26 Phase 0).
+    private func mapAccessibilityValue(_ layout: MapLayout) -> String {
+        guard let current = layout.rooms.first(where: { $0.uid == layout.current }) else {
+            return "no current room"
+        }
+        var parts = [current.name]
+        if let area = current.areaName { parts.append(area) }
+        if current.isPK { parts.append("player-kill room") }
+        return parts.joined(separator: ", ")
+    }
 
     @ViewBuilder
     private func header(_ layout: MapLayout) -> some View {
