@@ -9,7 +9,7 @@
 > north-star in **[docs/DESIGN.md](docs/DESIGN.md)**, and the player-facing intro
 > in **[README.md](README.md)**.
 
-**Status:** feature-complete for 1.0. Latest release `v0.7.3` (notarized
+**Status:** feature-complete for 1.0. Latest release `v0.8.0` (notarized
 Developer-ID build). The build-out phases (§8) are done; what remains before
 tagging 1.0 is UI/UX polish (`ux` label) and QA hardening — all tracked in Issues.
 

@@ -80,7 +80,7 @@ GitHub Pages redeploys ~1–2 min after the gh-pages push; installed copies then
 see the update on their next check.
 
 > **The round-trip is validated** (since the first Sparkle release; it has
-> shipped on every release through v0.7.3). The inside-out signing in
+> shipped on every release through v0.8.0). The inside-out signing in
 > `release.sh` notarizes cleanly — the nested XPC services / Updater.app are the
 > usual culprits if it ever regresses, so confirm `notarytool` accepts the bundle
 > and `spctl` passes, and budget one notarization retry.

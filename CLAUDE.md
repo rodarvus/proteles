@@ -9,7 +9,7 @@ rules, and the gotchas.
 
 ## Current status
 
-**Feature-complete for 1.0. Shipped `v0.7.3`** (build 47; tag + GitHub release,
+**Feature-complete for 1.0. Shipped `v0.8.0`** (build 48; tag + GitHub release,
 **notarized Developer-ID build**; `scripts/release.sh` runs the
 build→sign→notarize→staple→verify flow). The build-out phases are **done**; the
 work now is **UI/UX polish + live-play debugging** ahead of tagging 1.0. Everything
