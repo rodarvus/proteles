@@ -104,7 +104,15 @@
         private weak var textView: NSTextView?
         private let builder: AttributedStringBuilder
         private let frameInterval: Duration
-        private var pendingEvents: [ScrollbackEvent] = []
+        /// Intake buffer between the off-main store subscription and the
+        /// main-actor frame flush. The subscription pushes here WITHOUT hopping
+        /// to the main actor per event, so a burst (e.g. resume seeding
+        /// hundreds of lines via `appendBatch`) accumulates and the next flush
+        /// renders it in ONE batch. (Previously the subscription did a
+        /// `MainActor.run` per event; on a busy main actor those hops
+        /// interleaved with the frame ticker, so a restored backlog trickled in
+        /// one line per frame instead of filling in a single shot — #42/#65.)
+        private let inbox = EventInbox()
         private var subscriptionTask: Task<Void, Never>?
         private var frameTask: Task<Void, Never>?
 
@@ -162,18 +170,20 @@
             }
             lineLengths.removeAll()
             recentLines.removeAll()
-            pendingEvents.removeAll()
+            inbox.clear()
             evictionBacklog = 0
             // Atomically grab the resident lines + a live event stream, then
             // render the existing buffer up front — so a freshly (re)created
             // view (e.g. after a font-size change) isn't blank.
             let (snapshot, stream) = await store.eventsWithSnapshot()
             renderSnapshot(snapshot)
-            subscriptionTask = Task { [weak self] in
+            // Push events into the thread-safe inbox directly — NO per-event
+            // main-actor hop. The frame ticker drains the inbox, so a burst
+            // accumulates and flushes as one batch (see ``inbox``).
+            let inbox = inbox
+            subscriptionTask = Task {
                 for await event in stream {
-                    await MainActor.run {
-                        self?.enqueue(event)
-                    }
+                    inbox.push(event)
                 }
             }
             let interval = frameInterval
@@ -225,8 +235,19 @@
             refreshTail()
         }
 
-        private func enqueue(_ event: ScrollbackEvent) {
-            pendingEvents.append(event)
+        /// Trim the deferred-eviction backlog in a single delete once it
+        /// reaches a full ``evictionBatch``, so the layout-invalidating
+        /// top-of-document delete happens once per batch rather than once per
+        /// flush. Must be called inside the storage's `beginEditing` scope.
+        private func trimEvictionBacklogIfFull(_ storage: NSTextStorage) {
+            guard evictionBacklog >= evictionBatch else { return }
+            var evictBytes = 0
+            for index in 0..<evictionBacklog {
+                evictBytes += lineLengths[index].utf16Length
+            }
+            storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
+            lineLengths.removeFirst(evictionBacklog)
+            evictionBacklog = 0
         }
 
         /// Re-render the live-tail pane from the buffered recent lines. The
@@ -255,15 +276,11 @@
         )
 
         private func flushPending() {
-            guard !pendingEvents.isEmpty,
-                  let textView,
-                  let storage = textView.textStorage
-            else { return }
+            guard let textView, let storage = textView.textStorage else { return }
+            let toApply = inbox.drain()
+            guard !toApply.isEmpty else { return }
             let signpostState = Self.signposter.beginInterval("render-flush")
             defer { Self.signposter.endInterval("render-flush", signpostState) }
-
-            let toApply = pendingEvents
-            pendingEvents.removeAll(keepingCapacity: true)
 
             let start = ContinuousClock.now
             let wallNow = Date()
@@ -303,18 +320,7 @@
                 }
             }
 
-            // Trim the backlog in a single delete once it reaches a full
-            // batch, so the layout-invalidating top-of-document delete happens
-            // once per `evictionBatch` lines rather than once per flush.
-            if evictionBacklog >= evictionBatch {
-                var evictBytes = 0
-                for index in 0..<evictionBacklog {
-                    evictBytes += lineLengths[index].utf16Length
-                }
-                storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
-                lineLengths.removeFirst(evictionBacklog)
-                evictionBacklog = 0
-            }
+            trimEvictionBacklogIfFull(storage)
 
             storage.endEditing()
 
@@ -383,6 +389,39 @@
             let distanceFromBottom =
                 contentHeight - (visible.origin.y + visible.height)
             return distanceFromBottom < autoScrollThreshold
+        }
+    }
+
+    /// Thread-safe FIFO of scrollback events, filled by the off-main store
+    /// subscription and drained by the main-actor frame flush. Decoupling
+    /// intake from the frame rate is the point: a burst pushed faster than the
+    /// frame interval (resume seeding, a reconnect dump) accumulates here and
+    /// drains as ONE batch, instead of one-per-frame when each push had to hop
+    /// the main actor and interleave with the ticker (#42/#65).
+    private final class EventInbox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var events: [ScrollbackEvent] = []
+
+        func push(_ event: ScrollbackEvent) {
+            lock.lock()
+            events.append(event)
+            lock.unlock()
+        }
+
+        /// Return and clear everything buffered, in arrival order.
+        func drain() -> [ScrollbackEvent] {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !events.isEmpty else { return [] }
+            let drained = events
+            events.removeAll(keepingCapacity: true)
+            return drained
+        }
+
+        func clear() {
+            lock.lock()
+            events.removeAll(keepingCapacity: true)
+            lock.unlock()
         }
     }
 #endif
