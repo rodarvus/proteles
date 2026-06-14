@@ -32,9 +32,6 @@ struct ContentView: View {
     @State private var notifications = NotificationController()
     /// Plays soundpack/plugin cues (#10) from the session's sound stream.
     @State private var cuePlayer = CuePlayerController()
-    /// Live MUSHclient miniwindows drawn by shim plugins (the miniwindow spike,
-    /// `docs/plans/MINIWINDOW_FEASIBILITY.md`); rendered over the output.
-    @State private var miniWindows = MiniWindowStore()
     /// Speaks TTS requests (#9) — AVSpeechSynthesizer or VoiceOver routing.
     @State private var speech = SpeechController()
     @Environment(\.openWindow) var openWindow
@@ -290,10 +287,6 @@ struct ContentView: View {
                 consider.update(snapshot)
             }
         }
-        .task {
-            // Feed shim-plugin miniwindow scenes to the overlay store.
-            await miniWindows.run(session: session)
-        }
         .alert("Save Layout Preset", isPresented: $showingSavePreset) {
             TextField("Preset name", text: $newPresetName)
             Button("Save") { layout.savePreset(named: newPresetName) }
@@ -344,13 +337,9 @@ struct ContentView: View {
                 Color.clear.task(id: proxy.size) { await reportOutputGeometry(proxy.size) }
             })
             // MUSHclient miniwindows drawn by shim plugins, composited over the
-            // output (the miniwindow spike). Layered under the native floating
-            // panels so a docked Proteles panel always wins the foreground.
-            .overlay {
-                MiniWindowOverlay(store: miniWindows) { event in
-                    Task { await session.dispatchMiniWindowEvent(event) }
-                }
-            }
+            // output (the miniwindow spike). Self-contained; layered under the
+            // native floating panels so a docked Proteles panel stays foreground.
+            .overlay { MiniWindowOverlay(session: session) }
             // Floating miniwindows (e.g. the Text Map) anchor to the top-right of
             // the game output, layered over it — not over the side dock.
             .overlay(alignment: .topTrailing) {
