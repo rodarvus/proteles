@@ -8,27 +8,30 @@ import SwiftUI
 ///
 /// A light rounded clip + drop shadow makes the frameless GDI-era windows look
 /// native without altering their 1:1 pixel geometry (the "nicer than MUSHclient"
-/// touch from the plan). Hotspot interactivity (Phase 2) is layered on top via
-/// `onEvent`; with no hotspots a window is transparent to the mouse so the
-/// output underneath stays clickable/selectable.
+/// touch from the plan). Self-contained: it owns the ``MiniWindowStore``,
+/// subscribes to the session's scene stream, and routes hotspot gestures back to
+/// the session — so the host view only adds `.overlay { MiniWindowOverlay(session:) }`.
+/// With no hotspots a window passes clicks through, so output stays selectable.
 public struct MiniWindowOverlay: View {
-    private let store: MiniWindowStore
-    private let onEvent: (MiniWindowEvent) -> Void
+    private let session: SessionController
+    @State private var store = MiniWindowStore()
 
-    public init(store: MiniWindowStore, onEvent: @escaping (MiniWindowEvent) -> Void = { _ in }) {
-        self.store = store
-        self.onEvent = onEvent
+    public init(session: SessionController) {
+        self.session = session
     }
 
     public var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 ForEach(visibleScenes) { scene in
-                    MiniWindowFrame(scene: scene, store: store, container: geo.size, onEvent: onEvent)
+                    MiniWindowFrame(scene: scene, store: store, container: geo.size) { event in
+                        Task { await session.dispatchMiniWindowEvent(event) }
+                    }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
+        .task { await store.run(session: session) }
     }
 
     private var visibleScenes: [MiniWindowScene] {
