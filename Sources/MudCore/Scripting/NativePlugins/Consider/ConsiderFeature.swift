@@ -95,8 +95,20 @@ public struct ConsiderFeature: NativePlugin {
     private var isSafeRoom = false
     private var wasInCombat = false
     private var statusNote: String?
+    /// Curated `area → name → keyword` overrides read from S&D's `SnDdb.db`
+    /// (empty when S&D isn't installed). Loaded once on connect.
+    private var exceptions: [String: [String: String]] = [:]
 
     public init() {}
+
+    /// Load S&D's keyword exceptions (read-only) so click/batch targeting uses
+    /// the same curated keywords S&D would. No-op when S&D isn't installed.
+    public mutating func connect() -> [ScriptEffect] {
+        if let url = ConsiderKeyword.defaultDatabaseURL() {
+            exceptions = ConsiderKeyword.loadExceptions(from: url)
+        }
+        return []
+    }
 
     // MARK: - GMCP
 
@@ -180,7 +192,10 @@ public struct ConsiderFeature: NativePlugin {
             }
         }
         let zone = currentZone
-        let outcome = model.ingestLine(line.text, zone: zone) { ConsiderNameCleanup.strip($0, zone: zone) }
+        let table = exceptions
+        let outcome = model.ingestLine(line.text, zone: zone) {
+            ConsiderKeyword.resolve($0, area: zone, exceptions: table)
+        }
         switch outcome {
         case .considered:
             return .init(gag: true, effects: [publishEffect()])
