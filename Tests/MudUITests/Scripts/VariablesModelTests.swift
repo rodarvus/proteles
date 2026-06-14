@@ -18,49 +18,54 @@ struct VariablesModelTests {
         return ScriptsModel(session: session)
     }
 
-    @Test("addVariable creates a _user variable and selects it")
+    @Test("commitVariable adds a new user variable and selects it")
     func add() async throws {
         let model = try await Self.makeModel()
-        await model.addVariable()
-        #expect(model.variables.count == 1)
+        await model.commitVariable(editing: nil, name: "target", value: "kobold")
         let entry = try #require(model.variables.first)
+        #expect(model.variables.count == 1)
         #expect(entry.scope == VariableEntry.userScope)
+        #expect(entry.name == "target")
+        #expect(entry.value == "kobold")
         #expect(model.selectedVariableID == entry.id)
     }
 
-    @Test("addVariable generates unique default names")
-    func uniqueNames() async throws {
-        let model = try await Self.makeModel()
-        await model.addVariable()
-        await model.addVariable()
-        #expect(Set(model.variables.map(\.name)) == ["variable", "variable_2"])
-    }
-
-    @Test("valueBinding updates the row synchronously")
+    @Test("commitVariable edits the value of an existing variable in place")
     func editValue() async throws {
         let model = try await Self.makeModel()
-        await model.addVariable()
-        let id = try #require(model.selectedVariableID)
-        let binding = try #require(model.valueBinding(forVariable: id))
-        binding.wrappedValue = "100"
-        #expect(model.variableEntry(id)?.value == "100")
+        await model.commitVariable(editing: nil, name: "hp", value: "1")
+        let original = try #require(model.variables.first)
+        await model.commitVariable(editing: original, name: "hp", value: "100")
+        #expect(model.variables.count == 1)
+        #expect(model.variables.first?.value == "100")
     }
 
-    @Test("renameVariable moves the value and reselects under the new id")
+    @Test("commitVariable renames, carrying the value to the new name")
     func rename() async throws {
         let model = try await Self.makeModel()
-        await model.addVariable()
-        let id = try #require(model.selectedVariableID)
-        await model.renameVariable(id: id, to: "target")
+        await model.commitVariable(editing: nil, name: "old", value: "v")
+        let original = try #require(model.variables.first)
+        await model.commitVariable(editing: original, name: "new", value: "v")
+        #expect(model.variables.count == 1)
         let entry = try #require(model.variables.first)
-        #expect(entry.name == "target")
+        #expect(entry.name == "new")
+        #expect(entry.value == "v")
         #expect(model.selectedVariableID == entry.id)
+    }
+
+    @Test("commitVariable trims the name and ignores an empty one")
+    func trimAndIgnoreEmpty() async throws {
+        let model = try await Self.makeModel()
+        await model.commitVariable(editing: nil, name: "   ", value: "x")
+        #expect(model.variables.isEmpty)
+        await model.commitVariable(editing: nil, name: "  spaced  ", value: "x")
+        #expect(model.variables.first?.name == "spaced")
     }
 
     @Test("deleteSelectedVariable removes it")
     func delete() async throws {
         let model = try await Self.makeModel()
-        await model.addVariable()
+        await model.commitVariable(editing: nil, name: "a", value: "1")
         #expect(model.variables.count == 1)
         await model.deleteSelectedVariable()
         #expect(model.variables.isEmpty)
