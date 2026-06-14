@@ -78,9 +78,9 @@ private struct MobRow: View {
                 Text("\(position).")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
-                if !mob.rawFlags.isEmpty {
-                    Text(mob.rawFlags)
-                        .foregroundStyle(.secondary)
+                ForEach(ConsiderColour.auraFlags(mob.rawFlags)) { flag in
+                    Text(flag.id)
+                        .foregroundStyle(flag.color)
                 }
                 Text(mob.name)
                     .foregroundStyle(ConsiderColour.color(for: mob.colour))
@@ -121,6 +121,30 @@ enum ConsiderColour {
 
     static func color(for name: String) -> Color {
         palette[name] ?? .primary
+    }
+
+    /// A coloured aura badge shown before a mob's name.
+    struct AuraFlag: Identifiable {
+        let id: String
+        let color: Color
+    }
+
+    /// The aura flags present in a mob's captured prefix, coloured like the
+    /// original plugin's `Process_flags`: white aura `(W)`, red aura `(R)` =
+    /// evil, golden aura `(G)` = good. Accepts the abbreviated `(R)` or the full
+    /// `(Red Aura)` form. `(W)` stacks with `(R)`/`(G)`.
+    static func auraFlags(_ raw: String) -> [AuraFlag] {
+        let lower = raw.lowercased()
+        var flags: [AuraFlag] = []
+        if lower.contains("(w)") || lower.contains("white aura") {
+            flags.append(AuraFlag(id: "(W)", color: rgb(230, 230, 230)))
+        }
+        if lower.contains("(r)") || lower.contains("red aura") {
+            flags.append(AuraFlag(id: "(R)", color: rgb(220, 60, 60)))
+        } else if lower.contains("(g)") || lower.contains("golden aura") {
+            flags.append(AuraFlag(id: "(G)", color: rgb(212, 175, 0)))
+        }
+        return flags
     }
 
     private static func rgb(_ red: Double, _ green: Double, _ blue: Double) -> Color {
