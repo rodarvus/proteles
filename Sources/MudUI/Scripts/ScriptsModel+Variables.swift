@@ -35,23 +35,17 @@ public struct VariableEntry: Identifiable, Hashable, Sendable {
 /// the live runtimes + the per-world ``VariableStore``, not the script document.
 @MainActor
 public extension ScriptsModel {
-    /// Re-read every scope from the session and flatten into sorted rows
-    /// (user scope first, then plugin scopes; by name within a scope).
+    /// Re-read the **user** scope from the session and present it sorted by
+    /// name. Only `_user` is shown — the variables you (or your triggers/
+    /// aliases/console) create, plus any imported world variables. Plugin and
+    /// Search-and-Destroy scopes hold those plugins' private state and are never
+    /// shown or editable here, matching MUSHclient's world Variables page (and
+    /// so a user who hasn't made a variable sees an empty list).
     func refreshVariables() async {
-        let scopes = await session.variableScopes()
-        var entries: [VariableEntry] = []
-        for (scope, vars) in scopes {
-            for (name, value) in vars {
-                entries.append(VariableEntry(scope: scope, name: name, value: value))
-            }
-        }
-        variables = entries.sorted { lhs, rhs in
-            if lhs.scope != rhs.scope {
-                if lhs.isUserScope != rhs.isUserScope { return lhs.isUserScope }
-                return lhs.scope < rhs.scope
-            }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
+        let userVars = await session.variableScopes()[VariableEntry.userScope] ?? [:]
+        variables = userVars
+            .map { VariableEntry(scope: VariableEntry.userScope, name: $0.key, value: $0.value) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// The entry for an id, if still present.
