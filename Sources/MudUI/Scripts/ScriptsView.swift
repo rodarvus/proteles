@@ -33,6 +33,10 @@ public struct ScriptsView: View {
     @State var macroQuery = ""
     @State var buttonQuery = ""
     @State var variableQuery = ""
+    /// The variable add/edit sheet request (nil when closed; `original == nil`
+    /// is Add). A sheet — not inline-table editing — so Tab moves Name→Value and
+    /// Return commits with the name field auto-focused (DESIGN.md §3.2).
+    @State var variableEditor: VariableEditorRequest?
     @State var deleteRequest: ScriptsDeleteRequest?
     /// The button group being renamed (D-106) — renaming is an explicit
     /// context-menu act, not an always-editable header field.
