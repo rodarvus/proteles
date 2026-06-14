@@ -27,7 +27,9 @@ public final class LayoutStore {
     public static let defaultFloating: [PanelKind: FloatingPlacement] = [
         .asciiMap: FloatingPlacement(anchor: .topTrailing),
         // Character stat block floats by default, snapped under the Text Map.
-        .info: FloatingPlacement(anchor: .topTrailing, stackBelow: .asciiMap)
+        .info: FloatingPlacement(anchor: .topTrailing, stackBelow: .asciiMap),
+        // The Consider room-mob list reads best as a top-left floating HUD.
+        .consider: FloatingPlacement(anchor: .topLeading)
     ]
 
     /// Decode the persisted placement map (new format) from `data`, or nil.
@@ -114,6 +116,20 @@ public final class LayoutStore {
         for kind in Set(floating.keys).union(detached) {
             layout = layout.removing(kind)
         }
+        // One-time introduction: float the Consider panel for layouts that
+        // predate it (or that auto-docked it on first enable), so it comes up as
+        // the intended top-left HUD. Runs once; the user's later choice sticks.
+        let considerMigrationKey = persistenceKey + ".considerFloatV1"
+        let considerPlacement = Self.defaultFloating[.consider]
+        let considerUnplaced = floating[.consider] == nil && !detached.contains(.consider)
+        if !UserDefaults.standard.bool(forKey: considerMigrationKey) {
+            UserDefaults.standard.set(true, forKey: considerMigrationKey)
+            if considerUnplaced, let considerPlacement {
+                floating[.consider] = considerPlacement
+                layout = layout.removing(.consider)
+                save()
+            }
+        }
         presets = UserDefaults.standard.data(forKey: presetsKey)
             .flatMap { try? JSONDecoder().decode([LayoutPreset].self, from: $0) } ?? []
     }
@@ -145,6 +161,12 @@ public final class LayoutStore {
         } else if layout.contains(kind) {
             rememberSlot(kind)
             layout = layout.removing(kind)
+            save()
+        } else if lastSlot[kind] == nil, let placement = Self.defaultFloating[kind] {
+            // First-ever enable of a float-by-default panel (it's never been
+            // docked, so there's no remembered slot): bring it up floating, not
+            // docked. Once the user docks it, the remembered slot wins hereafter.
+            floating[kind] = placement
             save()
         } else {
             layout = restoredInsert(kind)
