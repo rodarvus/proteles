@@ -20,8 +20,16 @@ public final class MiniWindowStore {
     /// Decoded images keyed `"pluginID\u{1}imageID"` (Phase 3). Held outside the
     /// scene values so the (large) bytes never cross the effect boundary.
     private var images: [String: CGImage] = [:]
+    /// User drag-overrides of window placement, keyed `"pluginID\u{1}name"` —
+    /// an absolute top-left in the output's coordinate space. Persisted so a
+    /// moved window returns to where the user left it next launch.
+    private var positions: [String: CGPoint]
 
-    public init() {}
+    private static let positionsDefaultsKey = "miniwindow.positions"
+
+    public init() {
+        positions = Self.loadPositions()
+    }
 
     /// Scenes in a stable draw order (z-order, then name) — lower z first, so
     /// higher-z windows render on top.
@@ -51,6 +59,34 @@ public final class MiniWindowStore {
     private static func decode(_ data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// The user's saved placement for a window (drag-override), or `nil` to use
+    /// the plugin's own MUSHclient position.
+    func position(for scene: MiniWindowScene) -> CGPoint? {
+        positions[Self.key(scene.pluginID, scene.name)]
+    }
+
+    /// Record (and persist) a user drag of a window to `point`.
+    func setPosition(_ point: CGPoint, for scene: MiniWindowScene) {
+        positions[Self.key(scene.pluginID, scene.name)] = point
+        Self.savePositions(positions)
+    }
+
+    private static func key(_ pluginID: String, _ name: String) -> String {
+        "\(pluginID)\u{1}\(name)"
+    }
+
+    private static func loadPositions() -> [String: CGPoint] {
+        guard let data = UserDefaults.standard.data(forKey: positionsDefaultsKey),
+              let decoded = try? JSONDecoder().decode([String: CGPoint].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    private static func savePositions(_ positions: [String: CGPoint]) {
+        guard let data = try? JSONEncoder().encode(positions) else { return }
+        UserDefaults.standard.set(data, forKey: positionsDefaultsKey)
     }
 
     /// Look up a decoded image for a scene's `imageID` (Phase 3).

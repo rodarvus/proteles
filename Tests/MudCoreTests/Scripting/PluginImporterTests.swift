@@ -31,15 +31,16 @@ struct PluginImporterTests {
         #expect(r.findings.isEmpty)
     }
 
-    @Test("Miniwindow use is a soft note — still Ready (commands work; panel won't draw)")
+    @Test("Miniwindow use is a soft note — Proteles now draws these natively")
     func miniwindowNote() throws {
         let r = try report("""
         function OnPluginInstall() WindowCreate("w", 0, 0, 100, 100, 1, 0, 0) end
         """)
-        // A self-drawn window doesn't stop the plugin working, so it stays Ready
-        // and the heads-up is an info note, not a verdict-lowering warning.
+        // Miniwindows render natively now, so this stays Ready and the note is an
+        // informational heads-up (advanced effects are approximated).
         #expect(r.verdict == .ready)
         #expect(r.findings.contains { $0.severity == .info && $0.message.contains("pop-up window") })
+        #expect(r.findings.contains { $0.message.contains("natively") })
     }
 
     @Test("EnableTrigger and AddTriggerEx are fully supported (no findings)")

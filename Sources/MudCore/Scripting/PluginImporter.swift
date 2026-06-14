@@ -85,8 +85,10 @@ public enum PluginImporter {
         if script.range(of: "\\bWindow[A-Za-z]+\\b", options: .regularExpression) != nil {
             findings.append(.init(
                 severity: .info,
-                message: "Has its own pop-up window, which Proteles doesn't draw yet — "
-                    + "its commands and triggers still work, you just won't see that panel."
+                message: "Draws its own pop-up window — Proteles renders these natively "
+                    + "(text, shapes, images, clickable buttons; drag to move, position is "
+                    + "remembered). A few advanced effects (image filters, blend modes, "
+                    + "draw-behind-text) are approximated or skipped."
             ))
         }
         if contains(script, word: "luacom") {
