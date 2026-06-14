@@ -69,7 +69,9 @@ extension SessionController {
             restartTimerLoop()
             return
         }
-        await scriptEngine.unloadPlugin(id)
+        // Clear the plugin's miniwindows; reloadDiskPlugin re-runs its install,
+        // which recreates any it still draws.
+        await applyScriptEffects(scriptEngine.unloadPlugin(id))
         if id == DinvAssets.pluginID {
             dinvLoaded = false
             await loadPendingDinv()

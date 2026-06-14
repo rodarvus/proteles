@@ -51,8 +51,9 @@ function OnPluginInstall()
   WindowCreate(win, 0, 0, WIDTH, HEIGHT, miniwin.pos_top_center, 0, 0)
   WindowFont(win, "f", "Menlo", 12, false, false, false, false)
   draw()
-  -- Redraw once a second (MUSHclient AddTimer: h, m, s).
-  AddTimer("mw_gauge_tick", 0, 0, 1, "", timer_flag.Enabled, "draw()")
+  -- Redraw once a second. The AddTimer script arg is a FUNCTION NAME — MUSHclient
+  -- fires it as `draw(timerName)`, so pass "draw" (not "draw()").
+  AddTimer("mw_gauge_tick", 0, 0, 1, "", timer_flag.Enabled, "draw")
 end
 ]]>
 </script>
