@@ -99,6 +99,19 @@ public struct ConsiderFeature: NativePlugin {
     /// (empty when S&D isn't installed). Loaded once on connect.
     private var exceptions: [String: [String: String]] = [:]
 
+    // Roomchars-driven refresh (Aardwolf's `{roomchars}` tag block). The block
+    // fires on a heartbeat, so we re-consider only when the occupant *set*
+    // changes (room entry, a kill, an arrival), not on every block.
+    private var inRoomchars = false
+    private var roomcharsBuffer: [String] = []
+    private var lastRoomSignature: [String]?
+    /// Once we've seen a roomchars block, it (not `room.info`) drives refreshes.
+    private var sawRoomchars = false
+    private var roomcharsRequested = false
+    /// An occupant change arrived while not in a playing state (mid-combat); the
+    /// refresh is deferred until we return to a playing state.
+    private var pendingConsider = false
+
     public init() {}
 
     /// Load S&D's keyword exceptions (read-only) so click/batch targeting uses
@@ -129,18 +142,34 @@ public struct ConsiderFeature: NativePlugin {
         playerAlign = status.align
         let previous = playerState
         playerState = status.state
-
-        // Combat-end transition (fighting → playing): re-consider the new state
-        // of the room (some mobs may have died / fled).
         if status.state == 8 { wasInCombat = true }
+
         let nowPlaying = status.state.map(Self.playingStates.contains) ?? false
-        if nowPlaying, wasInCombat, previous != status.state {
-            wasInCombat = false
-            if settings.enabled, settings.autoOnCombatEnd {
-                return beginConsiderSequence()
-            }
+        guard nowPlaying else { return [] }
+
+        var effects: [ScriptEffect] = []
+        // Enable Aardwolf's roomchars tag once, post-login (a game command can't
+        // go pre-login). Idempotent if another plugin already enabled it.
+        if !roomcharsRequested {
+            roomcharsRequested = true
+            effects.append(.send("tags roomchars on"))
         }
-        return []
+        guard previous != status.state else { return effects }
+
+        // A refresh deferred during combat (occupants changed) fires now.
+        if pendingConsider {
+            pendingConsider = false
+            wasInCombat = false
+            if settings.enabled { effects += beginConsiderSequence() }
+            return effects
+        }
+        // Combat-end fallback — only when roomchars isn't the driver (otherwise
+        // an occupant change already triggered, or will, via the tag block).
+        if !sawRoomchars, wasInCombat {
+            wasInCombat = false
+            if settings.enabled, settings.autoOnCombatEnd { effects += beginConsiderSequence() }
+        }
+        return effects
     }
 
     private mutating func onRoomInfo(_ json: String) -> [ScriptEffect] {
@@ -150,7 +179,8 @@ public struct ConsiderFeature: NativePlugin {
         currentZone = room.zone
         isSafeRoom = room.details?.contains("safe") ?? false
 
-        guard movedRooms, settings.enabled, settings.autoOnEntry else { return [] }
+        // Once roomchars drives refreshes, room.info only tracks zone/safe state.
+        guard !sawRoomchars, movedRooms, settings.enabled, settings.autoOnEntry else { return [] }
         guard playerState.map(Self.playingStates.contains) ?? false else { return [] }
         return beginConsiderSequence()
     }
@@ -181,8 +211,26 @@ public struct ConsiderFeature: NativePlugin {
     // MARK: - Line ingestion
 
     public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
+        let trimmed = line.text.trimmingCharacters(in: .whitespaces)
+
+        // Aardwolf `{roomchars}…{/roomchars}` block: capture + gag it (so it's
+        // hidden even without S&D, which gags it too), then act on the end.
+        if trimmed == "{roomchars}" {
+            inRoomchars = true
+            roomcharsBuffer = []
+            return .init(gag: true)
+        }
+        if inRoomchars {
+            if trimmed == "{/roomchars}" {
+                inRoomchars = false
+                sawRoomchars = true
+                return .init(gag: true, effects: handleRoomchars(roomcharsBuffer))
+            }
+            roomcharsBuffer.append(trimmed)
+            return .init(gag: true)
+        }
+
         if model.considering {
-            let trimmed = line.text.trimmingCharacters(in: .whitespaces)
             if trimmed == "nhm" {
                 model.endConsider()
                 return .init(gag: true, effects: [publishEffect()])
@@ -204,6 +252,25 @@ public struct ConsiderFeature: NativePlugin {
         case .ignored:
             return .init()
         }
+    }
+
+    /// React to a completed roomchars block: re-consider only when the occupant
+    /// set changed (the block fires on a heartbeat). An empty room clears the
+    /// list; an occupant change while not in a playing state defers to combat-end.
+    private mutating func handleRoomchars(_ occupants: [String]) -> [ScriptEffect] {
+        guard occupants != lastRoomSignature else { return [] }
+        lastRoomSignature = occupants
+        if occupants.isEmpty {
+            model.clear()
+            statusNote = nil
+            return [publishEffect()]
+        }
+        guard settings.enabled, settings.autoOnEntry else { return [] }
+        if playerState.map(Self.playingStates.contains) ?? false {
+            return beginConsiderSequence()
+        }
+        pendingConsider = true
+        return []
     }
 
     // MARK: - Commands (conw…)
