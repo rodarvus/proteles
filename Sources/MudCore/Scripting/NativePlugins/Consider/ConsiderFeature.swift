@@ -51,8 +51,11 @@ struct ConsiderSettings: Codable, Equatable {
 ///
 /// Data source: like the original, the list comes from parsing `consider all`
 /// output (Aardwolf has no GMCP room-occupant list). Auto-refresh is driven by
-/// `room.info` (room change) and the combat-end `char.status` transition, never
-/// fired mid-combat / while running / note-writing.
+/// the `roomchars` tag feed when it's enabled (re-consider when the occupant set
+/// changes), falling back to `room.info` (room change) + the combat-end
+/// `char.status` transition. Never fired mid-combat / running / note-writing. The
+/// roomchars block is observed only — never gagged (it's the room's `look`
+/// display).
 public struct ConsiderFeature: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.consider",
@@ -107,7 +110,6 @@ public struct ConsiderFeature: NativePlugin {
     private var lastRoomSignature: [String]?
     /// Once we've seen a roomchars block, it (not `room.info`) drives refreshes.
     private var sawRoomchars = false
-    private var roomcharsRequested = false
     /// An occupant change arrived while not in a playing state (mid-combat); the
     /// refresh is deferred until we return to a playing state.
     private var pendingConsider = false
@@ -145,31 +147,21 @@ public struct ConsiderFeature: NativePlugin {
         if status.state == 8 { wasInCombat = true }
 
         let nowPlaying = status.state.map(Self.playingStates.contains) ?? false
-        guard nowPlaying else { return [] }
-
-        var effects: [ScriptEffect] = []
-        // Enable Aardwolf's roomchars tag once, post-login (a game command can't
-        // go pre-login). Idempotent if another plugin already enabled it.
-        if !roomcharsRequested {
-            roomcharsRequested = true
-            effects.append(.send("tags roomchars on"))
-        }
-        guard previous != status.state else { return effects }
+        guard nowPlaying, previous != status.state else { return [] }
 
         // A refresh deferred during combat (occupants changed) fires now.
         if pendingConsider {
             pendingConsider = false
             wasInCombat = false
-            if settings.enabled { effects += beginConsiderSequence() }
-            return effects
+            return settings.enabled ? beginConsiderSequence() : []
         }
         // Combat-end fallback — only when roomchars isn't the driver (otherwise
         // an occupant change already triggered, or will, via the tag block).
         if !sawRoomchars, wasInCombat {
             wasInCombat = false
-            if settings.enabled, settings.autoOnCombatEnd { effects += beginConsiderSequence() }
+            if settings.enabled, settings.autoOnCombatEnd { return beginConsiderSequence() }
         }
-        return effects
+        return []
     }
 
     private mutating func onRoomInfo(_ json: String) -> [ScriptEffect] {
@@ -213,21 +205,24 @@ public struct ConsiderFeature: NativePlugin {
     public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
         let trimmed = line.text.trimmingCharacters(in: .whitespaces)
 
-        // Aardwolf `{roomchars}…{/roomchars}` block: capture + gag it (so it's
-        // hidden even without S&D, which gags it too), then act on the end.
+        // Aardwolf `{roomchars}…{/roomchars}` block. OBSERVE only — never gag it:
+        // the occupant lines are the room's "Also here" display that `look`/entry
+        // shows, so suppressing them empties the room. The `{roomchars}` markers
+        // themselves are hidden by the display tag layer; we just watch the block
+        // to detect occupant changes.
         if trimmed == "{roomchars}" {
             inRoomchars = true
             roomcharsBuffer = []
-            return .init(gag: true)
+            return .init()
         }
         if inRoomchars {
             if trimmed == "{/roomchars}" {
                 inRoomchars = false
                 sawRoomchars = true
-                return .init(gag: true, effects: handleRoomchars(roomcharsBuffer))
+                return .init(effects: handleRoomchars(roomcharsBuffer))
             }
             roomcharsBuffer.append(trimmed)
-            return .init(gag: true)
+            return .init()
         }
 
         if model.considering {

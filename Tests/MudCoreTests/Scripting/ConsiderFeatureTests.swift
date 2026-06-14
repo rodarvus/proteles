@@ -15,12 +15,12 @@ struct ConsiderFeatureTests {
         Line(id: LineID(0), text: text)
     }
 
-    @Test("The roomchars block is gagged")
-    func gagsBlock() {
+    @Test("The roomchars block is observed but NOT gagged (look still shows occupants)")
+    func doesNotGagBlock() {
         var feature = playingFeature()
-        #expect(feature.onLine(line("{roomchars}")).gag)
-        #expect(feature.onLine(line("(R) a goblin is here.")).gag)
-        #expect(feature.onLine(line("{/roomchars}")).gag)
+        #expect(!feature.onLine(line("{roomchars}")).gag)
+        #expect(!feature.onLine(line("(R) a goblin is here.")).gag)
+        #expect(!feature.onLine(line("{/roomchars}")).gag)
     }
 
     @Test("A new occupant set triggers a consider-all")
