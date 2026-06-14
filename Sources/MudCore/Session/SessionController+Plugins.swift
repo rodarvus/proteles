@@ -98,7 +98,7 @@ public extension SessionController {
         guard connection != nil else { return }
         if let directory { pendingInitialPluginDirectories.removeAll { $0 == directory } }
         guard let scriptEngine, loadedPluginPaths[id] != nil else { return }
-        await scriptEngine.unloadPlugin(id)
+        await applyScriptEffects(scriptEngine.unloadPlugin(id)) // remove its miniwindows
         loadedPluginPaths[id] = nil
         await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map(\.code.path))
     }

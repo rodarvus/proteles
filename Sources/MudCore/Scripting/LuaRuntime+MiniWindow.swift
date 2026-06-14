@@ -63,6 +63,20 @@ extension LuaRuntime {
         }
     }
 
+    /// Drop every miniwindow a plugin owns (on unload/reload) and return the
+    /// `.deleteMiniWindow` effects so the UI removes them — otherwise a removed
+    /// plugin's windows linger on screen (its scenes persist in the runtime, and
+    /// it may not define an `OnPluginClose` that calls `WindowDelete`).
+    nonisolated func removeMiniWindows(ownedBy pluginID: String) -> [ScriptEffect] {
+        let owned = miniWindows.filter { $0.value.pluginID == pluginID }.keys.sorted()
+        for name in owned {
+            miniWindows[name] = nil
+            miniWindowsDirty.remove(name)
+            miniWindowFramePainted.remove(name)
+        }
+        return owned.map { .deleteMiniWindow(name: $0) }
+    }
+
     /// Reset the per-run frame bookkeeping (called at the start of `run`/
     /// `callGlobal`). Scene state itself persists across runs.
     nonisolated func beginMiniWindowPass() {

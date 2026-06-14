@@ -42,6 +42,29 @@ struct MiniWindowPluginTests {
         #expect(scene?.hotspots.first?.mouseUp == "onUp")
     }
 
+    @Test("unloading a plugin emits deleteMiniWindow for each window it owned")
+    func unloadRemovesWindows() async throws {
+        let xml = """
+        <muclient><plugin id="cccccccccccccccccccccccc" name="MWUnload"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          WindowCreate("u1", 0, 0, 40, 40, 4, 0, 0)
+          WindowCreate("u2", 0, 0, 40, 40, 8, 0, 0)
+        end
+        ]]></script>
+        </muclient>
+        """
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        _ = await engine.loadPlugin(plugin)
+        let effects = await engine.unloadPlugin("cccccccccccccccccccccccc")
+        let deleted = Set(effects.compactMap { effect -> String? in
+            if case .deleteMiniWindow(let name) = effect { return name }
+            return nil
+        })
+        #expect(deleted == ["u1", "u2"])
+    }
+
     @Test("the owning plugin id flows onto the hotspot, so dispatch can route back")
     func ownerRecorded() async throws {
         let xml = """

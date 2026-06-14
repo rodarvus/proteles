@@ -131,7 +131,10 @@ extension ScriptEngine {
     /// and forgets it from the load order. Idempotent: unloading an unknown id
     /// is a no-op. State that lives outside the engine (scoped variables, the
     /// plugin's own SQLite DB) is intentionally preserved across the reload.
-    public func unloadPlugin(_ id: String) async {
+    /// Returns any `.deleteMiniWindow` effects for windows the plugin had drawn,
+    /// so the caller can clear them from the UI.
+    @discardableResult
+    public func unloadPlugin(_ id: String) async -> [ScriptEffect] {
         let ownedIDs = Set(automationOwners.filter { $0.value == id }.keys)
         for ownedID in ownedIDs {
             triggers.remove(id: ownedID)
@@ -143,7 +146,9 @@ extension ScriptEngine {
         aliasIDsByName = aliasIDsByName.filter { !ownedIDs.contains($0.value) }
         timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
         loadedPluginIDs.removeAll { $0 == id }
+        let windowEffects = await runtime.removeMiniWindows(ownedBy: id)
         await runtime.clearPluginEnvironment(id)
+        return windowEffects
     }
 
     /// True when `id` names a registered native (Swift) plugin (so the host can
