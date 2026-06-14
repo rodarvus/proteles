@@ -31,6 +31,10 @@ public final class ScriptsModel {
     public private(set) var keypad = Keypad()
     /// Transient on/off state for toggle buttons (not persisted).
     public var buttonToggleStates: [UUID: Bool] = [:]
+    /// The world's scoped variables (≈ MUSHclient Get/SetVariable), flattened
+    /// for the Variables tab (#69). `internal(set)` so `ScriptsModel+Variables`
+    /// can refresh it from its own file.
+    public internal(set) var variables: [VariableEntry] = []
 
     public var selectedTriggerID: UUID?
     public var selectedAliasID: UUID?
@@ -38,6 +42,8 @@ public final class ScriptsModel {
     public var selectedMacroID: UUID?
     public var selectedButtonGroupID: UUID?
     public var selectedButtonID: UUID?
+    /// The selected variable's id (`scope` + name — see ``VariableEntry``).
+    public var selectedVariableID: VariableEntry.ID?
     /// Bumped by ``requestButtonsTab()`` — the Scripts window watches it and
     /// switches to the Buttons tab (the command-bar panel's empty state links
     /// straight to the editor, D-106).
@@ -98,6 +104,7 @@ public final class ScriptsModel {
         // written through as variables change).
         if let variableURL = try? VariableStore.defaultStoreURL(forProfile: id) {
             await session.attachVariableStore(VariableStore(url: variableURL))
+            await refreshVariables()
         }
         // Hydrate the native plugins' per-world state (e.g. #sub/#gag rules)
         // and enabled flags.

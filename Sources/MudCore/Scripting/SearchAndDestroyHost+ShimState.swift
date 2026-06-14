@@ -152,4 +152,15 @@ public extension SearchAndDestroyHost {
     func variablesSnapshot() async -> [String: [String: String]] {
         await runtime.variablesSnapshot()
     }
+
+    /// Set (or create) a variable in an explicit scope (the Variables editor's
+    /// host path, #69), marking it dirty so the session persists it.
+    func setVariableValue(scope: String, name: String, value: String) async {
+        await runtime.setVariableValue(scope: scope, name: name, value: value)
+    }
+
+    /// Delete a variable from an explicit scope (#69), marking it dirty.
+    func deleteVariableValue(scope: String, name: String) async {
+        await runtime.deleteVariableValue(scope: scope, name: name)
+    }
 }

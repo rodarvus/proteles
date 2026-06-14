@@ -22,7 +22,7 @@ public struct ScriptsView: View {
     /// Which tab is frontmost — drives the ⌘N/⌘D routing (the shortcut
     /// belongs to the visible tab's toolbar only, so the chord is unambiguous).
     enum Tab: Hashable {
-        case triggers, aliases, timers, macros, keypad, buttons
+        case triggers, aliases, timers, macros, keypad, buttons, variables
     }
 
     @Bindable var model: ScriptsModel
@@ -32,6 +32,7 @@ public struct ScriptsView: View {
     @State var timerQuery = ""
     @State var macroQuery = ""
     @State var buttonQuery = ""
+    @State var variableQuery = ""
     @State var deleteRequest: ScriptsDeleteRequest?
     /// The button group being renamed (D-106) — renaming is an explicit
     /// context-menu act, not an always-editable header field.
@@ -66,6 +67,9 @@ public struct ScriptsView: View {
             buttonsTab
                 .tabItem { Label("Buttons", systemImage: "rectangle.grid.2x2") }
                 .tag(Tab.buttons)
+            variablesTab
+                .tabItem { Label("Variables", systemImage: "curlybraces") }
+                .tag(Tab.variables)
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle("Scripts")
@@ -97,7 +101,7 @@ public struct ScriptsView: View {
     /// The tabs that have a filter field (only Keypad doesn't — 17 keys
     /// need no search).
     private var filterableTabs: Set<Tab> {
-        [.triggers, .aliases, .timers, .macros, .buttons]
+        [.triggers, .aliases, .timers, .macros, .buttons, .variables]
     }
 
     // MARK: - Delete confirmation
@@ -127,6 +131,9 @@ public struct ScriptsView: View {
             await model.deleteButton(id)
         case .deleteButtonGroup(let id):
             await model.deleteButtonGroup(id)
+        case .deleteVariable(let id):
+            model.selectedVariableID = id
+            await model.deleteSelectedVariable()
         case .restoreDefaultKeypad:
             await model.restoreDefaultKeypad()
         }
