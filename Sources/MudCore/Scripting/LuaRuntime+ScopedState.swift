@@ -86,6 +86,22 @@ public extension LuaRuntime {
         return dirtyVariableScopes
     }
 
+    /// Set (or create) a variable in an explicit scope, marking the scope
+    /// dirty so the host persists it. Distinct from the Lua-facing `setVar`,
+    /// which always targets `currentVariableScope`: this is the host path the
+    /// Variables editor uses to write any scope directly (#69).
+    func setVariableValue(scope: String, name: String, value: String) {
+        variables[scope, default: [:]][name] = value
+        dirtyVariableScopes.insert(scope)
+    }
+
+    /// Delete a variable from an explicit scope, marking it dirty. The host
+    /// path behind the Variables editor's delete (#69).
+    func deleteVariableValue(scope: String, name: String) {
+        variables[scope]?[name] = nil
+        dirtyVariableScopes.insert(scope)
+    }
+
     /// `proteles.varList([scope])` → a fresh Lua table `{name = value, …}` of a
     /// scope's variables, backing MUSHclient's `GetVariableList()` (current
     /// scope, when the arg is empty) and `GetPluginVariableList(id)` (the named

@@ -58,6 +58,7 @@ struct ScriptsDeleteRequest {
         case deleteMacro(UUID)
         case deleteButton(UUID)
         case deleteButtonGroup(UUID)
+        case deleteVariable(VariableEntry.ID)
         case restoreDefaultKeypad
     }
 
@@ -126,6 +127,17 @@ struct ScriptsDeleteRequest {
             confirmLabel: "Delete Group",
             message: "This deletes the group and all \(group.buttons.count) "
                 + "button(s) in it. \(noUndo)"
+        )
+    }
+
+    static func variable(_ entry: VariableEntry) -> Self {
+        Self(
+            action: .deleteVariable(entry.id),
+            title: entry.name.isEmpty
+                ? "Delete this variable?" : "Delete the variable “\(entry.name)”?",
+            confirmLabel: "Delete Variable",
+            message: "This removes it from this world and the running session. "
+                + noUndo
         )
     }
 
