@@ -66,12 +66,14 @@ struct VariablesModelTests {
         #expect(model.variables.isEmpty)
     }
 
-    @Test("refreshVariables sorts the user scope ahead of plugin scopes")
-    func sorting() async throws {
+    @Test("refreshVariables shows only the user scope — plugin variables excluded")
+    func userScopeOnly() async throws {
         let model = try await Self.makeModel()
         await model.session.setVariable(scope: "pluginZ", name: "z", value: "1")
         await model.session.setVariable(scope: VariableEntry.userScope, name: "a", value: "1")
         await model.refreshVariables()
+        #expect(model.variables.count == 1)
         #expect(model.variables.first?.scope == VariableEntry.userScope)
+        #expect(model.variables.first?.name == "a")
     }
 }

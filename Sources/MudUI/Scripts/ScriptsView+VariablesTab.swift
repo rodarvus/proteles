@@ -1,105 +1,67 @@
 import MudCore
 import SwiftUI
 
-/// The Scripts window's Variables tab (#69): a filterable list of the world's
-/// scoped variables (≈ MUSHclient Game ▸ Configure ▸ Variables) + a name/value
-/// editor. Split into its own file like the Buttons tab. Variables aren't in the
-/// script document, so this tab talks to the session's variable API directly
-/// (``ScriptsModel+Variables``) rather than the per-tab Add/Duplicate/scope
-/// toolbar the other tabs share — there's no "shared vs per-character" axis and
-/// duplicating a variable makes no sense, so the toolbar is just Add + Delete.
+/// The Scripts window's Variables tab (#69): the user's own world variables
+/// (the `_user` scope — see ``ScriptsModel/refreshVariables()``), shown as a
+/// native two-column **Name | Value** table you edit in place — the same shape
+/// as MUSHclient's Game ▸ Configure ▸ Variables page. A plain list+detail split
+/// wasted the whole right pane on a two-field record; a ``Table`` shows every
+/// variable's name and value at once and edits inline. Plugin/S&D variables are
+/// deliberately absent (their plugins own them; hand-editing live state corrupts
+/// them), so the list is empty until you create a variable.
 extension ScriptsView {
     private var filteredVariables: [VariableEntry] {
         guard !variableQuery.isEmpty else { return model.variables }
         return model.variables.filter { entry in
             entry.name.localizedCaseInsensitiveContains(variableQuery)
                 || entry.value.localizedCaseInsensitiveContains(variableQuery)
-                || Self.scopeLabel(entry.scope).localizedCaseInsensitiveContains(variableQuery)
         }
     }
 
     var variablesTab: some View {
-        NavigationSplitView {
-            Group {
-                if model.variables.isEmpty {
-                    emptyList(
-                        "No Variables",
-                        systemImage: "curlybraces",
-                        blurb: "A variable stores a named value your scripts and "
-                            + "plugins can read and set (MUSHclient Get/SetVariable).",
-                        addLabel: "Add Variable",
-                        add: { await model.addVariable() }
-                    )
-                } else if filteredVariables.isEmpty {
-                    ContentUnavailableView.search(text: variableQuery)
-                } else {
-                    variablesList
+        Group {
+            if model.variables.isEmpty {
+                ContentUnavailableView {
+                    Label("No Variables", systemImage: "curlybraces")
+                } description: {
+                    Text("A variable stores a named value your scripts and aliases "
+                        + "can read and set (MUSHclient Get/SetVariable). Plugins keep "
+                        + "their own variables privately.")
+                } actions: {
+                    Button("Add Variable") { Task { await model.addVariable() } }
                 }
-            }
-            .searchable(text: $variableQuery, placement: .sidebar, prompt: "Filter")
-            .searchFocused($filterFocus, equals: .variables)
-            .navigationSplitViewColumnWidth(min: 200, ideal: 260)
-            .task { await model.refreshVariables() }
-            .toolbar { variablesToolbar }
-        } detail: {
-            // Single-line `if let` (via this helper) so swiftformat doesn't wrap
-            // the opening brace onto its own line, which swiftlint then rejects.
-            if let inputs = variableDetailInputs() {
-                VariableEditorView(
-                    entry: inputs.entry,
-                    value: inputs.value,
-                    rename: { newName in await model.renameVariable(id: inputs.entry.id, to: newName) }
-                )
-                .id(inputs.entry.id)
+            } else if filteredVariables.isEmpty {
+                ContentUnavailableView.search(text: variableQuery)
             } else {
-                unavailable("No Variable Selected", systemImage: "curlybraces")
+                variablesTable
             }
         }
+        .searchable(text: $variableQuery, placement: .automatic, prompt: "Filter")
+        .searchFocused($filterFocus, equals: .variables)
+        .task { await model.refreshVariables() }
+        .toolbar { variablesToolbar }
     }
 
-    /// The selected variable's entry + a binding to its value, or nil when
-    /// nothing (valid) is selected — collapsed into one optional so the detail
-    /// view's `if let` stays a single line (see the brace note above).
-    private func variableDetailInputs() -> (entry: VariableEntry, value: Binding<String>)? {
-        guard let id = model.selectedVariableID,
-              let entry = model.variableEntry(id),
-              let value = model.valueBinding(forVariable: id)
-        else { return nil }
-        return (entry, value)
-    }
-
-    private var variablesList: some View {
-        List(selection: $model.selectedVariableID) {
-            ForEach(filteredVariables) { entry in
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 8) {
-                        Text(entry.name)
-                            .font(.body.monospaced())
-                            .lineLimit(1)
-                        Spacer()
-                        if !entry.isUserScope {
-                            Text(Self.scopeLabel(entry.scope))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(.quaternary, in: Capsule())
-                                .lineLimit(1)
-                        }
-                    }
-                    Text(entry.value.isEmpty ? "—" : entry.value)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+    private var variablesTable: some View {
+        Table(filteredVariables, selection: $model.selectedVariableID) {
+            TableColumn("Name") { entry in
+                VariableNameCell(name: entry.name) { newName in
+                    await model.renameVariable(id: entry.id, to: newName)
                 }
-                .padding(.vertical, 2)
-                .tag(entry.id)
-                .contextMenu {
-                    Button("Delete", role: .destructive) { deleteRequest = .variable(entry) }
-                }
+            }
+            .width(min: 160, ideal: 220)
+            TableColumn("Value") { entry in
+                VariableValueCell(
+                    value: model.valueBinding(forVariable: entry.id) ?? .constant(entry.value)
+                )
             }
         }
         .onDeleteCommandCompat { confirmDeleteSelectedVariable() }
+        .contextMenu(forSelectionType: VariableEntry.ID.self) { ids in
+            if let id = ids.first, let entry = model.variableEntry(id) {
+                Button("Delete", role: .destructive) { deleteRequest = .variable(entry) }
+            }
+        }
     }
 
     @ToolbarContentBuilder
@@ -127,14 +89,55 @@ extension ScriptsView {
         else { return }
         deleteRequest = .variable(entry)
     }
+}
 
-    /// A human-readable scope label: the user scope reads "World", S&D is named,
-    /// other plugin scopes show their (opaque) id — the editor shows it in full.
-    static func scopeLabel(_ scope: String) -> String {
-        switch scope {
-        case VariableEntry.userScope: "World"
-        case SearchAndDestroyHost.pluginID: "Search-and-Destroy"
-        default: "Plugin"
+/// The editable Name cell: a local draft that commits on Return (or when the
+/// field loses focus), so typing a new name doesn't rename per keystroke —
+/// rename is a delete-then-add, which would otherwise leave a trail of partial
+/// variables. A fresh row (the id is `scope` + name) re-creates this cell, so
+/// the draft tracks the current name.
+private struct VariableNameCell: View {
+    let name: String
+    let rename: (String) async -> Void
+    @State private var draft: String
+    @FocusState private var focused: Bool
+
+    init(name: String, rename: @escaping (String) async -> Void) {
+        self.name = name
+        self.rename = rename
+        _draft = State(initialValue: name)
+    }
+
+    var body: some View {
+        TextField("Name", text: $draft)
+            .labelsHidden()
+            .font(.body.monospaced())
+            .focused($focused)
+            .onSubmit { commit() }
+            .onChange(of: focused) { _, isFocused in
+                if !isFocused { commit() }
+            }
+    }
+
+    private func commit() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != name else {
+            draft = name // revert an empty/unchanged edit
+            return
         }
+        Task { await rename(trimmed) }
+    }
+}
+
+/// The editable Value cell: binds straight through to the runtime + store
+/// (persists as you type, like the trigger/alias editors). Values are plain
+/// text, exactly like MUSHclient's Get/SetVariable.
+private struct VariableValueCell: View {
+    @Binding var value: String
+
+    var body: some View {
+        TextField("Value", text: $value)
+            .labelsHidden()
+            .font(.body.monospaced())
     }
 }
