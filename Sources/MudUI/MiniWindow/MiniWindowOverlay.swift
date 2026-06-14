@@ -24,22 +24,33 @@ public struct MiniWindowOverlay: View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 ForEach(visibleScenes) { scene in
-                    windowView(scene, container: geo.size)
+                    MiniWindowFrame(scene: scene, store: store, container: geo.size, onEvent: onEvent)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
-        // The layer itself never intercepts; only hotspot regions do (Phase 2).
-        .allowsHitTesting(true)
     }
 
     private var visibleScenes: [MiniWindowScene] {
         store.orderedScenes.filter { $0.visible && $0.width > 0 && $0.height > 0 }
     }
+}
 
-    private func windowView(_ scene: MiniWindowScene, container: CGSize) -> some View {
-        let origin = scene.origin(in: container)
-        return MiniWindowCanvasView(
+/// One positioned, draggable miniwindow. Renders the scene + hotspots, and lets
+/// the user drag the window by any non-hotspot area (the hotspot layer, on top,
+/// claims clicks on its regions first). The dragged position is persisted, so it
+/// returns there next launch — a Proteles nicety the GDI original lacks. Held in
+/// its own view so the live-drag `@GestureState` is per-window.
+private struct MiniWindowFrame: View {
+    let scene: MiniWindowScene
+    let store: MiniWindowStore
+    let container: CGSize
+    let onEvent: (MiniWindowEvent) -> Void
+    @GestureState private var drag: CGSize = .zero
+
+    var body: some View {
+        let base = store.position(for: scene) ?? scene.origin(in: container)
+        MiniWindowCanvasView(
             scene: scene,
             imageProvider: { store.image(pluginID: scene.pluginID, imageID: $0) }
         )
@@ -47,6 +58,27 @@ public struct MiniWindowOverlay: View {
         .overlay { MiniWindowHotspotLayer(scene: scene, onEvent: onEvent) }
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .shadow(color: .black.opacity(0.28), radius: 6, y: 2)
-        .offset(x: origin.x, y: origin.y)
+        .offset(x: base.x + drag.width, y: base.y + drag.height)
+        // Global space so moving the view via `.offset` doesn't feed back into
+        // the drag (the FloatingMiniWindow lesson). A small threshold lets a
+        // click on a hotspot still register as a click, not a drag.
+        .gesture(
+            DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                .updating($drag) { value, state, _ in state = value.translation }
+                .onEnded { value in
+                    store.setPosition(clamp(base: base, translation: value.translation), for: scene)
+                }
+        )
+    }
+
+    /// Keep the dragged window within the output bounds (its top-left stays on
+    /// screen, leaving room for the window itself).
+    private func clamp(base: CGPoint, translation: CGSize) -> CGPoint {
+        let maxX = max(0, container.width - CGFloat(scene.width))
+        let maxY = max(0, container.height - CGFloat(scene.height))
+        return CGPoint(
+            x: min(max(0, base.x + translation.width), maxX),
+            y: min(max(0, base.y + translation.height), maxY)
+        )
     }
 }
