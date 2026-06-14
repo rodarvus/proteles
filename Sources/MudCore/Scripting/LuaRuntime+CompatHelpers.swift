@@ -18,6 +18,7 @@ extension LuaRuntime {
         "commas": commasSource,
         "pairsbykeys": pairsByKeysSource,
         "serialize": serializeSource,
+        "var": varSource,
         "json": jsonSource,
         "aardwolf_colors": aardwolfColorsSource,
         "addxml": addxmlSource,
@@ -284,6 +285,32 @@ extension LuaRuntime {
       return name .. " = " .. literal(value)
     end
     return serialize
+    """
+
+    /// `var` (clean-room): the MUSHclient `var` table (gammon.com.au forum 4904),
+    /// a metatable over `Get/Set/DeleteVariable` so `var.foo = "x"` persists and
+    /// `var.foo` reads it back (`var.foo = nil` deletes). The accessors resolve
+    /// the global `GetVariable`/`SetVariable`/`DeleteVariable` lazily at call
+    /// time, so the compat shim having defined them already is all this needs.
+    /// Non-string values are `tostring`'d on write, matching the reference (and
+    /// our string-only store); a bad name raises, like the original.
+    private static let varSource = """
+    var = {}
+    setmetatable(var, {
+      __index = function(_, name) return GetVariable(name) end,
+      __newindex = function(_, name, value)
+        local result
+        if value == nil then
+          result = DeleteVariable(name)
+        else
+          result = SetVariable(name, tostring(value))
+        end
+        if result == error_code.eInvalidObjectLabel then
+          error("Bad variable name '" .. name .. "'", 2)
+        end
+      end,
+    })
+    return var
     """
 
     /// `json.encode(value)` / `json.decode(text)` over Foundation (via the

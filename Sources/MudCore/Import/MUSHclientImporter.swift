@@ -143,6 +143,13 @@ public enum MUSHclientImporter {
             into: pluginEnv
         )
 
+        // 3a. World-level variables → the `_user` scope, so a migrant's own
+        // GetVariable/`var.foo` state (defined on the world, not a plugin)
+        // survives the move. Merged after plugins, which write disjoint scopes.
+        if !world.variables.isEmpty {
+            try await variables.update(scope: "_user", variables: world.variables)
+        }
+
         // 3b. Plugin-owned data files travel with their plugin → the runtime DB
         // dir (Databases/<character>/), so the plugin finds them after import.
         problems += copyPluginDataFiles(

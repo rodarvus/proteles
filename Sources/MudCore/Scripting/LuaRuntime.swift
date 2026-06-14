@@ -344,6 +344,7 @@ public actor LuaRuntime {
         setHostFunction("info", .info)
         setHostFunction("pluginID", .pluginID)
         setHostFunction("getPluginVar", .getPluginVar)
+        setHostFunction("varList", .varList)
         setHostFunction("__compile", .compileChunk)
         setHostFunction("__moduleSource", .moduleSource)
         setHostFunction("sendGMCP", .sendGMCP)
@@ -420,7 +421,7 @@ public actor LuaRuntime {
         case .call:
             guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
             return invokeFunction(ref, payload: Array(arguments.dropFirst()))
-        case .getVar, .setVar, .deleteVar, .getPluginVar:
+        case .getVar, .setVar, .deleteVar, .getPluginVar, .varList:
             return accessVariable(function, arguments)
         case .compileChunk:
             return compileChunk(arguments)
@@ -456,6 +457,9 @@ public actor LuaRuntime {
         case .getPluginVar:
             // arg0 is the target scope (plugin id), arg1 the variable name.
             return [variables[name]?[Self.argString(arguments, 1)].map { LuaValue.string($0) } ?? .nil]
+        case .varList:
+            // arg0 is the scope (empty → current); returns a {name=value} table.
+            return variableList(arguments)
         default:
             break
         }

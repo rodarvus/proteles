@@ -101,6 +101,44 @@ struct MUSHclientImporterTests {
         ))
     }
 
+    @Test("world-level variables seed the _user scope on import")
+    func worldVariablesSeedUserScope() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let env = makeEnv(root: root, scriptsDir: root.appendingPathComponent("Scripts"))
+        try await env.profiles.load()
+        try await env.library.load()
+        var world = makeWorld()
+        world.variables = ["target": "kobold", "autosac": "on"]
+        var manifest = makeManifest(
+            pluginXML: root.appendingPathComponent("unused.xml"),
+            dbSrc: root.appendingPathComponent("unused.db")
+        )
+        manifest.plugins = []
+        manifest.databases = []
+        manifest.stateFiles = []
+
+        let result = try await MUSHclientImporter.run(
+            world: world,
+            manifest: manifest,
+            selection: .init(
+                importScriptsAndKeypad: false,
+                pluginIncludes: [],
+                databasePaths: [],
+                target: .newProfile(name: "Aardwolf (imported)"),
+                character: "Hero"
+            ),
+            into: env
+        )
+        #expect(result.problems.isEmpty)
+
+        let vars = VariableStore(url: root.appendingPathComponent("vars-\(result.profileID).json"))
+        try await vars.load()
+        #expect(await vars.scopes["_user"] == ["target": "kobold", "autosac": "on"])
+    }
+
     @Test("map background textures copy to MapImages — never clobbering existing files")
     func mapImages() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

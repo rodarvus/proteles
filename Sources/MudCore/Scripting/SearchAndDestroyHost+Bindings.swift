@@ -232,8 +232,9 @@ extension SearchAndDestroyHost {
     function DeleteTrigger(...) return 0 end
     function GetTriggerList() return {} end
     function GetTriggerInfo(...) return nil end
-    function GetVariableList() return {} end
-    function GetPluginVariable(...) return nil end
+    function GetVariableList() return proteles.varList() end
+    function GetPluginVariableList(id) return proteles.varList(id) end
+    function GetPluginVariable(id, name) return proteles.getPluginVar(id, name) end
     function SetClipboard(...) return 0 end
 
     -- MUSHclient send-target constants (submodules/mushclient/OtherTypes.h). S&D passes

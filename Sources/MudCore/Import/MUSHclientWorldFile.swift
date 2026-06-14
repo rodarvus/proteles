@@ -44,6 +44,11 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
     public var triggers: [ScriptRule]
     /// World-level `<timer>` rules, in document order.
     public var timers: [Timer]
+    /// World-level `<variable name="…">value</variable>` entries (those defined on
+    /// the world itself, not a plugin) → name → value. On import these seed the
+    /// `_user` variable scope, so a migrant's `GetVariable`/`var.foo` state
+    /// survives the move. See `submodules/mushclient/xml/xml_load_world.cpp`.
+    public var variables: [String: String]
 
     public init(
         worldID: String = "",
@@ -57,7 +62,8 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         pluginIncludes: [String] = [],
         aliases: [ScriptRule] = [],
         triggers: [ScriptRule] = [],
-        timers: [Timer] = []
+        timers: [Timer] = [],
+        variables: [String: String] = [:]
     ) {
         self.worldID = worldID
         self.name = name
@@ -71,6 +77,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         self.aliases = aliases
         self.triggers = triggers
         self.timers = timers
+        self.variables = variables
     }
 
     /// A world-level `<timer>` as stored in the `.mcl`. Either an interval timer
@@ -213,6 +220,10 @@ public enum MUSHclientWorldParser {
         private var pendingTimer: MUSHclientWorldFile.Timer?
         private var inSend = false
         private var sendBuffer = ""
+        private var pendingVariableName: String?
+        private var pendingVariableTrim = false
+        private var inVariable = false
+        private var variableBuffer = ""
 
         private static func timer(from attrs: [String: String]) -> MUSHclientWorldFile.Timer {
             func num(_ key: String) -> Double {
@@ -283,6 +294,13 @@ public enum MUSHclientWorldParser {
                 || pendingRule != nil || pendingTimer != nil:
                 inSend = true
                 sendBuffer = ""
+            case "variable":
+                // `<variable name="…" [trim="y"]>value</variable>` — value is the
+                // element's text node (mirrors Load_Variables_XML's `trim`).
+                pendingVariableName = attrs["name"].flatMap { $0.isEmpty ? nil : $0 }
+                pendingVariableTrim = attrs["trim"]?.lowercased() == "y"
+                inVariable = pendingVariableName != nil
+                variableBuffer = ""
             case "include" where attrs["plugin"]?.lowercased() == "y":
                 if let name = attrs["name"], !name.isEmpty { world.pluginIncludes.append(name) }
             default:
@@ -292,10 +310,13 @@ public enum MUSHclientWorldParser {
 
         func parser(_: XMLParser, foundCharacters string: String) {
             if inSend { sendBuffer += string }
+            if inVariable { variableBuffer += string }
         }
 
         func parser(_: XMLParser, foundCDATA CDATABlock: Data) {
-            if inSend, let string = String(data: CDATABlock, encoding: .utf8) { sendBuffer += string }
+            guard let string = String(data: CDATABlock, encoding: .utf8) else { return }
+            if inSend { sendBuffer += string }
+            if inVariable { variableBuffer += string }
         }
 
         /// Decode MUSHclient's stored password (base64 when `password_base64="y"`).
@@ -345,6 +366,14 @@ public enum MUSHclientWorldParser {
             case "timer":
                 pendingTimer.map { world.timers.append($0) }
                 pendingTimer = nil
+            case "variable" where inVariable:
+                inVariable = false
+                if let name = pendingVariableName {
+                    world.variables[name] = pendingVariableTrim
+                        ? variableBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                        : variableBuffer
+                }
+                pendingVariableName = nil
             default:
                 break
             }

@@ -85,4 +85,27 @@ public extension LuaRuntime {
         defer { dirtyVariableScopes.removeAll() }
         return dirtyVariableScopes
     }
+
+    /// `proteles.varList([scope])` → a fresh Lua table `{name = value, …}` of a
+    /// scope's variables, backing MUSHclient's `GetVariableList()` (current
+    /// scope, when the arg is empty) and `GetPluginVariableList(id)` (the named
+    /// plugin's scope). An unknown/empty scope yields an empty table — never
+    /// nil — matching MUSHclient, where both calls always return a table.
+    ///
+    /// Built directly on the Lua stack and handed back through the registry-ref
+    /// bridge (like ``jsonDecode``), since ``LuaValue`` has no table case. Runs
+    /// inside `lua_pcall` on the executor, hence `nonisolated`.
+    nonisolated func variableList(_ arguments: [LuaValue]) -> [LuaValue] {
+        let requested = Self.argString(arguments, 0)
+        let scope = requested.isEmpty ? currentVariableScope : requested
+        let entries = variables[scope] ?? [:]
+        lua_createtable(state, 0, Int32(entries.count))
+        for (name, value) in entries {
+            lua_pushstring(state, value)
+            lua_setfield(state, -2, name)
+        }
+        let ref = luaL_ref(state, LUA_REGISTRYINDEX) // pops the table, stores it
+        noteTransientRef(ref)
+        return [.functionRef(ref)]
+    }
 }

@@ -21,6 +21,12 @@ struct MUSHclientWorldFileTests {
     <include name="aard_GMCP_mapper.xml" plugin="y" />
     <include name="dinv\\dinv.xml" plugin="y" />
     <include name="not_a_plugin.xml" />
+    <!-- variables -->
+    <variables muclient_version="5.07-pre" world_file_version="15">
+      <variable name="target">kobold</variable>
+      <variable name="autosac" trim="y">  on  </variable>
+      <variable name="">ignored</variable>
+    </variables>
     </muclient>
     """
 
@@ -36,6 +42,13 @@ struct MUSHclientWorldFileTests {
         ])
         // Only plugin="y" includes; Windows-style subdir path preserved verbatim.
         #expect(world.pluginIncludes == ["aard_GMCP_mapper.xml", #"dinv\dinv.xml"#])
+    }
+
+    @Test("parses world-level variables (text content; trim; skips nameless)")
+    func parsesVariables() throws {
+        let world = try #require(MUSHclientWorldParser.parse(Data(Self.mcl.utf8)))
+        // `trim="y"` strips surrounding whitespace; a nameless variable is dropped.
+        #expect(world.variables == ["target": "kobold", "autosac": "on"])
     }
 }
 
