@@ -72,12 +72,12 @@ struct PluginImporterTests {
 
     @Test("A required helper that wasn't included is one actionable warning")
     func helperMissingWarns() throws {
-        let r = try report(#"local u = require "aardutils"; local v = require "var""#)
+        let r = try report(#"local u = require "aardutils"; local d = require "plugindeps""#)
         #expect(r.verdict == .needsAttention)
         let warnings = r.findings.filter { $0.severity == .warning }
         #expect(warnings.count == 1) // consolidated, not one-per-file
         #expect(warnings.first?.message.contains("aardutils.lua") == true)
-        #expect(warnings.first?.message.contains("var.lua") == true)
+        #expect(warnings.first?.message.contains("plugindeps.lua") == true)
         #expect(warnings.first?.message.contains("whole plugin folder") == true)
     }
 

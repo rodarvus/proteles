@@ -287,6 +287,10 @@ public extension LuaRuntime {
     end
     function DeleteVariable(name) proteles.deleteVar(name); return error_code.eOK end
     function GetPluginVariable(id, name) return proteles.getPluginVar(id, name) end
+    -- Both always return a table (empty when the scope has no variables),
+    -- matching MUSHclient — callers iterate the result without a nil guard.
+    function GetVariableList() return proteles.varList() end
+    function GetPluginVariableList(id) return proteles.varList(id) end
 
     -- Introspection ---------------------------------------------------------
     function GetInfo(n) return proteles.info(n) end

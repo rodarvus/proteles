@@ -23,6 +23,7 @@ extension LuaRuntime {
         case info
         case pluginID
         case getPluginVar
+        case varList
         case compileChunk
         case moduleSource
         case sendGMCP

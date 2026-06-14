@@ -46,6 +46,29 @@ struct LuaRuntimeVariableTests {
         #expect(await lua.takeDirtyVariableScopes().isEmpty)
     }
 
+    @Test("varList returns the current scope's variables as a name→value table")
+    func varListCurrentScope() async throws {
+        let lua = try LuaRuntime()
+        try await lua.run("proteles.setVar('a', '1'); proteles.setVar('b', '2')")
+        let effects = try await lua.run("""
+        local t = proteles.varList()
+        proteles.send(tostring(t.a) .. ',' .. tostring(t.b))
+        """)
+        #expect(effects == [.send("1,2")])
+    }
+
+    @Test("varList(scope) reads a named scope; an unknown scope is an empty table")
+    func varListByScope() async throws {
+        let lua = try LuaRuntime()
+        await lua.setVariableScope("pluginA")
+        try await lua.run("proteles.setVar('x', '9')")
+        await lua.setVariableScope("_user")
+        #expect(try await lua.boolean("proteles.varList('pluginA').x == '9'"))
+        // Unknown scope → empty table, never nil (MUSHclient parity).
+        #expect(try await lua.boolean("type(proteles.varList('nope')) == 'table'"))
+        #expect(try await lua.boolean("next(proteles.varList('nope')) == nil"))
+    }
+
     @Test("A snapshot reloads into another runtime")
     func snapshotRoundTrip() async throws {
         let lua = try LuaRuntime()

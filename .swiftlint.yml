@@ -47,6 +47,7 @@ analyzer_rules:
 excluded:
   - .build
   - .swiftpm
+  - .claude # Claude Code harness dir (agent worktrees + local settings), untracked
   - DerivedData
   - mushclient
   - mudlet
