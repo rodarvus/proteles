@@ -266,6 +266,13 @@ public actor SessionController {
     /// local echo of typed input is suppressed until it sends `WONT ECHO`.
     var serverEcho = false
 
+    /// NAWS (window size) state: whether the server negotiated it (`DO NAWS` →
+    /// `WILL NAWS`), and the last dimensions we reported — so we re-send only on
+    /// an actual change. See `SessionController+NAWS`.
+    var nawsEnabled = false
+    var lastTerminalColumns = 0
+    var lastTerminalRows = 0
+
     /// Drop empty MUD lines from output; off by default (`Omit_Blank_Lines`).
     public internal(set) var omitBlankLines = false
 
@@ -485,6 +492,7 @@ public actor SessionController {
         pipeline.reset()
         autologin = plan.map { AutologinState(plan: $0, phase: .awaitingUsername) }
         pluginsConnectFired = false // per-connection; pluginsLoaded persists across reconnects
+        nawsEnabled = false // re-negotiated each connection; the window size itself persists
         sentExitsTag = false
         richExitsCardinals = []
         richExitsCustomExits = []
@@ -560,40 +568,5 @@ public actor SessionController {
             logTranscript(.input, command)
         }
         try await dispatchCommand(command)
-    }
-
-    /// Send a single line to the MUD (raw text + `\r\n`), bypassing alias
-    /// expansion. Used for internal sends (autologin, applied effects).
-    /// `redactInTranscript` hides secrets (the autologin password) from the
-    /// debug transcript while still sending them on the wire.
-    func sendLine(_ text: String, redactInTranscript: Bool = false) async throws {
-        logTranscript(.send, redactInTranscript ? "<redacted>" : text)
-        try await sendRaw(Array((text + "\r\n").utf8))
-    }
-
-    /// Send raw bytes verbatim (no line terminator added).
-    public func sendRaw(_ bytes: [UInt8]) async throws {
-        guard let connection else { throw SessionError.notConnected }
-        lastOutboundActivity = Date()
-        // Time the actual socket write. The `.send` transcript line is logged
-        // before this await (it records intent); if the write itself stalls,
-        // that's an outbound-path delay we otherwise can't see in a recording
-        // (which only tees inbound). Surface a slow write so a "command response
-        // was late" report can be pinned to our side vs the server/network.
-        let writeStart = Date()
-        do {
-            try await connection.send(bytes)
-            let elapsed = Date().timeIntervalSince(writeStart)
-            if elapsed > 0.25 {
-                logTranscript(.note, "[slow-send] \(bytes.count)B socket write took \(Int(elapsed * 1000))ms")
-            }
-        } catch let error as NetworkConnection.ConnectionError {
-            switch error {
-            case .notConnected:
-                throw SessionError.notConnected
-            default:
-                throw SessionError.sendFailed(error.localizedDescription)
-            }
-        }
     }
 }

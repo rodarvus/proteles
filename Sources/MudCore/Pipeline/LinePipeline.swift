@@ -39,6 +39,9 @@ public struct LinePipeline {
         /// True when this call replied `DO GMCP`, i.e. the server may now
         /// start sending GMCP. The caller should send its GMCP handshake.
         public var enabledGMCP: Bool
+        /// True when this call replied `WILL NAWS`, i.e. the server asked for
+        /// window size. The caller should send its initial `SB NAWS` now.
+        public var enabledNAWS: Bool
         /// Set when the server toggled the telnet ECHO option this call:
         /// `true` on `WILL ECHO` (it's taking over echo — e.g. a password
         /// prompt, so the client should stop local-echoing), `false` on
@@ -51,6 +54,7 @@ public struct LinePipeline {
             activatedCompression: Bool = false,
             gmcp: [GMCPMessage] = [],
             enabledGMCP: Bool = false,
+            enabledNAWS: Bool = false,
             serverWillEcho: Bool? = nil
         ) {
             self.lines = lines
@@ -58,6 +62,7 @@ public struct LinePipeline {
             self.activatedCompression = activatedCompression
             self.gmcp = gmcp
             self.enabledGMCP = enabledGMCP
+            self.enabledNAWS = enabledNAWS
             self.serverWillEcho = serverWillEcho
         }
     }
@@ -85,7 +90,7 @@ public struct LinePipeline {
         var acceptedDoOptions: Set<UInt8> {
             switch self {
             case .phase2Default: []
-            case .aardwolf: [TelnetOption.terminalType]
+            case .aardwolf: [TelnetOption.terminalType, TelnetOption.naws]
             }
         }
 
@@ -269,6 +274,14 @@ public struct LinePipeline {
                 && negotiationPolicy.acceptedWillOptions.contains(TelnetOption.gmcp)
             if acceptedGMCP {
                 output.enabledGMCP = true
+            }
+            // The server asked us to report window size (DO NAWS) and we agreed
+            // (WILL NAWS) — signal the caller to send the initial dimensions.
+            let acceptedNAWS = verb == .do
+                && option == TelnetOption.naws
+                && negotiationPolicy.acceptedDoOptions.contains(TelnetOption.naws)
+            if acceptedNAWS {
+                output.enabledNAWS = true
             }
             // Track the server's ECHO toggle so the host can suppress local
             // echo while the server echoes (password prompts).

@@ -73,10 +73,12 @@ struct ContentView: View {
     /// Rich Exits: clickable exit hyperlinks in the main output (View menu).
     @AppStorage("richExits") private var richExits = false
     /// Output font size (Appearance preference). Changing it recreates the
-    /// output view, which re-renders the scrollback at the new size.
-    @AppStorage("outputFontSize") private var outputFontSize = 13.0
+    /// output view, which re-renders the scrollback at the new size. Internal
+    /// (not private) so `reportOutputGeometry` can read it + the font name for
+    /// the NAWS character grid.
+    @AppStorage("outputFontSize") var outputFontSize = 13.0
     /// Output font family ("" = system monospaced). Recreates the output view.
-    @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
+    @AppStorage("outputFontName") var outputFontName = "JetBrains Mono NL"
     /// Connection preferences (pushed to the session like omitBlankLines).
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
