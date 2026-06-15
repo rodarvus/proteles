@@ -63,6 +63,10 @@ extension SessionController {
         if output.enabledGMCP {
             await sendGMCPHandshake()
         }
+        // The server asked for window size (DO NAWS) — start reporting it.
+        if output.enabledNAWS {
+            await enableNAWS()
+        }
         // Process this chunk's GMCP *before* its lines, so state (vitals,
         // comm.channel, …) is current when triggers and native plugins see
         // the lines — e.g. Chat Echo needs the comm.channel for a line

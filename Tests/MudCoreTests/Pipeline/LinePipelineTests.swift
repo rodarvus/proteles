@@ -110,7 +110,7 @@ struct LinePipelineNegotiationTests {
         ])
     }
 
-    @Test("DO STATUS is still refused: WONT STATUS (only TTYPE is accepted)")
+    @Test("DO STATUS is still refused: WONT STATUS (only TTYPE/NAWS are accepted)")
     func doStatusRefused() throws {
         var pipeline = LinePipeline()
         let output = try pipeline.consume([
@@ -119,6 +119,18 @@ struct LinePipelineNegotiationTests {
         #expect(output.responses == [
             [TelnetCommand.iac, TelnetCommand.wont, TelnetOption.status]
         ])
+    }
+
+    @Test("DO NAWS is accepted: WILL NAWS in responses + enabledNAWS set")
+    func doNAWSAccepted() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume([
+            TelnetCommand.iac, TelnetCommand.do, TelnetOption.naws
+        ])
+        #expect(output.responses == [
+            [TelnetCommand.iac, TelnetCommand.will, TelnetOption.naws]
+        ])
+        #expect(output.enabledNAWS)
     }
 
     @Test("SB TTYPE SEND cycles the MTTS sequence; client name 'Proteles' first")
