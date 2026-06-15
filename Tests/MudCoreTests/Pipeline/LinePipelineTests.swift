@@ -98,16 +98,47 @@ struct LinePipelineNegotiationTests {
         #expect(output.gmcp.first?.json == #"{"hp":1234,"mana":900,"moves":500}"#)
     }
 
-    @Test("DO TTYPE is refused: WONT TTYPE in responses")
-    func doTTYPERefused() throws {
+    @Test("DO TTYPE is accepted: WILL TTYPE in responses (MTTS)")
+    func doTTYPEAccepted() throws {
         var pipeline = LinePipeline()
         let doTTYPE: [UInt8] = [
             TelnetCommand.iac, TelnetCommand.do, TelnetOption.terminalType
         ]
         let output = try pipeline.consume(doTTYPE)
         #expect(output.responses == [
-            [TelnetCommand.iac, TelnetCommand.wont, TelnetOption.terminalType]
+            [TelnetCommand.iac, TelnetCommand.will, TelnetOption.terminalType]
         ])
+    }
+
+    @Test("DO STATUS is still refused: WONT STATUS (only TTYPE is accepted)")
+    func doStatusRefused() throws {
+        var pipeline = LinePipeline()
+        let output = try pipeline.consume([
+            TelnetCommand.iac, TelnetCommand.do, TelnetOption.status
+        ])
+        #expect(output.responses == [
+            [TelnetCommand.iac, TelnetCommand.wont, TelnetOption.status]
+        ])
+    }
+
+    @Test("SB TTYPE SEND cycles the MTTS sequence; client name 'Proteles' first")
+    func ttypeSendCycle() throws {
+        var pipeline = LinePipeline()
+        // IAC SB TTYPE SEND IAC SE  (TTYPE SEND qualifier = 1)
+        let send: [UInt8] = [
+            TelnetCommand.iac, TelnetCommand.sb, TelnetOption.terminalType, 1,
+            TelnetCommand.iac, TelnetCommand.se
+        ]
+        /// IAC SB TTYPE IS <value> IAC SE  (IS qualifier = 0)
+        func reply(_ value: String) -> [UInt8] {
+            [TelnetCommand.iac, TelnetCommand.sb, TelnetOption.terminalType, 0]
+                + Array(value.utf8)
+                + [TelnetCommand.iac, TelnetCommand.se]
+        }
+        #expect(try pipeline.consume(send).responses == [reply("Proteles")])
+        #expect(try pipeline.consume(send).responses == [reply("ANSI-TRUECOLOR")])
+        #expect(try pipeline.consume(send).responses == [reply("MTTS 269")])
+        #expect(try pipeline.consume(send).responses == [reply("MTTS 269")]) // repeated, then resets
     }
 }
 

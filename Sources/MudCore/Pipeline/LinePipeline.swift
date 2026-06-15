@@ -78,6 +78,17 @@ public struct LinePipeline {
             }
         }
 
+        /// Server-requested (`DO`) options we agree to provide (reply `WILL`).
+        /// Terminal type (MTTS) lets the server learn the client — Aardwolf's
+        /// `clients` command keys off the first TTYPE value; we answer the
+        /// `SB TTYPE SEND` cycle in ``LinePipeline``.
+        var acceptedDoOptions: Set<UInt8> {
+            switch self {
+            case .phase2Default: []
+            case .aardwolf: [TelnetOption.terminalType]
+            }
+        }
+
         func reply(verb: TelnetVerb, option: UInt8) -> [UInt8]? {
             let responseVerb: UInt8
             switch verb {
@@ -86,7 +97,9 @@ public struct LinePipeline {
                     ? TelnetCommand.do
                     : TelnetCommand.dont
             case .do:
-                responseVerb = TelnetCommand.wont
+                responseVerb = acceptedDoOptions.contains(option)
+                    ? TelnetCommand.will
+                    : TelnetCommand.wont
             case .wont, .dont:
                 return nil
             }
@@ -100,6 +113,21 @@ public struct LinePipeline {
     private var ansi = ANSIParser()
     private var lineBuilder = LineBuilder()
     private var inflater: Inflater?
+    /// Which MTTS response the next `SB TTYPE SEND` should return (0 = client
+    /// name, 1 = terminal type, 2/3 = the MTTS bitvector, then reset). See
+    /// ``terminalTypeReply()``.
+    private var mttsCycle = 0
+
+    /// TTYPE (RFC 1091) subnegotiation qualifiers: `IS` = 0, `SEND` = 1.
+    private static let ttypeIS: UInt8 = 0
+    private static let ttypeSEND: UInt8 = 1
+    /// The client name reported as the first TTYPE — Aardwolf's `clients`
+    /// command groups sessions by this value.
+    private static let clientName = "Proteles"
+    /// MTTS capability bitvector: ANSI (1) + UTF-8 (4) + 256 COLORS (8) +
+    /// TRUECOLOR (256). Proteles' ANSI parser handles 8-bit and 24-bit colour
+    /// and the app is UTF-8 throughout.
+    private static let mttsBitvector = 1 + 4 + 8 + 256
 
     public init(negotiationPolicy: NegotiationPolicy = .aardwolf) {
         self.negotiationPolicy = negotiationPolicy
@@ -248,9 +276,7 @@ public struct LinePipeline {
                 output.serverWillEcho = verb == .will
             }
         case .subnegotiation(let option, let payload):
-            if option == TelnetOption.gmcp, let message = GMCPMessage(subnegotiationPayload: payload) {
-                output.gmcp.append(message)
-            }
+            handleSubnegotiation(option: option, payload: payload, into: &output)
         case .command(let byte):
             // `IAC GA` (Go-Ahead) marks a prompt boundary: the server has
             // finished and it's the client's turn. Aardwolf sends GA after
@@ -266,5 +292,46 @@ public struct LinePipeline {
                 drainPending(into: &output.lines)
             }
         }
+    }
+
+    /// Decode a completed subnegotiation: GMCP payloads become messages; a
+    /// `TTYPE SEND` gets the next MTTS value queued as a response.
+    private mutating func handleSubnegotiation(option: UInt8, payload: [UInt8], into output: inout Output) {
+        if option == TelnetOption.gmcp, let message = GMCPMessage(subnegotiationPayload: payload) {
+            output.gmcp.append(message)
+        } else if option == TelnetOption.terminalType, payload.first == Self.ttypeSEND {
+            // `IAC SB TTYPE SEND IAC SE` → answer with the next MTTS value.
+            output.responses.append(terminalTypeReply())
+        }
+    }
+
+    /// Build the next `IAC SB TTYPE IS <value> IAC SE` reply, cycling through the
+    /// MTTS sequence (Mud Terminal Type Standard, as Mudlet/TinTin implement it):
+    ///   1. the client name (`Proteles`) — what Aardwolf's `clients` records;
+    ///   2. the terminal type (`ANSI-TRUECOLOR`);
+    ///   3. `MTTS <bitvector>`, sent twice then reset, so a server that re-`SEND`s
+    ///      sees the same value repeated and stops (the MTTS termination rule).
+    private mutating func terminalTypeReply() -> [UInt8] {
+        let value: String
+        switch mttsCycle {
+        case 0:
+            value = Self.clientName
+            mttsCycle = 1
+        case 1:
+            value = "ANSI-TRUECOLOR"
+            mttsCycle = 2
+        case 2:
+            value = "MTTS \(Self.mttsBitvector)"
+            mttsCycle = 3
+        default:
+            value = "MTTS \(Self.mttsBitvector)" // repeated once, then reset
+            mttsCycle = 0
+        }
+        var reply: [UInt8] = [
+            TelnetCommand.iac, TelnetCommand.sb, TelnetOption.terminalType, Self.ttypeIS
+        ]
+        reply.append(contentsOf: Array(value.utf8))
+        reply.append(contentsOf: [TelnetCommand.iac, TelnetCommand.se])
+        return reply
     }
 }

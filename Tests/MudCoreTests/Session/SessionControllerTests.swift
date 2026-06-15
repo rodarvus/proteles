@@ -145,7 +145,7 @@ struct SessionControllerPipelineTests {
         await listener.stop()
     }
 
-    @Test("Telnet: DO TTYPE from server gets a WONT TTYPE back")
+    @Test("Telnet: DO TTYPE from server gets a WILL TTYPE back (MTTS)")
     func telnetDoIsRefused() async throws {
         let listener = LoopbackListener()
         let port = try await listener.start()
@@ -162,7 +162,7 @@ struct SessionControllerPipelineTests {
         try await listener.send(serverDoTTYPE)
 
         let expectedReply: [UInt8] = [
-            TelnetCommand.iac, TelnetCommand.wont, TelnetOption.terminalType
+            TelnetCommand.iac, TelnetCommand.will, TelnetOption.terminalType
         ]
         var received: [UInt8] = []
         for await chunk in listener.received {
