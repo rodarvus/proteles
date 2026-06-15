@@ -53,14 +53,18 @@ extension LuaRuntime {
         return [.functionRef(ref)]
     }
 
-    /// `proteles.__moduleSource(name, isRequire)` → resolved Lua source or nil.
+    /// `proteles.__moduleSource(name, isRequire)` → `(source, isBundled)`, or nil.
+    /// The second result tells the Lua `require` whether this is a *bundled*
+    /// helper (load into the shared `_G`, as always) or a *plugin-local* file
+    /// (run in the caller's plugin env, isolated per plugin — see the bootstrap).
     nonisolated func moduleSourceValue(_ arguments: [LuaValue]) -> [LuaValue] {
         let name = arguments.first?.stringValue ?? ""
         let isRequire = arguments.count > 1 ? (arguments[1].booleanValue ?? true) : true
         guard let source = resolveModuleSource(name, isRequire: isRequire) else {
             return [.nil]
         }
-        return [.string(source)]
+        let isBundled = isRequire && bundledModules[name] != nil
+        return [.string(source), .boolean(isBundled)]
     }
 
     // MARK: - Resolution
@@ -134,22 +138,48 @@ extension LuaRuntime {
     nonisolated static let moduleLoaderBootstrap = """
     local loaded = {}
     function require(name)
+      -- Shared cache: bundled helpers + already-global stdlib tables.
       local cached = loaded[name]
       if cached ~= nil then return cached end
-      -- A standard Lua library already loaded as a global (string, math, table,
-      -- os, coroutine, …): `require "string"` returns it, like stock Lua's
-      -- package.loaded. Many MUSHclient plugins `require "string"`/`"math"`.
-      local lib = rawget(_G, name)
-      if type(lib) == "table" then loaded[name] = lib; return lib end
-      local source = proteles.__moduleSource(name, true)
-      if source == nil then error("module '" .. tostring(name) .. "' not found", 2) end
+      -- Per-plugin cache for plugin-local files, stored ON the caller's env, so
+      -- each plugin gets its own copy and a reload (fresh env) re-runs it.
+      local env = getfenv(2)
+      local bucket = rawget(env, "__proteles_required")
+      if bucket then
+        local hit = bucket[name]
+        if hit ~= nil then return hit end
+      end
+      local source, bundled = proteles.__moduleSource(name, true)
+      if source == nil then
+        -- A standard Lua library already loaded as a global (string, math, os,
+        -- …): `require "string"` returns it, like stock Lua's package.loaded.
+        local lib = rawget(_G, name)
+        if type(lib) == "table" then loaded[name] = lib; return lib end
+        error("module '" .. tostring(name) .. "' not found", 2)
+      end
       local chunk = proteles.__compile(source, name)
       if chunk == nil then error("error loading module '" .. tostring(name) .. "'", 2) end
-      -- Pass the module name as the chunk's vararg, like real `require`, so
-      -- modules using `module(...)` (Lua 5.1) get their name.
+      -- Bundled helpers (gmcphelper/serialize/json/…) load once into the shared
+      -- global env, so the globals they define stay available everywhere — as
+      -- before (the compiled chunk's default environment is _G). `name` is passed
+      -- as the vararg, like real `require`, for modules using `module(...)`.
+      if bundled then
+        local result = chunk(name)
+        if result == nil then result = true end
+        loaded[name] = result
+        return result
+      end
+      -- A plugin-local file (split-out plugin code) runs in the CALLER's env —
+      -- the plugin's own environment, like dofile/loadstring — so its globals
+      -- (`xc = {}`, `function xc.foo()`) are private to that plugin and visible
+      -- to the rest of the plugin's code (and it can see globals the plugin
+      -- defined in that env), instead of leaking into the shared _G where they'd
+      -- collide across plugins.
+      if bucket == nil then bucket = {}; rawset(env, "__proteles_required", bucket) end
+      setfenv(chunk, env)
       local result = chunk(name)
       if result == nil then result = true end
-      loaded[name] = result
+      bucket[name] = result
       return result
     end
     function dofile(path)
