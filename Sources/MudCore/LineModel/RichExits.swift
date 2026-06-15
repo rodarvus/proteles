@@ -58,6 +58,18 @@ public enum RichExits {
         cardinalKeys.contains(dir.lowercased())
     }
 
+    /// Resolve a user-typed direction to the key the room's `exits` table uses
+    /// (GMCP keys exits by abbreviation: `n`, `ne`, …). A full compass word
+    /// ("north", "NorthEast") becomes its abbreviation; an abbreviation ("n",
+    /// "N") is lowercased; a custom-exit command ("yiff") passes through
+    /// unchanged. Lets `mapper lockexit north` match a stored `n` exit.
+    public static func canonicalDirection(_ dir: String) -> String {
+        let lower = dir.lowercased()
+        if let match = directionOrder.first(where: { $0.word == lower }) { return match.key }
+        if cardinalKeys.contains(lower) { return lower }
+        return dir
+    }
+
     /// Build the ordered cardinal list from a GMCP `room.info.exits` map
     /// (`{ "n": 1234, "e": 5678 }`), skipping invalid `-1` destinations.
     public static func cardinals(fromExits exits: [String: Int]?) -> [Cardinal] {
