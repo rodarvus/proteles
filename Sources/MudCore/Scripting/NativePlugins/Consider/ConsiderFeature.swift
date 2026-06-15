@@ -179,6 +179,12 @@ public struct ConsiderFeature: NativePlugin {
 
     // MARK: - Consider lifecycle
 
+    /// End-of-output sentinel echoed after `consider all` (the server bounces it
+    /// back verbatim). A distinctive tag — not a bare word like the old "nhm" —
+    /// so ``onLine(_:)`` can gag it unconditionally without risk of hiding real
+    /// MUD text. Mirrors dinv's `{ DINV fence N }` round-trip fence.
+    static let endSentinel = "{ consider }"
+
     /// Start a `consider all` capture, or short-circuit with a status note for a
     /// safe room / ignored zone (clearing the list, sending nothing). Mirrors the
     /// plugin's `Send_Consider_Internal`.
@@ -195,9 +201,16 @@ public struct ConsiderFeature: NativePlugin {
         }
         statusNote = nil
         model.beginConsider()
-        // `echo nhm` is the end-of-output sentinel: the consider lines stream
-        // (gagged), then the server echoes "nhm", which we catch to finalise.
-        return [.sendNoEcho("consider all"), .sendNoEcho("echo nhm"), publishEffect()]
+        // After `consider all`, echo a tagged sentinel the server bounces back:
+        // the consider lines stream (gagged), then `{ consider }` arrives and we
+        // finalise on it. The tag is unmistakably ours, so it's always gagged in
+        // `onLine` — a duplicate/late one (two auto-refreshes in flight) can't
+        // leak into the output, as a bare "nhm" could.
+        return [
+            .sendNoEcho("consider all"),
+            .sendNoEcho("echo \(Self.endSentinel)"),
+            publishEffect()
+        ]
     }
 
     // MARK: - Line ingestion
@@ -225,14 +238,16 @@ public struct ConsiderFeature: NativePlugin {
             return .init()
         }
 
-        if model.considering {
-            if trimmed == "nhm" {
-                model.endConsider()
-                return .init(gag: true, effects: [publishEffect()])
-            }
-            if trimmed == "You see no one here but yourself!" {
-                return .init(gag: true)
-            }
+        // The end-of-output sentinel (echoed back by the server). Always gag it:
+        // the tag is unmistakably ours, so a duplicate/late one (two refreshes in
+        // flight) can't leak. Finalise the capture only when one is actually open.
+        if trimmed == Self.endSentinel {
+            guard model.considering else { return .init(gag: true) }
+            model.endConsider()
+            return .init(gag: true, effects: [publishEffect()])
+        }
+        if model.considering, trimmed == "You see no one here but yourself!" {
+            return .init(gag: true)
         }
         let zone = currentZone
         let table = exceptions
