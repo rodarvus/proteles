@@ -55,7 +55,10 @@ public struct URLSessionHTTPClient: HTTPClient {
         guard let url = URL(string: request.url) else { return failure("invalid URL") }
         var urlRequest = URLRequest(url: url, timeoutInterval: request.timeout > 0 ? request.timeout : 30)
         urlRequest.httpMethod = request.method.rawValue
-        if request.method == .post, let body = request.body {
+        for (field, value) in request.headers {
+            urlRequest.setValue(value, forHTTPHeaderField: field)
+        }
+        if let body = request.body, request.method != .head {
             urlRequest.httpBody = Data(body.utf8)
         }
         do {
