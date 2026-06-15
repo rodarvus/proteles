@@ -4,6 +4,18 @@ import Testing
 
 @Suite("RichExits — detect + render clickable exit lines")
 struct RichExitsTests {
+    // MARK: - Direction normalization
+
+    @Test("canonicalDirection maps full words and abbreviations to the exit key")
+    func canonicalDirection() {
+        #expect(RichExits.canonicalDirection("north") == "n")
+        #expect(RichExits.canonicalDirection("NorthEast") == "ne")
+        #expect(RichExits.canonicalDirection("down") == "d")
+        #expect(RichExits.canonicalDirection("N") == "n") // uppercase abbrev
+        #expect(RichExits.canonicalDirection("n") == "n") // already a key
+        #expect(RichExits.canonicalDirection("yiff") == "yiff") // custom exit passes through
+    }
+
     // MARK: - Detection
 
     @Test("The tagged exits line is recognised")

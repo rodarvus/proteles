@@ -122,11 +122,16 @@ extension Mapper {
         guard tokens.count >= 2, let level = Int(tokens[1]) else {
             return [Self.note("Usage: mapper lockexit <direction> <level>")]
         }
-        let changed = (try? store.setExitLevel(from: uid, dir: tokens[0], level: level)) ?? false
+        // The user may type a full word ("north"); exits are keyed by GMCP's
+        // abbreviation ("n"), so normalize before the lookup (custom exits like
+        // "yiff" pass through unchanged).
+        let typed = tokens[0]
+        let dir = RichExits.canonicalDirection(typed)
+        let changed = (try? store.setExitLevel(from: uid, dir: dir, level: level)) ?? false
         if changed { reloadGraphAndPublish() }
         return [Self.note(changed
-                ? "Exit '\(tokens[0])' from room \(uid) locked to level \(max(0, level))."
-                : "No '\(tokens[0])' exit from here.")]
+                ? "Exit '\(typed)' from room \(uid) locked to level \(max(0, level))."
+                : "No '\(typed)' exit from here.")]
     }
 
     // MARK: - Custom exits (cexits)
