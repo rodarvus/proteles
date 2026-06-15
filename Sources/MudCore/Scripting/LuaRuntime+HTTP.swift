@@ -16,13 +16,17 @@ extension LuaRuntime {
     /// `request` (GET, or POST when `payload` is a body), `head`, or `getfile`
     /// (GET whose body is saved to the `payload` path, sandbox-guarded).
     nonisolated func registerHTTPRequest(_ arguments: [LuaValue]) {
+        // Arg order (set by the `async` shim): kind, url, protocol(unused here),
+        // timeout, body, headersJSON, method, callback, onTimeout.
         let kind = Self.argString(arguments, 0)
         let url = Self.argString(arguments, 1)
         guard !url.isEmpty else { return }
         let timeout = Self.argDouble(arguments, 3)
         let payload = Self.argOptionalString(arguments, 4)
-        let callback = Self.argFunctionRef(arguments, 5)
-        let onTimeout = Self.argFunctionRef(arguments, 6)
+        let headers = Self.decodeHeaders(Self.argOptionalString(arguments, 5))
+        let methodHint = Self.argOptionalString(arguments, 6)
+        let callback = Self.argFunctionRef(arguments, 7)
+        let onTimeout = Self.argFunctionRef(arguments, 8)
 
         let method: HTTPRequest.Method
         var body: String?
@@ -32,14 +36,13 @@ extension LuaRuntime {
             method = .head
         case "getfile":
             method = .get
-            savePath = payload
+            savePath = payload // the GETFILE target path travels in the body slot
         default: // "request"
-            if let payload, !payload.isEmpty {
-                method = .post
-                body = payload
-            } else {
-                method = .get
-            }
+            // The shim sends the table's `method` (POST/GET/…); fall back to POST
+            // when there's a body, else GET — matching LuaSocket's `http.request`.
+            body = payload
+            method = methodHint.flatMap { HTTPRequest.Method(rawValue: $0.uppercased()) }
+                ?? (payload?.isEmpty == false ? .post : .get)
         }
 
         let id = nextHTTPRequestID
@@ -49,8 +52,26 @@ extension LuaRuntime {
             onTimeout: onTimeout.map { claim($0) }
         )
         effects.append(.httpRequest(HTTPRequest(
-            id: id, url: url, method: method, body: body, savePath: savePath, timeout: timeout
+            id: id,
+            url: url,
+            method: method,
+            body: body,
+            headers: headers,
+            savePath: savePath,
+            timeout: timeout
         )))
+    }
+
+    /// Decode a JSON object of request headers (`{"Content-Type":"…"}`) the
+    /// `async` shim builds via `proteles.jsonEncode`, into `[field: value]`.
+    /// Non-string values are stringified; nil/invalid input is no headers.
+    private nonisolated static func decodeHeaders(_ json: String?) -> [String: String] {
+        guard let json, let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return object.reduce(into: [:]) { result, pair in
+            result[pair.key] = String(describing: pair.value)
+        }
     }
 
     /// Fire the stored callback for `request` with `response` and return the

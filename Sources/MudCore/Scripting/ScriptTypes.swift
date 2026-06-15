@@ -300,6 +300,9 @@ public struct HTTPRequest: Sendable, Equatable {
     public let method: Method
     /// POST body, or nil for GET/HEAD.
     public let body: String?
+    /// Custom request headers (e.g. `Content-Type`, `Authorization`) from a
+    /// LuaSocket-style request table; empty for a plain GET/string POST.
+    public let headers: [String: String]
     /// A GETFILE target path (the response body is written there, inside the
     /// plugin sandbox), or nil for a normal request.
     public let savePath: String?
@@ -310,6 +313,7 @@ public struct HTTPRequest: Sendable, Equatable {
         url: String,
         method: Method,
         body: String? = nil,
+        headers: [String: String] = [:],
         savePath: String? = nil,
         timeout: Double
     ) {
@@ -317,6 +321,7 @@ public struct HTTPRequest: Sendable, Equatable {
         self.url = url
         self.method = method
         self.body = body
+        self.headers = headers
         self.savePath = savePath
         self.timeout = timeout
     }

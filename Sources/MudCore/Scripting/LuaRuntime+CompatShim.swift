@@ -52,35 +52,8 @@ public extension LuaRuntime {
         registerModule("aard_requirements", source: "-- Proteles no-op: see checkplugin stub.")
     }
 
-    /// Native `async` module (clean-room) over `proteles.__http`: the reference's
-    /// `doAsyncRemoteRequest`/`HEAD`/`GETFILE` with the same signatures, so
-    /// plugins run unmodified. A string callback is `loadstring`d (as upstream).
-    /// The host fires it with `(retval, page, status, headers, full_status,
-    /// url, body)`.
-    internal nonisolated static let asyncModuleSource = """
-    async = {}
-    local function as_func(cb)
-      if type(cb) == "string" then return loadstring(cb) end
-      return cb
-    end
-    local function protocol_for(url, p)
-      if p and p ~= "" then return p end
-      return tostring(url):lower():find("^https:") and "HTTPS" or "HTTP"
-    end
-    function async.doAsyncRemoteRequest(url, callback, protocol, timeout, on_timeout, body)
-      proteles.__http("request", tostring(url), protocol_for(url, protocol),
-        tonumber(timeout) or 30, body, as_func(callback), as_func(on_timeout))
-    end
-    function async.HEAD(url, callback, protocol, timeout, on_timeout)
-      proteles.__http("head", tostring(url), protocol_for(url, protocol),
-        tonumber(timeout) or 30, nil, as_func(callback), as_func(on_timeout))
-    end
-    function async.GETFILE(url, callback, protocol, file_name, timeout, on_timeout)
-      proteles.__http("getfile", tostring(url), protocol_for(url, protocol),
-        tonumber(timeout) or 30, file_name, as_func(callback), as_func(on_timeout))
-    end
-    return async
-    """
+    // `asyncModuleSource` (the clean-room `async` HTTP module) lives in
+    // LuaRuntime+AsyncModule.swift to keep this file under the line budget.
 
     /// No-op `checkplugin`: defines the same globals the real one does
     /// (`do_plugin_check_now`/`checkplugin`/`load_ppi`) so a plugin's dependency

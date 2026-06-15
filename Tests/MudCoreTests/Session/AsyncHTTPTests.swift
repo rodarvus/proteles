@@ -99,4 +99,36 @@ struct AsyncHTTPTests {
         #expect(client.requests.first?.body == "payload=1")
         await controller.disconnect()
     }
+
+    @Test("a LuaSocket request table sets method, body, and custom headers")
+    func tableBodyWithHeaders() async throws {
+        let engine = try ScriptEngine()
+        try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: plugin("""
+        function go()
+          async.doAsyncRemoteRequest("https://example.com/api", function(r, page, status)
+            Send("done:" .. tostring(status))
+          end, "HTTPS", 5, nil, {
+            method = "POST",
+            headers = { ["content-type"] = "application/json", ["authorization"] = "Bearer k" },
+            source = '{"a":1}'
+          })
+        end
+        """)))
+        let conn = InMemoryConnection()
+        let client = StubHTTPClient(HTTPResponse(
+            retval: 1, page: "{}", status: 200, headers: "", fullStatus: "HTTP 200", timedOut: false
+        ))
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn }, httpClient: client)
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("go")
+
+        #expect(await eventually { conn.sentLines.contains("done:200") })
+        let req = try #require(client.requests.first)
+        #expect(req.method == .post)
+        #expect(req.body == #"{"a":1}"#)
+        #expect(req.headers["content-type"] == "application/json")
+        #expect(req.headers["authorization"] == "Bearer k")
+        await controller.disconnect()
+    }
 }
