@@ -87,14 +87,40 @@ from intuition. The user has forbidden guessing here.
 This generalises to all live-debugging: **verify against a captured recording,
 not a passing isolated test.** Every connect auto-writes a timestamped
 human-readable `.log` (`SessionTranscript`) beside the binary `.jsonl`, under
-`~/Library/Application Support/com.proteles.ProtelesApp/recordings/`, logging
-RECV/SEND/INPUT/NOTE/GMCP + a `GAG` category (withheld line + reason). When live
-behaviour diverges from a green unit test, **read a transcript first.** A passing
-isolated test that encodes your own hypothesis proves nothing — reproduce the bug
-so the test **fails without the fix**, and after a code change **build + install +
-confirm the binary contains it** (`nm | grep <symbol>`) before asking the user to
-test. (Don't compare a UTC `…Z` transcript time against a local `stat` time —
-that hour mismatch once invented a phantom "the recording predates the build".)
+`~/Documents/Proteles/Recordings/`, logging RECV/SEND/INPUT/NOTE/GMCP + a `GAG`
+category (withheld line + reason). When live behaviour diverges from a green unit
+test, **read a transcript first.** A passing isolated test that encodes your own
+hypothesis proves nothing — reproduce the bug so the test **fails without the
+fix**, and after a code change **build + install + confirm the binary contains
+it** before asking the user to test. (Don't compare a UTC `…Z` transcript time
+against a local `stat` time — that hour mismatch once invented a phantom "the
+recording predates the build".)
+
+**Inspecting telnet/MCCP2 at the byte level** (e.g. terminal-type/option
+negotiation): the human `.log` holds only decoded text — no telnet control bytes
+— and the `.jsonl` holds **inbound raw wire only** (per-record base64 `bytes`;
+*outbound is not recorded*, so you can never see our replies, only what the
+server sent). After MCCP2 activates the inbound stream is **zlib-compressed**, so
+a raw byte search finds nothing past that point — you must **decompress**: find
+the marker `FF FA 56 FF F0` (`IAC SB COMPRESS2 IAC SE`), `zlib`-inflate
+everything after it, and prepend the plaintext preamble. Then search the
+combined buffer for negotiation (`FF FD/FE/FB/FC <opt>`, `FF FA <opt> … FF F0`).
+A server `SB TTYPE SEND` appearing in the decompressed stream *proves* we replied
+`WILL TTYPE` (the server only sends it after our `WILL`) — that's how you confirm
+an outbound reply you can't see directly.
+
+```python
+import json, base64, zlib
+raw = b"".join(base64.b64decode(json.loads(l)["bytes"]) for l in open(PATH) if '"bytes"' in l)
+i = raw.find(bytes([0xFF,0xFA,0x56,0xFF,0xF0]))
+full = raw[:i] + zlib.decompressobj().decompress(raw[i+5:])   # plaintext preamble + inflated
+```
+
+**`nm`, not `strings`, to confirm a Swift change is in a binary.** Swift inlines
+string literals ≤15 UTF-8 bytes (small-string optimisation), so `strings | grep
+"ANSI-TRUECOLOR"` returns nothing even when the code is present — a false
+negative that once led to a wrong "the build is missing the change". Grep `nm`
+for the **symbol** (e.g. a function name like `terminalTypeReply`) instead.
 
 ## Architecture (SwiftPM, one `Package.swift`)
 
