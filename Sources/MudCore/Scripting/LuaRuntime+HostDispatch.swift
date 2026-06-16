@@ -5,6 +5,11 @@ import Foundation
 /// resolved ``PluginContext/InfoValue`` (for `proteles.info`) to a Lua value.
 /// Factored out of `LuaRuntime` to keep that file within the length budget.
 extension LuaRuntime {
+    /// Pop the error object at the top of the stack as a String.
+    func popError() -> String {
+        Self.popMessage(state)
+    }
+
     /// Read-only `proteles.*` queries that return a value (rather than
     /// recording an effect): `info`, `pluginID`, `isConnected`.
     nonisolated func queryValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
@@ -15,7 +20,7 @@ extension LuaRuntime {
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
-        case .sqliteAllowed, .monotonic, .databaseDir, .isPluginInstalled:
+        case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled:
             miscValue(function, arguments)
         default: []
         }
@@ -27,6 +32,9 @@ extension LuaRuntime {
     nonisolated func miscValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
+        case .mapperMergeSQL:
+            { let merge = mapperMergeSQL(Self.argString(arguments, 0))
+              return [.string(merge.overlay), .string(merge.sql)] }()
         case .monotonic: [.number(Self.monotonicSeconds())]
         case .databaseDir: [.string(databasesDirectory)]
         case .isPluginInstalled:

@@ -76,6 +76,12 @@ struct sdb {
 
     int trace_cb;       /* trace callback */
     int trace_udata;
+
+    /* Proteles (D-111): the single overlay path this connection may ATTACH.
+    ** NULL ⇒ all ATTACH denied (the default hardening). Set by the host only
+    ** for the trusted mapper-merge, only to the per-character overlay file —
+    ** never plugin-controlled. */
+    char *allowed_attach;
 };
 
 static const char *sqlite_meta      = ":sqlite3";
@@ -580,6 +586,8 @@ static sdb *newdb (lua_State *L) {
     db->trace_cb =
     db->trace_udata = LUA_NOREF;
 
+    db->allowed_attach = NULL;  /* Proteles (D-111): no ATTACH unless host-set */
+
     luaL_getmetatable(L, sqlite_meta);
     lua_setmetatable(L, -2);        /* set metatable */
 
@@ -630,6 +638,12 @@ static int cleanupdb(lua_State *L, sdb *db) {
     /* close database */
     result = sqlite3_close(db->db);
     db->db = NULL;
+
+    /* Proteles (D-111): release the registered overlay-attach path, if any. */
+    if (db->allowed_attach) {
+        sqlite3_free(db->allowed_attach);
+        db->allowed_attach = NULL;
+    }
 
     /* free associated memory with created functions */
     func = db->func;
@@ -1587,6 +1601,26 @@ static int db_close(lua_State *L) {
     return 1;
 }
 
+/* Proteles (D-111): register the single overlay path this connection may
+** ATTACH (consulted by proteles_deny_attach). The host calls this only for the
+** trusted mapper merge, with the per-character overlay path; a plugin can't
+** reach it with an arbitrary path because the host owns both this call and the
+** ATTACH SQL. Passing nil clears the permission. */
+static int db_proteles_allow_attach(lua_State *L) {
+    sdb *db = lsqlite_checkdb(L, 1);
+    const char *path = lua_isnoneornil(L, 2) ? NULL : luaL_checkstring(L, 2);
+    if (db->allowed_attach) {
+        sqlite3_free(db->allowed_attach);
+        db->allowed_attach = NULL;
+    }
+    if (path) {
+        size_t n = strlen(path) + 1;
+        db->allowed_attach = (char*)sqlite3_malloc((int)n);
+        if (db->allowed_attach) memcpy(db->allowed_attach, path, n);
+    }
+    return 0;
+}
+
 static int db_close_vm(lua_State *L) {
     sdb *db = lsqlite_checkdb(L, 1);
     /* cleanup temporary only tables? */
@@ -1664,10 +1698,20 @@ static int lsqlite_temp_directory(lua_State *L) {
 ** plugin running `ATTACH '<other path>' AS x` through exec/prepare/nrows. An
 ** authorizer catches it regardless of the SQL entry point. Everything else is
 ** permitted. */
-static int proteles_deny_attach(void *unused, int action,
+static int proteles_deny_attach(void *udata, int action,
         const char *a, const char *b, const char *c, const char *d) {
-    (void)unused; (void)a; (void)b; (void)c; (void)d;
-    if (action == SQLITE_ATTACH || action == SQLITE_DETACH)
+    (void)b; (void)c; (void)d;
+    if (action == SQLITE_ATTACH) {
+        /* Permit ATTACH only of this connection's single host-registered
+        ** overlay path (D-111). `a` is the filename being attached. Everything
+        ** else — and any DETACH — stays denied. */
+        sdb *db = (sdb*)udata;
+        if (db != NULL && db->allowed_attach != NULL && a != NULL
+                && strcmp(a, db->allowed_attach) == 0)
+            return SQLITE_OK;
+        return SQLITE_DENY;
+    }
+    if (action == SQLITE_DETACH)
         return SQLITE_DENY;
     return SQLITE_OK;
 }
@@ -1676,8 +1720,10 @@ static int lsqlite_do_open(lua_State *L, const char *filename) {
     sdb *db = newdb(L); /* create and leave in stack */
 
     if (sqlite3_open(filename, &db->db) == SQLITE_OK) {
-        /* Proteles: refuse ATTACH/DETACH on every opened connection. */
-        sqlite3_set_authorizer(db->db, proteles_deny_attach, NULL);
+        /* Proteles: refuse ATTACH/DETACH on every opened connection, except a
+        ** single host-registered overlay path (see proteles_deny_attach). Pass
+        ** the sdb so the authorizer can read db->allowed_attach. */
+        sqlite3_set_authorizer(db->db, proteles_deny_attach, db);
         /* database handle already in the stack - return it */
         return 1;
     }
@@ -1770,6 +1816,7 @@ static const luaL_reg dblib[] = {
     {"nrows",               db_nrows                },
 
     {"exec",                db_exec                 },
+    {"proteles_allow_attach", db_proteles_allow_attach },
     {"execute",             db_exec                 },
     {"close",               db_close                },
     {"close_vm",            db_close_vm             },

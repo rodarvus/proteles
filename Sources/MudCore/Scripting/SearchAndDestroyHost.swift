@@ -73,6 +73,15 @@ public actor SearchAndDestroyHost {
         await runtime.setSQLiteDirectory(directory)
     }
 
+    /// Point S&D's direct mapper-DB reads at the per-character overlay (D-111):
+    /// when it `sqlite3.open`s the shared `Aardwolf.db`, the overlay is ATTACHed
+    /// and merged views are created so its unmodified SQL sees the character's
+    /// portals/custom-exits/locks. Call before ``load()`` (S&D captures the DB
+    /// at load); pass `nil`/`nil` for single-file (un-migrated) behaviour.
+    public func configureMapperOverlay(sharedDBPath: String?, overlayPath: String?) async {
+        await runtime.setMapperOverlay(sharedDBPath: sharedDBPath, overlayPath: overlayPath)
+    }
+
     /// S&D's well-known MUSHclient plugin id.
     public static let pluginID = "30000000537461726C696E67"
 

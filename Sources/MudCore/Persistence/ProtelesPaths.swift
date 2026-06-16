@@ -289,6 +289,20 @@ public enum ProtelesPaths {
         try databasesDirectory(fileManager: fileManager).appendingPathComponent("SnDdb.db")
     }
 
+    /// The per-character mapper **overlay**, `Databases/<character>/Aardwolf-personal.db`
+    /// (D-111). Holds only that character's personal map data — portals, custom
+    /// exits, exit level-locks, room notes, bookmarks — kept out of the shared
+    /// `Aardwolf.db` so it doesn't bleed across characters. The distinctive name
+    /// makes it unmistakable next to the shared file. Creates the per-character
+    /// directory if needed.
+    public static func personalMapperDatabaseURL(
+        character: String,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        try pluginDatabasesDirectory(character: character, fileManager: fileManager)
+            .appendingPathComponent("Aardwolf-personal.db")
+    }
+
     /// A filesystem-safe, human-readable directory name for a plugin display
     /// name (kept readable for discoverability — spaces are fine on macOS;
     /// only path-hostile characters are replaced). Falls back to "Plugin".
