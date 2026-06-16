@@ -296,6 +296,8 @@ struct ContentView: View {
         } message: {
             Text("Save the current panel arrangement so you can re-apply it later.")
         }
+        // One-time mapper-migration prompt (D-111).
+        .mapMigrationPrompt(session: session)
         .onAppear {
             wireSearchAndDestroy()
             // Bind the mapper at the app root so it's live regardless of which

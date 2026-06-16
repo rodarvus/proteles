@@ -25,28 +25,44 @@ public final class MapperStore: Sendable {
     }
 
     public let url: URL
-    private let dbQueue: DatabaseQueue
+    /// The per-character overlay DB (`Aardwolf-personal.db`), when attached
+    /// (D-111). `nil` ⇒ single-file mode: every per-character operation falls
+    /// back to the shared queue, so behaviour is byte-for-byte what it was
+    /// before the split (un-migrated DBs and pre-login both take this path).
+    public let personalURL: URL?
+    // Internal (not private) so the `MapperStore+Personal` extension can route.
+    let dbQueue: DatabaseQueue
+    let personalQueue: DatabaseQueue?
 
     /// Our extension-schema version, stamped in `proteles_meta` (orthogonal
     /// to the MUSHclient `user_version`, which stays at the imported value).
     public static let protelesSchemaVersion = 1
 
-    public init(url: URL) throws {
+    /// Open a shared-only store (single-file mode). Convenience over the
+    /// designated initialiser; preserves the pre-split call site.
+    public convenience init(url: URL) throws {
+        try self.init(url: url, personalURL: nil)
+    }
+
+    /// Open the shared map at `url` and, when `personalURL` is given, the
+    /// per-character overlay (D-111). Both connections share the same WAL
+    /// configuration. Per-character reads/writes route to the overlay via
+    /// ``personalRead(_:)``/``personalWrite(_:)``; ``loadGraph()`` merges the
+    /// two in Swift (no cross-DB JOIN — navigation stays in-memory).
+    public init(url: URL, personalURL: URL?) throws {
         self.url = url
+        self.personalURL = personalURL
         do {
-            // WAL so a plugin's lsqlite3 reader can read the map while we
-            // write it (a second connection); rollback-journal mode would
-            // block concurrent access. Set on each connection before use
-            // (PRAGMA journal_mode can't run inside a transaction).
-            var configuration = Configuration()
-            configuration.prepareDatabase { db in
-                try db.execute(sql: "PRAGMA journal_mode = WAL")
-                // Wait out a concurrent reader/writer (a plugin's lsqlite3
-                // connection) rather than failing with SQLITE_BUSY.
-                try db.execute(sql: "PRAGMA busy_timeout = 5000")
-            }
+            let configuration = Self.makeConfiguration()
             dbQueue = try DatabaseQueue(path: url.path, configuration: configuration)
             try Self.ensureSchema(dbQueue)
+            if let personalURL {
+                let queue = try DatabaseQueue(path: personalURL.path, configuration: configuration)
+                try Self.ensurePersonalSchema(queue)
+                personalQueue = queue
+            } else {
+                personalQueue = nil
+            }
         } catch {
             throw StoreError.openFailed(error.localizedDescription)
         }
@@ -142,18 +158,74 @@ public final class MapperStore: Sendable {
 
     /// Replace all exits leaving `uid` with `exits` (mirrors the mapper's
     /// `save_room_exits`: delete-then-insert keyed by `(fromuid, dir)`).
+    ///
+    /// Single-file mode writes the whole set to the shared `exits` (unchanged).
+    /// With an overlay attached (D-111), the set is partitioned: **cardinal**
+    /// exits are the shared world geography (written to shared at level 0 — any
+    /// per-character lock lives in the overlay's `exit_locks`, applied on load),
+    /// while **custom** exits are per-character (written to the overlay with
+    /// their level). Each side only deletes its own rows, so neither wipes the
+    /// other's.
     public func saveExits(from uid: String, exits: [String: Exit]) throws {
+        guard hasPersonalStore else {
+            try write { db in try Self.replaceExits(
+                db,
+                from: uid,
+                exits: Array(exits.values),
+                zeroLevel: false
+            ) }
+            return
+        }
+        let cardinals = exits.values.filter { Self.isCardinal($0.dir) }
+        let customs = exits.values.filter { !Self.isCardinal($0.dir) }
         try write { db in
-            try db.execute(sql: "DELETE FROM exits WHERE fromuid = ?", arguments: [uid])
-            for exit in exits.values {
-                try db.execute(
-                    sql: """
-                    INSERT OR REPLACE INTO exits (dir, fromuid, touid, level, weight, door)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    arguments: [exit.dir, uid, exit.to, String(exit.level), exit.weight, exit.door?.rawValue]
-                )
-            }
+            try db.execute(
+                sql: "DELETE FROM exits WHERE fromuid = ? AND \(Self.cardinalInClause)",
+                arguments: [uid]
+            )
+            try Self.insertExits(db, from: uid, exits: cardinals, zeroLevel: true)
+        }
+        try personalWrite { db in
+            try db.execute(
+                sql: "DELETE FROM exits WHERE fromuid = ? AND NOT \(Self.cardinalInClause)",
+                arguments: [uid]
+            )
+            try Self.insertExits(db, from: uid, exits: customs, zeroLevel: false)
+        }
+    }
+
+    /// `dir IN ('n', …)` over the ten compass directions — the shared/per-
+    /// character split line (custom-exit *commands* fall outside it).
+    static let cardinalInClause = "dir IN ('n','s','e','w','u','d','ne','nw','se','sw')"
+
+    /// Whether `dir` is one of the ten compass directions (vs. a custom-exit
+    /// command). Mirrors ``cardinalInClause``.
+    static func isCardinal(_ dir: String) -> Bool {
+        ["n", "s", "e", "w", "u", "d", "ne", "nw", "se", "sw"].contains(dir.lowercased())
+    }
+
+    private static func replaceExits(
+        _ db: Database,
+        from uid: String,
+        exits: [Exit],
+        zeroLevel: Bool
+    ) throws {
+        try db.execute(sql: "DELETE FROM exits WHERE fromuid = ?", arguments: [uid])
+        try insertExits(db, from: uid, exits: exits, zeroLevel: zeroLevel)
+    }
+
+    private static func insertExits(_ db: Database, from uid: String, exits: [Exit], zeroLevel: Bool) throws {
+        for exit in exits {
+            try db.execute(
+                sql: """
+                INSERT OR REPLACE INTO exits (dir, fromuid, touid, level, weight, door)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    exit.dir, uid, exit.to,
+                    String(zeroLevel ? 0 : exit.level), exit.weight, exit.door?.rawValue
+                ]
+            )
         }
     }
 
@@ -206,9 +278,10 @@ public final class MapperStore: Sendable {
         }
     }
 
-    /// Set or clear a room's note (the `bookmarks` table).
+    /// Set or clear a room's note (the `bookmarks` table) — per-character, so it
+    /// routes to the overlay when attached (D-111).
     public func setNote(_ note: String?, uid: String) throws {
-        try write { db in
+        try personalWrite { db in
             if let note, !note.isEmpty {
                 try db.execute(
                     sql: "INSERT OR REPLACE INTO bookmarks (uid, notes) VALUES (?, ?)",
@@ -372,7 +445,7 @@ public final class MapperStore: Sendable {
     /// Designed for the live DB scale (~30k rooms / ~93k exits): a handful
     /// of full-table scans, assembled in Swift.
     public func loadGraph() throws -> RoomGraph {
-        try read { db in
+        var graph = try read { db in
             var rooms: [String: Room] = [:]
             for row in try Row.fetchAll(db, sql: "SELECT * FROM rooms") {
                 let room = Self.room(from: row)
@@ -399,6 +472,10 @@ public final class MapperStore: Sendable {
             }
             return RoomGraph(rooms: rooms, areas: areas)
         }
+        // Layer the per-character overlay on top (D-111). Skipped (and the
+        // shared read above already carries everything) in single-file mode.
+        if hasPersonalStore { try mergePersonalOverlay(into: &graph) }
+        return graph
     }
 
     // MARK: - Row decoding
@@ -420,21 +497,24 @@ public final class MapperStore: Sendable {
         )
     }
 
-    private static func exit(from row: Row) -> Exit {
-        // `exits.level` is declared STRING (NUMERIC affinity) so it may be
-        // stored as an integer (179) or, in some DBs, as text ("179").
-        // Decode tolerantly across storage classes.
-        let levelValue = row["level"] as DatabaseValue
-        let level = Int.fromDatabaseValue(levelValue)
-            ?? String.fromDatabaseValue(levelValue).flatMap { Int($0) }
-            ?? 0
-        return Exit(
+    static func exit(from row: Row) -> Exit {
+        Exit(
             dir: row["dir"] ?? "",
             to: row["touid"] ?? "",
-            level: level,
+            level: levelInt(row, "level"),
             weight: row["weight"],
             door: (row["door"] as Int?).flatMap(Exit.Door.init(rawValue:))
         )
+    }
+
+    /// Decode a `level` column tolerantly: it's declared STRING (NUMERIC
+    /// affinity), so it may be stored as an integer (179) or text ("179")
+    /// across the MUSHclient/overlay schemas.
+    static func levelInt(_ row: Row, _ column: String) -> Int {
+        let value = row[column] as DatabaseValue
+        return Int.fromDatabaseValue(value)
+            ?? String.fromDatabaseValue(value).flatMap { Int($0) }
+            ?? 0
     }
 
     private static func exits(from rows: [Row]) -> [String: Exit] {

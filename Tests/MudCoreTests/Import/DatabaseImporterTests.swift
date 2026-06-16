@@ -51,13 +51,17 @@ struct DatabaseImporterTests {
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         let dbs = tmp.appendingPathComponent("Databases")
-        let src = tmp.appendingPathComponent("Aardwolf.db")
+        let src = tmp.appendingPathComponent("leveldb.db")
         try Data("new map".utf8).write(to: src)
-        let record = ImportManifest.DatabaseEntry(url: src, kind: .mapper, byteSize: 0)
+        // A non-mapper kind exercises the generic staging-swap copy in isolation
+        // (the mapper kind additionally demuxes — covered by MapperSplitTests).
+        let record = ImportManifest.DatabaseEntry(url: src, kind: .leveldb, byteSize: 0)
 
         // Seed an existing destination, then overwrite it.
-        let existing = dbs.appendingPathComponent("Aardwolf.db")
-        try FileManager.default.createDirectory(at: dbs, withIntermediateDirectories: true)
+        let existing = dbs.appendingPathComponent("Hero/leveldb.db")
+        try FileManager.default.createDirectory(
+            at: existing.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
         try Data("old map".utf8).write(to: existing)
         _ = try DatabaseImporter.copy(record, character: "Hero", in: dbs)
         #expect(try Data(contentsOf: existing) == Data("new map".utf8))
@@ -66,7 +70,7 @@ struct DatabaseImporterTests {
         // destination intact — the audit found delete-before-copy destroyed
         // the user's DB when the copy failed.
         let missing = ImportManifest.DatabaseEntry(
-            url: tmp.appendingPathComponent("nope.db"), kind: .mapper, byteSize: 0
+            url: tmp.appendingPathComponent("nope.db"), kind: .leveldb, byteSize: 0
         )
         #expect(throws: DatabaseImporter.ImportError.self) {
             try DatabaseImporter.copy(missing, character: "Hero", in: dbs)

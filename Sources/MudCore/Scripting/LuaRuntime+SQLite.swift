@@ -62,6 +62,44 @@ extension LuaRuntime {
         sqliteDirectory = directory
     }
 
+    /// Register the mapper overlay merge (D-111) for direct readers in this
+    /// runtime: when `sharedDBPath` is opened via `sqlite3.open`, the overlay at
+    /// `overlayPath` is ATTACHed and merged temp views are created. Passing nil
+    /// for either disables the merge (reverting to a plain single-file read).
+    func setMapperOverlay(sharedDBPath: String?, overlayPath: String?) {
+        mapperSharedDBPath = sharedDBPath
+        mapperOverlayPath = overlayPath
+    }
+
+    /// The merge to apply to a freshly-opened DB handle (D-111), as
+    /// `(overlayPath, sql)`. Both are `""` when no merge applies — `path` isn't
+    /// the shared mapper DB, no overlay is registered, or the overlay file is
+    /// missing. `overlayPath` is registered on the connection (via
+    /// `db:proteles_allow_attach`) so the authorizer permits exactly this one
+    /// ATTACH; `sql` ATTACHes it and creates a temp `exits` view UNIONing the
+    /// shared cardinal exits (with overlay `exit_locks` applied) and the
+    /// overlay's portals/custom exits, so a direct reader's `SELECT … FROM exits`
+    /// sees the merged set. Returned to Lua via `proteles.mapperMergeSQL`.
+    nonisolated func mapperMergeSQL(_ path: String) -> (overlay: String, sql: String) {
+        guard let shared = mapperSharedDBPath, let overlay = mapperOverlayPath else { return ("", "") }
+        let opened = URL(fileURLWithPath: normalizedPath(path)).standardizedFileURL.path
+        let sharedStd = URL(fileURLWithPath: shared).standardizedFileURL.path
+        guard opened == sharedStd, FileManager.default.fileExists(atPath: overlay) else { return ("", "") }
+        let escaped = overlay.replacingOccurrences(of: "'", with: "''")
+        let sql = """
+        ATTACH DATABASE '\(escaped)' AS personal;
+        DROP VIEW IF EXISTS temp.exits;
+        CREATE TEMP VIEW exits AS
+          SELECT s.dir, s.fromuid, s.touid,
+                 COALESCE(l.level, s.level) AS level, s.weight, s.door
+            FROM main.exits s
+            LEFT JOIN personal.exit_locks l ON l.fromuid = s.fromuid AND l.dir = s.dir
+          UNION ALL
+          SELECT dir, fromuid, touid, level, weight, door FROM personal.exits;
+        """
+        return (overlay, sql)
+    }
+
     /// Install the app's `utils.*` dialog provider (see ``ScriptDialogProvider``).
     func setDialogProvider(_ provider: ScriptDialogProvider?) {
         dialogProvider = provider
@@ -107,6 +145,7 @@ extension LuaRuntime {
       local raw = __lsqlite3_raw
       __lsqlite3_raw = nil
       local allowed = proteles.sqliteAllowed
+      local merge = proteles.mapperMergeSQL
       local function checked_open(path, ...)
         -- Windows-centric plugins build paths with backslash separators; treat
         -- them as "/" so the file resolves on macOS (the host guard agrees).
@@ -114,7 +153,18 @@ extension LuaRuntime {
         if type(path) == "string" and not allowed(path) then
           error("sqlite3.open: access denied for '" .. path .. "'", 2)
         end
-        return raw.open(path, ...)
+        local db = raw.open(path, ...)
+        -- Mapper overlay merge (D-111): when a direct reader opens the shared
+        -- mapper DB, permit + ATTACH the per-character overlay and create merged
+        -- views so its unmodified SQL sees the merged set. Empty ⇒ no merge.
+        if db and type(path) == "string" then
+          local overlay, sql = merge(path)
+          if sql ~= "" then
+            db:proteles_allow_attach(overlay)  -- authorize this one ATTACH
+            db:exec(sql)
+          end
+        end
+        return db
       end
       sqlite3 = setmetatable({
         open = checked_open,

@@ -72,6 +72,9 @@ extension SessionController {
     /// Run the armed initial loads: the enabled library plugins, the bundled
     /// leveldb, and the armed dinv. Each is guarded/idempotent on its own.
     private func loadDeferredInitialPlugins() async {
+        if let character = pendingInitialPluginCharacter {
+            await activateMapperOverlay(character: character)
+        }
         if let character = pendingInitialPluginCharacter, !pendingInitialPluginDirectories.isEmpty {
             await loadPlugins(directories: pendingInitialPluginDirectories, character: character)
         }
@@ -87,6 +90,38 @@ extension SessionController {
         // (the user had to `dinv reload`). So dinv keeps its own dedicated
         // arming (`armedDinvShouldLoad` → `loadPendingDinv` in `dispatchGMCP`),
         // which already loads it on the in-game char.status with clean timing.
+    }
+
+    /// Activate the per-character mapper overlay once the character is known
+    /// (D-111). Attaches `Databases/<character>/Aardwolf-personal.db` so the
+    /// map shows that character's portals/custom-exits/locks. **Inert until the
+    /// shared map has been migrated** (the `personal_split` flag): on an
+    /// un-migrated single-file DB `attachPersonalStore` is a guarded no-op, so
+    /// behaviour is unchanged until the user runs the migration.
+    func activateMapperOverlay(character: String) async {
+        guard let mapper,
+              let overlay = try? ProtelesPaths.personalMapperDatabaseURL(character: character)
+        else { return }
+        // Already-split DB → attach silently. Un-migrated DB with personal data
+        // → ask the user once (assign to this character) rather than guess.
+        if await mapper.needsPersonalMigration() {
+            mapperMigrationPromptsContinuation.yield(character)
+        } else {
+            try? await mapper.attachPersonalStore(at: overlay)
+        }
+    }
+
+    /// Run the one-time mapper migration for `character` (D-111), invoked when
+    /// the user accepts the prompt: back up the shared map, split this
+    /// character's personal data into its overlay, and attach it.
+    public func migrateMapperPersonal(character: String) async {
+        guard let mapper,
+              let overlay = try? ProtelesPaths.personalMapperDatabaseURL(character: character),
+              let shared = try? ProtelesPaths.mapperDatabaseURL()
+        else { return }
+        let backup = shared.deletingLastPathComponent()
+            .appendingPathComponent("Aardwolf-premigration-backup.db")
+        try? await mapper.migratePersonal(overlayURL: overlay, backupURL: backup)
     }
 
     /// Arm the fallback that activates plugins if no in-game `char.status`

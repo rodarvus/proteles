@@ -63,6 +63,20 @@ public enum DatabaseImporter {
             } else {
                 try fileManager.moveItem(at: staging, to: destination)
             }
+            // Mapper demux (D-111): a MUSHclient Aardwolf.db is single-file
+            // (per-character data mixed into the shared map). After copying it to
+            // the shared destination, split the importing character's personal
+            // rows out into that character's overlay. Per the maintainer's call,
+            // all custom exits go to the importing character.
+            if entry.kind == .mapper {
+                let overlay = databasesDirectory
+                    .appendingPathComponent(character, isDirectory: true)
+                    .appendingPathComponent("Aardwolf-personal.db")
+                try fileManager.createDirectory(
+                    at: overlay.deletingLastPathComponent(), withIntermediateDirectories: true
+                )
+                try MapperStore.splitPersonal(sharedURL: destination, overlayURL: overlay)
+            }
             return destination
         } catch {
             throw ImportError.copyFailed(

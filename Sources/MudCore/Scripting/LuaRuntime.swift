@@ -194,6 +194,11 @@ public actor LuaRuntime {
     /// Directory `sqlite3.open`/file helpers may touch; `nil` = closed.
     nonisolated(unsafe) var sqliteDirectory: String?
 
+    /// Mapper-DB merge state (D-111); set via `setMapperOverlay`, consumed by
+    /// `mapperMergeSQL` (full rationale there). Both nil ⇒ no merge.
+    nonisolated(unsafe) var mapperSharedDBPath: String?
+    nonisolated(unsafe) var mapperOverlayPath: String?
+
     /// Pending async HTTP callbacks by request id (claimed refs, freed on
     /// completion — see `LuaRuntime+HTTP`); `nextHTTPRequestID` keys them.
     nonisolated(unsafe) var pendingHTTP: [Int: (callback: Int32?, onTimeout: Int32?)] = [:]
@@ -361,6 +366,7 @@ public actor LuaRuntime {
         setHostFunction("isPluginInstalled", .isPluginInstalled)
         setHostFunction("sndCall", .sndCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
+        setHostFunction("mapperMergeSQL", .mapperMergeSQL)
         setHostFunction("publish", .publish)
         installProtelesAPIAutomation()
     }
@@ -429,9 +435,9 @@ public actor LuaRuntime {
             return moduleSourceValue(arguments)
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected, .sqliteAllowed, .monotonic, .fileExists, .makeDirectory,
-             .readFile, .writeFile, .dialog, .clipboardGet, .clipboardSet, .databaseDir,
-             .isPluginInstalled:
+        case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
+             .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
+             .clipboardSet, .databaseDir, .isPluginInstalled:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
@@ -587,10 +593,5 @@ public actor LuaRuntime {
             }
             throw LuaError.runtime(message)
         }
-    }
-
-    /// Pop the error object at the top of the stack as a String.
-    func popError() -> String {
-        Self.popMessage(state)
     }
 }

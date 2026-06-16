@@ -104,6 +104,13 @@ public actor SessionController {
     public nonisolated let notifications: AsyncStream<ProtelesNotification>
     nonisolated let notificationsContinuation: AsyncStream<ProtelesNotification>.Continuation
 
+    /// One-time mapper-migration prompt (D-111): emits the logged-in character
+    /// when an un-migrated single-file map with personal data is detected. The
+    /// app subscribes and offers to migrate (assigning the personals to that
+    /// character); confirming calls ``migrateMapperPersonal(character:)``.
+    public nonisolated let mapperMigrationPrompts: AsyncStream<String>
+    nonisolated let mapperMigrationPromptsContinuation: AsyncStream<String>.Continuation
+
     /// Script/plugin button-bar changes (`Button.*` / #15); the app applies them
     /// to the live bar + persists.
     public nonisolated let buttonCommands: AsyncStream<ButtonCommand>
@@ -435,6 +442,8 @@ public actor SessionController {
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (notifications, notificationsContinuation) =
             AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
+        (mapperMigrationPrompts, mapperMigrationPromptsContinuation) =
+            AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (buttonCommands, buttonCommandsContinuation) =
             AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
         (soundCues, soundCuesContinuation) =

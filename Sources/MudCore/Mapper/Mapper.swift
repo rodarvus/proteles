@@ -18,7 +18,9 @@ import Logging
 /// should send (e.g. `"request area"` when a room's area name isn't known
 /// yet), keeping the actor free of networking.
 public actor Mapper {
-    let store: MapperStore
+    // `var` so the per-character overlay can be attached once the character is
+    // known (``attachPersonalStore(at:)``, D-111); otherwise immutable.
+    var store: MapperStore
     public internal(set) var graph: RoomGraph
     /// The uid of the room the player is currently in (nil until known).
     public private(set) var currentRoomUID: String?

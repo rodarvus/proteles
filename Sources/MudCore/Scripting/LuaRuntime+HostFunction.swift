@@ -33,6 +33,7 @@ extension LuaRuntime {
         case echoAard, echoAnsi, simulate
         case colourNote, hyperlink, mapperCall, chatCapture
         case sqliteAllowed
+        case mapperMergeSQL
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
