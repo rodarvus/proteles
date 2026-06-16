@@ -108,12 +108,14 @@ extension SessionController {
             mapperMigrationPromptsContinuation.yield(character)
         } else {
             try? await mapper.attachPersonalStore(at: overlay)
+            await pointSearchAndDestroyAtOverlay(overlay)
         }
     }
 
     /// Run the one-time mapper migration for `character` (D-111), invoked when
     /// the user accepts the prompt: back up the shared map, split this
-    /// character's personal data into its overlay, and attach it.
+    /// character's personal data into its overlay, attach it, and point S&D's
+    /// direct reads at the overlay too.
     public func migrateMapperPersonal(character: String) async {
         guard let mapper,
               let overlay = try? ProtelesPaths.personalMapperDatabaseURL(character: character),
@@ -122,6 +124,18 @@ extension SessionController {
         let backup = shared.deletingLastPathComponent()
             .appendingPathComponent("Aardwolf-premigration-backup.db")
         try? await mapper.migratePersonal(overlayURL: overlay, backupURL: backup)
+        await pointSearchAndDestroyAtOverlay(overlay)
+    }
+
+    /// Point the S&D host's direct mapper-DB reads at `overlay` (D-111). S&D
+    /// opens the shared `Aardwolf.db` per-query, so this takes effect on its next
+    /// read with no reload; harmless pre-migration (the overlay won't exist yet,
+    /// so the merge is skipped). No-op when S&D isn't installed.
+    private func pointSearchAndDestroyAtOverlay(_ overlay: URL) async {
+        guard let shared = try? ProtelesPaths.mapperDatabaseURL() else { return }
+        await searchAndDestroy?.configureMapperOverlay(
+            sharedDBPath: shared.path, overlayPath: overlay.path
+        )
     }
 
     /// Arm the fallback that activates plugins if no in-game `char.status`
