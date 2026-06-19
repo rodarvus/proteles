@@ -2,6 +2,20 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0124] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Portal: make rapid mapper-driven hops safe. A portal hop is now ONE sequential operation -- a get/hold burst, then (only if the portal is verifiably held) the `enter` and the equipment swap-back issued together in a single ordered burst -- that runs to completion before another can start; a use() that arrives mid-hop is dropped (redundant churn). This kills the death in which two rapid hops' commands interleaved and an `enter` fired after the swap-back had already restored the (possibly lethal) worn portal. A self-expiring lock prevents a wedged hop.]]
+  }
+}
+
+dbot.changelog[3.0123] =
+{
+  { change = drlDbotChangeLogTypeNew,
+    desc   = [[Add SearchAndReturn() external API: returns full item records (serialized) for CallPlugin callers such as Aardwolf-Switch-Weapons.]]
+  }
+}
+
 dbot.changelog[3.0122] =
 {
   { change = drlDbotChangeLogTypeMisc,
