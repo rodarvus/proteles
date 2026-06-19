@@ -45,9 +45,11 @@ Broadly used, and either the primitive already exists or the function is pure:
 | `RGBColourToName` | 43 | 14 | ✅ **SHIPPED** — native `MUSHColour` table (148 W3C names, ported from `MXP_colours[]`) |
 | `ColourNameToRGB` | 29 | 10 | ✅ **SHIPPED** — same `MUSHColour` table (name/`#rrggbb` → COLORREF) |
 | `ANSI` | 19 | 4 | ✅ **SHIPPED** — pure-Lua escape builder in the shim |
-| `AdjustColour` | 6 | 2 | pure colour math |
+| `AdjustColour` | 6 | 2 | ✅ **SHIPPED** — native `MUSHColour` (invert + HLS lighten/darken/saturate, ported from `CColor`) |
 | `WorldName` | 8 | 5 | ✅ **SHIPPED** — generic-shim global over `proteles.info` |
-| `CreateGUID` / `GetUniqueID` | 4 / 3 | 3 | generate an id string |
+| `CreateGUID` / `GetUniqueID` | 4 / 3 | 3 | ✅ **SHIPPED** — `ScriptIdentifiers` (dashed GUID / 24-hex id) |
+
+**Tier 1 is complete** — all seven shipped.
 
 ## Tier 2 — medium value/effort (engine introspection + control)
 

@@ -19,10 +19,10 @@ extension LuaRuntime {
         case .isConnected: [.boolean(connected)]
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
-        case .colourNameToRGB: [.number(Double(MUSHColour.colourNameToRGB(Self.argString(arguments, 0))))]
-        case .rgbColourToName: [.string(MUSHColour.rgbColourToName(Int(Self.argDouble(arguments, 0))))]
+        case .colourNameToRGB, .rgbColourToName, .adjustColour: colourValue(function, arguments)
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
-        case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled:
+        case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
+             .createGUID, .uniqueID:
             miscValue(function, arguments)
         default: []
         }
@@ -44,6 +44,23 @@ extension LuaRuntime {
                 let id = Self.argString(arguments, 0)
                 return pluginEnvs[id] != nil || bridgedPluginIDs.contains(id)
             }())]
+        case .createGUID: [.string(ScriptIdentifiers.createGUID())]
+        case .uniqueID: [.string(ScriptIdentifiers.uniqueID())]
+        default: []
+        }
+    }
+
+    /// The MUSHclient colour helpers, all pure ``MUSHColour`` math:
+    /// `ColourNameToRGB`/`RGBColourToName` (name ↔ COLORREF) and `AdjustColour`
+    /// (invert / lighten / darken / de- or re-saturate via HLS).
+    nonisolated func colourValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        switch function {
+        case .colourNameToRGB: [.number(Double(MUSHColour.colourNameToRGB(Self.argString(arguments, 0))))]
+        case .rgbColourToName: [.string(MUSHColour.rgbColourToName(Int(Self.argDouble(arguments, 0))))]
+        case .adjustColour:
+            [.number(Double(MUSHColour.adjustColour(
+                Int(Self.argDouble(arguments, 0)), method: Int(Self.argDouble(arguments, 1))
+            )))]
         default: []
         }
     }

@@ -370,6 +370,9 @@ public actor LuaRuntime {
         setHostFunction("chatCapture", .chatCapture)
         setHostFunction("colourNameToRGB", .colourNameToRGB)
         setHostFunction("rgbColourToName", .rgbColourToName)
+        setHostFunction("adjustColour", .adjustColour)
+        setHostFunction("createGUID", .createGUID)
+        setHostFunction("uniqueID", .uniqueID)
         setHostFunction("isPluginInstalled", .isPluginInstalled)
         setHostFunction("sndCall", .sndCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
@@ -444,7 +447,8 @@ public actor LuaRuntime {
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
              .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
-             .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName:
+             .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
+             .adjustColour, .createGUID, .uniqueID:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
