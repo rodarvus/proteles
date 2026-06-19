@@ -559,7 +559,9 @@ extension ContentView {
     private func auxPanelContent(_ kind: PanelKind) -> AnyView {
         switch kind {
         case .info: AnyView(InfoPanel(state: gmcp))
-        case .group: AnyView(GroupPanel(state: gmcp))
+        case .group: AnyView(GroupPanel(state: gmcp, onCommand: { command in
+                Task { try? await session.send(command) }
+            }))
         case .help: AnyView(HelpPanelView(model: help))
         case .levels: AnyView(LevelDBPanelView(model: levels))
         case .commandBar: AnyView(CommandBarView(scripts: scripts, onOpenEditor: {

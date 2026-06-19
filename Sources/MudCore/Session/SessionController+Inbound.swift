@@ -79,6 +79,10 @@ extension SessionController {
             // Transcript the raw MUD line (pre-gag) so S&D scrape output the
             // window omits is still on disk for debugging.
             logTranscript(.recv, line.text)
+            // Track group invitations (plain text — Aardwolf has no GMCP for
+            // them) before scripts, so the pending list survives even if a user
+            // trigger gags the line.
+            await handleGroupInviteLine(line.text)
             await appendLineThroughScripts(line)
         }
         // A group join/leave/disband/leader change → re-pull the group snapshot
@@ -290,6 +294,17 @@ extension SessionController {
     /// on each tick to keep the Group panel current.
     func refreshGroupSnapshot() async {
         await sendGMCP("request group")
+    }
+
+    /// Maintain the pending group-invitation list + raise a banner on a new
+    /// invite. Aardwolf sends invites as plain text only (no GMCP), so we parse
+    /// the reference's `aard_group_monitor` lines (see ``GroupInviteEvent``).
+    func handleGroupInviteLine(_ text: String) async {
+        guard let event = GroupInviteEvent.parse(text) else { return }
+        await gmcpState.applyInviteEvent(event)
+        if case .invited(let inviter, let groupName) = event {
+            notifyGroupInvite(inviter: inviter, groupName: groupName)
+        }
     }
 
     /// True for the Aardwolf lines that signal the group composition/leadership
