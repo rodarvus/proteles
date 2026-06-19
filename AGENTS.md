@@ -9,7 +9,7 @@ rules, and the gotchas.
 
 ## Current status
 
-**Feature-complete for 1.0. Shipped `v0.8.0`** (build 48; tag + GitHub release,
+**Feature-complete for 1.0. Shipped `v0.8.3`** (build 51; tag + GitHub release,
 **notarized Developer-ID build**; `scripts/release.sh` runs the
 build→sign→notarize→staple→verify flow). The build-out phases are **done**; the
 work now is **UI/UX polish + live-play debugging** ahead of tagging 1.0. Everything
@@ -19,9 +19,11 @@ soundpack (#10, D-109 — bundled CC0 cues, `Settings/soundpack.json`), and
 text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). The
 `v0.7.x` line has been a scrollback/render/resume-correctness arc: the TextKit
 document is bounded at 10k lines independently of the store (#65), resume fills
-panels in one batch (#42), and chat intake reverted to direct-append (#57).
-~1570 tests, four gates green. See **ARCHITECTURE.md §0** for what works and
-**docs/DECISIONS.md** for history.
+panels in one batch (#42), and chat intake reverted to direct-append (#57). The
+`v0.8.x` line adds client identification (TTYPE/MTTS/NAWS), the per-character
+mapper DB split (D-111), pending group invitations, and a ground-up command
+input rewrite on `NSTextView` (#71). ~1720 tests, four gates green. See
+**ARCHITECTURE.md §0** for what works and **docs/DECISIONS.md** for history.
 
 ## Backlog — GitHub Issues are the source of truth
 
