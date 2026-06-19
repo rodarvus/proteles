@@ -57,31 +57,6 @@ public actor Mapper {
     var bouncePortalDir: String?
     var bounceRecallDir: String?
 
-    /// On a `room.info`, advance a pending segmented walk. If we've arrived in the
-    /// room the last-sent segment was heading to, send the next segment;
-    /// otherwise (still en route, or no walk) do nothing. This is what makes a
-    /// portal hop wait for its whoosh before the follow-on `run` is sent.
-    /// Returns the command(s) to execute now.
-    public func advanceWalk() -> [ScriptEffect] {
-        guard let expect = walkExpect, currentRoomUID == expect else { return [] }
-        walkIndex += 1
-        guard walkIndex < walkSegments.count else {
-            walkExpect = nil
-            return []
-        }
-        let segment = walkSegments[walkIndex]
-        // Wait for this segment only if more follow; the last one needs no wait.
-        walkExpect = walkIndex < walkSegments.count - 1 ? segment.expectUID : nil
-        return [.execute(segment.command)]
-    }
-
-    /// Cancel any in-progress segmented walk (a new route supersedes the old).
-    func clearWalk() {
-        walkSegments = []
-        walkIndex = 0
-        walkExpect = nil
-    }
-
     /// Terrain environment code → name, and terrain name → packed colour,
     /// from `room.sectors` (used by the map panel's colouring).
     public private(set) var environments: [String: String] = [:]

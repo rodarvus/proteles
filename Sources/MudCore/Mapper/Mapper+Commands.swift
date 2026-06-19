@@ -179,7 +179,13 @@ extension Mapper {
         walkSegments = segments
         walkIndex = 0
         walkExpect = segments.count > 1 ? segments.first?.expectUID : nil
-        if let first = segments.first { effects.append(.execute(first.command)) }
+        // Wrap the walk in the reference's `{begin running}` marker (→ 999
+        // "kinda_busy" broadcast), then emit the first segment. The matching
+        // `{end running}` rides the final segment (``segmentEffects``).
+        if let first = segments.first {
+            effects.append(.sendNoEcho(Self.beginRunningMarker))
+            effects.append(contentsOf: segmentEffects(first, isFinal: segments.count == 1))
+        }
         return effects
     }
 

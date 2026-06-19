@@ -133,6 +133,14 @@ public actor SessionController {
     /// caps this, so we do too.
     var executeDepth = 0
     static let maxExecuteDepth = 20
+    /// Generation token for the mapper wait-walk pacer (`.walkWithWaits`). A new
+    /// walk (or a disconnect) bumps it so a still-running pacer for a superseded
+    /// walk stops emitting. See ``runWaitWalk``.
+    var walkGeneration = 0
+    /// The pacer parked awaiting the reflected `{mapper_wait}` echo (the
+    /// ExecuteWithWaits round-trip barrier); resumed by ``handleWalkMarker`` on
+    /// arrival, or by a defensive timeout / teardown so it can't wedge.
+    var waitMarkerContinuation: CheckedContinuation<Void, Never>?
     /// Whether the character is speedwalking (`char.status.state == 12`),
     /// for the policy's quiet-while-running gate.
     var charIsRunning = false
