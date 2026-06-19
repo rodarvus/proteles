@@ -2,6 +2,25 @@ import Foundation
 
 /// Remote-close handling + the autoreconnect loop (ReconnectPolicy, D-18/D-19).
 extension SessionController {
+    /// Commands that mean "log me out" — a server close right after one is
+    /// expected, not a dropped link. Aardwolf's normal logout is `quit`; the
+    /// **force-logout** (required when you hold items that can't be saved) is
+    /// `quit quit`. Both actually close the connection, so both must suppress
+    /// autoreconnect — matching only `quit` reconnected you the instant you
+    /// force-quit. `quit check` (just lists unsaveable items) and `quit <bad
+    /// arg>` do NOT log you out, so they're deliberately excluded.
+    public static let quitCommands: Set<String> = ["quit", "quit quit"]
+
+    /// Whether `command` is an Aardwolf logout (see ``quitCommands``).
+    /// Normalises case and collapses internal whitespace first, so `Quit  Quit`
+    /// and a trailing space still count.
+    static func isLogoutQuit(_ command: String) -> Bool {
+        let normalized = command.lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return quitCommands.contains(normalized)
+    }
+
     /// True when a close arriving now is a clean logout: a quit command was
     /// accepted (the close lands within ``cleanQuitWindow`` of it). A refused
     /// quit leaves the connection up, so no close arrives and this never trips.
