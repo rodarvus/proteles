@@ -24,6 +24,41 @@ struct PluginReloadTests {
     </muclient>
     """
 
+    private let handlerPlugin = """
+    <muclient>
+    <plugin id="com.test.handlers" name="Handler Test" save_state="y"/>
+    <script><![CDATA[
+    function fire()
+      proteles.raiseEvent("reload-event", "event")
+      proteles.broadcast("broadcast")
+      local value = proteles.call("reload-export")
+      if value ~= nil then Send("export:" .. tostring(value)) end
+    end
+    function OnPluginInstall()
+      proteles.onEvent("reload-event", function(text) Send("event:" .. text) end)
+      proteles.onBroadcast(function(text) Send("broadcast:" .. text) end)
+      proteles.export("reload-export", function() return "owned" end)
+      AddTriggerEx("fire", "^fire$", "", 33, -1, "", "", "fire", 12, 100)
+    end
+    ]]></script>
+    </muclient>
+    """
+
+    private let callerPlugin = """
+    <muclient>
+    <plugin id="com.test.caller" name="Caller Test" save_state="y"/>
+    <script><![CDATA[
+    function call_export()
+      local value = proteles.call("reload-export")
+      if value ~= nil then Send("export:" .. tostring(value)) end
+    end
+    function OnPluginInstall()
+      AddTriggerEx("call-export", "^call-export$", "", 33, -1, "", "", "call_export", 12, 100)
+    end
+    ]]></script>
+    </muclient>
+    """
+
     @Test("Unloading a plugin removes its static and dynamic automations")
     func unloadClearsOwnedAutomations() async throws {
         let parsed = try MUSHclientPluginLoader.parse(xml: plugin)
@@ -60,6 +95,37 @@ struct PluginReloadTests {
         // Both the static and the reinstalled dynamic trigger still fire once.
         #expect(await engine.process(line: "ping").effects == [.send("pong")])
         #expect(await engine.process(line: "poke").effects == [.send("dynamic")])
+    }
+
+    @Test("Reload clears owned event and broadcast handlers")
+    func reloadClearsOwnedHandlers() async throws {
+        let parsed = try MUSHclientPluginLoader.parse(xml: handlerPlugin)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+
+        let expected: [ScriptEffect] = [
+            .send("event:event"),
+            .send("broadcast:broadcast"),
+            .send("export:owned")
+        ]
+        #expect(await engine.process(line: "fire").effects == expected)
+
+        await engine.unloadPlugin("com.test.handlers")
+        await engine.loadPlugin(parsed)
+
+        #expect(await engine.process(line: "fire").effects == expected)
+    }
+
+    @Test("Unload removes exported plugin functions")
+    func unloadClearsOwnedExports() async throws {
+        let handler = try MUSHclientPluginLoader.parse(xml: handlerPlugin)
+        let caller = try MUSHclientPluginLoader.parse(xml: callerPlugin)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(handler)
+        await engine.unloadPlugin("com.test.handlers")
+        await engine.loadPlugin(caller)
+
+        #expect(await engine.process(line: "call-export").effects.isEmpty)
     }
 
     @Test("isNativePlugin distinguishes native ids from MUSHclient plugin ids")

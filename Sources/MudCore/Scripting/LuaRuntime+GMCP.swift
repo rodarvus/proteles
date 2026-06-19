@@ -192,7 +192,7 @@ extension LuaRuntime {
         var name = "gmcp"
         for component in components {
             name += "." + component
-            invokeHandlers(eventHandlers[name] ?? [], payload: [.string(package)])
+            invokeHandlers((eventHandlers[name] ?? []).map(\.ref), payload: [.string(package)])
         }
     }
 }

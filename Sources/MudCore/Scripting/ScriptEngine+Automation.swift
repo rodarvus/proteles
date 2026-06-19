@@ -147,6 +147,7 @@ extension ScriptEngine {
         timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
         loadedPluginIDs.removeAll { $0 == id }
         let windowEffects = await runtime.removeMiniWindows(ownedBy: id)
+        await runtime.clearPluginRegistrations(id)
         await runtime.clearPluginEnvironment(id)
         return windowEffects
     }

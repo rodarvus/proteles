@@ -4,7 +4,7 @@ import Foundation
 // MARK: - Lua ↔ Swift bridge
 
 /// Read the Lua value at `index` as a ``LuaValue`` (scalars only).
-private func luaReadValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
+func luaReadValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
     switch lua_type(state, index) {
     case LUA_TBOOLEAN:
         .boolean(lua_toboolean(state, index) != 0)
@@ -183,14 +183,19 @@ public actor LuaRuntime {
     /// Scopes whose variables changed since the last ``takeDirtyVariableScopes``.
     nonisolated(unsafe) var dirtyVariableScopes: Set<String> = []
 
+    struct OwnedRegistryRef {
+        let ref: Int32
+        let owner: String?
+    }
+
     /// Event name → registry refs of registered handler functions.
-    nonisolated(unsafe) var eventHandlers: [String: [Int32]] = [:]
-    private nonisolated(unsafe) var broadcastHandlers: [Int32] = [] // `onBroadcast` handler refs
+    nonisolated(unsafe) var eventHandlers: [String: [OwnedRegistryRef]] = [:]
+    nonisolated(unsafe) var broadcastHandlers: [OwnedRegistryRef] = []
     /// Exported callable name → registry ref (for `call`).
-    private nonisolated(unsafe) var exportedFunctions: [String: Int32] = [:]
+    nonisolated(unsafe) var exportedFunctions: [String: OwnedRegistryRef] = [:]
     /// Function refs created this run that no handler/export claimed; freed at
     /// run end so transient callbacks don't leak registry slots.
-    private nonisolated(unsafe) var transientRefs: [Int32] = []
+    nonisolated(unsafe) var transientRefs: [Int32] = []
     /// Directory `sqlite3.open`/file helpers may touch; `nil` = closed.
     nonisolated(unsafe) var sqliteDirectory: String?
 
@@ -425,8 +430,8 @@ public actor LuaRuntime {
             recordEffect(function, arguments)
             return []
         case .call:
-            guard let ref = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
-            return invokeFunction(ref, payload: Array(arguments.dropFirst()))
+            guard let function = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
+            return invokeFunction(function.ref, payload: Array(arguments.dropFirst()))
         case .getVar, .setVar, .deleteVar, .getPluginVar, .varList:
             return accessVariable(function, arguments)
         case .compileChunk:
@@ -470,101 +475,6 @@ public actor LuaRuntime {
             break
         }
         return []
-    }
-
-    /// The event-bus / RPC registration & firing functions (no return value).
-    nonisolated func registerOrRaise(_ function: HostFunction, _ arguments: [LuaValue]) {
-        switch function {
-        case .onEvent:
-            if let ref = Self.argFunctionRef(arguments, 1) {
-                eventHandlers[Self.argString(arguments, 0), default: []].append(claim(ref))
-            }
-        case .raiseEvent:
-            invokeHandlers(
-                eventHandlers[Self.argString(arguments, 0)] ?? [],
-                payload: Array(arguments.dropFirst())
-            )
-        case .onBroadcast:
-            if let ref = Self.argFunctionRef(arguments, 0) {
-                broadcastHandlers.append(claim(ref))
-            }
-        case .broadcast:
-            invokeHandlers(broadcastHandlers, payload: arguments)
-        case .export:
-            if let ref = Self.argFunctionRef(arguments, 1) {
-                let name = Self.argString(arguments, 0)
-                if let previous = exportedFunctions[name] { luaL_unref(state, LUA_REGISTRYINDEX, previous) }
-                exportedFunctions[name] = claim(ref)
-            }
-        default: break
-        }
-    }
-
-    // MARK: - Calling Lua from Swift (event bus / RPC)
-
-    /// Record a function ref that will be freed at run-end unless claimed.
-    nonisolated func noteTransientRef(_ ref: Int32) {
-        transientRefs.append(ref)
-    }
-
-    /// Mark a transient ref as owned (stored long-term), so it isn't freed at
-    /// run-end. Returns the same ref. Pair with `luaL_unref` when done.
-    nonisolated func claim(_ ref: Int32) -> Int32 {
-        transientRefs.removeAll { $0 == ref }
-        return ref
-    }
-
-    /// Free every still-unclaimed function ref created during this run.
-    nonisolated func releaseTransientRefs() {
-        for ref in transientRefs {
-            luaL_unref(state, LUA_REGISTRYINDEX, ref)
-        }
-        transientRefs.removeAll(keepingCapacity: true)
-    }
-
-    /// Call each handler ref with `payload`, discarding results. Handler
-    /// errors are surfaced as a red note rather than aborting the caller.
-    nonisolated func invokeHandlers(_ refs: [Int32], payload: [LuaValue]) {
-        for ref in refs {
-            lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
-            for value in payload {
-                luaPushValue(state, value)
-            }
-            if lua_pcall(state, Int32(payload.count), 0, 0) != 0 {
-                effects.append(.note(
-                    text: "Lua event error: \(Self.popMessage(state))",
-                    foreground: "red",
-                    background: nil
-                ))
-            }
-        }
-    }
-
-    /// Call an exported function ref with `payload`, returning its results.
-    private nonisolated func invokeFunction(_ ref: Int32, payload: [LuaValue]) -> [LuaValue] {
-        let base = lua_gettop(state)
-        lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
-        for value in payload {
-            luaPushValue(state, value)
-        }
-        if lua_pcall(state, Int32(payload.count), LUA_MULTRET, 0) != 0 {
-            effects.append(.note(
-                text: "Lua call error: \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
-            ))
-            lua_settop(state, base)
-            return []
-        }
-        let resultCount = lua_gettop(state) - base
-        var results: [LuaValue] = []
-        if resultCount > 0 {
-            for index in (base + 1)...(base + resultCount) {
-                results.append(luaReadValue(state, index))
-            }
-        }
-        lua_settop(state, base)
-        return results
     }
 
     // MARK: - Private
