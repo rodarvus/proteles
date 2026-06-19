@@ -188,8 +188,10 @@ Before committing, ALL must pass (from repo root):
   Cross-cutting foundations and app/UI plumbing follow the normal build flow.
 - New logic gets thorough tests; prefer pure value-type models in MudCore.
 - Commit straight to `main` (no feature branches); **pushes are user-gated.**
-  Logical commits with detailed *why* messages; co-author trailer
-  `Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>`.
+  Use the repo's conventional commit style (`fix(area): ...`,
+  `feat(area): ...`, `docs: ...`, `chore: ...`) with detailed *why* messages
+  and a `Tests:` section when relevant. Do **not** add co-author trailers unless
+  the user explicitly asks; never add Claude/Anthropic trailers for Codex work.
 - **Never launch the app** — build only, install to `~/Applications`, clear
   quarantine (`xattr -dr com.apple.quarantine`); the user launches + live-tests.
 - After a feature lands, produce a Release build for the user to verify, then push
