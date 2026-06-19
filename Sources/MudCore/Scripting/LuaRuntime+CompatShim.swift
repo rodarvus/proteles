@@ -494,6 +494,12 @@ public extension LuaRuntime {
     -- `module(name, package.seeall)` so helper libs like `wait` load. ---------
     package = package or { loaded = {} }
     package.loaded = package.loaded or {}
+    -- Restore the stdlib fields the sandbox stripped, so plugins that compute a
+    -- path separator from `package.config` or extend `package.path` (a common
+    -- idiom for requiring split-out files) don't hit a nil. Unix values: dir-sep
+    -- "/", path-sep ";", template "?", … (the `require` loader honours path).
+    package.config = package.config or "/\\n;\\n?\\n!\\n-\\n"
+    package.path = package.path or "?.lua"
     function package.seeall(m)
       setmetatable(m, { __index = _G })
     end

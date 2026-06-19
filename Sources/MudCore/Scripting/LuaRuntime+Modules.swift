@@ -74,6 +74,10 @@ extension LuaRuntime {
             if let bundled = bundledModules[name] { return bundled }
             for directory in moduleSearchPaths {
                 if let source = readLua(directory + "/" + name + ".lua") { return source }
+                // Also the conventional `lua/` subfolder, where plugins keep
+                // split-out modules (e.g. `require("shared_core")` →
+                // `<plugin>/lua/shared_core.lua`) without manual `package.path`.
+                if let source = readLua(directory + "/lua/" + name + ".lua") { return source }
             }
             return nil
         }
@@ -137,6 +141,22 @@ extension LuaRuntime {
     /// (caught by the running chunk's pcall).
     nonisolated static let moduleLoaderBootstrap = """
     local loaded = {}
+    -- Honor `package.path` (MUSHclient/Lua compat): expand "?" in each
+    -- ";"-separated template with the module's path and return the first source
+    -- that exists, resolved through the sandboxed dofile-mode reader (so it can
+    -- only read files under the allowed plugin roots). Returns source or nil.
+    local function module_from_package_path(name)
+      local pp = type(package) == "table" and package.path
+      if type(pp) ~= "string" then return nil end
+      local cfg = type(package) == "table" and package.config
+      local sep = (type(cfg) == "string" and cfg:sub(1, 1)) or "/"
+      local modpath = tostring(name):gsub("%.", sep)
+      for template in pp:gmatch("[^;]+") do
+        local src = proteles.__moduleSource((template:gsub("%?", modpath)), false)
+        if src ~= nil then return src end
+      end
+      return nil
+    end
     function require(name)
       -- Shared cache: bundled helpers + already-global stdlib tables.
       local cached = loaded[name]
@@ -155,7 +175,10 @@ extension LuaRuntime {
         -- …): `require "string"` returns it, like stock Lua's package.loaded.
         local lib = rawget(_G, name)
         if type(lib) == "table" then loaded[name] = lib; return lib end
-        error("module '" .. tostring(name) .. "' not found", 2)
+        -- Last resort: the plugin's own `package.path` entries. A hit runs as
+        -- plugin-local code below (bundled is nil → the caller-env branch).
+        source = module_from_package_path(name)
+        if source == nil then error("module '" .. tostring(name) .. "' not found", 2) end
       end
       local chunk = proteles.__compile(source, name)
       if chunk == nil then error("error loading module '" .. tostring(name) .. "'", 2) end
