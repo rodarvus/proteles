@@ -11,6 +11,19 @@ struct MapperStoreTests {
             .appendingPathComponent("mapper-test-\(UUID().uuidString).db")
     }
 
+    private func lookupNames(at url: URL) throws -> [String: String] {
+        let queue = try DatabaseQueue(path: url.path)
+        return try queue.read { db in
+            var out: [String: String] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT uid, name FROM rooms_lookup") {
+                if let uid = row["uid"] as String? {
+                    out[uid] = row["name"] as String? ?? ""
+                }
+            }
+            return out
+        }
+    }
+
     @Test("Fresh DB round-trips rooms, exits, areas, and notes")
     func roundTrip() throws {
         let url = tempURL()
@@ -38,6 +51,20 @@ struct MapperStoreTests {
         #expect(graph.rooms["100"]?.name == "Town Square")
         #expect(graph.areas["aylor"]?.name == "Aylor")
         #expect(graph.rooms["100"]?.exits.count == 2)
+        #expect(try lookupNames(at: url)["100"] == "Town Square")
+    }
+
+    @Test("Room upsert keeps the MUSHclient rooms_lookup FTS mirror current")
+    func upsertMaintainsRoomsLookup() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = try MapperStore(url: url)
+
+        try store.upsert(Room(uid: "100", name: "Old Name", area: "aylor"))
+        #expect(try lookupNames(at: url)["100"] == "Old Name")
+
+        try store.upsert(Room(uid: "100", name: "New Name", area: "aylor"))
+        #expect(try lookupNames(at: url) == ["100": "New Name"])
     }
 
     @Test("Replacing exits removes the old set")
@@ -69,6 +96,7 @@ struct MapperStoreTests {
         #expect(graph.rooms.isEmpty)
         #expect(graph.areas.isEmpty)
         #expect(try store.room(uid: "100") == nil)
+        #expect(try lookupNames(at: url).isEmpty)
         // UI preferences live in proteles_meta and must survive a reset.
         #expect(try store.meta(forKey: "ui.scan_depth") == "123")
     }
@@ -150,6 +178,10 @@ struct MapperStoreTests {
                 db, sql: "SELECT value FROM proteles_meta WHERE key='schema_version'"
             )
             #expect(version == String(MapperStore.protelesSchemaVersion))
+            let lookup = try String.fetchOne(
+                db, sql: "SELECT name FROM rooms_lookup WHERE uid='676'"
+            )
+            #expect(lookup == "A Dusty Trail")
         }
     }
 
@@ -184,6 +216,10 @@ struct MapperStoreTests {
         // Room 6 was added with the imported note.
         #expect(try dest.room(uid: "6")?.name == "Imported Six")
         #expect(try dest.room(uid: "6")?.notes == "imported note")
+        #expect(try lookupNames(at: destURL) == [
+            "5": "My Local Five",
+            "6": "Imported Six"
+        ])
     }
 
     @Test("Import brings the terrain palette (environments) so rooms aren't grey")

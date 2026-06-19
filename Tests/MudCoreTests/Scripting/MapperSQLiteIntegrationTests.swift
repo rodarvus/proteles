@@ -37,4 +37,30 @@ struct MapperSQLiteIntegrationTests {
         """)
         #expect(effects == [.echo("Market Square / Aylor")])
     }
+
+    @Test("A plugin reads the mapper rooms_lookup FTS mirror")
+    func pluginReadsRoomsLookup() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-lookup-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let dbURL = dir.appendingPathComponent("Aardwolf.db")
+        let store = try MapperStore(url: dbURL)
+        try store.upsert(Room(uid: "32418", name: "Market Square", area: "aylor"))
+        try store.upsert(Room(uid: "32418", name: "Renamed Market Square", area: "aylor"))
+
+        let lua = try LuaRuntime()
+        await lua.setSQLiteDirectory(dir.path)
+        let effects = try await lua.run("""
+        local db = sqlite3.open("\(dbURL.path)")
+        local rows = {}
+        for row in db:nrows("SELECT uid, name FROM rooms_lookup WHERE uid = '32418'") do
+          rows[#rows + 1] = row.uid .. ":" .. row.name
+        end
+        db:close()
+        proteles.echo(table.concat(rows, "|"))
+        """)
+        #expect(effects == [.echo("32418:Renamed Market Square")])
+    }
 }

@@ -97,6 +97,7 @@ public final class MapperStore: Sendable {
             CREATE INDEX IF NOT EXISTS rooms_name_index ON rooms (name);
             CREATE INDEX IF NOT EXISTS exits_touid_index ON exits (touid);
             """)
+            try ensureRoomsLookup(db)
 
             // Defensive column adds for older imported DBs (a v2–v9 `rooms`
             // table predates these flag columns).
@@ -122,16 +123,7 @@ public final class MapperStore: Sendable {
                 sql: "INSERT OR REPLACE INTO proteles_meta(key, value) VALUES('schema_version', ?)",
                 arguments: [String(protelesSchemaVersion)]
             )
-        }
-    }
-
-    private static func addColumnIfMissing(
-        _ db: Database, table: String, column: String, decl: String
-    ) throws {
-        let existing = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
-            .compactMap { $0["name"] as String? }
-        if !existing.contains(column) {
-            try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) \(decl)")
+            try repairRoomsLookupIfNeeded(db)
         }
     }
 
@@ -153,6 +145,7 @@ public final class MapperStore: Sendable {
                     room.noportal ? 1 : 0, room.norecall ? 1 : 0, room.ignoreExitsMismatch ? 1 : 0
                 ]
             )
+            try Self.syncRoomsLookup(db, uid: room.uid, name: room.name)
         }
     }
 
@@ -363,7 +356,8 @@ public final class MapperStore: Sendable {
             try dbQueue.write { db in
                 for table in [
                     "rooms", "exits", "areas", "bookmarks",
-                    "environments", "terrain", "storage", "room_user_data"
+                    "environments", "terrain", "storage", "room_user_data",
+                    "rooms_lookup"
                 ] {
                     try db.execute(sql: "DELETE FROM \(table)")
                 }
@@ -400,6 +394,7 @@ public final class MapperStore: Sendable {
         // have no colour and the whole map renders grey — the env table is how
         // the reference mapper colours rooms (verified against a live Aardwolf.db).
         summary.environments = try insertIgnore(db, table: "environments", columns: "uid, name, color")
+        try rebuildRoomsLookup(db)
         return summary
     }
 
