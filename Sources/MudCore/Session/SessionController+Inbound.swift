@@ -210,29 +210,7 @@ extension SessionController {
         ) {
             await gmcpState.apply(message)
         }
-        let chatLine = await measureSessionPhase(
-            "session.gmcp.chat-ingest",
-            events: 1,
-            thresholdMS: 50
-        ) {
-            await chatStore.ingest(message)
-        }
-        if let chatLine {
-            PerformanceProbe.shared.measure(
-                "session.gmcp.chat-record",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                recordChannelLine(chatLine) // speech-mute matching (tts mute)
-            }
-            await measureSessionPhase(
-                "session.gmcp.chat-notify",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await notifyForChat(chatLine)
-            }
-        }
+        await dispatchGMCPToChat(message)
         // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals
         // update) + quest-ready (comm.quest). Self-gates on the relevant rules,
         // so it's a cheap no-op when none exist.
@@ -243,29 +221,7 @@ extension SessionController {
         ) {
             await checkGMCPNotifications(package: message.package, json: message.json)
         }
-        if let mapper {
-            let packets = await measureSessionPhase(
-                "session.gmcp.mapper-ingest",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await mapper.ingest(package: message.package, json: message.json)
-            }
-            for packet in packets {
-                try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
-            }
-            // After a room change, release the next segment of any pending
-            // speedwalk. This is what makes a portal hop wait for its whoosh
-            // before the follow-on `run` is sent (otherwise the run races the
-            // portal, walks from the wrong room, and aborts).
-            await measureSessionPhase(
-                "session.gmcp.mapper-effects",
-                events: packets.count,
-                thresholdMS: 50
-            ) {
-                await applyScriptEffects(mapper.advanceWalk())
-            }
-        }
+        await dispatchGMCPToMapper(message)
         // Each tick, refresh the group snapshot so member vitals stay current
         // (Aardwolf won't push `group` GMCP on its own).
         if message.package.lowercased() == "comm.tick" {
@@ -288,62 +244,12 @@ extension SessionController {
                 await handleRoomInfoSideEffects()
             }
         }
-        // Hold `char.status` plugin delivery until the character is in-game
-        // (state ≥ 3), matching MUSHclient: a transitional mid-login char.status
-        // (state 2) otherwise makes plugins act prematurely — e.g. Hadar's
-        // spellup-list request fires before login completes, fails, and recovers
-        // too slowly, so spell tracking never works. The native HUD (gmcpState,
-        // above) still updates throughout.
+        // Hold `char.status` plugin delivery until the character is in-game; see
+        // ``activatePluginsIfFirstInGame`` / ``dispatchGMCPToScripts``.
         let isCharStatus = message.package.lowercased() == "char.status"
-        if isCharStatus, !seenCharInGame, (Self.charStatusState(message.json) ?? 0) >= 3 {
-            seenCharInGame = true
-            // Now in-game (post-MOTD): load + connect all deferred plugins before
-            // this first in-game char.status reaches them (init precedes broadcasts).
-            await measureSessionPhase(
-                "session.gmcp.plugin-activate",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await activatePluginsIfNeeded()
-            }
-        }
-        let holdCharStatus = isCharStatus && !seenCharInGame
-        if let scriptEngine, !holdCharStatus {
-            let applyEffects = await measureSessionPhase(
-                "session.gmcp.script-apply",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await scriptEngine.applyGMCP(package: message.package, json: message.json)
-            }
-            await applyScriptEffects(applyEffects)
-            // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
-            // (option 201); dinv's config detection reads only that path.
-            let subnegEffects = await measureSessionPhase(
-                "session.gmcp.script-subneg",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await scriptEngine.deliverGMCPSubnegotiation(
-                    package: message.package, json: message.json
-                )
-            }
-            await applyScriptEffects(subnegEffects)
-            // A plugin's OnPluginBroadcast may have scheduled a one-shot (e.g. a
-            // wait.time resume timer); re-arm the loop so it fires when idle.
-            await rearmTimerLoopIfScriptScheduled()
-        }
-        if let searchAndDestroy {
-            let effects = await measureSessionPhase(
-                "session.gmcp.snd-apply",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                await searchAndDestroy.applyGMCP(package: message.package, json: message.json)
-            }
-            await applyScriptEffects(effects)
-            await rearmTimerLoopIfSnDScheduled()
-        }
+        await activatePluginsIfFirstInGame(message, isCharStatus: isCharStatus)
+        await dispatchGMCPToScripts(message, hold: isCharStatus && !seenCharInGame)
+        await dispatchGMCPToSearchAndDestroy(message)
         // Load the armed dinv once the character is active (its init keys off the
         // first char.base broadcast it sees while active — see D-32).
         if armedDinvShouldLoad(for: message) {
@@ -355,6 +261,126 @@ extension SessionController {
                 await loadPendingDinv()
             }
         }
+    }
+
+    /// Route a GMCP message to chat capture: ingest it, and on a captured
+    /// channel line record it (speech-mute matching) + raise any notification.
+    private func dispatchGMCPToChat(_ message: GMCPMessage) async {
+        let chatLine = await measureSessionPhase(
+            "session.gmcp.chat-ingest",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await chatStore.ingest(message)
+        }
+        guard let chatLine else { return }
+        PerformanceProbe.shared.measure(
+            "session.gmcp.chat-record",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            recordChannelLine(chatLine) // speech-mute matching (tts mute)
+        }
+        await measureSessionPhase(
+            "session.gmcp.chat-notify",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await notifyForChat(chatLine)
+        }
+    }
+
+    /// Route a GMCP message to the native mapper: ingest it, send any follow-on
+    /// requests it asks for (e.g. "request area"), then release the next
+    /// speedwalk segment. No-op without a mapper.
+    private func dispatchGMCPToMapper(_ message: GMCPMessage) async {
+        guard let mapper else { return }
+        let packets = await measureSessionPhase(
+            "session.gmcp.mapper-ingest",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await mapper.ingest(package: message.package, json: message.json)
+        }
+        for packet in packets {
+            try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
+        }
+        // After a room change, release the next segment of any pending speedwalk.
+        // This is what makes a portal hop wait for its whoosh before the
+        // follow-on `run` is sent (otherwise the run races the portal, walks from
+        // the wrong room, and aborts).
+        await measureSessionPhase(
+            "session.gmcp.mapper-effects",
+            events: packets.count,
+            thresholdMS: 50
+        ) {
+            await applyScriptEffects(mapper.advanceWalk())
+        }
+    }
+
+    /// On the first in-game `char.status` (state ≥ 3), load + connect the
+    /// deferred plugins before this broadcast reaches them. Held until in-game
+    /// (matching MUSHclient) so a transitional mid-login char.status (state 2)
+    /// doesn't make plugins act prematurely — e.g. Hadar's spellup-list request
+    /// firing before login completes, failing, and recovering too slowly so spell
+    /// tracking never works. The native HUD (gmcpState) updates throughout.
+    private func activatePluginsIfFirstInGame(_ message: GMCPMessage, isCharStatus: Bool) async {
+        guard isCharStatus, !seenCharInGame, (Self.charStatusState(message.json) ?? 0) >= 3
+        else { return }
+        seenCharInGame = true
+        await measureSessionPhase(
+            "session.gmcp.plugin-activate",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await activatePluginsIfNeeded()
+        }
+    }
+
+    /// Deliver a GMCP message to the user's scripts: `applyGMCP` (the broadcast),
+    /// then the raw subnegotiation (option 201) that dinv's config detection
+    /// reads, then re-arm the timer loop for any one-shot a plugin scheduled.
+    /// `hold` defers `char.status` until the character is in-game.
+    private func dispatchGMCPToScripts(_ message: GMCPMessage, hold: Bool) async {
+        guard let scriptEngine, !hold else { return }
+        let applyEffects = await measureSessionPhase(
+            "session.gmcp.script-apply",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.applyGMCP(package: message.package, json: message.json)
+        }
+        await applyScriptEffects(applyEffects)
+        // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
+        // (option 201); dinv's config detection reads only that path.
+        let subnegEffects = await measureSessionPhase(
+            "session.gmcp.script-subneg",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.deliverGMCPSubnegotiation(
+                package: message.package, json: message.json
+            )
+        }
+        await applyScriptEffects(subnegEffects)
+        // A plugin's OnPluginBroadcast may have scheduled a one-shot (e.g. a
+        // wait.time resume timer); re-arm the loop so it fires when idle.
+        await rearmTimerLoopIfScriptScheduled()
+    }
+
+    /// Deliver a GMCP message to the Search-and-Destroy host + re-arm the timer
+    /// loop for any one-shot it scheduled. No-op without an S&D host.
+    private func dispatchGMCPToSearchAndDestroy(_ message: GMCPMessage) async {
+        guard let searchAndDestroy else { return }
+        let effects = await measureSessionPhase(
+            "session.gmcp.snd-apply",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await searchAndDestroy.applyGMCP(package: message.package, json: message.json)
+        }
+        await applyScriptEffects(effects)
+        await rearmTimerLoopIfSnDScheduled()
     }
 
     private func markInGameIfNeeded(_ json: String) {
