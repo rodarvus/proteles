@@ -426,7 +426,7 @@ public actor LuaRuntime {
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
-             .sndCall, .playSound, .speak:
+             .sndCall, .playSound, .speak, .simulate:
             recordEffect(function, arguments)
             return []
         case .call:

@@ -251,6 +251,21 @@ public extension LuaRuntime {
       end
       proteles.execute(text); return error_code.eOK
     end
+    -- Simulate(text): inject `text` as if it arrived from the MUD (re-fed
+    -- through the inbound pipeline, so triggers see it and it displays) — the
+    -- generic-shim twin of the S&D binding (the most-used world fn missing from
+    -- the shim per docs/MUSHCLIENT_LUA_GAP.md).
+    function Simulate(text)
+      proteles.simulate(text == nil and "" or tostring(text))
+      return error_code.eOK
+    end
+    -- ANSI(code, ...): build an ANSI escape from numeric codes — pure, exact to
+    -- MUSHclient (ESC "[" .. codes joined by ";" .. "m"; no args -> ESC "[m").
+    function ANSI(...)
+      local parts, n = {}, select("#", ...)
+      for i = 1, n do parts[i] = string.format("%i", math.floor(tonumber((select(i, ...))) or 0)) end
+      return "\\27[" .. table.concat(parts, ";") .. "m"
+    end
 
     -- Variables -------------------------------------------------------------
     function GetVariable(name) return proteles.getVar(name) end
@@ -269,6 +284,9 @@ public extension LuaRuntime {
     function GetInfo(n) return proteles.info(n) end
     function GetPluginID() return proteles.pluginID() end
     function IsConnected() return proteles.isConnected() end
+    -- WorldName(): the current world's name (GetInfo(2)); defaults to the only
+    -- world Proteles targets when unset.
+    function WorldName() return proteles.info(2) or "Aardwolf" end
     -- GetPluginInfo(id, 20) = the plugin's directory; resolved for the
     -- current plugin via GetInfo(60). Other infotypes/plugins return nil.
     function GetPluginInfo(id, n)
