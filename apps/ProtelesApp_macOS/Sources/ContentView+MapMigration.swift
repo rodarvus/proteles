@@ -14,7 +14,9 @@ private struct MapMigrationPrompt: ViewModifier {
     func body(content: Content) -> some View {
         content
             .task {
-                for await name in session.mapperMigrationPrompts { character = name }
+                for await name in session.mapperMigrationPrompts {
+                    character = name
+                }
             }
             .alert(
                 "Upgrade map storage?",

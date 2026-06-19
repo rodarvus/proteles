@@ -106,7 +106,7 @@ struct MapperSplitTests {
             .appendingPathComponent("Aardwolf-personal.db")
         #expect(FileManager.default.fileExists(atPath: overlay.path))
         // The imported map is whole again when read with the character's overlay.
-        let graph = try MapperStore(url: dest!, personalURL: overlay).loadGraph()
+        let graph = try MapperStore(url: #require(dest), personalURL: overlay).loadGraph()
         #expect(graph["100"]?.exits["enter portal"]?.to == "200")
         #expect(graph["100"]?.exits["n"]?.level == 9)
         #expect(graph["*"]?.exits["recall"]?.to == "200")

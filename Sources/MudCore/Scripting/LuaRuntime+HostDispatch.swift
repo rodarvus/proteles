@@ -34,7 +34,7 @@ extension LuaRuntime {
         case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
         case .mapperMergeSQL:
             { let merge = mapperMergeSQL(Self.argString(arguments, 0))
-              return [.string(merge.overlay), .string(merge.sql)] }()
+                return [.string(merge.overlay), .string(merge.sql)] }()
         case .monotonic: [.number(Self.monotonicSeconds())]
         case .databaseDir: [.string(databasesDirectory)]
         case .isPluginInstalled:

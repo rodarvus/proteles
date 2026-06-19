@@ -79,12 +79,12 @@ extension MapperStore {
     }
 
     /// What ``splitPersonal(sharedURL:overlayURL:)`` moved out of the shared map.
-    struct SplitSummary: Sendable, Equatable {
-        public var portals = 0
-        public var customExits = 0
-        public var exitLocks = 0
-        public var notes = 0
-        public var alreadySplit = false
+    struct SplitSummary: Equatable {
+        var portals = 0
+        var customExits = 0
+        var exitLocks = 0
+        var notes = 0
+        var alreadySplit = false
     }
 
     /// `proteles_meta` flag stamped in the shared DB once it has been split, so
