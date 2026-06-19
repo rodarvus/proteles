@@ -8,6 +8,9 @@ import SwiftUI
 /// state; members can be room-only filtered + sorted via the header menu.
 public struct GroupPanel: View {
     private let model: GMCPStateModel
+    /// Sends a command to the session (Accept/Decline on a pending invite). Nil
+    /// disables the buttons — they're cosmetic without a session to send to.
+    private let onCommand: ((String) -> Void)?
     /// Reads route through the model so per-GMCP updates re-render only this
     /// panel, never the root that passed the reference (#61).
     private var state: GMCPState {
@@ -21,8 +24,9 @@ public struct GroupPanel: View {
     /// (the Character-panel live report, 2026-06-10).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
-    public init(state: GMCPStateModel) {
+    public init(state: GMCPStateModel, onCommand: ((String) -> Void)? = nil) {
         model = state
+        self.onCommand = onCommand
     }
 
     private var sort: GroupMemberSort {
@@ -47,6 +51,8 @@ public struct GroupPanel: View {
                         .padding(8)
                     }
                 }
+            } else if !state.pendingInvites.isEmpty {
+                pendingInvites(state.pendingInvites)
             } else {
                 placeholder("Not in a group.")
             }
@@ -90,6 +96,49 @@ public struct GroupPanel: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+
+    /// "Pending Group Invitations" — shown when you're not grouped but someone
+    /// has invited you (modelled on the reference `aard_group_monitor`, which
+    /// lists pending invites in place of its "No Group To Display" text). Each
+    /// row is actionable: Accept/Decline send `group accept/decline <inviter>`.
+    private func pendingInvites(_ invites: [GroupInvite]) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Pending Group Invitations")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(invites) { invite in
+                    inviteRow(invite)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func inviteRow(_ invite: GroupInvite) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.caption2).foregroundStyle(.blue)
+                Text(invite.inviter).font(.caption.weight(.medium))
+            }
+            if !invite.groupName.isEmpty {
+                Text(invite.groupName).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            HStack(spacing: 6) {
+                Button("Accept") { onCommand?("group accept \(invite.inviter)") }
+                    .buttonStyle(.borderedProminent)
+                Button("Decline") { onCommand?("group decline \(invite.inviter)") }
+                    .buttonStyle(.bordered)
+            }
+            .controlSize(.small)
+            .disabled(onCommand == nil)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func memberBlock(_ member: GroupInfo.Member, isLeader: Bool) -> some View {

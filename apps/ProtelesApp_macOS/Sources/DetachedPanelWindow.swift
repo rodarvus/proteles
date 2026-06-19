@@ -75,7 +75,9 @@ struct DetachedPanelWindow: View {
         case .hunt: SearchAndDestroyPanelView(model: snd)
         case .consider: ConsiderPanelView(model: consider)
         case .info: InfoPanel(state: gmcp)
-        case .group: GroupPanel(state: gmcp)
+        case .group: GroupPanel(state: gmcp, onCommand: { command in
+                Task { try? await session.send(command) }
+            })
         case .help: HelpPanelView(model: help)
         case .levels: LevelDBPanelView(model: levels)
         case .commandBar: CommandBarView(scripts: scripts, onOpenEditor: {

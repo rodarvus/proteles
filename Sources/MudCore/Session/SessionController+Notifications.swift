@@ -96,4 +96,18 @@ public extension SessionController {
         guard notificationsEnabled else { return }
         publishNotification(ProtelesNotification(title: title, body: body))
     }
+
+    /// Raise a banner for a new group invitation. Aardwolf sends no GMCP for
+    /// invites, so this is driven by ``handleGroupInviteLine``'s text parsing.
+    /// Behaves like the tell/keyword banners — gated by the master toggle and
+    /// the suppress-when-focused policy (the always-visible reminder is the
+    /// Group panel's pending-invite list, which the banner complements when
+    /// you're tabbed away).
+    func notifyGroupInvite(inviter: String, groupName: String) {
+        guard notificationsEnabled else { return }
+        publishNotification(ProtelesNotification(
+            title: "Group invite from \(inviter)",
+            body: "Join “\(groupName)”? Use ‘group accept \(inviter)’ or ‘group decline \(inviter)’."
+        ))
+    }
 }

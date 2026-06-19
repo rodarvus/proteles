@@ -12,6 +12,11 @@ public struct GMCPState: Sendable, Equatable {
     public var base: CharBase?
     public var room: RoomInfo?
     public var group: GroupInfo?
+    /// Pending group invitations awaiting your accept/decline. Aardwolf sends
+    /// these as plain text (no GMCP — see ``GroupInvite``), so they're parsed
+    /// from lines and shown in the Group panel when you're not grouped, mirroring
+    /// the reference `aard_group_monitor`'s "Pending Group Invitations" view.
+    public var pendingInvites: [GroupInvite] = []
     /// When the most recent Aardwolf tick was witnessed (a `comm.tick` GMCP
     /// broadcast). `nil` until the first tick — "a tick must be witnessed
     /// before the next tick can be predicted" (cf. Aardwolf_Tick_Timer).
@@ -84,7 +89,7 @@ public actor GMCPStateStore {
         case "char.worth": set(\.worth, from: message, as: CharWorth.self)
         case "char.base": set(\.base, from: message, as: CharBase.self)
         case "room.info": set(\.room, from: message, as: RoomInfo.self)
-        case "group": set(\.group, from: message, as: GroupInfo.self)
+        case "group": setGroup(from: message)
         default: false
         }
     }
@@ -111,7 +116,41 @@ public actor GMCPStateStore {
         broadcast()
     }
 
+    /// Apply a parsed group-invite event — add a pending invitation or remove
+    /// one — and notify observers if it changed anything. Driven by
+    /// ``SessionController``'s line parsing, since Aardwolf has no GMCP for
+    /// invites. Matching is case-insensitive on the inviter; a fresh invite from
+    /// the same player replaces the old entry (a re-invite to a renamed group).
+    public func applyInviteEvent(_ event: GroupInviteEvent) {
+        let before = state.pendingInvites
+        switch event {
+        case .invited(let inviter, let groupName):
+            removeInvite(from: inviter)
+            state.pendingInvites.append(GroupInvite(inviter: inviter, groupName: groupName))
+        case .cancelled(let inviter):
+            removeInvite(from: inviter)
+        }
+        if state.pendingInvites != before { broadcast() }
+    }
+
+    private func removeInvite(from inviter: String) {
+        state.pendingInvites.removeAll { $0.inviter.caseInsensitiveCompare(inviter) == .orderedSame }
+    }
+
     // MARK: - Private
+
+    /// Decode the `group` module; on a decode that shows you grouped, drop any
+    /// pending invite from the new leader — accepting an invite produces no
+    /// explicit "invitation accepted" line, only the `group` GMCP, so this is
+    /// how an accepted invite leaves the pending list.
+    private func setGroup(from message: GMCPMessage) -> Bool {
+        guard let value = try? message.decode(GroupInfo.self) else { return false }
+        state.group = value
+        if value.isGrouped, let leader = value.leader, !leader.isEmpty {
+            removeInvite(from: leader)
+        }
+        return true
+    }
 
     private func set<T: Decodable>(
         _ keyPath: WritableKeyPath<GMCPState, T?>,
