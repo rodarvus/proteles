@@ -12,13 +12,18 @@ public extension SessionController {
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
-    /// Fire a macro's action. A `.command` runs through the same input
-    /// pipeline as typed text (so aliases + `;`-stacking apply); a multi-line
-    /// body sends each line separately (a command button authored like a
-    /// MUSHclient Send box). A `.script` runs as Lua in the user script
-    /// environment and its effects are applied.
+    /// Fire a macro's action. A `.send` goes straight to the MUD (raw, no
+    /// alias/mapper/S&D re-processing — an alias's "Send to MUD"); a `.command`
+    /// runs through the same input pipeline as typed text (so aliases +
+    /// `;`-stacking apply — an alias's "Re-process as input"); both split a
+    /// multi-line body into separate commands. A `.script` runs as Lua in the
+    /// user script environment and its effects are applied.
     func fire(_ action: MacroAction) async {
         switch action {
+        case .send(let command):
+            // Raw send, via the .send effect so multi-line + `;`-stacking (and
+            // OnPluginSend) apply exactly as for an alias's .world target.
+            await applyScriptEffects([.send(command)])
         case .command(let command):
             for line in Self.commandLines(command) {
                 try? await send(line)

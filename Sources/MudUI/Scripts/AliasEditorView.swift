@@ -37,13 +37,10 @@ struct AliasEditorView: View {
                     Text(AliasTarget.script.label).tag(AliasTarget.script)
                     Text(AliasTarget.output.label).tag(AliasTarget.output)
                 }
-                TextField(
-                    alias.sendTo == .script ? "Script (Lua)" : "Expansion",
-                    text: $alias.sendText.orEmpty(),
-                    axis: .vertical
+                CommandBodyEditor(
+                    title: alias.sendTo == .script ? "Script (Lua)" : "Expansion",
+                    text: $alias.sendText.orEmpty()
                 )
-                .font(.body.monospaced())
-                .lineLimit(1...10)
             }
 
             Section {

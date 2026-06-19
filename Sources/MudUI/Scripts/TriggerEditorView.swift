@@ -31,10 +31,8 @@ struct TriggerEditorView: View {
                 Picker("Send to", selection: $trigger.sendTo) {
                     ForEach(TriggerTarget.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
-                TextField(trigger.sendTo.fieldLabel, text: $trigger.sendText.orEmpty())
-                TextField("Script (Lua)", text: $trigger.script.orEmpty(), axis: .vertical)
-                    .font(.body.monospaced())
-                    .lineLimit(3...10)
+                CommandBodyEditor(title: trigger.sendTo.fieldLabel, text: $trigger.sendText.orEmpty())
+                CommandBodyEditor(title: "Script (Lua)", text: $trigger.script.orEmpty())
             }
 
             Section("Highlight") {

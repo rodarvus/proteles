@@ -19,17 +19,15 @@ struct MacroEditorView: View {
 
             Section("Action") {
                 Picker("Type", selection: actionKind) {
-                    Text("Send command").tag(MacroActionKind.command)
+                    Text("Send to MUD").tag(MacroActionKind.send)
+                    Text("Re-process as input").tag(MacroActionKind.command)
                     Text("Replace command line").tag(MacroActionKind.replaceInput)
                     Text("Run Lua script").tag(MacroActionKind.script)
                 }
-                TextField(
-                    actionKind.wrappedValue == .script ? "Script (Lua)" : "Command",
-                    text: actionText,
-                    axis: .vertical
+                CommandBodyEditor(
+                    title: actionKind.wrappedValue == .script ? "Script (Lua)" : "Command",
+                    text: actionText
                 )
-                .font(.body.monospaced())
-                .lineLimit(1...10)
             }
 
             Section("Options") {
@@ -64,6 +62,7 @@ struct MacroEditorView: View {
         Binding(
             get: {
                 switch macro.action {
+                case .send: .send
                 case .command: .command
                 case .script: .script
                 case .replaceInput: .replaceInput
@@ -83,7 +82,7 @@ struct MacroEditorView: View {
 
 /// The selectable kinds of ``MacroAction`` (the editor's type picker).
 enum MacroActionKind: String, CaseIterable, Identifiable {
-    case command, replaceInput, script
+    case send, command, replaceInput, script
 
     var id: String {
         rawValue
@@ -93,6 +92,7 @@ enum MacroActionKind: String, CaseIterable, Identifiable {
     /// user flips the picker).
     static func make(_ kind: MacroActionKind, text: String) -> MacroAction {
         switch kind {
+        case .send: .send(text)
         case .command: .command(text)
         case .replaceInput: .replaceInput(text)
         case .script: .script(text)
@@ -104,7 +104,7 @@ extension MacroAction {
     /// The action's text payload (the command, script source, or prefill text).
     var text: String {
         switch self {
-        case .command(let value), .script(let value), .replaceInput(let value): value
+        case .send(let value), .command(let value), .script(let value), .replaceInput(let value): value
         }
     }
 }
