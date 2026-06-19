@@ -71,7 +71,7 @@ public extension SessionController {
             }
         }
         if !disposition.gag, !sndGag, !omitBlank, !richExitsGag, !wishGag, !tagGag {
-            await scrollbackStore.append(displayLine)
+            await recordDisplayed(displayLine, kind: .mud)
             // Phase-2 keyword notifications fire on lines the user actually sees.
             notifyForOutput(displayLine.text)
             // TTS (#9) speaks displayed lines only — gagged spam never talks.
@@ -135,7 +135,7 @@ public extension SessionController {
                 }
             case .colourNote(let segments):
                 logTranscript(.note, segments.map(\.text).joined())
-                await scrollbackStore.append(Self.colourNoteLine(segments))
+                await recordDisplayed(Self.colourNoteLine(segments), kind: .note)
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
             case .echoAard(let coded):
@@ -173,7 +173,7 @@ public extension SessionController {
         var segments = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         if segments.count > 1, segments.last?.isEmpty == true { segments.removeLast() }
         for segment in segments {
-            await scrollbackStore.append(makeLine(segment))
+            await recordDisplayed(makeLine(segment), kind: .note)
         }
     }
 

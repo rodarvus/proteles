@@ -158,6 +158,12 @@ public actor LuaRuntime {
     nonisolated(unsafe) var outputPixelWidth = 800
     nonisolated(unsafe) var outputPixelHeight = 600
 
+    /// Bounded mirror of the displayed output lines, backing the MUSHclient
+    /// output-buffer world functions (`GetLineCount`/`GetLineInfo`/…). Pushed
+    /// per line by `SessionController` (post-gag); read synchronously by the
+    /// host dispatch. See ``OutputLineBuffer``.
+    nonisolated(unsafe) var outputBuffer = OutputLineBuffer()
+
     /// Per-character `~/Documents/Proteles/Databases/<character>/` (trailing
     /// slash), surfaced to plugins as `proteles.databaseDir()` so a plugin can
     /// keep its DB flat in the shared Databases tree (#43/#44). Empty until the
@@ -373,6 +379,11 @@ public actor LuaRuntime {
         setHostFunction("adjustColour", .adjustColour)
         setHostFunction("createGUID", .createGUID)
         setHostFunction("uniqueID", .uniqueID)
+        setHostFunction("lineCount", .lineCount)
+        setHostFunction("linesInBuffer", .linesInBuffer)
+        setHostFunction("lineInfo", .lineInfo)
+        setHostFunction("styleInfo", .styleInfo)
+        setHostFunction("recentLines", .recentLines)
         setHostFunction("isPluginInstalled", .isPluginInstalled)
         setHostFunction("sndCall", .sndCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
@@ -448,7 +459,8 @@ public actor LuaRuntime {
         case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
              .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
              .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
-             .adjustColour, .createGUID, .uniqueID:
+             .adjustColour, .createGUID, .uniqueID,
+             .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the

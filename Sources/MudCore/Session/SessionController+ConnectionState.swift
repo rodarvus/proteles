@@ -33,6 +33,9 @@ extension SessionController {
                 default: []
                 }
                 if newState == .connected {
+                    // Reset the output-buffer mirror so GetLineCount counts from
+                    // this connect (and infotype 13 elapsed is from now).
+                    await scriptEngine.resetOutputBuffer(connectedAt: Date())
                     await effects.append(contentsOf: scriptEngine.connectNativePlugins())
                     await self?.schedulePluginActivationFallback()
                 }

@@ -575,7 +575,7 @@ public actor SessionController {
         // Suppressed when the server echoes (passwords) and for the bare
         // prompt-refresh Enter; the transcript tap is gated the same way.
         if !serverEcho, !command.isEmpty {
-            await scrollbackStore.append(Self.inputEchoLine(command))
+            await recordDisplayed(Self.inputEchoLine(command), kind: .userInput)
             logTranscript(.input, command)
         }
         try await dispatchCommand(command)

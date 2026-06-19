@@ -20,6 +20,8 @@ extension LuaRuntime {
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .colourNameToRGB, .rgbColourToName, .adjustColour: colourValue(function, arguments)
+        case .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines:
+            bufferValue(function, arguments)
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
              .createGUID, .uniqueID:
@@ -130,6 +132,41 @@ extension LuaRuntime {
     func setOutputGeometry(width: Int, height: Int) {
         outputPixelWidth = max(0, width)
         outputPixelHeight = max(0, height)
+    }
+
+    /// Append one displayed line to the output-buffer mirror (``OutputLineBuffer``)
+    /// that backs `GetLineCount`/`GetLineInfo`/… Pushed per line by
+    /// `SessionController` after gag resolution.
+    func recordOutputLine(
+        id: UInt64, timestamp: Date, text: String, runs: [StyledRun], kind: OutputLineKind
+    ) {
+        outputBuffer.append(BufferedLine(id: id, timestamp: timestamp, text: text, runs: runs, kind: kind))
+    }
+
+    /// Clear the output-buffer mirror and stamp the connect time (`GetLineCount`
+    /// counts from connect; infotype 13 is elapsed-since-connect).
+    func resetOutputBuffer(connectedAt: Date) {
+        outputBuffer.reset(connectedAt: connectedAt)
+    }
+
+    /// The output-buffer host queries (`GetLineCount`/`GetLinesInBufferCount`/
+    /// `GetLineInfo`/`GetStyleInfo`/`GetRecentLines`) — all synchronous reads of
+    /// the runtime's ``outputBuffer`` mirror.
+    nonisolated func bufferValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        switch function {
+        case .lineCount: [.number(Double(outputBuffer.lineCount))]
+        case .linesInBuffer: [.number(Double(outputBuffer.linesInBuffer))]
+        case .lineInfo:
+            [outputBuffer.lineInfo(Int(Self.argDouble(arguments, 0)), Int(Self.argDouble(arguments, 1)))]
+        case .styleInfo:
+            [outputBuffer.styleInfo(
+                Int(Self.argDouble(arguments, 0)),
+                Int(Self.argDouble(arguments, 1)),
+                Int(Self.argDouble(arguments, 2))
+            )]
+        case .recentLines: [.string(outputBuffer.recentLines(Int(Self.argDouble(arguments, 0))))]
+        default: []
+        }
     }
 
     /// `proteles.dialog(kind, …)` → build a ``ScriptDialog``, run it through the

@@ -34,6 +34,7 @@ extension LuaRuntime {
         case colourNote, hyperlink, mapperCall, chatCapture
         case colourNameToRGB, rgbColourToName, adjustColour
         case createGUID, uniqueID
+        case lineCount, linesInBuffer, lineInfo, styleInfo, recentLines
         case sqliteAllowed
         case mapperMergeSQL
         case publish

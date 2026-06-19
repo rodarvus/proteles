@@ -189,6 +189,33 @@ public extension LuaRuntime {
     end
     function CreateGUID() return proteles.createGUID() end
     function GetUniqueID() return proteles.uniqueID() end
+    -- Output-buffer introspection. Line numbers are 1-indexed (1 = oldest line
+    -- still in the buffer); GetLineCount is the running total since connect,
+    -- GetLinesInBufferCount the current buffer size. GetLineInfo(n) (or
+    -- GetLineInfo(n, 0)) returns the all-fields table; a specific infotype
+    -- returns that scalar (nil if the line is out of range / infotype unknown).
+    function GetLineCount() return proteles.lineCount() end
+    function GetLinesInBufferCount() return proteles.linesInBuffer() end
+    function GetRecentLines(count) return proteles.recentLines(tonumber(count) or 0) end
+    function GetStyleInfo(line, style, infotype)
+      return proteles.styleInfo(tonumber(line) or 0, tonumber(style) or 0, tonumber(infotype) or 0)
+    end
+    function GetLineInfo(line, infotype)
+      line = tonumber(line) or 0
+      if infotype ~= nil and infotype ~= 0 then
+        return proteles.lineInfo(line, tonumber(infotype) or 0)
+      end
+      if proteles.lineInfo(line, 1) == nil then return nil end -- out-of-range line
+      return {
+        text = proteles.lineInfo(line, 1), length = proteles.lineInfo(line, 2),
+        newline = proteles.lineInfo(line, 3), note = proteles.lineInfo(line, 4),
+        user = proteles.lineInfo(line, 5), log = proteles.lineInfo(line, 6),
+        bookmark = proteles.lineInfo(line, 7), hr = proteles.lineInfo(line, 8),
+        time = proteles.lineInfo(line, 9), line = proteles.lineInfo(line, 10),
+        styles = proteles.lineInfo(line, 11), ticks = proteles.lineInfo(line, 12),
+        elapsed = proteles.lineInfo(line, 13),
+      }
+    end
     -- Hyperlink(action, text, hint): clickable text → the native primitive
     -- (action: URL → opens browser, else sent as a command). A pending prefix is
     -- flushed first; inline composition with Tell/Note isn't supported.
