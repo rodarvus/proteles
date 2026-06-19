@@ -40,10 +40,7 @@ extension SessionController {
         do {
             output = try pipeline.consume(wireBytes)
         } catch {
-            // Corrupt MCCP stream — drop the session. Future phases
-            // will surface a user-visible error rather than bail
-            // silently.
-            await disconnect()
+            await handleInboundPipelineFailure(error)
             return
         }
 
@@ -315,6 +312,23 @@ extension SessionController {
         return lower.contains("join") || lower.contains("left the group")
             || lower.contains("disband") || lower.contains("removed")
             || lower.contains("group leader") || lower.contains("leaves the group")
+    }
+
+    func handleInboundPipelineFailure(_ error: any Error) async {
+        await echoSystemNote(Self.inboundPipelineFailureMessage(error))
+        await connection?.disconnect()
+    }
+
+    nonisolated static func inboundPipelineFailureMessage(_ error: any Error) -> String {
+        let detail = switch error {
+        case Inflater.InflaterError.dataError(let code):
+            "compressed MCCP data was corrupt (zlib code \(code))"
+        case Inflater.InflaterError.initFailed(let code):
+            "MCCP decompression could not start (zlib code \(code))"
+        default:
+            "the inbound stream could not be parsed (\(error))"
+        }
+        return "[Proteles] Inbound stream error: \(detail); disconnecting."
     }
 
     func flushOnDisconnect() async {

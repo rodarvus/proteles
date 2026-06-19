@@ -190,4 +190,35 @@ struct SessionControllerMCCP2Tests {
         await controller.disconnect()
         await listener.stop()
     }
+
+    @Test("Corrupt MCCP input surfaces a note without a clean-session end")
+    func corruptMCCPInputSurfacesDiagnostic() async throws {
+        let connection = InMemoryConnection()
+        let controller = SessionController(makeConnection: { connection })
+        let cleanEnd = CleanEndFlag()
+        await controller.setCleanSessionEndHandler { cleanEnd.fired = true }
+
+        let storeStream = await controller.scrollbackStore.subscribe()
+        try await controller.connect(to: .init(host: "127.0.0.1", port: 1))
+
+        connection.injectInbound(Self.mccp2Start + [0xFF, 0xFE, 0xFD, 0xFC])
+
+        var diagnostic: Line?
+        for await line in storeStream {
+            guard line.text.contains("[Proteles] Inbound stream error") else { continue }
+            diagnostic = line
+            break
+        }
+
+        let note = try #require(diagnostic)
+        #expect(note.text.contains("compressed MCCP data was corrupt"))
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!cleanEnd.fired)
+        #expect(await controller.state == .disconnected)
+    }
+}
+
+private final class CleanEndFlag: @unchecked Sendable {
+    var fired = false
 }
