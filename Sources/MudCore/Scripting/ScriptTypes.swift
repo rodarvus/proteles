@@ -89,6 +89,14 @@ public enum ScriptEffect: Sendable, Equatable {
     case sendNoEcho(String)
     /// Run a command as if the user typed it (through aliases).
     case execute(String)
+    /// Pace a mapper speedwalk / custom-exit command that embeds `wait(N)`
+    /// pauses — a faithful port of the Aardwolf mapper's `ExecuteWithWaits`.
+    /// The session parses it (``WaitWalk``), `execute`s the command chunks, and
+    /// turns each `wait(N)` into a real pause gated on an `echo {mapper_wait}`
+    /// server round-trip — so `wait(1)` never reaches the MUD and the walk stays
+    /// synchronised. `emitEndRunning` asks the pacer to send the `{end running}`
+    /// marker after the last step (true only for a walk's final segment).
+    case walkWithWaits(command: String, emitEndRunning: Bool)
     /// Print plain text to the scrollback.
     case echo(String)
     /// Raise a native user notification from a script/plugin (`Notify` /

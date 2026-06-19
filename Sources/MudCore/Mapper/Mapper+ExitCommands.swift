@@ -160,22 +160,33 @@ extension Mapper {
         guard from != "-1" else {
             return [Self.note("CEXIT FAILED: You cannot link custom exits from unmappable rooms.")]
         }
-        let delay = tempCexitDelay ?? Mapper.cexitDelaySeconds
+        let baseDelay = tempCexitDelay ?? Mapper.cexitDelaySeconds
         tempCexitDelay = nil
+        // A cexit command may embed `wait(N)` pauses; the reference samples the
+        // destination after `cexit_delay + added_waits` so the sample lands
+        // after the paced walk completes (custom_exit). Add the summed waits.
+        let addedWaits = WaitWalk.steps(from: dir).reduce(0.0) {
+            if case .wait(let seconds) = $1 { return $0 + seconds }
+            return $0
+        }
+        let delay = Double(baseDelay) + addedWaits
         let generation = beginPendingCexit(from: from, dir: dir)
         // Run-and-sample: send the command, then check the destination after
         // the cexit delay (the reference's wait.time + current_room sample).
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             await self?.finalizeCexit(generation: generation)
         }
+        // A wait-bearing cexit is paced (ExecuteWithWaits) so `wait(N)` never
+        // reaches the MUD; a plain one re-enters the pipeline so a stacked
+        // `open south;s` splits into `open south` then `s`.
+        let move: ScriptEffect = WaitWalk.containsWait(dir)
+            ? .walkWithWaits(command: dir, emitEndRunning: false)
+            : .execute(dir)
         return [
-            // Re-enter the command pipeline (MUSHclient's `Execute`/
-            // ExecuteWithWaits) so a stacked cexit like `open south;s` splits
-            // into `open south` then `s` instead of being sent raw.
-            .execute(dir),
+            move,
             Self.note("CEXIT: WAIT FOR CONFIRMATION BEFORE MOVING."),
-            Self.note("This should take about \(delay) seconds.")
+            Self.note("This should take about \(Int(delay.rounded())) seconds.")
         ]
     }
 

@@ -45,6 +45,8 @@ extension SessionController {
             // Miniwindow scene/image updates (the miniwindow spike) — forwarded
             // to the UI stream; a no-op for any other effect.
             _ = applyMiniWindowEffect(effect)
+            // Pace a wait-bearing mapper walk (`.walkWithWaits`); no-op otherwise.
+            applyWalkEffect(effect)
         }
     }
 

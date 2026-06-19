@@ -23,6 +23,7 @@ public extension SessionController {
     /// it unless a trigger gagged it. Trigger sends/echoes are applied
     /// afterwards so echoes land just below the line that produced them.
     internal func appendLineThroughScripts(_ line: Line) async {
+        if await handleWalkMarker(line) { return } // mapper {begin/end running}/{mapper_wait}
         if helpCaptureEnabled, captureHelpLine(line) { return } // Help panel capture
         // Blank-line omission (View menu): triggers/S&D still see the line, but
         // it's withheld from the main output. Checked per line against the
