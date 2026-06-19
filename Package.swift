@@ -16,7 +16,18 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.0"),
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0")
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+        // Sparkle is consumed only by the XcodeGen app target (D-100), not by any
+        // SwiftPM library/test target here. But because the app references this
+        // package by path, the *root* Package.resolved is the lock file both
+        // `swift build` and `xcodebuild` write to — and SwiftPM (no Sparkle) vs
+        // Xcode (with Sparkle) wrote different pin sets + originHashes, so the
+        // file flip-flopped on every alternation between the gates and an app
+        // build. Declaring Sparkle here too makes both resolvers emit a
+        // byte-identical Package.resolved (verified), ending the churn. No target
+        // links it, so `swift build` prints a benign "dependency 'sparkle' is not
+        // used by any target" warning — the accepted cost (D-112).
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0")
     ],
     targets: [
         .systemLibrary(name: "CZlib"),
