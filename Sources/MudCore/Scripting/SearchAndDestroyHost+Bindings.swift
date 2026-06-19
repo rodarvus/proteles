@@ -216,22 +216,55 @@ extension SearchAndDestroyHost {
     -- Runtime trigger registration → the host's own TriggerEngine. S&D uses
     -- this for its scan/consider matchers. AddTriggerEx args (MUSHclient):
     -- (name, match, response, flags, colour, wildcard, sound, script, send_to, seq)
+    local __snd_trigger_meta, __snd_trigger_order = {}, {}
+    local function __snd_trigger_key(name) return tostring(name) end
+    local function __snd_touch_trigger(name)
+      local key = __snd_trigger_key(name)
+      if not __snd_trigger_meta[key] then
+        __snd_trigger_meta[key] = {}
+        __snd_trigger_order[#__snd_trigger_order + 1] = key
+      end
+      return __snd_trigger_meta[key]
+    end
+    function __snd_seed_trigger_meta(items)
+      for _, item in ipairs(items or {}) do
+        local meta = __snd_touch_trigger(item.name)
+        meta.group = item.group or ""
+      end
+    end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, send_to, seq)
-      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "")
+      __snd_touch_trigger(name)
+      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "", tonumber(seq) or 100)
       return 0
     end
     function AddTrigger(name, match, response, flags, colour, wildcard, sound, script)
-      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "")
+      __snd_touch_trigger(name)
+      proteles.addTrigger(name, match, tonumber(flags) or 0, script or "", 100)
       return 0
     end
     function AddAlias(...) return 0 end
     function SetTriggerOption(name, option, value)
-      if option == "group" then proteles.setTriggerGroup(name, tostring(value)) end
+      local key, opt = __snd_trigger_key(name), tostring(option)
+      if opt == "group" then
+        __snd_touch_trigger(key).group = tostring(value)
+        proteles.setTriggerGroup(key, tostring(value))
+      else
+        proteles.setTriggerOption(key, opt, tostring(value))
+      end
       return 0
     end
     function DeleteTrigger(...) return 0 end
-    function GetTriggerList() return {} end
-    function GetTriggerInfo(...) return nil end
+    function GetTriggerList()
+      local out = {}
+      for i, name in ipairs(__snd_trigger_order) do out[i] = name end
+      return out
+    end
+    function GetTriggerInfo(name, info)
+      local meta = __snd_trigger_meta[__snd_trigger_key(name)]
+      if not meta then return nil end
+      if tonumber(info) == 26 then return meta.group or "" end
+      return nil
+    end
     function GetVariableList() return proteles.varList() end
     function GetPluginVariableList(id) return proteles.varList(id) end
     function GetPluginVariable(id, name) return proteles.getPluginVar(id, name) end

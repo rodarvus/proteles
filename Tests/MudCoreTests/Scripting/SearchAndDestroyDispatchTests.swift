@@ -96,6 +96,55 @@ struct SearchAndDestroyDispatchTests {
         #expect(await host.evaluate("__con_mob") == "a city guard")
     }
 
+    @Test("xset con_overwrite toggles dynamic consider trigger gagging")
+    func conOverwriteTogglesConsiderGagging() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        try await host.run("setup_scan_con_triggers()")
+
+        let line = "No Problem! a city guard is weak compared to you."
+        #expect(await host.process(line).gag)
+
+        try await host.run("xset_con_overwrite()")
+        #expect(await host.evaluate("GetVariable('mcvar_xset_overwrite_con')") == "off")
+        #expect(await host.process(line).gag == false)
+
+        try await host.run("xset_con_overwrite()")
+        #expect(await host.evaluate("GetVariable('mcvar_xset_overwrite_con')") == "on")
+        #expect(await host.process(line).gag)
+    }
+
+    @Test("S&D trigger metadata exposes XML and dynamic trigger groups")
+    func triggerMetadataCoversXMLAndDynamicTriggers() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        try await host.run("setup_scan_con_triggers()")
+
+        let list = await host.evaluate("table.concat(GetTriggerList(), ',')") ?? ""
+        #expect(list.contains("consider_protected"))
+        #expect(list.contains("con_1"))
+        #expect(await host.evaluate("GetTriggerInfo('consider_protected', 26)") == "consider")
+        #expect(await host.evaluate("GetTriggerInfo('con_1', 26)") == "consider")
+    }
+
+    @Test("AddTriggerEx preserves the MUSHclient sequence argument")
+    func addTriggerExPreservesSequence() async throws {
+        let host = try SearchAndDestroyHost()
+        try await host.load()
+        try await host.run("""
+        __order = {}
+        function first() table.insert(__order, "first") end
+        function second() table.insert(__order, "second") end
+        AddTriggerEx("late", "^ordered$", "", trigger_flag.Enabled + trigger_flag.RegularExpression,
+                     -1, 0, "", "second", sendto.script, 200)
+        AddTriggerEx("early", "^ordered$", "", trigger_flag.Enabled + trigger_flag.RegularExpression,
+                     -1, 0, "", "first", sendto.script, 50)
+        """)
+
+        _ = await host.process("ordered")
+        #expect(await host.evaluate("table.concat(__order, ',')") == "first,second")
+    }
+
     @Test("Static scan triggers run without crashing on a nil style arg")
     func scanFlowRunsCleanly() async throws {
         let host = try SearchAndDestroyHost()

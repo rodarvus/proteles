@@ -35,12 +35,12 @@ public actor SearchAndDestroyHost {
     // S&D's own automation engines (pure value types). S&D runs on a dedicated
     // runtime with curated bindings, so it can't share `ScriptEngine`'s engines
     // — the host drives matching itself and runs fired scripts on `runtime`.
-    private var triggers = TriggerEngine()
+    var triggers = TriggerEngine()
     private var aliases = AliasEngine()
     private var timers = TimerEngine()
     /// Name → engine id, so S&D's `EnableTrigger`/`EnableTimer` (by name) can
     /// toggle the right rule.
-    private var triggerIDsByName: [String: UUID] = [:]
+    var triggerIDsByName: [String: UUID] = [:]
     private var timerIDsByName: [String: UUID] = [:]
     private var aliasIDsByName: [String: UUID] = [:]
     /// Set when a `DoAfter`/`DoAfterSpecial` one-shot is scheduled, so the
@@ -142,6 +142,7 @@ public actor SearchAndDestroyHost {
         // capture the bridge's published JSON in `run`.
         do {
             _ = try await runtime.run(Self.bindings)
+            try await seedTriggerMetadata()
             _ = try await runtime.run(source)
             _ = try await runtime.run(Self.postLoadOverrides)
         } catch {
@@ -468,6 +469,8 @@ public actor SearchAndDestroyHost {
             addDynamicTrigger(name: name, pattern: pattern, flags: flags, script: script, sequence: sequence)
         case .setTriggerGroup(let name, let group):
             setDynamicTriggerGroup(name: name, group: group)
+        case .setTriggerOption(let name, let option, let value):
+            setTriggerOptionByName(name: name, option: option, value: value)
         default:
             return false
         }
