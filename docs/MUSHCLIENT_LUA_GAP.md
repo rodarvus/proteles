@@ -41,12 +41,12 @@ Broadly used, and either the primitive already exists or the function is pure:
 
 | fn | calls | files | note |
 |---|---|---|---|
-| `Simulate` | 93 | 8 | **primitive exists** (`proteles.simulate`) — just needs a generic-shim global alias |
-| `RGBColourToName` | 43 | 14 | pure: RGB int → MUSHclient colour name (static table) |
-| `ColourNameToRGB` | 29 | 10 | pure: colour name → RGB int (the same table, reversed) |
-| `ANSI` | 19 | 4 | pure: build an ANSI escape from numeric args |
+| `Simulate` | 93 | 8 | ✅ **SHIPPED** — generic-shim global over `proteles.simulate` (parses through ANSIParser→LineBuilder) |
+| `RGBColourToName` | 43 | 14 | ✅ **SHIPPED** — native `MUSHColour` table (148 W3C names, ported from `MXP_colours[]`) |
+| `ColourNameToRGB` | 29 | 10 | ✅ **SHIPPED** — same `MUSHColour` table (name/`#rrggbb` → COLORREF) |
+| `ANSI` | 19 | 4 | ✅ **SHIPPED** — pure-Lua escape builder in the shim |
 | `AdjustColour` | 6 | 2 | pure colour math |
-| `WorldName` | 8 | 5 | return the profile/world name (we have it for S&D already) |
+| `WorldName` | 8 | 5 | ✅ **SHIPPED** — generic-shim global over `proteles.info` |
 | `CreateGUID` / `GetUniqueID` | 4 / 3 | 3 | generate an id string |
 
 ## Tier 2 — medium value/effort (engine introspection + control)

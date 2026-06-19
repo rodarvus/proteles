@@ -19,6 +19,8 @@ extension LuaRuntime {
         case .isConnected: [.boolean(connected)]
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
+        case .colourNameToRGB: [.number(Double(MUSHColour.colourNameToRGB(Self.argString(arguments, 0))))]
+        case .rgbColourToName: [.string(MUSHColour.rgbColourToName(Int(Self.argDouble(arguments, 0))))]
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled:
             miscValue(function, arguments)

@@ -174,6 +174,13 @@ public extension LuaRuntime {
     local __bc = { 8421504, 255, 65280, 65535, 16711680, 16711935, 16776960, 16777215 }
     function GetNormalColour(w) return __nc[tonumber(w) or 0] or 0 end
     function GetBoldColour(w) return __bc[tonumber(w) or 0] or 0 end
+    -- ColourNameToRGB(name)/RGBColourToName(int): MUSHclient's 148 named colours
+    -- <-> COLORREF (red low byte). Delegated to Swift (MUSHColour) so the table
+    -- lives in one place. ColourNameToRGB also parses a "#rrggbb" literal and
+    -- returns -1 for an unknown name; RGBColourToName returns "#RRGGBB" when no
+    -- name matches the int.
+    function ColourNameToRGB(name) return proteles.colourNameToRGB(name == nil and "" or tostring(name)) end
+    function RGBColourToName(colour) return proteles.rgbColourToName(tonumber(colour) or 0) end
     -- Hyperlink(action, text, hint): clickable text → the native primitive
     -- (action: URL → opens browser, else sent as a command). A pending prefix is
     -- flushed first; inline composition with Tell/Note isn't supported.

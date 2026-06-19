@@ -32,6 +32,7 @@ extension LuaRuntime {
         case jsonEncode
         case echoAard, echoAnsi, simulate
         case colourNote, hyperlink, mapperCall, chatCapture
+        case colourNameToRGB, rgbColourToName
         case sqliteAllowed
         case mapperMergeSQL
         case publish
