@@ -351,10 +351,6 @@ public actor SessionController {
     /// one with no recent quit, is the session ending while still live.
     static let cleanQuitWindow: Duration = .seconds(10)
 
-    /// Commands that mean "log me out" — a server close right after one is
-    /// expected, not a dropped link. Aardwolf's is `quit`.
-    public static let quitCommands: Set<String> = ["quit"]
-
     /// Called when the user **intentionally** ends the session — a `quit`
     /// command or an explicit ``disconnect()`` — but *not* on a drop or an app /
     /// Sparkle-update shutdown (those leave ``userInitiatedDisconnect`` /
@@ -560,9 +556,7 @@ public actor SessionController {
         if autologin != nil, command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return
         }
-        expectsCleanClose = Self.quitCommands.contains(
-            command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        )
+        expectsCleanClose = Self.isLogoutQuit(command)
         // Don't drop the resume breadcrumb here — Aardwolf can REFUSE a quit
         // (combat, confirmation) and leave you connected. We only treat it as a
         // clean end if the server actually closes soon after (see

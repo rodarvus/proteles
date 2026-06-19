@@ -161,6 +161,52 @@ struct SessionControllerAutoreconnectTests {
         #expect(!flagB.fired, "a refused quit (no close) must keep the breadcrumb")
         await listenerB.stop()
     }
+
+    @Test("`quit quit` (force-logout) makes the ensuing close clean — no reconnect")
+    func quitQuitSuppressesReconnect() async throws {
+        // Live repro (session-20260618-170947): holding unsaveable items, the
+        // user force-quit with `quit quit`; the server logged them out and
+        // closed, but the client autoreconnected and re-sent the character
+        // name. Only the exact string `quit` was recognised as a logout, so
+        // the force-quit form fell through to the drop→reconnect path.
+        let listener = LoopbackListener()
+        let port = try await listener.start()
+
+        let controller = SessionController(reconnectPolicy: fastPolicy(maxAttempts: 10))
+        let observer = observe(controller) { seen in
+            seen.contains(.connected) && seen.last == .disconnected
+        }
+
+        try await controller.connect(to: .init(host: "127.0.0.1", port: port))
+        await listener.waitForConnection()
+
+        try await controller.send("quit quit")
+        await listener.stop() // server closes its side after the force-quit
+
+        let seen = await observer.value
+        #expect(seen.contains(.connected))
+        #expect(seen.last == .disconnected)
+
+        // No reconnect should have started.
+        try await Task.sleep(for: .milliseconds(200))
+        let finalState = await controller.state
+        #expect(finalState == .disconnected)
+    }
+
+    @Test("isLogoutQuit recognises Aardwolf's logout forms, and only those")
+    func logoutQuitClassification() {
+        // Forms that actually close the connection.
+        #expect(SessionController.isLogoutQuit("quit"))
+        #expect(SessionController.isLogoutQuit("quit quit"))
+        // Tolerate case and stray whitespace from the input box.
+        #expect(SessionController.isLogoutQuit("  Quit  "))
+        #expect(SessionController.isLogoutQuit("Quit  Quit"))
+        // Forms that do NOT log you out — they must keep autoreconnect armed.
+        #expect(!SessionController.isLogoutQuit("quit check"))
+        #expect(!SessionController.isLogoutQuit("quit haha"))
+        #expect(!SessionController.isLogoutQuit("look"))
+        #expect(!SessionController.isLogoutQuit(""))
+    }
 }
 
 /// Mutable flag the @Sendable clean-end handler flips; the test awaits the
