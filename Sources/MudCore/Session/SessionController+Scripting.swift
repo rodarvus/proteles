@@ -166,11 +166,20 @@ public extension SessionController {
         }
     }
 
-    /// Send `command` one line at a time — a multi-line alias expansion becomes
-    /// separate commands (MUSHclient's per-line Send), each offered to OnPluginSend.
+    /// Send `command` one line at a time — a multi-line alias/trigger expansion
+    /// becomes separate commands (MUSHclient's per-line Send) — and within each
+    /// line, honour client-side `;`-stacking (`;;` is a literal `;`), so a
+    /// "Send to MUD" alias whose expansion is `get all;wear all` reaches the MUD
+    /// as two commands. The empty-piece rule mirrors ``dispatchCommand``: a lone
+    /// empty line survives as a bare-Enter nudge, but a trailing `;` doesn't emit
+    /// a spurious blank. Each piece is offered to OnPluginSend.
     private func sendLines(_ command: String) async {
         for line in Self.splitSendLines(command) {
-            await sendCommandThroughPlugins(line)
+            let pieces = CommandStack.split(line)
+            for piece in pieces {
+                if piece.isEmpty, pieces.count > 1 { continue }
+                await sendCommandThroughPlugins(piece)
+            }
         }
     }
 

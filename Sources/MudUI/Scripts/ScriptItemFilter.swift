@@ -30,7 +30,7 @@ enum ScriptItemFilter {
 
     static func matches(_ macro: Macro, query: String) -> Bool {
         let actionText: String = switch macro.action {
-        case .command(let text), .script(let text), .replaceInput(let text): text
+        case .send(let text), .command(let text), .script(let text), .replaceInput(let text): text
         }
         return matches(query, anyOf: [
             macro.name, macro.label, actionText,
@@ -44,7 +44,7 @@ enum ScriptItemFilter {
         case .toggle(let off): off.text
         }
         let actionText: String = switch button.action {
-        case .command(let text), .script(let text), .replaceInput(let text): text
+        case .send(let text), .command(let text), .script(let text), .replaceInput(let text): text
         }
         return matches(query, anyOf: [button.label, actionText, offText])
     }

@@ -67,8 +67,14 @@ public struct KeyChord: Sendable, Hashable, Codable {
 /// the same value can back both a key chord *and* a future command-button bar
 /// (Mudlet's TAction) — see MACRO_ENGINE_PLAN.md.
 public enum MacroAction: Sendable, Equatable, Hashable, Codable {
-    /// Run through the input pipeline as if typed (so `;`-stacking and
-    /// aliases apply).
+    /// Send straight to the MUD as a raw line — **no** alias, native-mapper, or
+    /// S&D re-processing (the parallel of an alias's "Send to MUD" target). A
+    /// multi-line body sends one line each; `;`-stacking applies (`;;` is a
+    /// literal `;`).
+    case send(String)
+    /// Run through the input pipeline as if typed (so `;`-stacking, aliases, the
+    /// native mapper, and S&D apply) — the parallel of an alias's "Re-process as
+    /// input" target.
     case command(String)
     /// Run as Lua in the user script environment.
     case script(String)
