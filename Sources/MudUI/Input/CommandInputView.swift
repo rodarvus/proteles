@@ -18,8 +18,8 @@ public enum MacroKeyOutcome: Sendable, Equatable {
 
 /// Command input field (auto-growing, multi-line capable).
 ///
-/// On macOS this is an `NSTextField`-backed field (``CommandField``) so it
-/// can intercept the keys SwiftUI's `TextField` swallows:
+/// On macOS this is an `NSTextView`-backed field (``CommandField``) so it
+/// can wrap, scroll, and intercept the keys SwiftUI's `TextField` swallows:
 ///
 ///   - **Tab / Shift-Tab → word completion.** Completes the *current word*
 ///     (the token ending at the caret) from the live ``CompletionVocabulary``
@@ -83,7 +83,7 @@ public struct CommandInputView: View {
     }
 
     /// Live editor height (one line by default; grows as lines are added, up to
-    /// ``CommandField/maxHeight``). Driven by the field editor's layout via the
+    /// ``CommandField/maxHeight``). Driven by the text view's own layout via the
     /// `onHeightChange` callback.
     @State private var fieldHeight: CGFloat = 20
 
@@ -97,7 +97,6 @@ public struct CommandInputView: View {
             onHeightChange: { fieldHeight = $0 }
         )
         .frame(height: fieldHeight)
-        .animation(.easeOut(duration: 0.1), value: fieldHeight)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.background)
@@ -112,7 +111,7 @@ public struct CommandInputView: View {
 #if os(macOS)
 
     /// macOS command field. See ``CommandInputView`` for behaviour.
-    private struct CommandField: NSViewRepresentable {
+    struct CommandField: NSViewRepresentable {
         let onSubmit: (String) -> Void
         let onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
@@ -120,10 +119,9 @@ public struct CommandInputView: View {
         let ghostHint: Bool
         let onHeightChange: (CGFloat) -> Void
 
-        /// One text line's height (set from the field's font in `makeNSView`).
-        static let lineHeight: CGFloat = 20
-        /// The tallest the input grows before it scrolls internally (~6 lines).
-        static let maxHeight: CGFloat = 120
+        /// The input grows to five visual rows; beyond that the text view scrolls.
+        static let visualLineCap: CGFloat = 5
+        static let textInset = NSSize(width: 0, height: 2)
 
         func makeCoordinator() -> Coordinator {
             Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
@@ -134,57 +132,19 @@ public struct CommandInputView: View {
         /// text (so it can't be sent, can't eat the spacebar) — it's positioned
         /// over the empty area to the right of what's typed. #13 / D-96.
         func makeNSView(context: Context) -> NSView {
-            let field = AutoFocusTextField()
-            field.onMacroKey = onMacroKey
-            field.spellChecking = spellChecking
-            field.delegate = context.coordinator
-            // Stable id so the output view can find + refocus the command field
-            // when the user types after selecting text (always-focused input).
-            field.identifier = NSUserInterfaceItemIdentifier("proteles.command")
-            // Accessibility: this is the player's primary control. A stable AX
-            // identifier doubles as the XCUITest hook (#26 Phase 0).
-            field.setAccessibilityIdentifier("command-input")
-            field.setAccessibilityLabel("Command input")
-            field.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            field.isBordered = false
-            field.drawsBackground = false
-            field.focusRingType = .none
-            // Multi-line capable (#39): wrap long lines and keep newlines (single-
-            // line mode strips them on paste and makes Enter end editing). Enter
-            // still *submits* — our `doCommandBy` intercepts `insertNewline:` and
-            // only inserts a literal newline when Shift is held.
-            field.lineBreakMode = .byWordWrapping
-            field.usesSingleLineMode = false
-            field.cell?.wraps = true
-            field.cell?.isScrollable = false
-            field.preferredMaxLayoutWidth = 0 // set from the live width by AppKit
-            field.maximumNumberOfLines = 0
-
-            let ghost = NSTextField(labelWithString: "")
-            ghost.font = field.font
-            ghost.textColor = .tertiaryLabelColor
-            ghost.lineBreakMode = .byClipping
-            ghost.isHidden = true
-            ghost.refusesFirstResponder = true
-            // Decorative completion hint — never announced to VoiceOver.
-            ghost.setAccessibilityElement(false)
-
-            let container = NSView()
-            field.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(field)
-            container.addSubview(ghost) // on top, in the empty area after the caret
-            NSLayoutConstraint.activate([
-                field.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                field.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                field.topAnchor.constraint(equalTo: container.topAnchor),
-                field.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-            ])
-            context.coordinator.field = field
-            context.coordinator.ghost = ghost
-            context.coordinator.ghostHintEnabled = ghostHint
-            context.coordinator.onHeightChange = onHeightChange
-            context.coordinator.maxHeight = Self.maxHeight
-            context.coordinator.minHeight = Self.lineHeight
+            let scrollView = makeScrollView()
+            let textView = makeTextView(context: context)
+            let ghost = makeGhostLabel(font: textView.font)
+            let container = makeContainer(scrollView: scrollView, ghost: ghost, context: context)
+            scrollView.documentView = textView
+            configureCoordinator(
+                context.coordinator,
+                container: container,
+                scrollView: scrollView,
+                textView: textView,
+                ghost: ghost
+            )
+            DispatchQueue.main.async { context.coordinator.updateHeight() }
             return container
         }
 
@@ -193,27 +153,37 @@ public struct CommandInputView: View {
             context.coordinator.vocabulary = vocabulary
             context.coordinator.ghostHintEnabled = ghostHint
             context.coordinator.onHeightChange = onHeightChange
-            if let field = context.coordinator.field as? AutoFocusTextField {
-                field.onMacroKey = onMacroKey
-                field.spellChecking = spellChecking
-                field.applyTextEditingPolicy() // re-apply if toggled while focused
+            if let textView = context.coordinator.textView {
+                textView.onMacroKey = onMacroKey
+                textView.spellChecking = spellChecking
+                textView.applyTextEditingPolicy() // re-apply if toggled while focused
+                context.coordinator.lineHeight = Self.lineHeight(for: textView.font)
+                context.coordinator.updateHeight()
             }
             if !ghostHint { context.coordinator.hideGhost() }
         }
 
+        static func lineHeight(for font: NSFont?) -> CGFloat {
+            guard let font else { return 20 }
+            return ceil(font.ascender - font.descender + font.leading)
+        }
+
         @MainActor
-        final class Coordinator: NSObject, NSTextFieldDelegate {
+        final class Coordinator: NSObject, NSTextViewDelegate {
             var onSubmit: (String) -> Void
             var vocabulary: (@MainActor () -> CompletionVocabulary)?
-            weak var field: NSTextField?
+            weak var container: NSView?
+            weak var scrollView: NSScrollView?
+            weak var textView: AutoFocusCommandTextView?
             weak var ghost: NSTextField?
             /// As-you-type ghost hint on/off (the Settings toggle).
             var ghostHintEnabled = true
             /// Report the editor's desired height (#39 auto-grow).
             var onHeightChange: ((CGFloat) -> Void)?
-            var minHeight: CGFloat = 20
-            var maxHeight: CGFloat = 120
-            private var lastReportedHeight: CGFloat = 20
+            var lineHeight: CGFloat = 20
+            var maxVisualLines: CGFloat = 5
+            private var lastReportedHeight: CGFloat = 0
+            private var programmaticEdit = false
 
             private var history = CommandHistory()
 
@@ -238,35 +208,26 @@ public struct CommandInputView: View {
             /// Typing ends any Tab cycle and resets history navigation. We do
             /// **not** auto-suggest inline as you type — Enter always sends
             /// exactly what's in the box (no stale command fired by accident).
-            func controlTextDidChange(_: Notification) {
+            func textDidChange(_: Notification) {
+                guard !programmaticEdit else { return }
                 history.resetNavigation()
                 cycling = false
                 candidates = []
-                updateGhost() // refresh the as-you-type hint for the new text
                 updateHeight() // grow/shrink to fit the (possibly multi-line) text
+                resetScrollIfAllContentFits()
+                scrollCaretToVisible()
+                updateGhost() // refresh the as-you-type hint for the new text
             }
 
-            func control(
-                _: NSControl,
-                textView _: NSTextView,
-                doCommandBy commandSelector: Selector
-            ) -> Bool {
+            func handleCommand(_ commandSelector: Selector) -> Bool {
                 switch commandSelector {
                 case #selector(NSResponder.insertNewline(_:)),
                      #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
                     return handleNewline(for: commandSelector)
                 case #selector(NSResponder.moveUp(_:)):
-                    endCycle()
-                    if let text = history.recallPrevious(currentText: currentText) {
-                        setText(text)
-                    }
-                    return true
+                    return handleMoveUp()
                 case #selector(NSResponder.moveDown(_:)):
-                    endCycle()
-                    if let text = history.recallNext() {
-                        setText(text)
-                    }
-                    return true
+                    return handleMoveDown()
                 case #selector(NSResponder.insertTab(_:)):
                     cycleCompletion(forward: true)
                     return true
@@ -290,6 +251,24 @@ public struct CommandInputView: View {
                 }
             }
 
+            private func handleMoveUp() -> Bool {
+                endCycle()
+                guard caretIsOnFirstVisualLine else { hideGhost(); return false }
+                if let text = history.recallPrevious(currentText: currentText) {
+                    setText(text)
+                }
+                return true
+            }
+
+            private func handleMoveDown() -> Bool {
+                endCycle()
+                guard caretIsOnLastVisualLine else { hideGhost(); return false }
+                if let text = history.recallNext() {
+                    setText(text)
+                }
+                return true
+            }
+
             // MARK: - Actions
 
             /// Enter handling (#39): plain Enter submits the whole buffer;
@@ -309,6 +288,10 @@ public struct CommandInputView: View {
 
             private func submit() {
                 let text = currentText
+                history.record(text)
+                cycling = false
+                candidates = []
+                setText("")
                 // A multi-line buffer sends one command per line (#39); a plain
                 // single line (incl. an empty one — MUDs use a bare Enter to
                 // refresh the prompt) sends exactly itself.
@@ -319,18 +302,14 @@ public struct CommandInputView: View {
                 } else {
                     onSubmit(text)
                 }
-                history.record(text)
-                cycling = false
-                candidates = []
-                setText("")
             }
 
             /// Insert a literal newline at the caret (Shift-Enter), then refresh
             /// the auto-grow height. Goes through the field editor so undo and
             /// the caret position behave normally.
             private func insertNewlineIntoField() {
-                guard let editor = field?.currentEditor() as? NSTextView else { return }
-                editor.insertText("\n", replacementRange: editor.selectedRange)
+                guard let textView else { return }
+                textView.insertText("\n", replacementRange: textView.selectedRange())
                 hideGhost()
                 updateHeight()
             }
@@ -383,57 +362,128 @@ public struct CommandInputView: View {
 
             // MARK: - Field text
 
-            private var editor: NSText? {
-                field?.currentEditor()
-            }
-
             private var currentText: String {
-                editor?.string ?? field?.stringValue ?? ""
+                textView?.string ?? ""
             }
 
             private var caretIsAtEnd: Bool {
-                guard let range = editor?.selectedRange else { return true }
+                guard let range = textView?.selectedRange() else { return true }
                 return range.length == 0
                     && range.location == (currentText as NSString).length
+            }
+
+            private var caretIsOnFirstVisualLine: Bool {
+                visualLinePosition?.isFirst ?? true
+            }
+
+            private var caretIsOnLastVisualLine: Bool {
+                visualLinePosition?.isLast ?? true
+            }
+
+            private var visualLinePosition: (isFirst: Bool, isLast: Bool)? {
+                guard let textView,
+                      textView.selectedRange().length == 0,
+                      let layoutManager = textView.layoutManager,
+                      let container = textView.textContainer
+                else { return nil }
+                let characterCount = (currentText as NSString).length
+                guard characterCount > 0 else { return (true, true) }
+                layoutManager.ensureLayout(for: container)
+                let glyphCount = layoutManager.numberOfGlyphs
+                guard glyphCount > 0 else { return (true, true) }
+                let caret = Swift.min(textView.selectedRange().location, characterCount)
+                let characterIndex = Swift.max(0, Swift.min(caret, characterCount - 1))
+                let glyphIndex = Swift.min(
+                    layoutManager.glyphIndexForCharacter(at: characterIndex),
+                    glyphCount - 1
+                )
+                var lineRange = NSRange()
+                _ = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &lineRange)
+                return (lineRange.location == 0, NSMaxRange(lineRange) >= glyphCount)
             }
 
             /// Replace the field text and put the caret at the end. Programmatic
             /// edits don't fire `controlTextDidChange`, so this won't clobber
             /// cycle / navigation state.
             private func setText(_ text: String) {
+                guard let textView else { return }
                 hideGhost() // every programmatic edit clears the hint
                 let end = (text as NSString).length
-                if let editor {
-                    editor.string = text
-                    editor.selectedRange = NSRange(location: end, length: 0)
-                } else {
-                    field?.stringValue = text
-                }
+                programmaticEdit = true
+                textView.string = text
+                textView.setSelectedRange(NSRange(location: end, length: 0))
+                programmaticEdit = false
                 updateHeight() // history recall / completion may add or drop lines
+                resetScrollIfAllContentFits()
+                scrollCaretToVisible()
+                DispatchQueue.main.async { [weak self] in
+                    self?.resetScrollIfAllContentFits()
+                    self?.scrollCaretToVisible()
+                }
+            }
+
+            func replaceInput(_ text: String) {
+                endCycle()
+                history.resetNavigation()
+                setText(text)
             }
 
             // MARK: - Auto-grow height (#39)
 
             /// Report the editor's content height (clamped to one line … `maxHeight`)
-            /// so the SwiftUI wrapper can grow/shrink the input bar. Uses the field
-            /// editor's layout when present (accounts for soft-wrapped long lines),
-            /// else falls back to one line. Only fires when the height changed.
-            private func updateHeight() {
-                let clamped = Swift.max(minHeight, Swift.min(measuredContentHeight(), maxHeight))
+            /// so the SwiftUI wrapper can grow/shrink the input bar. Uses this
+            /// text view's layout, so soft-wrapped long lines are measured directly.
+            func updateHeight() {
+                guard let scrollView else { return }
+                updateTextContainerWidth()
+                let contentHeight = measuredContentHeight()
+                let minHeight = lineHeight + CommandField.textInset.height * 2
+                let maxHeight = lineHeight * maxVisualLines + CommandField.textInset.height * 2
+                let clamped = Swift.max(minHeight, Swift.min(contentHeight, maxHeight))
+                scrollView.hasVerticalScroller = contentHeight > maxHeight + 0.5
                 guard abs(clamped - lastReportedHeight) > 0.5 else { return }
                 lastReportedHeight = clamped
                 onHeightChange?(clamped)
             }
 
-            /// The field editor's laid-out text height (accounts for soft-wrapped
-            /// long lines), or one line when there's no active editor.
+            /// The text view's laid-out content height, including vertical inset.
             private func measuredContentHeight() -> CGFloat {
-                guard let textView = field?.currentEditor() as? NSTextView,
+                measuredTextHeight() + CommandField.textInset.height * 2
+            }
+
+            private func measuredTextHeight() -> CGFloat {
+                guard let textView,
                       let layoutManager = textView.layoutManager,
                       let container = textView.textContainer
-                else { return minHeight }
+                else { return lineHeight }
                 layoutManager.ensureLayout(for: container)
-                return layoutManager.usedRect(for: container).height
+                return Swift.max(lineHeight, ceil(layoutManager.usedRect(for: container).height))
+            }
+
+            private func updateTextContainerWidth() {
+                guard let textView, let scrollView, let container = textView.textContainer else { return }
+                let width = Swift.max(1, scrollView.contentView.bounds.width)
+                container.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+                if abs(textView.frame.width - width) > 0.5 {
+                    textView.frame.size.width = width
+                }
+                let height = Swift.max(measuredContentHeight(), scrollView.contentView.bounds.height)
+                if abs(textView.frame.height - height) > 0.5 {
+                    textView.frame.size.height = height
+                }
+            }
+
+            private func scrollCaretToVisible() {
+                guard let textView else { return }
+                textView.scrollRangeToVisible(textView.selectedRange())
+            }
+
+            private func resetScrollIfAllContentFits() {
+                guard let scrollView else { return }
+                let contentHeight = measuredContentHeight()
+                guard contentHeight <= scrollView.contentView.bounds.height + 0.5 else { return }
+                scrollView.contentView.scroll(to: .zero)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
             }
 
             // MARK: - As-you-type ghost hint (#13)
@@ -464,44 +514,49 @@ public struct CommandInputView: View {
             /// Shows only when: enabled, the caret is at end-of-line, the current
             /// word has a completion, and there's room to the right of the caret.
             private func updateGhost() {
-                guard ghostHintEnabled, let ghost, let field, let vocabulary, caretIsAtEnd else {
+                guard ghostHintEnabled, let ghost, let textView, let vocabulary, caretIsAtEnd else {
                     hideGhost(); return
                 }
                 let line = currentText
                 // The ghost's geometry tracks the caret on a single row; skip it
-                // entirely for a multi-line buffer (#39).
-                guard !line.contains("\n") else { hideGhost(); return }
+                // for explicit newlines and soft-wrapped long lines (#39/#71).
+                guard !line.contains("\n"), measuredTextHeight() <= lineHeight + 1 else {
+                    hideGhost(); return
+                }
                 guard !line.isEmpty,
                       let (word, _) = InputCompletion.currentWord(in: line, caret: line.count),
                       !word.isEmpty,
                       let suffix = vocabulary().ghostSuffix(inLine: line, caret: line.count),
-                      let editor = field.currentEditor() as? NSTextView,
                       let container = ghost.superview, let window = container.window
                 else { hideGhost(); return }
-                // The caret rect (field-editor geometry → container coords) so the
+                // The caret rect (text-view geometry → container coords) so the
                 // hint sits exactly after the typed text, insets included.
                 let caret = (line as NSString).length
-                let screen = editor.firstRect(
+                let screen = textView.firstRect(
                     forCharacterRange: NSRange(location: caret, length: 0),
                     actualRange: nil
                 )
-                let originX = container.convert(window.convertFromScreen(screen), from: nil).minX
+                let caretRect = container.convert(window.convertFromScreen(screen), from: nil)
+                let originX = caretRect.minX
                 guard originX.isFinite, originX < container.bounds.maxX - 12 else { hideGhost(); return }
+                ghost.font = textView.font
                 ghost.stringValue = suffix
                 let width = Swift.min(ghost.intrinsicContentSize.width, container.bounds.maxX - originX)
+                let height = Swift.max(ghost.intrinsicContentSize.height, lineHeight)
+                let originY = caretRect.midY - height / 2
                 ghost.frame = CGRect(
                     x: originX,
-                    y: field.frame.minY,
+                    y: originY,
                     width: width,
-                    height: field.frame.height
+                    height: height
                 )
                 ghost.isHidden = false
             }
         }
     }
 
-    // `AutoFocusTextField` (the always-focused NSTextField subclass) lives in
-    // CommandInputView+AutoFocusTextField.swift to keep this file under budget.
+    // `AutoFocusCommandTextView` (the always-focused NSTextView subclass) lives
+    // in CommandInputView+AutoFocusTextField.swift to keep this file under budget.
 
 #else
 
@@ -533,13 +588,3 @@ public struct CommandInputView: View {
     }
 
 #endif
-
-#Preview {
-    VStack(spacing: 0) {
-        Color.black.frame(maxWidth: .infinity, maxHeight: .infinity)
-        CommandInputView { command in
-            print("submit: \(command)")
-        }
-    }
-    .frame(width: 600, height: 200)
-}
