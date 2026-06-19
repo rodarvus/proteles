@@ -10,6 +10,15 @@ extension SessionController {
     /// by a plugin's `Execute` (re-parsed as if typed, so S&D's
     /// `Execute("mapper goto …")` reaches the native mapper).
     func dispatchCommand(_ command: String) async throws {
+        // `/lua …` bypasses command stacking: Lua statements are `;`-separated
+        // (and a `;` can sit inside a string literal), so splitting first would
+        // chop the chunk. Treat the whole line after `/lua ` as one Lua chunk.
+        // (A `/lua` stacked *after* another command is still handled per-piece
+        // in dispatchSingleCommand.)
+        if let code = Self.luaConsoleCode(command) {
+            await runLuaConsole(code)
+            return
+        }
         // Command stacking (Aardwolf/MUSHclient): split on `;` (`;;` = literal
         // `;`). A trailing empty piece is dropped; a lone empty line falls
         // through to dispatchSingleCommand as a bare-Enter nudge.
