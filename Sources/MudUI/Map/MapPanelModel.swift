@@ -235,13 +235,34 @@ public final class MapPanelModel {
             alert.informativeText = "This permanently deletes all mapped rooms, exits, areas, and "
                 + "notes for this world (UI preferences are kept). For development and testing."
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "Empty Database")
+            let sharedButton = NSButton(checkboxWithTitle: "Shared world map", target: nil, action: nil)
+            sharedButton.state = .on
+            let personalButton = NSButton(checkboxWithTitle: "Personal overlay", target: nil, action: nil)
+            personalButton.state = .on
+            let stack = NSStackView(views: [sharedButton, personalButton])
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 6
+            alert.accessoryView = stack
+            alert.addButton(withTitle: "Empty Selected")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
+            var scope: MapperStore.EmptyScope = []
+            if sharedButton.state == .on {
+                scope.insert(.shared)
+            }
+            if personalButton.state == .on {
+                scope.insert(.personal)
+            }
+            guard !scope.isEmpty else {
+                importAlert = ImportAlert(title: "Nothing Selected", message: "No map database was reset.")
+                return
+            }
             Task {
                 do {
-                    try await mapper.emptyDatabase()
-                    await session.echoSystemNote("[Mapper] Database reset to empty (testing).")
+                    try await mapper.emptyDatabase(scope: scope)
+                    let label = Self.resetScopeLabel(scope)
+                    await session.echoSystemNote("[Mapper] Database reset: \(label) (testing).")
                 } catch {
                     await session.echoSystemNote("[Mapper] Reset failed.")
                 }
@@ -253,11 +274,30 @@ public final class MapPanelModel {
         guard !summary.isEmpty else {
             return "Nothing new — your map already had everything in that file."
         }
-        return """
-        Added \(summary.rooms.formatted()) rooms, \(summary.areas.formatted()) areas, \
-        \(summary.exits.formatted()) exits, \(summary.notes.formatted()) notes, and \
-        \(summary.environments.formatted()) terrain colours.
-        """
+        var pieces = [
+            "\(summary.rooms.formatted()) rooms",
+            "\(summary.areas.formatted()) areas",
+            "\(summary.exits.formatted()) exits"
+        ]
+        if summary.exitLocks > 0 {
+            pieces.append("\(summary.exitLocks.formatted()) exit locks")
+        }
+        pieces.append("\(summary.notes.formatted()) notes")
+        pieces.append("\(summary.environments.formatted()) terrain colours")
+        return "Added \(pieces.joined(separator: ", "))."
+    }
+
+    private static func resetScopeLabel(_ scope: MapperStore.EmptyScope) -> String {
+        switch (scope.contains(.shared), scope.contains(.personal)) {
+        case (true, true):
+            "shared and personal databases"
+        case (true, false):
+            "shared database"
+        case (false, true):
+            "personal database"
+        case (false, false):
+            "nothing"
+        }
     }
 
     private func send(_ command: String) {

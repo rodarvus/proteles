@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 @testable import MudCore
 import Testing
 
@@ -86,6 +87,28 @@ struct MapperStorePersonalTests {
 
         #expect(try fix.s1.loadGraph()["100"]?.notes == "bank here")
         #expect(try fix.s2.loadGraph()["100"]?.notes == nil)
+    }
+
+    @Test("empty can reset only the personal overlay")
+    func emptyPersonalOnly() throws {
+        let fix = try makeStores()
+        defer { cleanup(fix.urls) }
+        try fix.s1.addCustomExit(dir: "enter portal", from: "100", to: "200", level: 0)
+        _ = try fix.s1.setExitLevel(from: "100", dir: "n", level: 3)
+        try fix.s1.setNote("bank here", uid: "100")
+
+        try fix.s1.empty(.personal)
+
+        let graph = try fix.s1.loadGraph()
+        #expect(graph["100"]?.exits["n"]?.to == "200")
+        #expect(graph["100"]?.exits["n"]?.level == 0)
+        #expect(graph["100"]?.exits["enter portal"] == nil)
+        #expect(graph["100"]?.notes == nil)
+        let shared = try DatabaseQueue(path: fix.urls[0].path)
+        try shared.read { db in
+            let sharedExitCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM exits")
+            #expect(sharedExitCount == 1)
+        }
     }
 
     @Test("saveExits keeps the lock when the room is revisited (GMCP re-report)")

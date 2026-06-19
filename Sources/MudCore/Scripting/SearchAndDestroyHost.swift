@@ -59,8 +59,8 @@ public actor SearchAndDestroyHost {
 
     /// Point S&D at its data directory — `GetInfo(66)` (where it finds the
     /// mapper DB as `<WorldName>.db` and keeps its own `SnDdb.db`) and the
-    /// lsqlite3 sandbox root. Call before ``load()`` (S&D captures the DB
-    /// paths from `GetInfo(66)` at load time).
+    /// lsqlite3 sandbox root. Call before ``load()`` because S&D initializes
+    /// path globals from `GetInfo(66)` at load time.
     public func configure(directory: String) async {
         let suffixed = directory.hasSuffix("/") ? directory : directory + "/"
         var context = PluginContext.default
@@ -76,8 +76,9 @@ public actor SearchAndDestroyHost {
     /// Point S&D's direct mapper-DB reads at the per-character overlay (D-111):
     /// when it `sqlite3.open`s the shared `Aardwolf.db`, the overlay is ATTACHed
     /// and merged views are created so its unmodified SQL sees the character's
-    /// portals/custom-exits/locks. Call before ``load()`` (S&D captures the DB
-    /// at load); pass `nil`/`nil` for single-file (un-migrated) behaviour.
+    /// portals/custom-exits/locks and notes. Safe before or after ``load()``;
+    /// it applies to future `sqlite3.open` calls. Pass `nil`/`nil` for
+    /// single-file (un-migrated) behaviour.
     public func configureMapperOverlay(sharedDBPath: String?, overlayPath: String?) async {
         await runtime.setMapperOverlay(sharedDBPath: sharedDBPath, overlayPath: overlayPath)
     }

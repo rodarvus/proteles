@@ -47,8 +47,8 @@ read.
     custom exits, with their levels.
   - `exit_locks(fromuid, dir, level, PRIMARY KEY(fromuid,dir))` — locks on shared
     cardinal exits.
-  - `room_notes(uid, notes, PRIMARY KEY(uid))`.
-  - `bookmarks`, `room_user_data`, `storage` (mapper UI config), `proteles_meta`.
+  - `bookmarks(uid, notes, PRIMARY KEY(uid))` — per-character room notes.
+  - `room_user_data`, `storage` (mapper UI config), `proteles_meta`.
 
 ## Merge
 
@@ -56,17 +56,17 @@ Two consumers, two mechanisms:
 
 1. **The mapper itself — merge in Swift (no SQL JOIN).** `loadGraph()` already
    assembles the in-memory `RoomGraph`, so it reads shared cardinals + overlay
-   portals/cexits + the tiny `exit_locks`/`room_notes` and merges in the
+   portals/cexits + the tiny `exit_locks`/`bookmarks` and merges in the
    dictionary it's building. Benchmarked cost vs. today: ≈ baseline + ~1ms.
    **Navigation is unaffected** — `Pathfinder` runs Dijkstra over the in-memory
    graph and never queries SQL.
 
-2. **Direct readers (Search-and-Destroy) — ATTACH + temp merge view.** S&D opens
+2. **Direct readers (Search-and-Destroy) — ATTACH + temp merge views.** S&D opens
    `Aardwolf.db` itself and runs raw SQL on `exits` (it's vendored, read-only —
    we can't change its SQL). We **wrap `sqlite3.open` in S&D's runtime** (we own
    its curated bindings): on opening the mapper DB, transparently `ATTACH` the
-   active character's overlay and create temp views so S&D's existing
-   `SELECT … FROM exits` sees merged data:
+   active character's overlay and create temp views so existing
+   `SELECT … FROM exits` and `SELECT … FROM bookmarks` reads see merged data:
 
    ```sql
    CREATE TEMP VIEW exits AS
@@ -140,26 +140,25 @@ keeps working via a fallback path until migrated.
 
 ## Phasing
 
-1. **MapperStore split — DONE (store layer, uncommitted).** Overlay schema +
+1. **MapperStore split — DONE.** Overlay schema +
    `ProtelesPaths.personalMapperDatabaseURL(character:)`; `MapperStore` is
    dual-queue (`init(url:personalURL:)`, `personalRead`/`personalWrite` with
    shared fallback, `MapperStore+Personal.swift`); `loadGraph` merges in Swift;
    write-routing by classification (portals/customs/locks/notes → overlay;
-   cardinals → shared at level 0; purges hit both). 7 new tests cover the
-   isolation property + lock-survives-`saveExits` + single-file fallback. Four
-   gates green (1665 tests). **Not yet activated in production** (see below).
-2. **S&D / direct-reader compatibility — DONE (mechanism, uncommitted).** The
+   cardinals → shared at level 0; purges hit both). Tests cover the isolation
+   property + lock-survives-`saveExits` + single-file fallback. Activated when
+   the active character is known.
+2. **S&D / direct-reader compatibility — DONE.** The
    guarded `sqlite3.open` now, on opening the registered shared mapper DB,
-   authorizes + ATTACHes the per-character overlay and creates the merged temp
-   `exits` view; `proteles.mapperMergeSQL` (host) supplies the overlay path +
-   SQL, `setMapperOverlay`/`SearchAndDestroyHost.configureMapperOverlay` register
-   it, and the scoped C authorizer permits that one ATTACH. 3 tests: merged read
-   sees locks+portals+customs, un-registered read is the plain shared file, and a
-   non-overlay ATTACH is still denied (code 23). Four gates green (1668 tests).
-   **Not yet activated** — `configureMapperOverlay` is called with nil until
-   Phase 4 (same deferral as the mapper). Still to do: verify against a *real*
-   live S&D run once activated.
-3. **Import demux — DONE (uncommitted).** Unified with migration as one
+   authorizes + ATTACHes the per-character overlay and creates merged temp
+   views for `exits` and `bookmarks`; `proteles.mapperMergeSQL` (host) supplies
+   the overlay path + SQL, and
+   `setMapperOverlay`/`SearchAndDestroyHost.configureMapperOverlay` register it.
+   The scoped C authorizer permits that one ATTACH. Tests cover merged reads for
+   locks+portals+customs+notes, plain shared reads without overlay, and denial
+   of non-overlay ATTACH (code 23). Still to do: verify direct SQL behavior
+   against a live S&D run when a scenario exercises it.
+3. **Import demux — DONE.** Unified with migration as one
    reusable `MapperStore.splitPersonal(sharedURL:overlayURL:)`: moves portals,
    custom exits, cardinal exit-locks (→ `exit_locks`), and notes out of a
    single-file DB into the overlay, leaving the shared file canonical (cardinals
@@ -169,7 +168,7 @@ keeps working via a fallback path until migrated.
    → that character). 4 tests incl. the **lossless round-trip** (merged graph
    after split == graph before) + import-demux end-to-end. Four gates green
    (1672 tests).
-4. **Migration + activation — IN PROGRESS (mechanism done, uncommitted).**
+4. **Migration + activation — DONE.**
    - `MapperStore.migratePersonal(sharedURL:overlayURL:backupURL:)` — non-
      destructive: WAL-safe backup via `VACUUM INTO`, then `splitPersonal`.
    - `Mapper.attachPersonalStore(at:)` ([Mapper+Personal.swift](../../Sources/MudCore/Mapper/Mapper+Personal.swift)) — re-opens
@@ -192,11 +191,9 @@ keeps working via a fallback path until migrated.
    1676 tests green. The prompt UI itself is **unverified until live-tested**.
 
    **Still to do (live-test / polish):**
-   - **S&D host overlay wiring** — the host captures its DB path at *load* time
-     (pre-character), so `configureMapperOverlay` needs to fire on the
-     character-known reload; best done during the live-testing pass (S&D's
-     `mapper goto` already routes through the merged mapper API; this is only for
-     S&D's own direct SQL).
+   - **Direct-reader live coverage** — the host overlay is registered on the
+     character-known reload path. The remaining check is a live S&D path that
+     exercises its own direct SQL against merged exits or notes.
    - **Databases-menu UI** to surface the per-character overlay (optional polish).
    - **Live verification** of the prompt + activation against the real DB.
 

@@ -556,8 +556,8 @@ public actor Mapper {
     /// Empty the map database (development/testing), then reload the now-empty
     /// graph and forget the current room so the next `room.info` re-establishes
     /// position. UI preferences (scan depth, toggles) are preserved.
-    public func emptyDatabase() throws {
-        try store.empty()
+    public func emptyDatabase(scope: MapperStore.EmptyScope = .all) throws {
+        try store.empty(scope)
         clearCurrentRoom()
         graph = try store.loadGraph()
         publishLayout()

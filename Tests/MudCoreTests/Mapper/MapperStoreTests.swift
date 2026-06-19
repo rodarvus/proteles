@@ -222,6 +222,65 @@ struct MapperStoreTests {
         ])
     }
 
+    @Test("Split import sends personal rows to the overlay")
+    func splitImportRoutesOverlayRows() throws {
+        let sourceURL = tempURL()
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        let source = try MapperStore(url: sourceURL)
+        try source.upsert(Room(uid: "5", name: "Five", area: "z"))
+        try source.upsert(Room(uid: "6", name: "Six", area: "z"))
+        try source.saveExits(from: "5", exits: [
+            "n": Exit(dir: "n", to: "6", level: 9),
+            "enter portal": Exit(dir: "enter portal", to: "6", level: 4)
+        ])
+        try source.addPortal(dir: "recall", touid: "6", level: 1, recall: false)
+        try source.setNote("imported note", uid: "6")
+
+        let sharedURL = tempURL()
+        let personalURL = tempURL()
+        defer {
+            try? FileManager.default.removeItem(at: sharedURL)
+            try? FileManager.default.removeItem(at: personalURL)
+        }
+        let dest = try MapperStore(url: sharedURL, personalURL: personalURL)
+
+        let summary = try dest.importIncremental(from: sourceURL)
+        #expect(summary.rooms == 3)
+        #expect(summary.exits == 3)
+        #expect(summary.exitLocks == 1)
+        #expect(summary.notes == 1)
+
+        let shared = try DatabaseQueue(path: sharedURL.path)
+        try shared.read { db in
+            let sharedExitCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM exits")
+            #expect(sharedExitCount == 1)
+            let level = try String.fetchOne(
+                db, sql: "SELECT level FROM exits WHERE fromuid='5' AND dir='n'"
+            )
+            #expect(level == "0")
+            let sharedNotes = try Int.fetchOne(db, sql: "SELECT count(*) FROM bookmarks")
+            #expect(sharedNotes == 0)
+        }
+
+        let personal = try DatabaseQueue(path: personalURL.path)
+        try personal.read { db in
+            let overlayExitCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM exits")
+            #expect(overlayExitCount == 2)
+            let lockLevel = try Int.fetchOne(
+                db, sql: "SELECT level FROM exit_locks WHERE fromuid='5' AND dir='n'"
+            )
+            #expect(lockLevel == 9)
+            let note = try String.fetchOne(db, sql: "SELECT notes FROM bookmarks WHERE uid='6'")
+            #expect(note == "imported note")
+        }
+
+        let graph = try dest.loadGraph()
+        #expect(graph["5"]?.exits["n"]?.level == 9)
+        #expect(graph["5"]?.exits["enter portal"]?.level == 4)
+        #expect(graph[RoomGraph.portalUID]?.exits["recall"]?.level == 1)
+        #expect(graph["6"]?.notes == "imported note")
+    }
+
     @Test("Import brings the terrain palette (environments) so rooms aren't grey")
     func importBringsEnvironments() throws {
         // Source: a MUSHclient DB with a populated sector palette + a room.

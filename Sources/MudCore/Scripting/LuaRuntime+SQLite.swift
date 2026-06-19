@@ -76,10 +76,11 @@ extension LuaRuntime {
     /// the shared mapper DB, no overlay is registered, or the overlay file is
     /// missing. `overlayPath` is registered on the connection (via
     /// `db:proteles_allow_attach`) so the authorizer permits exactly this one
-    /// ATTACH; `sql` ATTACHes it and creates a temp `exits` view UNIONing the
-    /// shared cardinal exits (with overlay `exit_locks` applied) and the
-    /// overlay's portals/custom exits, so a direct reader's `SELECT … FROM exits`
-    /// sees the merged set. Returned to Lua via `proteles.mapperMergeSQL`.
+    /// ATTACH; `sql` ATTACHes it and creates temp views for overlay-backed
+    /// tables. `exits` UNIONs shared cardinal exits (with overlay `exit_locks`
+    /// applied) and the overlay's portals/custom exits. `bookmarks` overlays
+    /// character notes onto shared notes. Returned to Lua via
+    /// `proteles.mapperMergeSQL`.
     nonisolated func mapperMergeSQL(_ path: String) -> (overlay: String, sql: String) {
         guard let shared = mapperSharedDBPath, let overlay = mapperOverlayPath else { return ("", "") }
         let opened = URL(fileURLWithPath: normalizedPath(path)).standardizedFileURL.path
@@ -96,6 +97,15 @@ extension LuaRuntime {
             LEFT JOIN personal.exit_locks l ON l.fromuid = s.fromuid AND l.dir = s.dir
           UNION ALL
           SELECT dir, fromuid, touid, level, weight, door FROM personal.exits;
+        DROP VIEW IF EXISTS temp.bookmarks;
+        CREATE TEMP VIEW bookmarks AS
+          SELECT uid, notes FROM personal.bookmarks
+          UNION ALL
+          SELECT s.uid, s.notes
+            FROM main.bookmarks s
+            WHERE NOT EXISTS (
+              SELECT 1 FROM personal.bookmarks p WHERE p.uid = s.uid
+            );
         """
         return (overlay, sql)
     }

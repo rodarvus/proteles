@@ -6,9 +6,9 @@ import Testing
 /// opens the shared `Aardwolf.db` via the sandboxed `sqlite3` global, and — when
 /// a per-character overlay is registered — its unmodified `SELECT … FROM exits`
 /// transparently sees the merged set (shared cardinals with overlay locks
-/// applied, plus the overlay's portals and custom exits). The merge needs one
-/// host-authorized `ATTACH`; the sandbox's blanket ATTACH ban still holds for
-/// every other path.
+/// applied, plus the overlay's portals/custom exits and notes). The merge needs
+/// one host-authorized `ATTACH`; the sandbox's blanket ATTACH ban still holds
+/// for every other path.
 @Suite("Mapper overlay merge for direct readers (D-111)")
 struct MapperOverlayMergeTests {
     private struct Seed {
@@ -30,6 +30,7 @@ struct MapperOverlayMergeTests {
         try store.addCustomExit(dir: "enter portal", from: "100", to: "200", level: 0) // overlay
         try store.addPortal(dir: "recall", touid: "200", level: 0, recall: false) // overlay
         _ = try store.setExitLevel(from: "100", dir: "n", level: 9) // overlay exit_locks
+        try store.setNote("bank here", uid: "100") // overlay bookmarks
         return Seed(dir: dir, shared: shared, overlay: overlay)
     }
 
@@ -44,8 +45,14 @@ struct MapperOverlayMergeTests {
         for row in db:nrows("SELECT count(*) AS n FROM exits WHERE fromuid = '*'") do
           portal = row.n
         end
+        local note = "nil"
+        for row in db:nrows("SELECT notes FROM bookmarks WHERE uid = '100'") do
+          note = row.notes
+        end
         db:close()
-        proteles.echo(table.concat(parts, ",") .. " | portals=" .. tostring(portal))
+        proteles.echo(table.concat(parts, ",")
+          .. " | portals=" .. tostring(portal)
+          .. " | note=" .. note)
         """
     }
 
@@ -59,7 +66,7 @@ struct MapperOverlayMergeTests {
         await lua.setMapperOverlay(sharedDBPath: env.shared.path, overlayPath: env.overlay.path)
         let effects = try await lua.run(probeScript(env.shared))
         // 'n' carries the overlay lock (9); the custom exit appears; portal seen.
-        #expect(effects == [.echo("enter portal=0,n=9 | portals=1")])
+        #expect(effects == [.echo("enter portal=0,n=9 | portals=1 | note=bank here")])
     }
 
     @Test("without an overlay, the same read is the plain shared file")
@@ -70,9 +77,9 @@ struct MapperOverlayMergeTests {
         let lua = try LuaRuntime()
         await lua.setSQLiteDirectory(env.dir.path)
         // No setMapperOverlay → no ATTACH/view: shared has only the cardinal at
-        // level 0 (the lock + custom + portal live in the un-attached overlay).
+        // level 0 (the lock + custom + portal + note live in the overlay).
         let effects = try await lua.run(probeScript(env.shared))
-        #expect(effects == [.echo("n=0 | portals=0")])
+        #expect(effects == [.echo("n=0 | portals=0 | note=nil")])
     }
 
     @Test("ATTACH of any non-overlay path is still denied")
