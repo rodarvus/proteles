@@ -74,7 +74,9 @@ struct MapperMigrationTests {
         let overlay = tempURL("overlay")
         let backup = tempURL("backup")
         defer {
-            for url in [shared, overlay, backup] { try? FileManager.default.removeItem(at: url) }
+            for url in [shared, overlay, backup] {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
         try seedSingleFile(shared)
         let original = try MapperStore(url: shared).loadGraph()
@@ -93,7 +95,9 @@ struct MapperMigrationTests {
         let overlay = tempURL("overlay")
         let backup = tempURL("backup")
         defer {
-            for url in [shared, overlay, backup] { try? FileManager.default.removeItem(at: url) }
+            for url in [shared, overlay, backup] {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
         try seedSingleFile(shared)
         let original = try MapperStore(url: shared).loadGraph()
