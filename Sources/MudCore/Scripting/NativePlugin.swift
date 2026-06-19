@@ -234,6 +234,11 @@ public struct NativePluginRegistry: Sendable {
         }
     }
 
+    /// Whether a registered native plugin is currently enabled.
+    public func isEnabled(id: String) -> Bool {
+        entries.first { $0.plugin.metadata.id == id }?.enabled ?? false
+    }
+
     /// Fire `connect()` on every enabled plugin, concatenating effects.
     public mutating func connect() -> [ScriptEffect] {
         var effects: [ScriptEffect] = []

@@ -131,7 +131,10 @@ public extension SessionController {
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
             case .echoAard(let coded):
-                await appendOutputLines(coded) { AardwolfColor.styledLine(from: $0) }
+                let linkURLs = await scriptEngine?.isNativePluginEnabled(id: URLLinkify().metadata.id) == true
+                await appendOutputLines(coded) {
+                    maybeLinkifyEffectLine(AardwolfColor.styledLine(from: $0), enabled: linkURLs)
+                }
             case .echoAnsi(let ansi):
                 await appendOutputLines(ansi) { Self.ansiLine($0) }
             default:
@@ -164,6 +167,11 @@ public extension SessionController {
         for segment in segments {
             await scrollbackStore.append(makeLine(segment))
         }
+    }
+
+    private func maybeLinkifyEffectLine(_ line: Line, enabled: Bool) -> Line {
+        guard enabled else { return line }
+        return URLLinkifier.linkify(line)
     }
 
     /// Send `command` one line at a time — a multi-line alias/trigger expansion

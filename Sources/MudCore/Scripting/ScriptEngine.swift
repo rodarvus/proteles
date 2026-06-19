@@ -183,6 +183,11 @@ public actor ScriptEngine {
         nativePlugins.listing
     }
 
+    /// Whether a registered native plugin is currently enabled.
+    public func isNativePluginEnabled(id: String) -> Bool {
+        nativePlugins.isEnabled(id: id)
+    }
+
     /// Route a `CallPlugin`-style call to a native plugin by id.
     public func callNativePlugin(id: String, function: String, arguments: [LuaValue]) -> [LuaValue] {
         nativePlugins.call(id: id, function: function, arguments: arguments)
