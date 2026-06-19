@@ -108,28 +108,40 @@ public struct ChatView: View {
     }
 
     private var chatList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.filteredLines) { chatLine in
-                        row(chatLine)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id(chatLine.id)
+        chatLog
+            .background(Color(palette.defaultBackground).opacity(fillOpacity))
+    }
+
+    @ViewBuilder
+    private var chatLog: some View {
+        #if os(macOS)
+            ChatLogView(
+                lines: model.filteredLines,
+                palette: palette,
+                showTimestamps: showTimestamps,
+                timestampSeconds: timestampSeconds,
+                filterKey: model.selectedChannel ?? "__all__",
+                fillOpacity: fillOpacity
+            )
+        #else
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(model.filteredLines) { chatLine in
+                            row(chatLine)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(chatLine.id)
+                        }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .overlayScrollers()
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                // Overlay, auto-hiding scroller like the main output —
-                // .scrollIndicators(.automatic) keeps a permanent legacy bar
-                // when the system shows scroll bars "Always".
-                .overlayScrollers()
+                .defaultScrollAnchor(.bottom)
+                .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
+                .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
             }
-            // Match the main output: pin to the bottom (resists accidental drift).
-            .defaultScrollAnchor(.bottom)
-            .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
-            .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
-        }
-        .background(Color(palette.defaultBackground).opacity(fillOpacity))
+        #endif
     }
 
     private func row(_ chatLine: ChatLine) -> some View {

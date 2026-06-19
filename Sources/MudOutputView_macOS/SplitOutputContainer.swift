@@ -190,4 +190,50 @@
             }
         }
     }
+
+    /// Main output scroll view that preserves bottom pinning across viewport
+    /// resizes, e.g. when the command input grows or shrinks underneath it.
+    final class BottomPinnedOutputScrollView: NSScrollView {
+        var autoScrollThreshold: CGFloat = 32
+
+        override func setFrameSize(_ newSize: NSSize) {
+            let wasPinned = isScrolledToBottom()
+            super.setFrameSize(newSize)
+            if wasPinned {
+                scrollToBottomSoon()
+            }
+        }
+
+        func isScrolledToBottom() -> Bool {
+            guard let documentView else { return true }
+            let visible = contentView.documentVisibleRect
+            return Self.isScrolledToBottom(
+                documentHeight: documentView.frame.height,
+                visibleOriginY: visible.origin.y,
+                visibleHeight: visible.height,
+                threshold: autoScrollThreshold
+            )
+        }
+
+        nonisolated static func isScrolledToBottom(
+            documentHeight: CGFloat,
+            visibleOriginY: CGFloat,
+            visibleHeight: CGFloat,
+            threshold: CGFloat
+        ) -> Bool {
+            let distanceFromBottom = documentHeight - (visibleOriginY + visibleHeight)
+            return distanceFromBottom < threshold
+        }
+
+        private func scrollToBottomSoon() {
+            scrollToBottom()
+            DispatchQueue.main.async { [weak self] in
+                self?.scrollToBottom()
+            }
+        }
+
+        private func scrollToBottom() {
+            (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+        }
+    }
 #endif

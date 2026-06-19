@@ -46,4 +46,14 @@ struct URLLinkifierTests {
         let result = URLLinkifier.linkify(line("mail me at mailto:a@b.com please"))
         #expect(result.runs.contains { $0.link?.action == .openURL("mailto:a@b.com") })
     }
+
+    @Test("Aardwolf say echo URLs inside quotes are detected")
+    func quotedSayEcho() {
+        let text = "You say 'http://www.google.com/'"
+        let result = URLLinkifier.linkify(line(text))
+        let linked = result.runs.first { $0.link != nil }
+
+        #expect(linked?.utf16Range == utf16Range(of: "http://www.google.com/", in: text))
+        #expect(linked?.link?.action == .openURL("http://www.google.com/"))
+    }
 }

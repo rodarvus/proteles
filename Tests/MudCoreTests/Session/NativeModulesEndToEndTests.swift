@@ -78,6 +78,23 @@ struct NativeModulesEndToEndTests {
         await session.disconnect()
     }
 
+    @Test("URL links: Aardwolf say echoes linkify quoted URLs")
+    func urlLinksSayEcho() async throws {
+        let engine = try ScriptEngine()
+        await registerAll(on: engine)
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        conn.injectLine("You say 'http://www.google.com/'")
+        let linked = await SessionTestSupport.poll {
+            await session.scrollbackStore.snapshot().contains { line in
+                line.runs.contains { $0.link?.action == .openURL("http://www.google.com/") }
+            }
+        }
+        #expect(linked, "the quoted say URL line never gained a link run")
+        await session.disconnect()
+    }
+
     @Test("note mode: typed lines bypass the mapper + S&D interception (sent verbatim)")
     func noteModeTypingBypassesInterceptors() async throws {
         guard SnDFixture.install() else { return }
@@ -123,5 +140,47 @@ struct NativeModulesEndToEndTests {
             if case .openURL(let url)? = run.link?.action { return url.contains("aardwolf.fandom.com") }
             return false
         }, "chat ingestion never linkified the URL")
+    }
+
+    @Test("URL links: GMCP chat echo output preserves clickable URLs")
+    func urlLinksChatEcho() async throws {
+        let engine = try ScriptEngine()
+        await registerAll(on: engine)
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
+            #"comm.channel {"chan":"say","player":"Rodarvus","msg":"You say '@Whttp://www.google.com/@w'"}"#
+        ))
+        let linked = await SessionTestSupport.poll {
+            await session.scrollbackStore.snapshot().contains { line in
+                line.runs.contains { $0.link?.action == .openURL("http://www.google.com/") }
+            }
+        }
+        #expect(linked, "the GMCP chat echo URL never gained a link run")
+        await session.disconnect()
+    }
+
+    @Test("URL links: disabling URL Links also disables chat echo URL links")
+    func urlLinksChatEchoDisabled() async throws {
+        let engine = try ScriptEngine()
+        await registerAll(on: engine)
+        _ = await engine.setNativePluginEnabled(false, id: "com.proteles.urllinkify")
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        conn.injectInbound(SessionTestSupport.gmcpBytes(
+            #"comm.channel {"chan":"say","player":"Rodarvus","msg":"You say '@Whttp://www.google.com/@w'"}"#
+        ))
+        let echoed = await SessionTestSupport.poll {
+            await !session.scrollbackStore.snapshot().isEmpty
+        }
+        let hasLink = await session.scrollbackStore.snapshot().contains { line in
+            line.runs.contains { $0.link != nil }
+        }
+
+        #expect(echoed, "the GMCP chat echo never reached scrollback")
+        #expect(!hasLink)
+        await session.disconnect()
     }
 }

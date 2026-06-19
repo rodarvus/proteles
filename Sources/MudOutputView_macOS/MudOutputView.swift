@@ -67,7 +67,7 @@
             // Main history scroll view + our MudTextView subclass (we hand-roll
             // the pair rather than NSTextView.scrollableTextView() so we get the
             // copyWithCodes(_:) action and hyperlink routing).
-            let scrollView = NSScrollView()
+            let scrollView = BottomPinnedOutputScrollView()
             scrollView.hasVerticalScroller = true
             scrollView.hasHorizontalScroller = false
             // Overlay scrollers: hidden at rest, fading in only while scrolling

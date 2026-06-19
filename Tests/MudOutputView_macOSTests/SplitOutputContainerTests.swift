@@ -33,6 +33,28 @@
             #expect(show(doc: 1000, originY: 796, height: 200) == false)
         }
 
+        @Test("Main scroll view bottom pin uses the same threshold geometry")
+        func bottomPinnedScrollViewThreshold() {
+            #expect(BottomPinnedOutputScrollView.isScrolledToBottom(
+                documentHeight: 1000,
+                visibleOriginY: 800,
+                visibleHeight: 200,
+                threshold: 32
+            ))
+            #expect(BottomPinnedOutputScrollView.isScrolledToBottom(
+                documentHeight: 1000,
+                visibleOriginY: 770,
+                visibleHeight: 200,
+                threshold: 32
+            ))
+            #expect(!BottomPinnedOutputScrollView.isScrolledToBottom(
+                documentHeight: 1000,
+                visibleOriginY: 760,
+                visibleHeight: 200,
+                threshold: 32
+            ))
+        }
+
         @Test("Content shorter than the viewport → never split")
         func contentFits() {
             #expect(show(doc: 120, originY: 0, height: 400) == false)
