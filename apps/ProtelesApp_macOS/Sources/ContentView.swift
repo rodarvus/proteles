@@ -62,8 +62,8 @@ struct ContentView: View {
     /// Installed plugins' verb + subcommand grammar for completion (#31).
     @State var pluginCommands = PluginCommandCache()
     /// Drives the "Save Layout…" name prompt.
-    @State private var showingSavePreset = false
-    @State private var newPresetName = ""
+    @State var showingSavePreset = false
+    @State var newPresetName = ""
     /// "Omit Blank Lines" display preference (View menu); pushed to the session
     /// on launch and whenever it changes. Same UserDefaults key as the toggle.
     @AppStorage("omitBlankLines") private var omitBlankLines = false
@@ -181,12 +181,22 @@ struct ContentView: View {
         // Main-thread stall monitor (perf diagnostics) — logs UI-thread hitches
         // to the session transcript. Body lives in the extension (type budget).
         .task { await monitorMainThreadStalls() }
+        // Thresholded performance attribution for #75. This is intentionally
+        // separate from the watchdog so measured phases never write transcript
+        // lines from inside the measured path.
+        .task { await performanceProbeLoop() }
         // Periodic render-health note: proves in the transcript whether the
         // rendered document stays capped over a long session (#65 follow-up).
         .task { await renderHealthLoop() }
         .task {
             for await snapshot in await session.gmcpState.subscribe() {
-                gmcp.state = snapshot
+                PerformanceProbe.shared.measure(
+                    "ui.gmcp-model.apply",
+                    events: 1,
+                    thresholdMS: 50
+                ) {
+                    gmcp.state = snapshot
+                }
                 // Feed the mid-combat guard for background update checks (#42).
                 updater.safeToInterrupt = snapshot.status?.isSafeToInterrupt ?? true
             }
@@ -381,38 +391,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    /// Toolbar menu to show/hide each panel + reset the layout.
-    private var panelsMenu: some View {
-        Menu {
-            ForEach(PanelKind.toggleable) { kind in
-                Toggle(isOn: Binding(
-                    get: { layout.isVisible(kind) },
-                    set: { _ in layout.toggle(kind) }
-                )) {
-                    Label(kind.title, systemImage: kind.systemImage)
-                }
-            }
-            Divider()
-            if !layout.presets.isEmpty {
-                Menu("Apply Layout") {
-                    ForEach(layout.presets) { preset in
-                        Button(preset.name) { layout.applyPreset(preset) }
-                    }
-                }
-                Menu("Delete Layout") {
-                    ForEach(layout.presets) { preset in
-                        Button(preset.name) { layout.deletePreset(named: preset.name) }
-                    }
-                }
-            }
-            Button("Save Layout…") { newPresetName = ""; showingSavePreset = true }
-            Button("Reset Layout") { layout.resetToDefault() }
-        } label: {
-            Image(systemName: "rectangle.3.group")
-        }
-        .help("Show or hide panels")
     }
 
     /// Wire the S&D panel's actions to the live session: toolbar/row commands

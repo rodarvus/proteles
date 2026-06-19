@@ -22,9 +22,10 @@ public extension SessionController {
     /// Run a received line through the script engine (if any), then append
     /// it unless a trigger gagged it. Trigger sends/echoes are applied
     /// afterwards so echoes land just below the line that produced them.
-    internal func appendLineThroughScripts(_ line: Line) async {
-        if await handleWalkMarker(line) { return } // mapper {begin/end running}/{mapper_wait}
-        if helpCaptureEnabled, captureHelpLine(line) { return } // Help panel capture
+    @discardableResult
+    internal func appendLineThroughScripts(_ line: Line) async -> LineProcessingSummary {
+        if await handleWalkMarker(line) { return LineProcessingSummary(gagged: 1) }
+        if helpCaptureEnabled, captureHelpLine(line) { return LineProcessingSummary(gagged: 1) }
         // Blank-line omission (View menu): triggers/S&D still see the line, but
         // it's withheld from the main output. Checked per line against the
         // current preference.
@@ -33,8 +34,11 @@ public extension SessionController {
             // S&D matches the raw line on its own runtime; its scrape triggers
             // gag their own command output (cp info/check) from the window.
             let sndGag = await applySearchAndDestroyLine(line)
-            if !sndGag, !omitBlank { await scrollbackStore.append(line) }
-            return
+            if !sndGag, !omitBlank {
+                await scrollbackStore.append(line)
+                return LineProcessingSummary(displayed: 1)
+            }
+            return LineProcessingSummary(gagged: 1)
         }
         let disposition = await scriptEngine.process(line)
         // S&D matches the raw line independently of the user's scripts (its own
@@ -72,6 +76,9 @@ public extension SessionController {
             notifyForOutput(displayLine.text)
             // TTS (#9) speaks displayed lines only — gagged spam never talks.
             speakForOutput(displayLine.text)
+            await applyScriptEffects(disposition.effects)
+            await rearmTimerLoopIfScriptScheduled()
+            return LineProcessingSummary(displayed: 1, effects: disposition.effects.count)
         } else {
             // Record *why* a line was withheld (the transcript otherwise only has
             // the pre-gag RECV, so a leak/over-gag report can't be diagnosed from
@@ -85,9 +92,10 @@ public extension SessionController {
                 tagGag ? "tag" : nil
             ].compactMap(\.self).joined(separator: "+")
             logTranscript(.gag, "[\(reasons)] \(line.text)")
+            await applyScriptEffects(disposition.effects)
+            await rearmTimerLoopIfScriptScheduled()
+            return LineProcessingSummary(gagged: 1, effects: disposition.effects.count)
         }
-        await applyScriptEffects(disposition.effects)
-        await rearmTimerLoopIfScriptScheduled()
     }
 
     /// If a plugin's `AddTimer`/`DoAfter` (e.g. via the `wait` helper)

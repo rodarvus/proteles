@@ -83,14 +83,26 @@ public final class MapPanelModel {
             guard let self else { return }
             asciiMap = await session.mapStore.map
             for await lines in await session.mapStore.subscribe() {
-                asciiMap = lines
+                PerformanceProbe.shared.measure(
+                    "ui.map-panel.ascii-apply",
+                    events: lines.count,
+                    thresholdMS: 50
+                ) {
+                    asciiMap = lines
+                }
             }
         }
         // Mirror captured continent bigmaps (rendered while overland).
         bigmapTask = Task { [weak self] in
             guard let self else { return }
             for await map in await session.bigmapStore.subscribe() {
-                bigmaps[map.zone] = map
+                PerformanceProbe.shared.measure(
+                    "ui.map-panel.bigmap-apply",
+                    events: map.lines.count,
+                    thresholdMS: 50
+                ) {
+                    bigmaps[map.zone] = map
+                }
             }
         }
         bindTask = Task { [weak self] in
@@ -113,7 +125,13 @@ public final class MapPanelModel {
         let stream = await mapper.subscribeLayout()
         streamTask = Task { [weak self] in
             for await newLayout in stream {
-                self?.layout = newLayout
+                PerformanceProbe.shared.measure(
+                    "ui.map-panel.layout-apply",
+                    events: newLayout.rooms.count,
+                    thresholdMS: 50
+                ) {
+                    self?.layout = newLayout
+                }
                 await self?.backfillBigmap(for: newLayout)
             }
         }

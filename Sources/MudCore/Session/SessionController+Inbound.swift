@@ -31,14 +31,11 @@ extension SessionController {
     }
 
     func processChunk(_ wireBytes: [UInt8]) async {
-        // Tee to the recorder before doing any parser work — we want
-        // the *wire* bytes on disk so a replay re-runs the full
-        // protocol stack (MCCP2 included) deterministically.
-        try? recorder?.record(wireBytes)
+        recordWireBytes(wireBytes)
 
         let output: LinePipeline.Output
         do {
-            output = try pipeline.consume(wireBytes)
+            output = try consumeWireBytes(wireBytes)
         } catch {
             await handleInboundPipelineFailure(error)
             return
@@ -69,19 +66,8 @@ extension SessionController {
         // the lines — e.g. Chat Echo needs the comm.channel for a line
         // cached before deciding whether to gag that line from the main
         // window.
-        for message in output.gmcp {
-            await dispatchGMCP(message)
-        }
-        for line in output.lines {
-            // Transcript the raw MUD line (pre-gag) so S&D scrape output the
-            // window omits is still on disk for debugging.
-            logTranscript(.recv, line.text)
-            // Track group invitations (plain text — Aardwolf has no GMCP for
-            // them) before scripts, so the pending list survives even if a user
-            // trigger gags the line.
-            await handleGroupInviteLine(line.text)
-            await appendLineThroughScripts(line)
-        }
+        await dispatchGMCPBatch(output.gmcp)
+        await processLines(output.lines)
         // A group join/leave/disband/leader change → re-pull the group snapshot
         // (Aardwolf only sends `group` GMCP on request). Once per chunk.
         if output.lines.contains(where: { Self.isGroupChangeLine($0.text) }) {
@@ -89,7 +75,110 @@ extension SessionController {
         }
 
         await advanceAutologin(newLines: output.lines)
+        await persistVariablesMeasured()
+    }
+
+    private func recordWireBytes(_ wireBytes: [UInt8]) {
+        // Tee to the recorder before doing any parser work — we want
+        // the *wire* bytes on disk so a replay re-runs the full
+        // protocol stack (MCCP2 included) deterministically.
+        PerformanceProbe.shared.measure(
+            "session.recorder.write",
+            events: wireBytes.count,
+            thresholdMS: 100
+        ) {
+            try? recorder?.record(wireBytes)
+        }
+    }
+
+    private func consumeWireBytes(_ wireBytes: [UInt8]) throws -> LinePipeline.Output {
+        try PerformanceProbe.shared.measure(
+            "session.pipeline.consume",
+            events: wireBytes.count,
+            thresholdMS: 100
+        ) {
+            try pipeline.consume(wireBytes)
+        }
+    }
+
+    private func dispatchGMCPBatch(_ messages: [GMCPMessage]) async {
+        let start = ContinuousClock.now
+        for message in messages {
+            await dispatchGMCP(message)
+        }
+        PerformanceProbe.shared.recordPhase(
+            "session.gmcp.dispatch",
+            duration: ContinuousClock.now - start,
+            events: messages.count,
+            thresholdMS: 100
+        )
+        PerformanceProbe.shared.recordEventSummary(
+            "session.gmcp.batch",
+            events: messages.count,
+            fields: [("packages", Set(messages.map { $0.package.lowercased() }).count)],
+            thresholdEvents: 10
+        )
+    }
+
+    private func processLines(_ lines: [Line]) async {
+        let start = ContinuousClock.now
+        PerformanceProbe.shared.measure(
+            "session.lines.transcript",
+            events: lines.count,
+            thresholdMS: 100
+        ) {
+            for line in lines {
+                logTranscript(.recv, line.text)
+            }
+        }
+        var summary = LineProcessingSummary()
+        for line in lines {
+            // Track group invitations (plain text — Aardwolf has no GMCP for
+            // them) before scripts, so the pending list survives even if a user
+            // trigger gags the line.
+            await measureSessionPhase(
+                "session.lines.group-invite",
+                events: 1,
+                thresholdMS: 100
+            ) {
+                await handleGroupInviteLine(line.text)
+            }
+            let lineSummary = await measureSessionPhase(
+                "session.lines.script-display",
+                events: 1,
+                thresholdMS: 100
+            ) {
+                await appendLineThroughScripts(line)
+            }
+            summary.add(lineSummary)
+        }
+        PerformanceProbe.shared.recordPhase(
+            "session.lines.process",
+            duration: ContinuousClock.now - start,
+            events: lines.count,
+            thresholdMS: 100
+        )
+        PerformanceProbe.shared.recordEventSummary(
+            "session.lines.batch",
+            events: lines.count,
+            fields: [
+                ("displayed", summary.displayed),
+                ("gagged", summary.gagged),
+                ("effects", summary.effects)
+            ],
+            thresholdEvents: 50
+        )
+    }
+
+    private func persistVariablesMeasured() async {
+        let start = ContinuousClock.now
         await persistVariablesIfDirty()
+        PerformanceProbe.shared.recordPhase(
+            "session.variables.persist",
+            duration: ContinuousClock.now - start,
+            events: 1,
+            thresholdMS: 100
+        )
     }
 
     /// Extract Aardwolf's `state` from a `char.status` GMCP payload (≥ 3 = in
@@ -112,35 +201,92 @@ extension SessionController {
         latestGMCPByPackage[message.package.lowercased()] = message.json
         if message.package.lowercased() == "char.status" {
             updateRunningState(fromCharStatus: message.json) // speech quiet-while-running
+            markInGameIfNeeded(message.json)
         }
-        await gmcpState.apply(message)
-        if let chatLine = await chatStore.ingest(message) {
-            recordChannelLine(chatLine) // speech-mute matching (tts mute)
-            await notifyForChat(chatLine)
+        await measureSessionPhase(
+            "session.gmcp.state-apply",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await gmcpState.apply(message)
+        }
+        let chatLine = await measureSessionPhase(
+            "session.gmcp.chat-ingest",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await chatStore.ingest(message)
+        }
+        if let chatLine {
+            PerformanceProbe.shared.measure(
+                "session.gmcp.chat-record",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                recordChannelLine(chatLine) // speech-mute matching (tts mute)
+            }
+            await measureSessionPhase(
+                "session.gmcp.chat-notify",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await notifyForChat(chatLine)
+            }
         }
         // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals
         // update) + quest-ready (comm.quest). Self-gates on the relevant rules,
         // so it's a cheap no-op when none exist.
-        await checkGMCPNotifications(package: message.package, json: message.json)
+        await measureSessionPhase(
+            "session.gmcp.notifications",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await checkGMCPNotifications(package: message.package, json: message.json)
+        }
         if let mapper {
-            for packet in await mapper.ingest(package: message.package, json: message.json) {
+            let packets = await measureSessionPhase(
+                "session.gmcp.mapper-ingest",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await mapper.ingest(package: message.package, json: message.json)
+            }
+            for packet in packets {
                 try? await sendRaw(GMCPMessage.encode(payload: packet)) // e.g. "request area"
             }
             // After a room change, release the next segment of any pending
             // speedwalk. This is what makes a portal hop wait for its whoosh
             // before the follow-on `run` is sent (otherwise the run races the
             // portal, walks from the wrong room, and aborts).
-            await applyScriptEffects(mapper.advanceWalk())
+            await measureSessionPhase(
+                "session.gmcp.mapper-effects",
+                events: packets.count,
+                thresholdMS: 50
+            ) {
+                await applyScriptEffects(mapper.advanceWalk())
+            }
         }
         // Each tick, refresh the group snapshot so member vitals stay current
         // (Aardwolf won't push `group` GMCP on its own).
         if message.package.lowercased() == "comm.tick" {
-            await refreshGroupSnapshot()
+            await measureSessionPhase(
+                "session.gmcp.group-refresh",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await refreshGroupSnapshot()
+            }
         }
         // On each room.info (post-login), refresh Rich Exits + one-shot enable
         // any tag options whose features are on.
         if message.package.lowercased() == "room.info" {
-            await handleRoomInfoSideEffects()
+            await measureSessionPhase(
+                "session.gmcp.room-side-effects",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await handleRoomInfoSideEffects()
+            }
         }
         // Hold `char.status` plugin delivery until the character is in-game
         // (state ≥ 3), matching MUSHclient: a transitional mid-login char.status
@@ -153,27 +299,68 @@ extension SessionController {
             seenCharInGame = true
             // Now in-game (post-MOTD): load + connect all deferred plugins before
             // this first in-game char.status reaches them (init precedes broadcasts).
-            await activatePluginsIfNeeded()
+            await measureSessionPhase(
+                "session.gmcp.plugin-activate",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await activatePluginsIfNeeded()
+            }
         }
         let holdCharStatus = isCharStatus && !seenCharInGame
         if let scriptEngine, !holdCharStatus {
-            await applyScriptEffects(scriptEngine.applyGMCP(package: message.package, json: message.json))
+            let applyEffects = await measureSessionPhase(
+                "session.gmcp.script-apply",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await scriptEngine.applyGMCP(package: message.package, json: message.json)
+            }
+            await applyScriptEffects(applyEffects)
             // MUSHclient also hands the raw GMCP to OnPluginTelnetSubnegotiation
             // (option 201); dinv's config detection reads only that path.
-            await applyScriptEffects(scriptEngine.deliverGMCPSubnegotiation(
-                package: message.package, json: message.json
-            ))
+            let subnegEffects = await measureSessionPhase(
+                "session.gmcp.script-subneg",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await scriptEngine.deliverGMCPSubnegotiation(
+                    package: message.package, json: message.json
+                )
+            }
+            await applyScriptEffects(subnegEffects)
             // A plugin's OnPluginBroadcast may have scheduled a one-shot (e.g. a
             // wait.time resume timer); re-arm the loop so it fires when idle.
             await rearmTimerLoopIfScriptScheduled()
         }
         if let searchAndDestroy {
-            await applyScriptEffects(searchAndDestroy.applyGMCP(package: message.package, json: message.json))
+            let effects = await measureSessionPhase(
+                "session.gmcp.snd-apply",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await searchAndDestroy.applyGMCP(package: message.package, json: message.json)
+            }
+            await applyScriptEffects(effects)
             await rearmTimerLoopIfSnDScheduled()
         }
         // Load the armed dinv once the character is active (its init keys off the
         // first char.base broadcast it sees while active — see D-32).
-        if armedDinvShouldLoad(for: message) { await loadPendingDinv() }
+        if armedDinvShouldLoad(for: message) {
+            await measureSessionPhase(
+                "session.gmcp.dinv-load",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await loadPendingDinv()
+            }
+        }
+    }
+
+    private func markInGameIfNeeded(_ json: String) {
+        if Self.charStatusState(json).map({ $0 >= 3 }) == true {
+            PerformanceProbe.shared.markInGame()
+        }
     }
 
     /// Per-`room.info` side effects, extracted to keep `dispatchGMCP` within the

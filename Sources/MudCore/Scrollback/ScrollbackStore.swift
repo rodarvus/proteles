@@ -59,12 +59,18 @@ public actor ScrollbackStore {
         text: String,
         runs: [StyledRun] = []
     ) -> LineID {
-        let id = LineID(nextLineRaw)
-        nextLineRaw += 1
-        appendLine(
-            Line(id: id, timestamp: timestamp, text: text, runs: runs)
-        )
-        return id
+        PerformanceProbe.shared.measure(
+            "scrollback.append",
+            events: 1,
+            thresholdMS: 100
+        ) {
+            let id = LineID(nextLineRaw)
+            nextLineRaw += 1
+            appendLine(
+                Line(id: id, timestamp: timestamp, text: text, runs: runs)
+            )
+            return id
+        }
     }
 
     /// Append a fully-formed line. The line's `id` field is overridden
@@ -72,24 +78,45 @@ public actor ScrollbackStore {
     /// placeholder ID.
     @discardableResult
     public func append(_ line: Line) -> LineID {
-        let id = LineID(nextLineRaw)
-        nextLineRaw += 1
-        appendLine(
-            Line(
-                id: id,
-                timestamp: line.timestamp,
-                text: line.text,
-                runs: line.runs
+        PerformanceProbe.shared.measure(
+            "scrollback.append",
+            events: 1,
+            thresholdMS: 100
+        ) {
+            let id = LineID(nextLineRaw)
+            nextLineRaw += 1
+            appendLine(
+                Line(
+                    id: id,
+                    timestamp: line.timestamp,
+                    text: line.text,
+                    runs: line.runs
+                )
             )
-        )
-        return id
+            return id
+        }
     }
 
     /// Append many lines in a single actor hop (e.g. rebuilding a filtered view
     /// like the Channels panel). Each gets the next monotonic ID.
     public func appendBatch(_ newLines: [Line]) {
-        for line in newLines {
-            _ = append(line)
+        PerformanceProbe.shared.measure(
+            "scrollback.appendBatch",
+            events: newLines.count,
+            thresholdMS: 100
+        ) {
+            for line in newLines {
+                let id = LineID(nextLineRaw)
+                nextLineRaw += 1
+                appendLine(
+                    Line(
+                        id: id,
+                        timestamp: line.timestamp,
+                        text: line.text,
+                        runs: line.runs
+                    )
+                )
+            }
         }
     }
 

@@ -47,11 +47,19 @@ public final class MiniWindowStore {
     }
 
     func apply(_ update: MiniWindowUpdate) {
-        switch update {
-        case .update(let scene): scenes[scene.name] = scene
-        case .delete(let name): scenes[name] = nil
-        case .image(let pluginID, let imageID, let data):
-            if let image = Self.decode(data) { setImage(image, pluginID: pluginID, imageID: imageID) }
+        PerformanceProbe.shared.measure(
+            "ui.miniwindow.apply",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            switch update {
+            case .update(let scene): scenes[scene.name] = scene
+            case .delete(let name): scenes[name] = nil
+            case .image(let pluginID, let imageID, let data):
+                if let image = Self.decode(data) {
+                    setImage(image, pluginID: pluginID, imageID: imageID)
+                }
+            }
         }
     }
 

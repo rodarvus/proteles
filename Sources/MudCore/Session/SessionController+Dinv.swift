@@ -27,11 +27,31 @@ public extension SessionController {
             appDirectory: suffixed,
             stateDirectory: suffixed
         )
-        await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        let loadEffects = await measureSessionPhase(
+            "session.dinv.load-plugin",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.loadPlugin(plugin, context: context)
+        }
+        await applyScriptEffects(loadEffects)
         // Replay char.base so dinv — freshly loaded with its init flag clear —
         // catches it while active and runs its init chain.
-        await applyScriptEffects(scriptEngine.deliverGMCPBroadcast(package: "char.base"))
-        await persistVariablesIfDirty()
+        let replayEffects = await measureSessionPhase(
+            "session.dinv.replay-char-base",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.deliverGMCPBroadcast(package: "char.base")
+        }
+        await applyScriptEffects(replayEffects)
+        await measureSessionPhase(
+            "session.dinv.persist",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await persistVariablesIfDirty()
+        }
         restartTimerLoop()
     }
 }

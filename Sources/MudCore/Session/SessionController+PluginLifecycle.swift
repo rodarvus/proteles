@@ -34,16 +34,41 @@ extension SessionController {
 
         if !pluginsLoaded {
             pluginsLoaded = true
-            await loadDeferredInitialPlugins()
+            await measureSessionPhase(
+                "session.plugins.load-deferred",
+                events: pendingInitialPluginDirectories.count,
+                thresholdMS: 50
+            ) {
+                await loadDeferredInitialPlugins()
+            }
         }
         if !pluginsConnectFired, let scriptEngine {
             pluginsConnectFired = true
-            await replayGMCPToLoadedPlugins()
-            await applyScriptEffects(scriptEngine.connectPlugins())
+            await measureSessionPhase(
+                "session.plugins.replay-gmcp",
+                events: latestGMCPByPackage.count,
+                thresholdMS: 50
+            ) {
+                await replayGMCPToLoadedPlugins()
+            }
+            let effects = await measureSessionPhase(
+                "session.plugins.connect-hooks",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await scriptEngine.connectPlugins()
+            }
+            await applyScriptEffects(effects)
         }
         // Loads/connect commonly arm timers + schedule probes; re-arm the loop.
         await rearmTimerLoopIfScriptScheduled()
-        await persistVariablesIfDirty()
+        await measureSessionPhase(
+            "session.plugins.persist",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await persistVariablesIfDirty()
+        }
     }
 
     /// Re-deliver the GMCP that arrived *before* the deferred plugins loaded, so

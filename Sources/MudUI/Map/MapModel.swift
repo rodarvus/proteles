@@ -24,7 +24,13 @@ public final class MapModel {
         streamTask?.cancel()
         streamTask = Task { [weak self] in
             for await map in stream {
-                self?.lines = map
+                PerformanceProbe.shared.measure(
+                    "ui.ascii-map-model.apply",
+                    events: map.count,
+                    thresholdMS: 50
+                ) {
+                    self?.lines = map
+                }
             }
         }
     }

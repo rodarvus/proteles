@@ -71,18 +71,43 @@
                 font: Self.baseFont,
                 timestampColor: NSColor.secondaryLabelColor
             )
-            textView.textStorage?.setAttributedString(builder.build(
-                lines,
-                showTimestamps: showTimestamps,
-                timestampSeconds: timestampSeconds
-            ))
+            let attributed = PerformanceProbe.shared.measure(
+                "channels.build",
+                events: lines.count,
+                thresholdMS: 50
+            ) {
+                builder.build(
+                    lines,
+                    showTimestamps: showTimestamps,
+                    timestampSeconds: timestampSeconds
+                )
+            }
+            PerformanceProbe.shared.measure(
+                "channels.set-text",
+                events: lines.count,
+                thresholdMS: 50
+            ) {
+                textView.textStorage?.setAttributedString(attributed)
+            }
             context.coordinator.hasRendered = true
             context.coordinator.lastFilterKey = filterKey
 
             if forceBottom || wasPinned {
-                scrollView.scrollToBottomSoon()
+                PerformanceProbe.shared.measure(
+                    "channels.scroll-bottom",
+                    events: lines.count,
+                    thresholdMS: 50
+                ) {
+                    scrollView.scrollToBottomSoon()
+                }
             } else {
-                scrollView.restoreVisibleOrigin(previousOrigin)
+                PerformanceProbe.shared.measure(
+                    "channels.restore-origin",
+                    events: lines.count,
+                    thresholdMS: 50
+                ) {
+                    scrollView.restoreVisibleOrigin(previousOrigin)
+                }
             }
         }
 

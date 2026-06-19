@@ -57,7 +57,13 @@ struct DetachedPanelWindow: View {
             .task {
                 // Only the Character panel needs live GMCP; cheap to always run.
                 for await snapshot in await session.gmcpState.subscribe() {
-                    gmcp.state = snapshot
+                    PerformanceProbe.shared.measure(
+                        "ui.detached-gmcp-model.apply",
+                        events: 1,
+                        thresholdMS: 50
+                    ) {
+                        gmcp.state = snapshot
+                    }
                 }
             }
             .onChange(of: layout.isDetached(kind)) { _, stillDetached in

@@ -49,6 +49,7 @@ extension ContentView {
     func noteConnection(_ networkState: NetworkConnection.State) {
         connectionState = Self.map(networkState)
         guard case .connected = networkState else { return }
+        PerformanceProbe.shared.reset()
         resumeBanner = nil
         writeResumeToken()
         // Point the Levels panel at this character's leveldb.db (#44) + refresh

@@ -225,17 +225,23 @@
         /// definition, within budget).
         private func renderSnapshot(_ lines: [Line]) {
             guard !lines.isEmpty, let textView, let storage = textView.textStorage else { return }
-            storage.beginEditing()
-            for line in lines {
-                let attributed = builder.build(line)
-                storage.append(attributed)
-                lineLengths.append((id: line.id, utf16Length: attributed.length))
-                recentLines.append(attributed)
+            PerformanceProbe.shared.measure(
+                "main-output.snapshot",
+                events: lines.count,
+                thresholdMS: 50
+            ) {
+                storage.beginEditing()
+                for line in lines {
+                    let attributed = builder.build(line)
+                    storage.append(attributed)
+                    lineLengths.append((id: line.id, utf16Length: attributed.length))
+                    recentLines.append(attributed)
+                }
+                storage.endEditing()
             }
             if recentLines.count > tailLineCount {
                 recentLines.removeFirst(recentLines.count - tailLineCount)
             }
-            storage.endEditing()
             scrollToBottom(textView)
             refreshTail()
         }
@@ -246,13 +252,19 @@
         /// flush. Must be called inside the storage's `beginEditing` scope.
         private func trimEvictionBacklogIfFull(_ storage: NSTextStorage) {
             guard evictionBacklog >= evictionBatch else { return }
-            var evictBytes = 0
-            for index in 0..<evictionBacklog {
-                evictBytes += lineLengths[index].utf16Length
+            PerformanceProbe.shared.measure(
+                "main-output.eviction-trim",
+                events: evictionBacklog,
+                thresholdMS: 50
+            ) {
+                var evictBytes = 0
+                for index in 0..<evictionBacklog {
+                    evictBytes += lineLengths[index].utf16Length
+                }
+                storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
+                lineLengths.removeFirst(evictionBacklog)
+                evictionBacklog = 0
             }
-            storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
-            lineLengths.removeFirst(evictionBacklog)
-            evictionBacklog = 0
         }
 
         /// Re-render the live-tail pane from the buffered recent lines. The
@@ -261,15 +273,21 @@
         /// row at the bottom.
         private func refreshTail() {
             guard let storage = tailTextView?.textStorage else { return }
-            let combined = NSMutableAttributedString()
-            for line in recentLines {
-                combined.append(line)
+            PerformanceProbe.shared.measure(
+                "main-output.tail-refresh",
+                events: recentLines.count,
+                thresholdMS: 50
+            ) {
+                let combined = NSMutableAttributedString()
+                for line in recentLines {
+                    combined.append(line)
+                }
+                if combined.length > 0, combined.mutableString.hasSuffix("\n") {
+                    combined.deleteCharacters(in: NSRange(location: combined.length - 1, length: 1))
+                }
+                storage.setAttributedString(combined)
+                tailTextView?.scrollToEndOfDocument(nil)
             }
-            if combined.length > 0, combined.mutableString.hasSuffix("\n") {
-                combined.deleteCharacters(in: NSRange(location: combined.length - 1, length: 1))
-            }
-            storage.setAttributedString(combined)
-            tailTextView?.scrollToEndOfDocument(nil)
         }
 
         /// `render-flush` intervals for Instruments (#59 B5): the same window
@@ -294,40 +312,49 @@
             var appendedCount = 0
             var maxArrivalLatency: TimeInterval = 0
 
-            storage.beginEditing()
+            PerformanceProbe.shared.measure(
+                "main-output.storage-edit",
+                events: toApply.count,
+                thresholdMS: 50
+            ) {
+                storage.beginEditing()
 
-            for event in toApply {
-                switch event {
-                case .appended(let line):
-                    let attributed = builder.build(line)
-                    storage.append(attributed)
-                    lineLengths.append((id: line.id, utf16Length: attributed.length))
-                    recentLines.append(attributed)
-                    if recentLines.count > tailLineCount {
-                        recentLines.removeFirst(recentLines.count - tailLineCount)
+                for event in toApply {
+                    switch event {
+                    case .appended(let line):
+                        let attributed = builder.build(line)
+                        storage.append(attributed)
+                        lineLengths.append((id: line.id, utf16Length: attributed.length))
+                        recentLines.append(attributed)
+                        if recentLines.count > tailLineCount {
+                            recentLines.removeFirst(recentLines.count - tailLineCount)
+                        }
+                        didAppend = true
+                        appendedCount += 1
+                        maxArrivalLatency = max(
+                            maxArrivalLatency,
+                            wallNow.timeIntervalSince(line.timestamp)
+                        )
+
+                    case .evicted(let id):
+                        // Defer the top-delete (see ``evictionBatch``): the line
+                        // stays rendered for now; we only advance the backlog
+                        // cursor. The store evicts in append order, so the next
+                        // eviction is always the first not-yet-deleted line,
+                        // `lineLengths[evictionBacklog]`.
+                        guard evictionBacklog < lineLengths.count else { break }
+                        assert(
+                            lineLengths[evictionBacklog].id == id,
+                            "ScrollbackStore eviction order does not match coordinator FIFO"
+                        )
+                        evictionBacklog += 1
                     }
-                    didAppend = true
-                    appendedCount += 1
-                    maxArrivalLatency = max(maxArrivalLatency, wallNow.timeIntervalSince(line.timestamp))
-
-                case .evicted(let id):
-                    // Defer the top-delete (see ``evictionBatch``): the line
-                    // stays rendered for now; we only advance the backlog
-                    // cursor. The store evicts in append order, so the next
-                    // eviction is always the first not-yet-deleted line,
-                    // `lineLengths[evictionBacklog]`.
-                    guard evictionBacklog < lineLengths.count else { break }
-                    assert(
-                        lineLengths[evictionBacklog].id == id,
-                        "ScrollbackStore eviction order does not match coordinator FIFO"
-                    )
-                    evictionBacklog += 1
                 }
+
+                trimEvictionBacklogIfFull(storage)
+
+                storage.endEditing()
             }
-
-            trimEvictionBacklogIfFull(storage)
-
-            storage.endEditing()
 
             if stickToBottom {
                 scrollToBottom(textView)
@@ -370,7 +397,13 @@
         /// connect, when the first burst arrives before the view has sized. The
         /// deferred pass runs after layout settles and lands on the real bottom.
         private func scrollToBottom(_ textView: NSTextView) {
-            textView.scrollToEndOfDocument(nil)
+            PerformanceProbe.shared.measure(
+                "main-output.scroll-bottom",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                textView.scrollToEndOfDocument(nil)
+            }
             DispatchQueue.main.async { [weak textView, weak self] in
                 guard let textView, let self else { return }
                 // Only pay the second scroll when the immediate one actually
@@ -380,7 +413,13 @@
                 // common already-at-bottom case must be a cheap geometry
                 // check, not a second walk.
                 if !isScrolledToBottom(textView) {
-                    textView.scrollToEndOfDocument(nil)
+                    PerformanceProbe.shared.measure(
+                        "main-output.scroll-bottom-deferred",
+                        events: 1,
+                        thresholdMS: 50
+                    ) {
+                        textView.scrollToEndOfDocument(nil)
+                    }
                 }
             }
         }

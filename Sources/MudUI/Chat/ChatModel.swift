@@ -68,12 +68,18 @@ public final class ChatModel {
     }
 
     private func append(_ line: ChatLine) {
-        lines.append(line)
-        if lines.count > maxLines {
-            lines.removeFirst(lines.count - maxLines)
-        }
-        if !channels.contains(line.channel) {
-            channels = (channels + [line.channel]).sorted()
+        PerformanceProbe.shared.measure(
+            "ui.chat-model.append",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            lines.append(line)
+            if lines.count > maxLines {
+                lines.removeFirst(lines.count - maxLines)
+            }
+            if !channels.contains(line.channel) {
+                channels = (channels + [line.channel]).sorted()
+            }
         }
     }
 }

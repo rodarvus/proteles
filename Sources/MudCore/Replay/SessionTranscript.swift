@@ -96,20 +96,26 @@ public final class SessionTranscript: @unchecked Sendable {
     /// Append one event. Embedded newlines/carriage returns in `text` are
     /// escaped so each event stays on a single line (grep-friendly).
     public func log(_ category: Category, _ text: String, timestamp: Date = Date()) {
-        let stamp = formatter.string(from: timestamp)
-        let escaped = text
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        let tag = category.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)
-        let line = "\(stamp) \(tag) \(escaped)\n"
-        guard let data = line.data(using: .utf8) else { return }
-        lock.withLock {
-            guard !isClosed else { return }
-            do {
-                try fileHandle.write(contentsOf: data)
-            } catch {
-                isClosed = true
+        PerformanceProbe.shared.measure(
+            "transcript.write",
+            events: 1,
+            thresholdMS: 100
+        ) {
+            let stamp = formatter.string(from: timestamp)
+            let escaped = text
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            let tag = category.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)
+            let line = "\(stamp) \(tag) \(escaped)\n"
+            guard let data = line.data(using: .utf8) else { return }
+            lock.withLock {
+                guard !isClosed else { return }
+                do {
+                    try fileHandle.write(contentsOf: data)
+                } catch {
+                    isClosed = true
+                }
             }
         }
     }

@@ -21,7 +21,30 @@ extension ContentView {
             let overrun = now.timeIntervalSince(last) - budget
             last = now
             if overrun > 0.08 {
-                await session.recordNote("UI stall: main thread blocked ~\(Int(overrun * 1000))ms")
+                let note = PerformanceProbe.shared.stallNote(
+                    blockedMS: Int(overrun * 1000),
+                    at: now
+                )
+                await session.recordNote(note)
+            }
+        }
+    }
+
+    /// Drain thresholded perf notes into the transcript. The probe never writes
+    /// to the transcript directly, so transcript I/O can be measured without
+    /// recursively producing a note per transcript write.
+    func performanceProbeLoop() async {
+        var nextSummary = Date().addingTimeInterval(30)
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(1))
+            for note in PerformanceProbe.shared.drainPendingNotes() {
+                await session.recordNote(note)
+            }
+            let now = Date()
+            guard now >= nextSummary else { continue }
+            nextSummary = now.addingTimeInterval(30)
+            if let summary = PerformanceProbe.shared.drainSummary(now: now) {
+                await session.recordNote(PerformanceProbe.shared.format(summary))
             }
         }
     }
