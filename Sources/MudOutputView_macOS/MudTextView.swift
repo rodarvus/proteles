@@ -51,8 +51,7 @@
             guard isPlainTyping,
                   !Self.navigationKeyCodes.contains(event.keyCode),
                   let field = commandField,
-                  window?.firstResponder !== field,
-                  window?.firstResponder !== field.currentEditor()
+                  window?.firstResponder !== field
             else {
                 super.keyDown(with: event)
                 return
@@ -65,7 +64,7 @@
         private static let navigationKeyCodes: Set<UInt16> = [123, 124, 125, 126, 116, 121, 115, 119, 48]
 
         /// The window's command input field, located by its stable identifier.
-        private var commandField: NSTextField? {
+        private var commandField: NSView? {
             window?.contentView?.firstDescendant(matching: "proteles.command")
         }
 
@@ -165,10 +164,10 @@
     private extension NSView {
         /// Depth-first search for the descendant view with the given accessibility
         /// identifier (used to find the command input from the output view).
-        func firstDescendant(matching identifier: String) -> NSTextField? {
+        func firstDescendant(matching identifier: String) -> NSView? {
             for subview in subviews {
-                if let field = subview as? NSTextField, field.identifier?.rawValue == identifier {
-                    return field
+                if subview.identifier?.rawValue == identifier {
+                    return subview
                 }
                 if let found = subview.firstDescendant(matching: identifier) {
                     return found
