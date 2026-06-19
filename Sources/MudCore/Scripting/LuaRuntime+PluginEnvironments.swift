@@ -103,7 +103,7 @@ public extension LuaRuntime {
         for argument in arguments {
             luaPushValue(state, argument)
         }
-        if lua_pcall(state, Int32(arguments.count), 0, 0) != 0 {
+        if protectedCall(nargs: Int32(arguments.count), nresults: 0) != 0 {
             effects.append(contentsOf: scriptErrorEffects(
                 "Lua callback error in \(name): \(Self.popMessage(state))", pluginID: pluginID
             ))
@@ -138,7 +138,7 @@ public extension LuaRuntime {
             return (effects, true)
         }
         luaPushValue(state, .string(text))
-        if lua_pcall(state, 1, 1, 0) != 0 {
+        if protectedCall(nargs: 1, nresults: 1) != 0 {
             effects.append(contentsOf: scriptErrorEffects(
                 "Lua callback error in OnPluginSend: \(Self.popMessage(state))", pluginID: pluginID
             ))
@@ -173,6 +173,7 @@ public extension LuaRuntime {
             releaseTransientRefs()
         }
         guard let envRef = pluginEnvs[pluginID] else { return effects }
+        rememberChunkSource(chunkName, source) // for source-context in error reports
         guard Self.loadBuffer(state, source, name: "=" + chunkName) == 0 else {
             effects.append(contentsOf: scriptErrorEffects(
                 "Lua compile error: \(Self.popMessage(state))", pluginID: pluginID
@@ -181,7 +182,7 @@ public extension LuaRuntime {
         }
         lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [chunk, env]
         lua_setfenv(state, -2) // set chunk's env; pops env; [chunk]
-        if lua_pcall(state, 0, 0, 0) != 0 {
+        if protectedCall(nargs: 0, nresults: 0) != 0 {
             effects.append(contentsOf: scriptErrorEffects(
                 "\(errorLabel): \(Self.popMessage(state))", pluginID: pluginID
             ))
@@ -200,9 +201,8 @@ public extension LuaRuntime {
         }
         let diagnostic = ScriptEffect.diagnostic(source: source, message: text)
         guard errorNotesVisible else { return [diagnostic] }
-        return [
-            .note(text: text, foreground: "red", background: nil),
-            diagnostic
-        ]
+        // The red error note + the offending source lines (Sath-style highlight).
+        return [.note(text: text, foreground: "red", background: nil), diagnostic]
+            + sourceContextEffects(forError: text)
     }
 }

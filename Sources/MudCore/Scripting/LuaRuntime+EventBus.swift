@@ -100,12 +100,10 @@ extension LuaRuntime {
             for value in payload {
                 luaPushValue(state, value)
             }
-            if lua_pcall(state, Int32(payload.count), 0, 0) != 0 {
-                effects.append(.note(
-                    text: "Lua event error: \(Self.popMessage(state))",
-                    foreground: "red",
-                    background: nil
-                ))
+            if protectedCall(nargs: Int32(payload.count), nresults: 0) != 0 {
+                let message = "Lua event error: \(Self.popMessage(state))"
+                effects.append(.note(text: message, foreground: "red", background: nil))
+                effects.append(contentsOf: sourceContextEffects(forError: message))
             }
         }
     }
@@ -117,12 +115,10 @@ extension LuaRuntime {
         for value in payload {
             luaPushValue(state, value)
         }
-        if lua_pcall(state, Int32(payload.count), LUA_MULTRET, 0) != 0 {
-            effects.append(.note(
-                text: "Lua call error: \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
-            ))
+        if protectedCall(nargs: Int32(payload.count), nresults: LUA_MULTRET) != 0 {
+            let message = "Lua call error: \(Self.popMessage(state))"
+            effects.append(.note(text: message, foreground: "red", background: nil))
+            effects.append(contentsOf: sourceContextEffects(forError: message))
             lua_settop(state, base)
             return []
         }

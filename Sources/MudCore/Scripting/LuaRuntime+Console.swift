@@ -60,7 +60,7 @@ extension LuaRuntime {
 
         clua_install_timeout(state, executionTimeout.inSeconds, Self.hookInstructionInterval)
         defer { clua_clear_timeout(state) }
-        if lua_pcall(state, 0, LUA_MULTRET, 0) != 0 {
+        if protectedCall(nargs: 0, nresults: LUA_MULTRET) != 0 {
             let message = popError()
             let text = message.contains("proteles:timeout") ? "execution timed out" : message
             effects.append(Self.consoleNote("error: \(text)", color: "red"))

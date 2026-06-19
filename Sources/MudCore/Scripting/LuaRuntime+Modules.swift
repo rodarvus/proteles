@@ -37,8 +37,9 @@ extension LuaRuntime {
     /// ref, or nil (with a red note) on a compile error.
     nonisolated func compileChunk(_ arguments: [LuaValue]) -> [LuaValue] {
         let source = arguments.first?.stringValue ?? ""
-        let chunkName = "=" + (arguments.count > 1 ? (arguments[1].stringValue ?? "chunk") : "chunk")
-        guard Self.loadBuffer(state, source, name: chunkName) == 0 else {
+        let name = arguments.count > 1 ? (arguments[1].stringValue ?? "chunk") : "chunk"
+        rememberChunkSource(name, source) // for source-context in error reports
+        guard Self.loadBuffer(state, source, name: "=" + name) == 0 else {
             effects.append(.note(
                 text: "Lua compile error: \(Self.popMessage(state))",
                 foreground: "red",

@@ -134,6 +134,12 @@ public actor LuaRuntime {
     nonisolated(unsafe) var bundledModules: [String: String] = [:]
     nonisolated(unsafe) var moduleSearchPaths: [String] = []
 
+    /// Source text of compiled plugin/module chunks (chunk name → source), so a
+    /// runtime error can show the offending source line (see ``LuaSourceContext``
+    /// + ``appendingSourceContext(to:)``). Bounded by the count of distinct
+    /// loaded chunks (plugins + require'd modules).
+    nonisolated(unsafe) var chunkSources: [String: String] = [:]
+
     /// Ambient `proteles.info`/`pluginID` (≈ `GetInfo`/`GetPluginID`), bound to the
     /// *executing* plugin per run via ``pluginContexts`` (see PluginEnvironments).
     nonisolated(unsafe) var pluginContext = PluginContext.default
@@ -310,6 +316,10 @@ public actor LuaRuntime {
     os = { time = _os.time, clock = _os.clock, date = _os.date, difftime = _os.difftime }
     local _debug = debug
     debug = { traceback = _debug.traceback }
+    -- pcall message handler (see protectedCall): enrich a runtime error with the
+    -- call stack. Captures the real `_debug` so a plugin can't disable it by
+    -- reassigning the sandboxed `debug` global. Level 2 skips this handler frame.
+    function __proteles_traceback(msg) return _debug.traceback(tostring(msg), 2) end
     """
 
     /// Run the sandbox chunk directly on a freshly-opened state. Static so it's
@@ -514,12 +524,30 @@ public actor LuaRuntime {
     private func call(argumentCount: Int32, resultCount: Int32) throws {
         clua_install_timeout(state, executionTimeout.inSeconds, Self.hookInstructionInterval)
         defer { clua_clear_timeout(state) }
-        if lua_pcall(state, argumentCount, resultCount, 0) != 0 {
+        if protectedCall(nargs: argumentCount, nresults: resultCount) != 0 {
             let message = popError()
             if message.contains("proteles:timeout") {
                 throw LuaError.timedOut
             }
             throw LuaError.runtime(message)
         }
+    }
+
+    /// `lua_pcall` with `__proteles_traceback` installed as the message handler,
+    /// so a runtime error carries the full Lua call stack (which plugin function,
+    /// which line) instead of just the top-level message. The callable + its
+    /// `nargs` arguments must already be on the stack top. Falls back to a plain
+    /// `lua_pcall` if the handler isn't available (e.g. pre-sandbox). Returns the
+    /// pcall status (0 = success).
+    nonisolated func protectedCall(nargs: Int32, nresults: Int32) -> Int32 {
+        let functionIndex = lua_gettop(state) - nargs
+        clua_getglobal(state, "__proteles_traceback")
+        guard lua_type(state, -1) == LUA_TFUNCTION else {
+            clua_pop(state, 1)
+            return lua_pcall(state, nargs, nresults, 0)
+        }
+        lua_insert(state, functionIndex) // move the handler below the callable
+        defer { lua_remove(state, functionIndex) } // drop the handler post-call
+        return lua_pcall(state, nargs, nresults, functionIndex)
     }
 }

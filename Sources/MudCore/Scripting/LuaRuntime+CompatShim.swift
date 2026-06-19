@@ -83,12 +83,10 @@ public extension LuaRuntime {
         for argument in arguments {
             luaPushValue(state, argument)
         }
-        if lua_pcall(state, Int32(arguments.count), 0, 0) != 0 {
-            effects.append(.note(
-                text: "Lua callback error in \(name): \(Self.popMessage(state))",
-                foreground: "red",
-                background: nil
-            ))
+        if protectedCall(nargs: Int32(arguments.count), nresults: 0) != 0 {
+            let message = "Lua callback error in \(name): \(Self.popMessage(state))"
+            effects.append(.note(text: message, foreground: "red", background: nil))
+            effects.append(contentsOf: sourceContextEffects(forError: message))
         }
         flushMiniWindows()
         return effects
