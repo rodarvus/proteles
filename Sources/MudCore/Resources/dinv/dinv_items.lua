@@ -3641,6 +3641,71 @@ function inv.items.isSearchRelative(query)
 end -- inv.items.isSearchRelative
 
 
+-- Searches the inventory and returns the FULL item records (serialized) for an
+-- external caller via CallPlugin.  Companion to getItemIds() above: where that
+-- returns a bare CSV of object ids, this returns each matching item's whole
+-- record -- with its objId folded in -- plus a count, so the caller gets
+-- everything in one round-trip instead of a CallPlugin per id.
+--
+-- Returns a string built by serialize.save_simple(); the caller reconstitutes
+-- it with loadstring("return " .. result)().  Every failure path returns a
+-- serialized { error = "..." } table rather than raising, so the caller can
+-- simply branch on decoded.error.
+--
+-- Note: like getItemIds(), this runs OUTSIDE dinv's search co-routine, so
+--       relative names/locations (rname/rloc) cannot be resolved here -- they
+--       need the co-routine to query the MUD.  Such queries are rejected up
+--       front (same guard as inv.items.searchIdsCSV) instead of failing
+--       obscurely deeper in the search.
+--
+-- This is the entry point the Aardwolf-Switch-Weapons plugin calls.  The body
+-- was contributed for aard_inventory by the plugin's author; it is ported here
+-- with two fork-local adjustments: the relative-query guard above, and a
+-- shallow copy of each item so we never mutate dinv's live item cache when
+-- attaching .objid (the serialized output is identical either way).
+function SearchAndReturn(query, verbosity)
+  if (not inv.init.initializedActive) then
+    return serialize.save_simple({ error = "Plugin not initialized" })
+  end -- if
+
+  if inv.items.isSearchRelative(query) then
+    return serialize.save_simple(
+      { error = "Relative names or locations are not available to external callers" })
+  end -- if
+
+  local idArray, searchRetval = inv.items.searchCR(query, false)
+
+  if (searchRetval ~= DRL_RET_SUCCESS) then
+    return serialize.save_simple(
+      { error = "Search failed: " .. dbot.retval.getString(searchRetval) })
+  end -- if
+
+  local matchingItems = {}
+
+  for _, objId in ipairs(idArray or {}) do
+    local item = inv.items.getEntry(objId)
+    if item then
+      -- getEntry returns the LIVE cached record, so copy it before folding in
+      -- the objId rather than scribbling on dinv's own item table.
+      local record = {}
+      for key, value in pairs(item) do
+        record[key] = value
+      end -- for
+      record.objid = objId
+      table.insert(matchingItems, record)
+    end -- if
+  end -- for
+
+  local results = {
+    count = #matchingItems,
+    items = matchingItems,
+    query = query,
+  }
+
+  return serialize.save_simple(results)
+end -- SearchAndReturn
+
+
 -- Return an array of objIds that is a sorted version of the idArray given as an input param
 -- E.g., to sort first by type and then by level, use a fieldArray like this:
 --   fieldArray = { { field = invStatFieldType, isAscending = true },
