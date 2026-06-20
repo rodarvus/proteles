@@ -23,9 +23,18 @@ extension SessionController {
         // `;`). A trailing empty piece is dropped; a lone empty line falls
         // through to dispatchSingleCommand as a bare-Enter nudge.
         let pieces = CommandStack.split(command)
-        for piece in pieces {
+        for (index, piece) in pieces.enumerated() {
             if piece.isEmpty, pieces.count > 1 { continue }
+            let armBefore = await mapper?.walkArmGeneration ?? 0
             try await dispatchSingleCommand(piece)
+            // If this piece started a `mapper goto`, the rest of the stacked
+            // line must wait for arrival (released on `.walkCompleted`) — the
+            // same hold a multi-line macro gets in `fire(.command)`. Skip the
+            // trailing-empty pieces the loop itself ignores.
+            let remaining = pieces[(index + 1)...].filter { !($0.isEmpty && pieces.count > 1) }
+            if await holdBatchIfWalkArmed(armBefore: armBefore, remaining: Array(remaining)) {
+                return
+            }
         }
     }
 

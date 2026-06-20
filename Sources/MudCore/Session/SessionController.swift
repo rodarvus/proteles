@@ -141,6 +141,17 @@ public actor SessionController {
     /// ExecuteWithWaits round-trip barrier); resumed by ``handleWalkMarker`` on
     /// arrival, or by a defensive timeout / teardown so it can't wedge.
     var waitMarkerContinuation: CheckedContinuation<Void, Never>?
+    /// Commands held behind an in-progress `mapper goto` — a macro/stacked
+    /// command after the goto must wait for ARRIVAL (the ordering MUSHclient got
+    /// for free from Aardwolf's server-side `run` queue; we walk client-side, so
+    /// we reproduce it). Drained in order on `.walkCompleted`; dropped when a new
+    /// goto supersedes; flushed-with-warning by a stall watchdog so a walk that
+    /// never lands can't swallow them. See `SessionController+WalkDeferral`.
+    var deferredAfterWalk: [String] = []
+    /// Bumped whenever the deferred queue is armed, drained, dropped, or flushed,
+    /// so a stall-watchdog task launched for an earlier arming knows it has been
+    /// superseded and exits without acting.
+    var walkDeferGeneration = 0
     /// Whether the character is speedwalking (`char.status.state == 12`),
     /// for the policy's quiet-while-running gate.
     var charIsRunning = false

@@ -97,6 +97,15 @@ public enum ScriptEffect: Sendable, Equatable {
     /// synchronised. `emitEndRunning` asks the pacer to send the `{end running}`
     /// marker after the last step (true only for a walk's final segment).
     case walkWithWaits(command: String, emitEndRunning: Bool)
+    /// The mapper's segmented speedwalk reached its final destination — the
+    /// `room.info` for the `goto`/`walkto` target arrived. The session releases
+    /// any commands it deferred behind the walk (a macro/stacked command after
+    /// `mapper goto` must wait for ARRIVAL, the ordering MUSHclient got for free
+    /// from Aardwolf's server-side `run` queue). Carries the destination uid for
+    /// the transcript. Keyed purely on arriving at the target, so it's route-shape
+    /// agnostic — though recall-routed gotos still mis-hold (issue #78: arrival
+    /// off the stale recall destination isn't matched, so this never fires).
+    case walkCompleted(uid: String)
     /// Print plain text to the scrollback.
     case echo(String)
     /// Raise a native user notification from a script/plugin (`Notify` /

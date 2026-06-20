@@ -25,9 +25,10 @@ public extension SessionController {
             // OnPluginSend) apply exactly as for an alias's .world target.
             await applyScriptEffects([.send(command)])
         case .command(let command):
-            for line in Self.commandLines(command) {
-                try? await send(line)
-            }
+            // Each line runs through the input pipeline in order — but if a line
+            // is `mapper goto …`, the remaining lines wait for arrival rather
+            // than racing the walk (the F9/F10/F11 `goto X` ⏎ `quest …` case).
+            await sendWalkAwareBatch(Self.commandLines(command))
         case .script(let script):
             guard let scriptEngine else { return }
             await applyScriptEffects(scriptEngine.run(script))

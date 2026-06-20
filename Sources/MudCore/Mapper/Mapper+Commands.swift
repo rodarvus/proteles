@@ -179,6 +179,12 @@ extension Mapper {
         walkSegments = segments
         walkIndex = 0
         walkExpect = segments.count > 1 ? segments.first?.expectUID : nil
+        // Track the FINAL destination through to arrival (not just the next
+        // segment), and announce that a walk was armed so the session can hold
+        // any command stacked after this `goto` until we land (``advanceWalk``
+        // emits `.walkCompleted` when `uid`'s `room.info` arrives).
+        walkFinalTarget = uid
+        walkArmGeneration += 1
         // Wrap the walk in the reference's `{begin running}` marker (→ 999
         // "kinda_busy" broadcast), then emit the first segment. The matching
         // `{end running}` rides the final segment (``segmentEffects``).

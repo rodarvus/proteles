@@ -22,19 +22,50 @@ extension Mapper {
     /// otherwise (still en route, or no walk) do nothing. Returns the effect(s)
     /// to apply now.
     public func advanceWalk() -> [ScriptEffect] {
-        guard let expect = walkExpect, currentRoomUID == expect else { return [] }
-        walkIndex += 1
-        guard walkIndex < walkSegments.count else {
-            // The final segment already carried the `{end running}` marker
-            // (emitted with it, or by its wait-pacer); nothing more to send.
-            walkExpect = nil
-            return []
+        var effects: [ScriptEffect] = []
+        // Release the next segment once we've arrived where the last-sent one
+        // was heading (still en route, or no walk → nothing to release).
+        if let expect = walkExpect, currentRoomUID == expect {
+            walkIndex += 1
+            if walkIndex < walkSegments.count {
+                let segment = walkSegments[walkIndex]
+                let isFinal = walkIndex == walkSegments.count - 1
+                // Wait for this segment only if more follow; the last needs none.
+                walkExpect = isFinal ? nil : segment.expectUID
+                effects.append(contentsOf: segmentEffects(segment, isFinal: isFinal))
+            } else {
+                // The final segment already carried the `{end running}` marker
+                // (emitted with it, or by its wait-pacer); nothing more to send.
+                walkExpect = nil
+            }
         }
-        let segment = walkSegments[walkIndex]
-        let isFinal = walkIndex == walkSegments.count - 1
-        // Wait for this segment only if more follow; the last one needs no wait.
-        walkExpect = isFinal ? nil : segment.expectUID
-        return segmentEffects(segment, isFinal: isFinal)
+        // Independently of segment bookkeeping, signal completion the moment we
+        // actually LAND in the final destination — for any route that reaches its
+        // target (plain run, single step, portal first jump). ``walkExpect`` can't
+        // serve as this gate: it clears when the final segment is *sent* (before
+        // arrival) and is nil for a one-step walk. The session releases commands
+        // deferred behind `mapper goto` on this. (A recall-routed goto whose
+        // recall lands somewhere other than the expected uid never reaches this —
+        // issue #78.)
+        if let target = walkFinalTarget, currentRoomUID == target {
+            walkFinalTarget = nil
+            effects.append(.walkCompleted(uid: target))
+        }
+        return effects
+    }
+
+    /// Whether a segmented walk is in progress — armed by ``route`` and cleared
+    /// when the destination `room.info` lands (or by ``clearWalk``). The session
+    /// reads this to decide whether to keep holding deferred commands.
+    public var isWalking: Bool {
+        walkFinalTarget != nil
+    }
+
+    /// Abandon any in-progress walk outright (the session's stall watchdog gave
+    /// up on it). Unlike ``advanceWalk``'s natural completion, this emits no
+    /// `.walkCompleted` — the session is already flushing the deferred queue.
+    public func cancelWalk() {
+        clearWalk()
     }
 
     /// Effects to emit one walk ``Speedwalk/Segment``. A command with embedded
@@ -57,5 +88,6 @@ extension Mapper {
         walkSegments = []
         walkIndex = 0
         walkExpect = nil
+        walkFinalTarget = nil
     }
 }

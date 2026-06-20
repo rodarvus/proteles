@@ -70,9 +70,19 @@ extension SessionController {
     /// walk on a detached task so its `wait(N)` pauses don't block inbound
     /// processing (the reflected `{mapper_wait}` echo it waits on arrives
     /// through that same inbound path). A no-op for any other effect.
-    func applyWalkEffect(_ effect: ScriptEffect) {
-        guard case .walkWithWaits(let command, let emitEndRunning) = effect else { return }
-        Task { await self.runWaitWalk(command, emitEndRunning: emitEndRunning) }
+    func applyWalkEffect(_ effect: ScriptEffect) async {
+        switch effect {
+        case .walkWithWaits(let command, let emitEndRunning):
+            Task { await self.runWaitWalk(command, emitEndRunning: emitEndRunning) }
+        case .walkCompleted:
+            // Arrived at a `mapper goto` target — release the commands held
+            // behind the walk (a macro/stacked command after the goto). Drained
+            // inline so they reach the wire within this `room.info`'s handling,
+            // when we're confirmed to be in the destination room.
+            await drainDeferredAfterWalk()
+        default:
+            break
+        }
     }
 
     /// Pace a `.walkWithWaits` command (the mapper's wait-bearing segment): run

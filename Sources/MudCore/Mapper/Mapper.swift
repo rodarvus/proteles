@@ -38,6 +38,22 @@ public actor Mapper {
     var walkIndex = 0
     var walkExpect: String?
 
+    /// The route's FINAL destination (the `goto`/`walkto`/`resume`/`next`
+    /// target), held until its `room.info` confirms ARRIVAL. Distinct from
+    /// ``walkExpect``, which tracks only the next *segment* boundary and clears
+    /// when the last segment is *sent* (before arrival, and nil for a one-step
+    /// walk). The session releases commands deferred behind `mapper goto` on
+    /// arrival here, so a recall/home/portal first jump (just the first segment)
+    /// is handled identically to a plain run. nil = no walk in progress.
+    var walkFinalTarget: String?
+    /// Monotonic counter bumped every time ``route`` actually arms a walk
+    /// (goto/walkto/resume/next with a non-empty path). The session snapshots it
+    /// around each dispatched command to tell "this command started/redirected a
+    /// walk" from "a walk was merely already running" (the latter happens while
+    /// the mapper re-dispatches its own segments) — the signal that arms, and
+    /// supersedes, the deferred-command queue.
+    public internal(set) var walkArmGeneration = 0
+
     /// The last room a `goto`/`walkto`/`where` targeted — `mapper resume` re-runs
     /// to it (reference `last_speedwalk_uid`/`last_hyperlink_uid`).
     var lastSpeedwalkTarget: String?

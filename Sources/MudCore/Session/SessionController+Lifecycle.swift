@@ -37,6 +37,7 @@ extension SessionController {
         pluginActivationFallbackTask?.cancel()
         pluginActivationFallbackTask = nil
         cancelWaitWalk() // stop a mapper wait-walk pacer + release its parked task
+        clearWalkDeferral() // drop any commands held behind an in-progress walk
         recorder?.close()
         recorder = nil
         transcript?.close()
