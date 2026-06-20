@@ -64,7 +64,7 @@ Real plugin-compat value; needs wiring into our trigger/alias/timer engines or
 config. The introspection and output-buffer families are done; the Options
 family is the main remaining cluster.
 
-- **Trigger/alias/timer introspection — ✅ SHIPPED** (`994644b`):
+- **Trigger/alias/timer introspection — ✅ SHIPPED** (`28437557`):
   `GetTriggerInfo`/`GetTriggerList`, `GetAliasInfo`/`GetAliasList`,
   `GetTimerInfo`/`GetTimerList`, `GetPluginTriggerList`, `ResetTimer`. Backed by a
   runtime-side `AutomationSnapshot` projected from the engines after each change;
@@ -74,7 +74,7 @@ family is the main remaining cluster.
 - **Trigger/timer group control — ✅ SHIPPED:** `EnableTriggerGroup`/
   `EnableTimerGroup` (assignment aliases of `EnableGroup`; the call-site regex
   misses them, so `EnableTriggerGroup` (35) still shows "missing" above).
-- **Output-buffer introspection — ✅ SHIPPED** (`e3d600d`): `GetLineCount`,
+- **Output-buffer introspection — ✅ SHIPPED** (`39ae098b`): `GetLineCount`,
   `GetLinesInBufferCount`, `GetLineInfo`, `GetStyleInfo`, `GetRecentLines` —
   semantics from `methods_info.cpp`, tied to the bounded `OutputLineBuffer`
   scrollback mirror.
