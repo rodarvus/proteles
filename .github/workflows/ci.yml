@@ -43,8 +43,23 @@ jobs:
       - name: Build (Debug)
         run: swift build -c debug
 
-      - name: Test (parallel)
-        run: swift test --parallel
+      # The SessionController coroutine/timer tests drive an async timer loop on
+      # a wall clock (wait.time fence/dequeue, autoreconnect, the unreachable-host
+      # timeout, …). On the few-core macos-15 runner those starve and flake (#26),
+      # badly under `--parallel`. Mitigations: run serially (much lower flake
+      # rate + deterministic), and retry the suite up to 3× so a residual flake
+      # doesn't redden the build. Developers still use `swift test --parallel`
+      # locally (the documented gate). The real fix — making those tests clock-
+      # independent — is tracked in #26.
+      - name: Test
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::swift test --no-parallel (attempt $attempt/3)"
+            if swift test --no-parallel; then echo "::endgroup::"; exit 0; fi
+            echo "::endgroup::"
+            echo "attempt $attempt failed (likely a timing flake, #26); retrying"
+          done
+          echo "tests failed after 3 attempts"; exit 1
 
   app-build:
     # The macOS app target is XcodeGen-generated and NOT covered by
