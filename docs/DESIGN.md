@@ -253,18 +253,27 @@ requirement, not a taste call:
 
 ## 6. Accessibility (not optional)
 
-- Honor **Increase Contrast, Reduce Motion, Reduce Transparency, Dark Mode**, and
-  Dynamic Type in the chrome.
-- **Text-to-speech shipped** (D-110): game lines, tells, and alerts are spoken via
-  an app voice or routed to VoiceOver (`announcementRequested`), configured in
-  Settings ▸ Audio. The speech *decision* pipeline is unit-tested end-to-end.
-- **VoiceOver:** controls should be labeled and the output navigable. This is the
-  current accessibility gap — most surfaces still lack explicit
-  `accessibilityIdentifier`/labels, so the planned work is an AX-labeling +
-  `performAccessibilityAudit` pass (the automatable half of #26) followed by
-  **validation with a real visually-impaired player** (the human half, #9). Color
-  is **never the only signal** (the align dot also has position/shape; HP has a
-  number mode), which already serves low-vision users.
+- Honor **Increase Contrast, Reduce Motion, Reduce Transparency, Dark Mode**,
+  and Dynamic Type in the chrome.
+- **Text-to-speech shipped** (D-110): game lines, tells, and alerts are spoken
+  via an app voice or routed to VoiceOver (`announcementRequested`), configured
+  in Settings ▸ Audio. The speech decision pipeline is unit-tested end-to-end.
+- **VoiceOver:** native VO output is the first accessibility milestone. Every
+  displayed game line should reach VoiceOver in display order, queue behind any
+  line already being spoken, and keep VO focus on the command input so the
+  player can keep typing. The planned work is a reliable VO output path, a
+  deliberate output-review mode with text selection/link navigation, semantic
+  review buffers for high-value streams such as tells/channels/URLs/command
+  output, an AX-labeling + `performAccessibilityAudit` pass (the automatable
+  half of #26), and **validation with a real visually-impaired player** (the
+  human half, #9).
+  Color is **never the only signal** (the align dot also has position/shape; HP
+  has a number mode), which already serves low-vision users.
+- **Server-assisted settings are secondary:** Aardwolf already provides
+  `blindmode`, structured `tags`, `spamreduce`, `brief`, and tell replay.
+  Proteles may expose an explicit, reversible opt-in helper for those settings,
+  but it must not treat `blindmode` as the primary accessibility mechanism or
+  make its public/private privacy choice for the user.
 - **Full keyboard access:** see §3.2 — this overlaps heavily with our core
   audience's needs, so a11y and our north-star pull the same direction.
 

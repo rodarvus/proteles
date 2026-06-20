@@ -1,127 +1,120 @@
-# Proteles & accessibility — for visually-impaired players
+# Proteles & Accessibility
 
-Aardwolf has a long-standing visually-impaired (VI) community, mostly playing on
-MUSHclient with a screen reader. Proteles is built to serve that community as a
-first-class audience, not an afterthought. This page is the honest state of
-things: **what works today, how to turn it on, how to use it, what's still
-coming, and how to help us get it right.**
+Aardwolf has a long-standing visually-impaired community, mostly playing on
+MUSHclient with a screen reader. Proteles should serve that community as a
+first-class audience, not as an afterthought.
 
-> **Status (v0.8.0):** the text-to-speech engine and screen-reader routing ship
-> and are usable. The remaining work is **validation with real VI players** and
-> some depth features — tracked in
-> [GitHub issue #9](https://github.com/rodarvus/proteles/issues/9). If you play
-> Aardwolf with a screen reader, your feedback there is exactly what we need.
+This page describes the current public state. The detailed architecture
+proposal lives in
+[docs/plans/ACCESSIBILITY_REVIEW.md](plans/ACCESSIBILITY_REVIEW.md), and the
+active tracking issue is
+[GitHub issue #9](https://github.com/rodarvus/proteles/issues/9).
 
----
+## Current Status
 
-## What works today
+Accessibility is still in design and validation. Proteles has app-owned speech
+features and some labelled controls, but native VoiceOver support for live MUD
+output is not yet proven good enough for screen-reader play.
 
-- **Text-to-speech (TTS).** Proteles can speak game text — either through its own
-  voice or by routing to **VoiceOver** (so speech *and* braille go through your
-  own assistive settings).
-- **A native soundpack.** Event cues (combat, channels, quests, repop). Muted by
-  default; opt-in.
-- **Keyboard-first by design.** Every primary action has a key path; the command
-  input is always focused and ready. This is core to the app, not a bolt-on.
-- **Labelled controls.** The command input, the game output, the worlds list, and
-  the map carry VoiceOver labels; the output text is navigable.
-- **Colour is never the only signal.** The vitals bars have a numbers mode, the
-  group panel states "most hurt"/leader in words, the worlds list says "active
-  world", and the map speaks the current room/area.
+The next accessibility milestone is a native VoiceOver output path:
 
-## What's still coming (and why this page says "usable", not "done")
+- Every visually displayed MUD output line should reach VoiceOver.
+- Lines should be spoken in display order.
+- New lines should queue behind current speech instead of interrupting it.
+- VoiceOver focus should remain on the command input while output is spoken.
+- Players need a review path for missed or stopped speech.
 
-These are deferred under #9 until we've validated with real VI players:
+Until that has been implemented and validated with screen-reader users, the
+existing speech features should be treated as useful support, not parity.
 
-- **Vitals/HUD value announcements** — the graphical gauges aren't yet spoken as
-  values (use `tts vitals` on demand, below).
-- **A pronunciation dictionary** beyond the per-player substitutions you can add.
-- **Review-buffer navigation** richer than `tts last` / `tts review`.
-- A **full VoiceOver narration pass** over every screen.
+## What Works Today
 
-We would rather ship this honestly and iterate with you than claim parity we
-haven't proven. **Please tell us what's awkward.**
+- **Keyboard-first command input.** The command input is intended to stay ready
+  for typing during normal play.
+- **App-owned text-to-speech.** Proteles can speak displayed game text through
+  the macOS speech synthesizer.
+- **VoiceOver announcement routing.** Speech requests can be routed through
+  macOS accessibility announcements, but this is not yet the reliable queued
+  live-output model described above.
+- **Recent-line speech commands.** `tts last` and `tts review` provide a basic
+  spoken recovery path.
+- **Native soundpack.** Event cues are available for combat, channels, quests,
+  repops, and other events. They are muted by default.
+- **Some labelled controls.** The command input, output, map, keypad editor,
+  command buttons, and connection surfaces have partial accessibility labels.
+- **Color is not the only signal.** Important status is also represented through
+  text, numbers, position, or shape.
 
----
+## Known Gaps
 
-## Turning TTS on
+- Live MUD output is not yet a dependable native VoiceOver stream.
+- Output review is not yet designed as a full screen-reader workflow.
+- Semantic review buffers for tells, channels, URLs, command captures, vitals,
+  and other high-value streams are still planned work.
+- Compound UI elements need semantic grouping. For example, a health bar should
+  expose one useful accessibility element rather than many decorative pieces.
+- Braille support needs validation with real hardware and VoiceOver workflows.
+- Aardwolf-side settings such as `blindmode`, `tags`, `spamreduce`, and `brief`
+  are not yet managed by an explicit Proteles helper.
 
-TTS is **off by default** (so it never surprises a sighted user). Two ways to
-enable it:
+## Text-To-Speech Commands
 
-- **In the app:** **Settings ▸ Audio** — choose the speech mode and, if you use a
-  screen reader, turn on **VoiceOver routing**.
-- **By command, in the game:** type `tts alerts` or `tts on`.
-
-There are three modes:
-
-| Command | What it speaks |
-| --- | --- |
-| `tts off` | nothing |
-| `tts alerts` | tells, and anything important enough to fire a sound cue |
-| `tts on` (or `tts everything`) | all displayed game lines |
-
-Speech runs on what's actually **displayed** — anything gagged by the map,
-gauges, or a plugin is never spoken — and **tells interrupt** so you hear them
-over slower combat narration. Symbol art and box-drawing are stripped before
-speaking.
-
-### Two ways the speech reaches you
-
-1. **Proteles' own voice** (the default): the macOS speech synthesizer, with full
-   control over rate and voice from the `tts` commands or Settings ▸ Audio.
-2. **Routed to VoiceOver / your assistive tech** (turn on *VoiceOver routing* in
-   Settings ▸ Audio): Proteles posts each line as a VoiceOver announcement, so it
-   speaks **and brailles** through the settings, voice, and rate you already use
-   everywhere else.
-
-Use whichever fits your setup. If you run VoiceOver full-time, routing keeps
-everything consistent with the rest of your Mac.
-
----
-
-## The `tts` command reference
-
-Type these in the game's command line. `tts help` lists them in-app; `tts setup`
-gives Aardwolf-side advice (blindmode, spam reduction, prompt).
+TTS is off by default. Enable it from **Settings -> Audio**, or type `tts alerts`
+or `tts on` in the command input.
 
 | Command | Effect |
 | --- | --- |
-| `tts on` / `tts alerts` / `tts off` | set the speech mode |
-| `tts say <text>` | speak something immediately (jumps the queue) |
-| `tts stop` | stop talking and clear the queue |
-| `tts last [n]` | re-speak the last *n* displayed lines |
-| `tts review [...]` | move through the recent-line review buffer |
-| `tts vitals` | speak your current HP/mana/moves on demand |
-| `tts rate <wpm>` | speaking rate, 80–600 words per minute |
-| `tts voice <name>` | pick a voice (Proteles' own-voice mode) |
-| `tts prompts off\|delta` | how much of the prompt to speak |
-| `tts mute <channel>` / `tts unmute <channel>` | silence/restore a channel's speech |
-| `tts subst add <from> <to>` / `tts subst del <from>` | pronunciation fixes (and `!skip` to drop a phrase) |
-| `tts enter` / `tts running` / `tts focus` | toggle: stop on send / quiet while speedwalking / quiet when Proteles isn't frontmost |
-| `tts setup` | Aardwolf-side VI setup tips |
+| `tts on` / `tts alerts` / `tts off` | Set the speech mode. |
+| `tts say <text>` | Speak text immediately. |
+| `tts stop` | Stop talking and clear the queue. |
+| `tts last [n]` | Re-speak recent displayed lines. |
+| `tts review [...]` | Move through the spoken recent-line buffer. |
+| `tts vitals` | Speak current HP, mana, and moves. |
+| `tts rate <wpm>` | Set app speech rate. |
+| `tts voice <name>` | Pick a macOS voice for app speech. |
+| `tts prompts off\|delta` | Control prompt verbosity. |
+| `tts mute <channel>` / `tts unmute <channel>` | Mute or restore a channel. |
+| `tts subst add <from> <to>` | Add a pronunciation substitution. |
+| `tts subst del <from>` | Remove a pronunciation substitution. |
+| `tts enter` | Toggle stopping speech when sending a command. |
+| `tts running` | Toggle quiet mode while speedwalking. |
+| `tts focus` | Toggle quiet mode while Proteles is not frontmost. |
+| `tts setup` | Show Aardwolf-side screen-reader setup tips. |
 
-Scripts and plugins can speak too, via `proteles.speak(text[, interrupt])`.
+Scripts and plugins can request speech with `proteles.speak(text[, interrupt])`.
 
-### The soundpack
+## Aardwolf-Side Settings
 
-Sound cues are muted by default. Enable them in **Settings ▸ Audio**, or with the
-`spmute` / `sptog` / `spvol` commands (`sphelp` lists them).
+Aardwolf already provides several screen-reader-oriented tools. Proteles should
+not silently change these settings, because some of them affect privacy and
+social discoverability.
 
----
+Relevant Aardwolf features include:
 
-## Testing it & telling us what's wrong
+- `blindmode 0|1|2`
+- `tags`
+- `spamreduce`
+- `brief`
+- `catchtells`, `savetells`, and `replay`
+- `glance`
 
-If you play with a screen reader, here's what would help most:
+Future Proteles work may add an explicit, reversible helper for these settings.
+For now, use Aardwolf's own help files and commands.
 
-1. Turn on **VoiceOver routing** (Settings ▸ Audio), connect, and just play for a
-   bit. Does the narration keep up? Do tells cut through? Is anything double-spoken?
-2. Tab/VoiceOver-navigate the chrome — the command input, the worlds list, the
-   map. Are the labels clear? What's unlabelled or confusing?
-3. Try `tts vitals`, `tts last 3`, `tts rate 350`, `tts mute <a noisy channel>`.
-4. Tell us what's missing for *your* workflow — pace, verbosity, what should and
-   shouldn't be spoken.
+## How To Help
 
-Please file findings on **[issue #9](https://github.com/rodarvus/proteles/issues/9)**
-(or reach the author in-game). Concrete "X was annoying / Y wasn't spoken /
-Z should be an option" reports are gold — they're how this gets good.
+The highest-value feedback is a screen-reader recording of real play:
+
+- connecting and logging in;
+- reading live output while keeping focus on the command input;
+- typing commands while output arrives;
+- reviewing missed lines;
+- selecting and copying output;
+- opening links;
+- using channels, tells, and high-volume combat or quest output;
+- using a braille display, if that is part of your workflow.
+
+Please add findings to
+[issue #9](https://github.com/rodarvus/proteles/issues/9). Concrete examples
+are especially useful: what was spoken, what was missed, where focus moved, and
+what you expected instead.
