@@ -75,16 +75,23 @@ family is the main remaining cluster.
   `EnableTimerGroup` (assignment aliases of `EnableGroup`; the call-site regex
   misses them, so `EnableTriggerGroup` (35) still shows "missing" above).
 - **Output-buffer introspection — ✅ SHIPPED** (`e3d600d`): `GetLineCount`,
-  `GetLinesInBufferCount`, `GetLineInfo`, `GetStyleInfo`, `GetRecentLines` — the
-  Sath traceback thread; semantics from `methods_info.cpp`, tied to the bounded
-  `OutputLineBuffer` scrollback mirror.
+  `GetLinesInBufferCount`, `GetLineInfo`, `GetStyleInfo`, `GetRecentLines` —
+  semantics from `methods_info.cpp`, tied to the bounded `OutputLineBuffer`
+  scrollback mirror.
+- **Trigger/alias/timer option getters + control — ✅ SHIPPED** (2026-06-20):
+  `GetTriggerOption`/`GetAliasOption`/`GetTimerOption` (the option-name readers
+  over the same `AutomationSnapshot` as `Get*Info`), `SetAliasOption` (mutates the
+  alias engine, mirroring the existing `SetTriggerOption`), `GetPluginTriggerInfo`
+  (`GetTriggerInfo` scoped to an owner plugin), and `StopEvaluatingTriggers`
+  (25/8 — a fired trigger's inline script halts the rest of the line's firings).
+- **Diagnostics/status — ✅ SHIPPED** (2026-06-20): `TraceOut` (23/2) + `SetStatus`
+  (15/6) route to the session transcript (no Trace-window/status-bar surface in
+  Proteles; both were nil-global crashes for a generic-shim plugin before).
 - **Still pending — Options family (now the top real gap):** `GetOption` (41),
   `SetOption` (24/9), `GetGlobalOption` (5), `GetAlphaOption`-list/`GetOptionList`.
-  Read/write world config; needs a config bridge into our settings model.
-- **Still pending — misc control/introspection:** `StopEvaluatingTriggers`
-  (25/8), `GetTimerOption`, `SetAliasOption`, `GetPluginTriggerInfo`.
-- **Still pending — diagnostics/status:** `TraceOut` (23/2 — concentrated) → a
-  debug note/log; `SetStatus` (15/6).
+  Corpus touches only ~25 named options, nearly all read for defaults → a faithful
+  MUSHclient default table + shim-local write-through covers it (not the config
+  bridge first assumed).
 - **Still pending — plugin management:** `LoadPlugin`/`UnloadPlugin` (3–4),
   `GetPluginList`, `PluginSupports`, `Connect` (5/4).
 

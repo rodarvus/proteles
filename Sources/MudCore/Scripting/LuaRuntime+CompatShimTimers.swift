@@ -263,6 +263,28 @@ extension LuaRuntime {
     function GetTriggerList() return proteles.triggerList() end
     function GetAliasList() return proteles.aliasList() end
     function GetPluginTriggerList(id) return proteles.pluginTriggerList(tostring(id or "")) end
+    -- Option-name getters (MUSHclient GetTriggerOption/GetAliasOption): the same
+    -- fields as Get*Info, addressed by the option name from the *OptionsTable
+    -- rather than a numeric infotype. An unmodelled option returns nil (VT_EMPTY).
+    function GetTriggerOption(name, option)
+      return proteles.triggerOption(tostring(name), tostring(option))
+    end
+    function GetAliasOption(name, option)
+      return proteles.aliasOption(tostring(name), tostring(option))
+    end
+    -- GetPluginTriggerInfo(id, name, infotype): GetTriggerInfo scoped to a
+    -- trigger owned by another plugin (used by inspection commands listing a
+    -- companion plugin's triggers).
+    function GetPluginTriggerInfo(id, name, infotype)
+      return proteles.pluginTriggerInfo(tostring(id or ""), tostring(name), tonumber(infotype) or 0)
+    end
+    -- StopEvaluatingTriggers([all]): halt the rest of this line's trigger
+    -- evaluation from inside a fired trigger's script (the send_to=script idiom
+    -- the map/bigmap plugins use). The optional arg (stop *all* plugins too) is
+    -- carried for fidelity but doesn't change behaviour in our single engine.
+    function StopEvaluatingTriggers(all)
+      proteles.stopEvaluatingTriggers(all == true)
+    end
     -- Timer introspection. Shim timers (AddTimer) are doAfter chains tracked in
     -- the __protelesTimer* tables, not host TimerEngine entries, so consult
     -- those first; fall back to the host snapshot for XML/engine timers. The
@@ -295,6 +317,39 @@ extension LuaRuntime {
       end
       if #names == 0 then return nil end
       return names
+    end
+    -- GetTimerOption(name, option): like GetTimerInfo but keyed by option name.
+    -- Shim timers (doAfter chains) answer from the __protelesTimer* tables first
+    -- (same as GetTimerInfo); engine/XML timers fall back to the host snapshot.
+    function GetTimerOption(name, option)
+      local key, opt = tostring(name), tostring(option)
+      local spec = __protelesTimerSpec[key]
+      if spec then
+        local s = spec.seconds or 0
+        if opt == "hour" then return math.floor(s / 3600) end
+        if opt == "minute" then return math.floor((s % 3600) / 60) end
+        if opt == "second" then return s - math.floor(s / 60) * 60 end
+        if opt == "script" then return spec.script or "" end
+        if opt == "enabled" then return __protelesTimerLive[key] and true or false end
+        if opt == "one_shot" then return not spec.recurring end
+        if opt == "at_time" then return false end
+        if opt == "temporary" then return __timerTemporary[key] and true or false end
+        return nil
+      end
+      return proteles.timerOption(key, opt)
+    end
+    -- SetAliasOption(name, option, value): the alias-side SetTriggerOption.
+    -- `enabled` routes to EnableAlias; everything else (group, match, sequence,
+    -- ignore_case, keep_evaluating) mutates the alias on the engine. Always eOK.
+    function SetAliasOption(name, option, value)
+      local key = tostring(name)
+      if option == "enabled" then
+        local on = not (value == false or value == nil or value == 0 or value == "0" or value == "false")
+        proteles.enableAlias(key, on)
+      else
+        proteles.setAliasOption(key, tostring(option), tostring(value))
+      end
+      return error_code.eOK
     end
     -- ResetTimer: re-arm a timer's countdown from now. A shim timer re-arms its
     -- doAfter chain (bump the generation so any pending fire self-skips, then

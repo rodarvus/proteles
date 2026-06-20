@@ -41,6 +41,14 @@ public actor ScriptEngine {
     /// read projects. See ``syncAutomationSnapshot``.
     var automationDirty = true
 
+    /// Set by a fired trigger's script calling `StopEvaluatingTriggers` to halt
+    /// the rest of the current line's trigger evaluation. ``process`` clears it
+    /// before each line and breaks the firing loop once it's set, so the
+    /// remaining (lower-priority) firings don't run — MUSHclient's behaviour, as
+    /// faithfully as a collect-then-fire pipeline allows (firings already run
+    /// inline per-firing in sequence order).
+    var stopTriggerEvaluation = false
+
     /// The well-known id of the Aardwolf GMCP-handler plugin. Native GMCP is
     /// handled in Swift, but plugins gate `OnPluginBroadcast` on this id, so
     /// the bridge synthesises broadcasts as if they came from it.
@@ -412,56 +420,8 @@ public actor ScriptEngine {
         return effects
     }
 
-    // MARK: - Processing
-
-    /// Run `line` through the triggers, returning the gag decision and the
-    /// effects (trigger sends + script effects, in order). Script errors
-    /// surface as red notes rather than aborting.
-    public func process(line text: String) async -> LineDisposition {
-        await process(Line(id: LineID(0), text: text))
-    }
-
-    /// Styled-line entry point: triggers match `line.text` (and get its colour
-    /// runs as `styles`); native plugins receive the full styled ``Line``.
-    public func process(_ line: Line) async -> LineDisposition {
-        // While suspended (Note mode), lines pass through untouched.
-        if suspended { return LineDisposition() }
-        var disposition = LineDisposition()
-        // Highlights collected from firings, applied to the *displayed* line
-        // after native plugins have had their say (they may replace it).
-        var highlights: [(highlight: TriggerHighlight, matchRange: Range<Int>?)] = []
-        for firing in triggers.process(line.text) {
-            if firing.gag { disposition.gag = true }
-            if let highlight = firing.highlight {
-                highlights.append((highlight, firing.match.utf16Range))
-            }
-            if let send = firing.send, !send.isEmpty {
-                // D-105: route the expanded send per the trigger's target.
-                disposition.effects.append(Self.sendEffect(send, target: firing.target))
-            }
-            if let script = firing.script {
-                let owner = automationOwners[firing.triggerID]
-                // Plugin triggers: %1/%0/%<name> in the body are substituted with
-                // (Lua-escaped) captures before it runs; user scripts (no owner)
-                // run verbatim so a literal `%` survives.
-                let body = owner == nil ? script : firing.match.expandForScript(script)
-                await disposition.effects.append(contentsOf: runOwnedScript(
-                    body,
-                    owner: owner,
-                    matches: firing.match.captures,
-                    named: firing.match.named,
-                    styles: ScriptStyleRun.mushStyles(text: line.text, runs: line.runs)
-                ))
-            }
-        }
-        // Fold native plugins' reactions (gag / effects / a rewritten line).
-        let native = nativePlugins.onLine(line)
-        if native.gag { disposition.gag = true }
-        disposition.effects.append(contentsOf: native.effects)
-        disposition.replacement = native.replacement
-        // Trigger highlights (D-105) restyle whatever will be displayed.
-        return Self.applyingHighlights(highlights, to: disposition, original: line)
-    }
+    // The inbound-line `process(_:)` entry points live in
+    // `ScriptEngine+Process.swift` (file-length budget).
 
     /// Project a GMCP message into the live `proteles.gmcp` table, fire its
     /// `gmcp.*` events, and (with MUSHclient plugins loaded) synthesise the

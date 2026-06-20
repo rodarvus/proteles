@@ -22,6 +22,8 @@ extension LuaRuntime {
     nonisolated func automationValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
         case .triggerInfo, .aliasInfo, .timerInfo: automationInfoValue(function, arguments)
+        case .triggerOption, .aliasOption, .timerOption: automationOptionValue(function, arguments)
+        case .pluginTriggerInfo: pluginTriggerInfoValue(arguments)
         case .triggerList, .aliasList, .timerList, .pluginTriggerList:
             automationListValue(function, arguments)
         default: []
@@ -46,6 +48,41 @@ extension LuaRuntime {
         default:
             return [.nil]
         }
+    }
+
+    /// `proteles.triggerOption`/`aliasOption`/`timerOption(name, option)` → the
+    /// option's value, or `nil` for an unknown name/option (MUSHclient VT_EMPTY).
+    /// MUSHclient lower-cases and trims the option name (`MakeLower`/`Trim*`).
+    nonisolated func automationOptionValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        let name = Self.objectName(Self.argString(arguments, 0))
+        let option = Self.argString(arguments, 1).trimmingCharacters(in: .whitespaces).lowercased()
+        switch function {
+        case .triggerOption:
+            let record = automationSnapshot.triggers.first { $0.name?.lowercased() == name }
+            return [record?.option(option) ?? .nil]
+        case .aliasOption:
+            let record = automationSnapshot.aliases.first { $0.name?.lowercased() == name }
+            return [record?.option(option) ?? .nil]
+        case .timerOption:
+            let record = automationSnapshot.timers.first { $0.name?.lowercased() == name }
+            return [record?.option(option) ?? .nil]
+        default:
+            return [.nil]
+        }
+    }
+
+    /// `proteles.pluginTriggerInfo(pluginID, name, infoType)` — `GetTriggerInfo`
+    /// scoped to a trigger *owned by* `pluginID` (MUSHclient `GetPluginTriggerInfo`,
+    /// which switches plugin context then calls `GetTriggerInfo`). An unknown
+    /// plugin/trigger/field yields `nil`.
+    nonisolated func pluginTriggerInfoValue(_ arguments: [LuaValue]) -> [LuaValue] {
+        let pluginID = Self.argString(arguments, 0)
+        let name = Self.objectName(Self.argString(arguments, 1))
+        let infoType = Int(Self.argDouble(arguments, 2))
+        let record = automationSnapshot.triggers.first {
+            $0.owner == pluginID && $0.name?.lowercased() == name
+        }
+        return [record?.info(infoType) ?? .nil]
     }
 
     /// `proteles.triggerList`/`timerList`/`aliasList()` (the calling plugin's

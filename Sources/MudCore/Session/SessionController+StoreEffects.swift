@@ -23,6 +23,11 @@ extension SessionController {
             ))
         case .updateTick(let date):
             await gmcpState.setLastTick(date)
+        case .trace(let text):
+            // MUSHclient TraceOut/SetStatus → transcript only (no Trace window
+            // or status bar in Proteles); never reaches the scrollback. A debug
+            // sibling of `.diagnostic`, minus the Lua Console tee.
+            logTranscript(.note, text)
         default:
             return false
         }

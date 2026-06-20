@@ -41,7 +41,14 @@ extension LuaRuntime {
         // re-arms a timer's countdown (a deferred control effect).
         case triggerInfo, aliasInfo, timerInfo
         case triggerList, aliasList, timerList, pluginTriggerList
+        // Option-name getters (GetTriggerOption/GetAliasOption/GetTimerOption)
+        // and the plugin-scoped GetPluginTriggerInfo — all synchronous snapshot
+        // queries alongside the *Info family.
+        case triggerOption, aliasOption, timerOption, pluginTriggerInfo
         case resetTimer
+        // SetAliasOption mutates the alias engine (a deferred control effect,
+        // like setTriggerOption); stopEvaluatingTriggers + trace are effects too.
+        case setAliasOption, stopEvaluatingTriggers, trace
         case sqliteAllowed
         case mapperMergeSQL
         case publish

@@ -249,6 +249,7 @@ extension LuaRuntime {
     /// calls have a distinct shape; everything else is an inert output effect).
     nonisolated func recordEffect(_ function: HostFunction, _ arguments: [LuaValue]) {
         if recordSpecialCall(function, arguments) { return }
+        if recordControlEffect(function, arguments) { return }
         switch function {
         case .aardwolfTelnet:
             effects.append(.aardwolfTelnet(
@@ -265,17 +266,6 @@ extension LuaRuntime {
             ))
         case .addTrigger, .addAlias:
             effects.append(Self.addAutomationEffect(function, arguments))
-        case .setTriggerGroup:
-            effects.append(.setTriggerGroup(
-                name: Self.argString(arguments, 0),
-                group: Self.argString(arguments, 1)
-            ))
-        case .setTriggerOption:
-            effects.append(.setTriggerOption(
-                name: Self.argString(arguments, 0),
-                option: Self.argString(arguments, 1),
-                value: Self.argString(arguments, 2)
-            ))
         case .notify:
             effects.append(.notify(
                 title: Self.argString(arguments, 0),
@@ -322,6 +312,40 @@ extension LuaRuntime {
         case .http: registerHTTPRequest(arguments)
         case .button:
             if let command = Self.buttonCommand(arguments) { effects.append(.button(command)) }
+        default: return false
+        }
+        return true
+    }
+
+    /// The trigger/alias group + option control calls (`SetTriggerOption`/
+    /// `SetTriggerGroup`/`SetAliasOption`), the Tier-2 `StopEvaluatingTriggers`,
+    /// and `TraceOut`/`SetStatus`. Split from ``recordEffect`` for its
+    /// complexity budget. Returns whether it handled `function`.
+    private nonisolated func recordControlEffect(
+        _ function: HostFunction, _ arguments: [LuaValue]
+    ) -> Bool {
+        switch function {
+        case .setTriggerGroup:
+            effects.append(.setTriggerGroup(
+                name: Self.argString(arguments, 0),
+                group: Self.argString(arguments, 1)
+            ))
+        case .setTriggerOption:
+            effects.append(.setTriggerOption(
+                name: Self.argString(arguments, 0),
+                option: Self.argString(arguments, 1),
+                value: Self.argString(arguments, 2)
+            ))
+        case .setAliasOption:
+            effects.append(.setAliasOption(
+                name: Self.argString(arguments, 0),
+                option: Self.argString(arguments, 1),
+                value: Self.argString(arguments, 2)
+            ))
+        case .stopEvaluatingTriggers:
+            effects.append(.stopEvaluatingTriggers(allPlugins: Self.argBool(arguments, 0)))
+        case .trace:
+            effects.append(.trace(Self.argString(arguments, 0)))
         default: return false
         }
         return true

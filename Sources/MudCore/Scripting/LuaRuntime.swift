@@ -432,6 +432,13 @@ public actor LuaRuntime {
         setHostFunction("aliasList", .aliasList)
         setHostFunction("timerList", .timerList)
         setHostFunction("pluginTriggerList", .pluginTriggerList)
+        setHostFunction("triggerOption", .triggerOption)
+        setHostFunction("aliasOption", .aliasOption)
+        setHostFunction("timerOption", .timerOption)
+        setHostFunction("pluginTriggerInfo", .pluginTriggerInfo)
+        setHostFunction("setAliasOption", .setAliasOption)
+        setHostFunction("stopEvaluatingTriggers", .stopEvaluatingTriggers)
+        setHostFunction("trace", .trace)
         setHostFunction("resetTimer", .resetTimer)
         setHostFunction("monotonic", .monotonic)
         setHostFunction("fileExists", .fileExists)
@@ -467,7 +474,8 @@ public actor LuaRuntime {
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
-             .sndCall, .playSound, .speak, .simulate, .resetTimer:
+             .sndCall, .playSound, .speak, .simulate, .resetTimer,
+             .setAliasOption, .stopEvaluatingTriggers, .trace:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -487,7 +495,8 @@ public actor LuaRuntime {
              .adjustColour, .createGUID, .uniqueID,
              .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
              .triggerInfo, .aliasInfo, .timerInfo,
-             .triggerList, .aliasList, .timerList, .pluginTriggerList:
+             .triggerList, .aliasList, .timerList, .pluginTriggerList,
+             .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the

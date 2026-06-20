@@ -72,10 +72,13 @@ extension ScriptEngine {
             addDynamicAlias(name: name, pattern: pattern, flags: flags, script: script, owner: owner)
         case .scheduleAfter(let seconds, let isScript, let body):
             scheduleOneShot(after: seconds, isScript: isScript, body: body, owner: owner)
-        case .setTriggerGroup(let name, let group):
-            setDynamicTriggerGroup(name: name, group: group)
-        case .setTriggerOption(let name, let option, let value):
-            setTriggerOptionByName(name: name, option: option, value: value)
+        case .setTriggerGroup, .setTriggerOption, .setAliasOption:
+            applyOptionEffect(effect)
+        case .stopEvaluatingTriggers:
+            // Set the flag the per-line firing loop checks (see ``process``).
+            // Not a snapshot change, so return early — don't dirty the mirror.
+            stopTriggerEvaluation = true
+            return true
         case .removeTrigger(let name):
             if let id = triggerIDsByName.removeValue(forKey: name) {
                 triggers.remove(id: id)
@@ -91,6 +94,22 @@ extension ScriptEngine {
         // ``syncAutomationSnapshot``).
         automationDirty = true
         return true
+    }
+
+    /// Apply a `SetTriggerOption`/`SetAliasOption` mutation (incl. the
+    /// `SetTriggerOption(.,"group",.)` group move) to the named item on its
+    /// engine. Grouped out of ``applyAutomationEffect`` for its complexity budget.
+    private func applyOptionEffect(_ effect: ScriptEffect) {
+        switch effect {
+        case .setTriggerGroup(let name, let group):
+            setDynamicTriggerGroup(name: name, group: group)
+        case .setTriggerOption(let name, let option, let value):
+            setTriggerOptionByName(name: name, option: option, value: value)
+        case .setAliasOption(let name, let option, let value):
+            setAliasOptionByName(name: name, option: option, value: value)
+        default:
+            break
+        }
     }
 
     /// Apply a name-based enable/disable (or timer reset) to the matching engine.
@@ -315,6 +334,31 @@ extension ScriptEngine {
         triggers.remove(id: id)
         guard (try? triggers.add(trigger)) != nil else { return }
         triggerIDsByName[name] = trigger.id
+    }
+
+    /// Apply a `SetAliasOption` option to a named alias by mutating it in place
+    /// on the engine (remove + re-add), the alias-side counterpart of
+    /// ``setTriggerOptionByName``. `enabled` is handled by its own effect
+    /// (`EnableAlias` in the shim); this covers the rest. Unrecognised options
+    /// leave the alias untouched (the call still returns eOK).
+    private func setAliasOptionByName(name: String, option: String, value: String) {
+        guard let id = aliasIDsByName[name],
+              var alias = aliases.allAliases.first(where: { $0.id == id })
+        else { return }
+        switch option {
+        case "enabled": alias.enabled = Self.mushTruthy(value)
+        case "keep_evaluating": alias.keepEvaluating = Self.mushTruthy(value)
+        case "ignore_case": alias.caseSensitive = !Self.mushTruthy(value)
+        case "group": alias.group = value
+        case "sequence":
+            guard let sequence = Int(value) else { return }
+            alias.sequence = sequence
+        case "match": alias.pattern = Self.repattern(alias.pattern, value)
+        default: return // an option we don't model — leave the alias unchanged
+        }
+        aliases.remove(id: id)
+        guard (try? aliases.add(alias)) != nil else { return }
+        aliasIDsByName[name] = alias.id
     }
 
     /// MUSHclient option booleans: truthy unless empty / 0 / n[o] / false / off.

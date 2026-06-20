@@ -170,6 +170,14 @@ public enum ScriptEffect: Sendable, Equatable {
     /// plugin's name as `source`). Emitted ALONGSIDE the red scrollback note,
     /// so the console is a tee — applying it only feeds the console store.
     case diagnostic(source: String?, message: String)
+    /// A diagnostic line bound for the session transcript only — invisible in
+    /// the scrollback. Backs MUSHclient `TraceOut` (whose Trace window Proteles
+    /// has no equivalent of) and `SetStatus` (no status bar): both would
+    /// otherwise be nil-global crashes for a generic-shim plugin. Routing the
+    /// text to the recording (NOT the scrollback) keeps live play clean — these
+    /// fire frequently (a status countdown each second) — while still capturing
+    /// it for transcript-based debugging.
+    case trace(String)
     /// Set the witnessed-tick anchor for the status-bar countdown (a `Date`,
     /// or `nil` to clear). Emitted by the native `TickTimer` plugin on each
     /// `comm.tick`; routing it through an effect (rather than decoding in the
@@ -246,6 +254,19 @@ public enum ScriptEffect: Sendable, Equatable {
     /// as y/n/0/1, sequence as a number, match as the pattern). Recognised options:
     /// omit_from_output, keep_evaluating, ignore_case, sequence, match.
     case setTriggerOption(name: String, option: String, value: String)
+    /// Set an option on a named alias by mutating it on the engine (MUSHclient
+    /// `SetAliasOption`). The alias-side counterpart of ``setTriggerOption``;
+    /// `value` is the raw MUSHclient option string. Recognised options: enabled,
+    /// keep_evaluating, ignore_case, sequence, group, match.
+    case setAliasOption(name: String, option: String, value: String)
+    /// Halt trigger evaluation for the current line (MUSHclient
+    /// `StopEvaluatingTriggers`). Consumed by the engine that owns the trigger
+    /// loop: the fired trigger's inline script sets it, and ``ScriptEngine``
+    /// stops running the remaining (lower-priority) firings for the line.
+    /// `allPlugins` is carried for fidelity; in Proteles' single ordered engine
+    /// breaking the loop already stops everything downstream, so both forms
+    /// behave identically.
+    case stopEvaluatingTriggers(allPlugins: Bool)
     /// Perform an outbound HTTP(S) request for a plugin's `async` helper. The
     /// host runs it off-actor (URLSession), then re-enters the script engine
     /// with the response to fire the plugin's stored Lua callback (kept in the

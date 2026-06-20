@@ -136,5 +136,12 @@ extension LuaRuntime {
     function MakeRegularExpression(text)
       return "^" .. tostring(text):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?{}|\\]", "\\%0") .. "$"
     end
+    -- TraceOut/SetStatus: MUSHclient's Trace window and status bar have no
+    -- Proteles surface, but a generic-shim plugin calling these must not hit a
+    -- nil-global. Route the text to the session transcript (a debug capture,
+    -- invisible in the scrollback) — SetStatus in particular fires often (e.g. a
+    -- per-second countdown), so it must never reach the output.
+    function TraceOut(message) proteles.trace("TraceOut: " .. tostring(message or "")) end
+    function SetStatus(message) proteles.trace("SetStatus: " .. tostring(message or "")) end
     """#
 }

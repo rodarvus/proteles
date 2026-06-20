@@ -93,6 +93,26 @@ public struct TriggerRecord: Sendable {
             36: .boolean(oneShot)
         ][infoType] ?? .nil
     }
+
+    /// `GetTriggerOption(name, option)` — the same fields keyed by MUSHclient's
+    /// `TriggerOptionsTable`/`TriggerAlphaOptionsTable` option names rather than
+    /// the numeric infotype. An option we don't model yields `nil` (VT_EMPTY).
+    public func option(_ name: String) -> LuaValue {
+        [
+            "send_to": .number(Double(sendTo)),
+            "sequence": .number(Double(sequence)),
+            "enabled": .boolean(enabled),
+            "ignore_case": .boolean(!caseSensitive),
+            "keep_evaluating": .boolean(keepEvaluating),
+            "omit_from_output": .boolean(gag),
+            "regexp": .boolean(isRegex),
+            "one_shot": .boolean(oneShot),
+            "group": .string(group),
+            "match": .string(match),
+            "script": .string(script),
+            "send": .string(sendText)
+        ][name] ?? .nil
+    }
 }
 
 /// One alias's introspectable fields. ``info`` implements MUSHclient
@@ -123,6 +143,23 @@ public struct AliasRecord: Sendable {
             19: .boolean(keepEvaluating),
             20: .number(Double(sequence))
         ][infoType] ?? .nil
+    }
+
+    /// `GetAliasOption(name, option)` — fields keyed by MUSHclient's
+    /// `AliasOptionsTable`/`AliasAlphaOptionsTable` names. Like ``TriggerRecord``
+    /// there is no `script` field (aliases don't model one here); it yields `nil`.
+    public func option(_ name: String) -> LuaValue {
+        [
+            "send_to": .number(Double(sendTo)),
+            "sequence": .number(Double(sequence)),
+            "enabled": .boolean(enabled),
+            "ignore_case": .boolean(!caseSensitive),
+            "keep_evaluating": .boolean(keepEvaluating),
+            "regexp": .boolean(isRegex),
+            "group": .string(group),
+            "match": .string(match),
+            "send": .string(sendText)
+        ][name] ?? .nil
     }
 }
 
@@ -180,5 +217,28 @@ public struct TimerRecord: Sendable {
             19: .string(group),
             20: .number(Double(sendTo))
         ][infoType] ?? .nil
+    }
+
+    /// `GetTimerOption(name, option)` — fields keyed by MUSHclient's
+    /// `TimerOptionsTable`/`TimerAlphaOptionsTable` names. The interval is
+    /// reported as the hour/minute/second breakdown MUSHclient stores; offset_*
+    /// options (which Proteles doesn't model) yield `nil`. Engine/XML timers
+    /// only — the shim's `AddTimer` (`doAfter`) timers answer from their own
+    /// tables in ``GetTimerOption``'s Lua before reaching here.
+    public func option(_ name: String) -> LuaValue {
+        let parts = clock
+        return [
+            "hour": .number(Double(parts.hour)),
+            "minute": .number(Double(parts.minute)),
+            "second": .number(parts.second),
+            "send_to": .number(Double(sendTo)),
+            "enabled": .boolean(enabled),
+            "at_time": .boolean(isAtTime),
+            "one_shot": .boolean(isOneShot),
+            "temporary": .boolean(temporary),
+            "group": .string(group),
+            "script": .string(script),
+            "send": .string(sendText)
+        ][name] ?? .nil
     }
 }
