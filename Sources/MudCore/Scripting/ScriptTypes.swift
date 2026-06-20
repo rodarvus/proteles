@@ -147,6 +147,16 @@ public enum ScriptEffect: Sendable, Equatable {
     /// store (emitted by a plugin after a command mutates its state, e.g.
     /// adding a `#sub` rule).
     case persistPluginState(id: String)
+    /// Unload a plugin by id at runtime (MUSHclient `UnloadPlugin`). The host
+    /// removes the named shim plugin (its env + owned triggers/aliases/timers);
+    /// idempotent — an unknown/native id is a no-op. Self-unload is rejected in
+    /// the shim before this is emitted.
+    case unloadPlugin(id: String)
+    /// Open the connection if it's closed (MUSHclient `Connect`). The host
+    /// re-establishes to the last endpoint; a no-op when already connected (the
+    /// shim returns `eWorldOpen` without emitting this) or when there's no prior
+    /// endpoint to reconnect to.
+    case connect
     /// Tear down and re-instantiate a plugin by id (MUSHclient `ReloadPlugin`).
     /// The host routes by kind: native plugins disable→enable (re-running
     /// `install()`); the bundled dinv and on-disk MUSHclient plugins are

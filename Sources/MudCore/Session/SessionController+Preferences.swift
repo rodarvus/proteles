@@ -9,6 +9,12 @@ public extension SessionController {
         omitBlankLines = enabled
     }
 
+    /// Push the user's configured output font name into the scripting runtime so
+    /// `GetAlphaOption("output_font_name")` reports the real font (not a default).
+    func setOutputFontName(_ name: String) async {
+        await scriptEngine?.setOutputFontName(name)
+    }
+
     /// Withhold leftover Aardwolf tag lines (`{rname}`/`{coords}`/…) from the
     /// live window. Display-only + post-processing: plugins still see the line.
     /// Whether script errors also appear as red notes in the main output

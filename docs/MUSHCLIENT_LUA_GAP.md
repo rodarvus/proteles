@@ -87,13 +87,20 @@ family is the main remaining cluster.
 - **Diagnostics/status — ✅ SHIPPED** (2026-06-20): `TraceOut` (23/2) + `SetStatus`
   (15/6) route to the session transcript (no Trace-window/status-bar surface in
   Proteles; both were nil-global crashes for a generic-shim plugin before).
-- **Still pending — Options family (now the top real gap):** `GetOption` (41),
-  `SetOption` (24/9), `GetGlobalOption` (5), `GetAlphaOption`-list/`GetOptionList`.
-  Corpus touches only ~25 named options, nearly all read for defaults → a faithful
-  MUSHclient default table + shim-local write-through covers it (not the config
-  bridge first assumed).
-- **Still pending — plugin management:** `LoadPlugin`/`UnloadPlugin` (3–4),
-  `GetPluginList`, `PluginSupports`, `Connect` (5/4).
+- **Options family — ✅ SHIPPED** (2026-06-20): `GetOption`/`SetOption`,
+  `GetAlphaOption`/`SetAlphaOption`, `GetGlobalOption`/`SetGlobalOption`, and the
+  `GetOptionList`/`GetAlphaOptionList`/`GetGlobalOptionList` calls. A faithful
+  MUSHclient default table (values from the reference `OptionsTable`) + shim-local
+  write-through: `SetOption` remembers a value so a later `GetOption` round-trips,
+  though it doesn't change real client behaviour. Unknown numeric → -1, unknown
+  alpha → "" (lenient), unknown global → nil; `SetOption` unknown → eUnknownOption.
+  Pinned to Proteles truth: `utf_8=1`, `enable_command_stack=1`,
+  `command_stack_character=";"`, and `output_font_name` (live, host-pushed).
+- **Plugin management — ✅ SHIPPED** (2026-06-20): `GetPluginList`/`PluginSupports`
+  (host queries over the loaded-plugin set), `UnloadPlugin`/`Connect` (control
+  effects — unload a shim plugin / re-open the last connection), and `LoadPlugin`
+  (a logged no-op: runtime file-load is the Plugin Library's job). See the
+  per-command reference comparison in the session notes for the exact divergences.
 
 ## Tier 3 — display / miniwindow (native-panel territory, defer)
 

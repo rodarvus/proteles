@@ -103,17 +103,82 @@ extension LuaRuntime {
     function Version() return "5.07" end
     local _unique = 0
     function GetUniqueNumber() _unique = _unique + 1; return _unique end
-    -- Plugins gate the `wait` helper on these being enabled.
-    function GetOption(name)
-      if name == "enable_timers" or name == "enable_triggers" then return 1 end
-      return 0
+    -- World options (MUSHclient Get/SetOption + Get/SetAlphaOption + the
+    -- GlobalOption family). We don't own MUSHclient's settings model, so this is
+    -- a faithful default table (values from the reference OptionsTable) plus a
+    -- shim-local write-through: SetOption remembers a value so a later GetOption
+    -- round-trips, even though it doesn't change real client behaviour. A few
+    -- are pinned to Proteles' truth (utf_8/enable_command_stack/command_stack_
+    -- character). Option names are lower-cased + trimmed (MUSHclient FindBaseOption).
+    local __numOptDefault = {
+      auto_pause = 1, auto_resize_command_window = 0, auto_resize_minimum_lines = 1,
+      display_my_input = 1, echo_colour = 0, enable_aliases = 1, enable_beeps = 1,
+      enable_command_stack = 1,            -- Proteles stacks commands on ';'
+      enable_timers = 1, enable_triggers = 1, line_spacing = 0,
+      omit_date_from_save_files = 0, output_font_height = 12,
+      play_sounds_in_background = 0, pixel_offset = 1, show_bold = 0,
+      tool_tip_visible_time = 5000, underline_hyperlinks = 1, unpause_on_send = 1,
+      utf_8 = 1,                           -- Proteles is UTF-8
+      wrap_column = 80,
+    }
+    local __alphaOptDefault = {
+      command_stack_character = ";",       -- Proteles' stack separator
+      output_font_name = "",               -- resolved live from the host (below)
+      script_prefix = "",
+    }
+    -- Global (app-wide) options are MUSHclient-UI specifics with no Proteles
+    -- surface; report their reference defaults (all 0). Keyed lower-case.
+    local __globalOptDefault = {
+      openactivitywindow = 0, smoothscrolling = 0, smootherscrolling = 0,
+    }
+    local __numOpt, __alphaOpt = {}, {}    -- SetOption/SetAlphaOption write-through
+    local function __optName(n)
+      return (tostring(n or ""):lower():gsub("^%s+", ""):gsub("%s+$", ""))
     end
-    -- String-valued world/plugin options. We don't persist these yet; return a
-    -- blank string (the MUSHclient default for an unset alpha option) and accept
-    -- writes as eOK so plugins that read/write them (e.g. autobypass on reload)
-    -- don't error.
-    function GetAlphaOption(name) return "" end
-    function SetAlphaOption(name, value) return error_code.eOK end
+    function GetOption(name)
+      local k = __optName(name)
+      if __numOpt[k] ~= nil then return __numOpt[k] end
+      if __numOptDefault[k] ~= nil then return __numOptDefault[k] end
+      return -1                            -- MUSHclient: unknown numeric option
+    end
+    function SetOption(name, value)
+      local k = __optName(name)
+      if __numOptDefault[k] == nil then return error_code.eUnknownOption end
+      __numOpt[k] = tonumber(value) or 0
+      return error_code.eOK
+    end
+    function GetAlphaOption(name)
+      local k = __optName(name)
+      if __alphaOpt[k] ~= nil then return __alphaOpt[k] end
+      -- output_font_name reports the user's REAL configured output font (pushed
+      -- from the app); fall back to the MUSHclient default if not yet set.
+      if k == "output_font_name" then
+        local font = proteles.outputFontName()
+        if font ~= nil and font ~= "" then return font end
+        return "FixedSys"
+      end
+      -- Unknown alpha option: MUSHclient returns nil, but "" is safer for the
+      -- common `GetAlphaOption(x) .. y` concatenation and is our long-standing
+      -- behaviour, so keep "" for unmodelled names.
+      return __alphaOptDefault[k] or ""
+    end
+    function SetAlphaOption(name, value)
+      __alphaOpt[__optName(name)] = tostring(value or "")
+      return error_code.eOK
+    end
+    function GetGlobalOption(name)
+      return __globalOptDefault[__optName(name)]  -- nil for unknown (faithful)
+    end
+    function SetGlobalOption() return error_code.eOK end
+    local function __sortedKeys(t)
+      local keys = {}
+      for k in pairs(t) do keys[#keys + 1] = k end
+      table.sort(keys)
+      return keys
+    end
+    function GetOptionList() return __sortedKeys(__numOptDefault) end
+    function GetAlphaOptionList() return __sortedKeys(__alphaOptDefault) end
+    function GetGlobalOptionList() return __sortedKeys(__globalOptDefault) end
     -- GetEchoInput/SetEchoInput: whether typed input is locally echoed. We
     -- don't suppress local echo (the native input field owns that), but dinv's
     -- prompt-read path saves/sets/restores it around a read, so the round-trip

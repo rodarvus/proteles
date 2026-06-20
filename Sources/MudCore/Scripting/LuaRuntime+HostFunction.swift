@@ -46,9 +46,14 @@ extension LuaRuntime {
         // queries alongside the *Info family.
         case triggerOption, aliasOption, timerOption, pluginTriggerInfo
         case resetTimer
-        // SetAliasOption mutates the alias engine (a deferred control effect,
-        // like setTriggerOption); stopEvaluatingTriggers + trace are effects too.
+        /// SetAliasOption mutates the alias engine (a deferred control effect,
+        /// like setTriggerOption); stopEvaluatingTriggers + trace are effects too.
         case setAliasOption, stopEvaluatingTriggers, trace
+        /// Plugin management: pluginList/pluginSupports are synchronous queries
+        /// over the loaded-plugin set; unloadPlugin/connect are control effects.
+        case pluginList, pluginSupports, unloadPlugin, connect
+        /// The configured output font name (GetAlphaOption("output_font_name")).
+        case outputFontName
         case sqliteAllowed
         case mapperMergeSQL
         case publish

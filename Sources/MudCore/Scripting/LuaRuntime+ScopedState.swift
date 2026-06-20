@@ -57,6 +57,12 @@ public extension LuaRuntime {
         databasesDirectory = path
     }
 
+    /// Update the configured output font name reported by
+    /// `GetAlphaOption("output_font_name")` (pushed from the app's setting).
+    func setOutputFontName(_ name: String) {
+        outputFontName = name
+    }
+
     /// Update the live connection state reported by `proteles.isConnected`.
     func setConnected(_ value: Bool) {
         connected = value

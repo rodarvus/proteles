@@ -109,6 +109,10 @@ public extension LuaRuntime {
       eTimerNotFound = 30017,
       eVariableNotFound = 30019,
       eOptionOutOfRange = 30024,
+      eUnknownOption = 30025,
+      ePluginFileNotFound = 30030,
+      eNoSuchPlugin = 30034,
+      eNoSuchRoutine = 30036,
       eBadParameter = 30046,
     }
     error_desc = error_desc or {}
@@ -372,6 +376,44 @@ public extension LuaRuntime {
     function IsPluginInstalled(id)
       if id == nil or id == GetPluginID() then return true end
       return proteles.isPluginInstalled(tostring(id)) == true
+    end
+    -- GetPluginList(): ids of the loaded shim plugins + the natively-bridged
+    -- ids + the caller. Always non-empty (the caller is present), so the common
+    -- `for _, id in ipairs(GetPluginList())` can't hit ipairs(nil).
+    function GetPluginList() return proteles.pluginList() end
+    -- PluginSupports(id, routine): eOK if plugin `id` defines a global function
+    -- `routine`, else eNoSuchRoutine (also for bridged/native ids, whose
+    -- routines aren't enumerable). Used to discover companion plugins.
+    function PluginSupports(id, routine)
+      if proteles.pluginSupports(tostring(id or ""), tostring(routine or "")) == true then
+        return error_code.eOK
+      end
+      return error_code.eNoSuchRoutine
+    end
+    -- UnloadPlugin(id): drop a loaded shim plugin (idempotent for an unknown/
+    -- native id). A plugin can't unload itself mid-script (eBadParameter), as in
+    -- MUSHclient. Returns eOK; the host removes its env + owned automations.
+    function UnloadPlugin(id)
+      local key = tostring(id or "")
+      if key == GetPluginID() then return error_code.eBadParameter end
+      proteles.unloadPlugin(key)
+      return error_code.eOK
+    end
+    -- LoadPlugin(file): MUSHclient loads a plugin from a path at runtime. Proteles
+    -- installs plugins through the Plugin Library (not arbitrary runtime file
+    -- loads), so this is a logged no-op returning eOK — a dependency-checker that
+    -- calls it won't error; the plugin itself is added via the Library.
+    function LoadPlugin(file)
+      proteles.trace("LoadPlugin (use the Plugin Library to add plugins): " .. tostring(file or ""))
+      return error_code.eOK
+    end
+    -- Connect(): open the connection if closed (re-using the last endpoint);
+    -- eWorldOpen when already connected, matching MUSHclient's guard idiom
+    -- `if not IsConnected() then Connect() end`.
+    function Connect()
+      if proteles.isConnected() == true then return error_code.eWorldOpen end
+      proteles.connect()
+      return error_code.eOK
     end
     -- check(code): MUSHclient's return-code guard (lua/check.lua) — raise a Lua
     -- error if an API call didn't return eOK, else pass the code through. Our

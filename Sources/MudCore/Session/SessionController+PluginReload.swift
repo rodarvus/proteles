@@ -9,6 +9,7 @@ extension SessionController {
     /// state effects ``applyControlEffect`` handles directly). Kept separate so
     /// the primary switch stays under the cyclomatic-complexity limit.
     func applyInboundControlEffect(_ effect: ScriptEffect) async {
+        if await applyPluginControlEffect(effect) { return }
         switch effect {
         case .callSearchAndDestroy(let function, let args):
             // A shim plugin's CallPlugin(<S&D id>, fn, …) → the native host.
@@ -29,8 +30,6 @@ extension SessionController {
             // Feed a synthesized GMCP message through the same inbound dispatch
             // as a real packet (native GMCP handler's config-state synthesis).
             await dispatchGMCP(GMCPMessage(package: package, json: json))
-        case .reloadPlugin(let id):
-            await reloadPlugin(id: id)
         case .chatCapture(let text, let channel):
             // Bridge `CallPlugin(<chat-capture>, "storeFromOutside", …)` to native
             // chat (rsocial/hadar_spellup); `text` may carry Aardwolf @-codes.
@@ -48,6 +47,37 @@ extension SessionController {
             // Pace a wait-bearing mapper walk (`.walkWithWaits`); no-op otherwise.
             applyWalkEffect(effect)
         }
+    }
+
+    /// Plugin/connection lifecycle effects (`ReloadPlugin`/`UnloadPlugin`/
+    /// `Connect`). Split into its own Bool handler so ``applyInboundControlEffect``
+    /// stays within the cyclomatic-complexity budget. Returns whether handled.
+    private func applyPluginControlEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .reloadPlugin(let id):
+            await reloadPlugin(id: id)
+        case .unloadPlugin(let id):
+            // MUSHclient UnloadPlugin: drop the named shim plugin (idempotent —
+            // a native/unknown id is a no-op). Apply any window-delete effects
+            // the teardown returns so its miniwindows clear from the UI.
+            if let scriptEngine {
+                await applyScriptEffects(scriptEngine.unloadPlugin(id))
+            }
+        case .connect:
+            await connectFromScript()
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// MUSHclient `Connect`: re-open the connection if it's closed, reusing the
+    /// last endpoint/autologin (the same path the reconnect loop uses). A no-op
+    /// when already connected (the shim returns `eWorldOpen` without emitting
+    /// this) or when there's no prior endpoint to reconnect to.
+    private func connectFromScript() async {
+        guard connection == nil, let endpoint = lastEndpoint else { return }
+        try? await establish(to: endpoint, autologin: lastAutologinPlan, surfaceFailureState: true)
     }
 
     /// Reload a plugin by id (MUSHclient `ReloadPlugin`), routing by kind:

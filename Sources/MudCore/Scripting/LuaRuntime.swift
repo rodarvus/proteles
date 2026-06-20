@@ -183,6 +183,13 @@ public actor LuaRuntime {
     /// session knows the character. Set via ``setDatabasesDirectory(_:)``.
     nonisolated(unsafe) var databasesDirectory = ""
 
+    /// The user's configured output font name, pushed from the app so the
+    /// MUSHclient `GetAlphaOption("output_font_name")` reports the real font (a
+    /// plugin formatting against it gets the right metrics). Empty until the app
+    /// sets it via ``setOutputFontName(_:)``; the shim falls back to the
+    /// MUSHclient default then.
+    nonisolated(unsafe) var outputFontName = ""
+
     /// Whether script errors ALSO surface as red scrollback notes (the
     /// paired `.diagnostic` always reaches the Lua Console regardless) —
     /// Settings ▸ Input ▸ Scripting (#16). Default on.
@@ -439,6 +446,11 @@ public actor LuaRuntime {
         setHostFunction("setAliasOption", .setAliasOption)
         setHostFunction("stopEvaluatingTriggers", .stopEvaluatingTriggers)
         setHostFunction("trace", .trace)
+        setHostFunction("pluginList", .pluginList)
+        setHostFunction("pluginSupports", .pluginSupports)
+        setHostFunction("unloadPlugin", .unloadPlugin)
+        setHostFunction("connect", .connect)
+        setHostFunction("outputFontName", .outputFontName)
         setHostFunction("resetTimer", .resetTimer)
         setHostFunction("monotonic", .monotonic)
         setHostFunction("fileExists", .fileExists)
@@ -475,7 +487,8 @@ public actor LuaRuntime {
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
              .sndCall, .playSound, .speak, .simulate, .resetTimer,
-             .setAliasOption, .stopEvaluatingTriggers, .trace:
+             .setAliasOption, .stopEvaluatingTriggers, .trace,
+             .unloadPlugin, .connect:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -496,7 +509,8 @@ public actor LuaRuntime {
              .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
              .triggerInfo, .aliasInfo, .timerInfo,
              .triggerList, .aliasList, .timerList, .pluginTriggerList,
-             .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo:
+             .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo,
+             .pluginList, .pluginSupports, .outputFontName:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the

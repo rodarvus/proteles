@@ -103,7 +103,7 @@ extension LuaRuntime {
     /// Build a 1-indexed Lua array of `names` on the stack and hand it back
     /// through the registry-ref bridge (``LuaValue`` has no table case), as
     /// ``variableList`` does for `GetVariableList`.
-    private nonisolated func pushNameArray(_ names: [String]) -> LuaValue {
+    nonisolated func pushNameArray(_ names: [String]) -> LuaValue {
         lua_createtable(state, Int32(names.count), 0)
         for (index, name) in names.enumerated() {
             lua_pushstring(state, name)

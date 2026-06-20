@@ -219,6 +219,10 @@ struct ContentView: View {
         .task(id: richExits) {
             await session.setRichExitsEnabled(richExits)
         }
+        // Report the configured output font to scripts (GetAlphaOption("output_font_name")).
+        .task(id: outputFontName) {
+            await session.setOutputFontName(outputFontName)
+        }
         // Help is captured to the dedicated Help window (always on, so
         // `help <topic>` can auto-open it); never printed inline.
         .task {

@@ -506,6 +506,12 @@ public actor ScriptEngine {
         await runtime.setConnected(value)
     }
 
+    /// Push the user's configured output font name, reported by
+    /// `GetAlphaOption("output_font_name")`.
+    public func setOutputFontName(_ name: String) async {
+        await runtime.setOutputFontName(name)
+    }
+
     /// Install the MUSHclient compatibility globals (`Send`, `Note`,
     /// `ColourNote`, `GetVariable`, `GetInfo`, …) on top of `proteles.*`.
     public func loadCompatShim() async throws {

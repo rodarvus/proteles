@@ -24,7 +24,7 @@ extension LuaRuntime {
             bufferValue(function, arguments)
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
-             .createGUID, .uniqueID:
+             .createGUID, .uniqueID, .pluginList, .pluginSupports, .outputFontName:
             miscValue(function, arguments)
         // Trigger/alias/timer introspection (LuaRuntime+AutomationInfo.swift) —
         // routed via the default so this switch gains no new branch.
@@ -50,6 +50,8 @@ extension LuaRuntime {
             }())]
         case .createGUID: [.string(ScriptIdentifiers.createGUID())]
         case .uniqueID: [.string(ScriptIdentifiers.uniqueID())]
+        case .pluginList, .pluginSupports: pluginQueryValue(function, arguments)
+        case .outputFontName: [.string(outputFontName)]
         default: []
         }
     }
@@ -346,6 +348,10 @@ extension LuaRuntime {
             effects.append(.stopEvaluatingTriggers(allPlugins: Self.argBool(arguments, 0)))
         case .trace:
             effects.append(.trace(Self.argString(arguments, 0)))
+        case .unloadPlugin:
+            effects.append(.unloadPlugin(id: Self.argString(arguments, 0)))
+        case .connect:
+            effects.append(.connect)
         default: return false
         }
         return true
