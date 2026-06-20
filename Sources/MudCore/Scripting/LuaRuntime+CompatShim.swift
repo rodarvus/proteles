@@ -125,16 +125,36 @@ public extension LuaRuntime {
       for i = 1, #segs do flat[k+1], flat[k+2], flat[k+3] = segs[i][1], segs[i][2], segs[i][3]; k = k + 3 end
       proteles.colourNote(unpack(flat, 1, k))
     end
-    function Tell(text) __pending[#__pending + 1] = { "", "", text == nil and "" or tostring(text) } end
-    function ColourTell(...) -- buffer each triple as a coloured cell
-      local a, n = {...}, select("#", ...)
-      for b = 1, n, 3 do
-        __pending[#__pending + 1] = {
-          a[b]     == nil and "" or tostring(a[b]),
-          a[b + 1] == nil and "" or tostring(a[b + 1]),
-          a[b + 2] == nil and "" or tostring(a[b + 2]),
-        }
+    -- Append one coloured cell, honouring embedded newlines: a newline in the
+    -- text COMPLETES the current line (flushes `__pending` as one colourNote) and
+    -- starts a fresh one — matching MUSHclient, where a newline in Tell/ColourTell
+    -- text breaks the line. Without this, a plugin that builds a table with
+    -- ColourTell and ends on a trailing-newline cell (no terminating Note — a very
+    -- common idiom, e.g. a list/messages table) accumulated the WHOLE table in
+    -- `__pending` and never emitted it, so its output vanished (it only surfaced
+    -- later, prepended to the next ColourNote that happened to flush).
+    local function __appendCell(fore, back, text)
+      fore = fore == nil and "" or tostring(fore)
+      back = back == nil and "" or tostring(back)
+      text = text == nil and "" or tostring(text)
+      local start = 1
+      while true do
+        local nl = text:find("\\n", start, true)
+        if not nl then
+          local rest = text:sub(start)
+          if rest ~= "" then __pending[#__pending + 1] = { fore, back, rest } end
+          return
+        end
+        local chunk = text:sub(start, nl - 1)
+        if chunk ~= "" then __pending[#__pending + 1] = { fore, back, chunk } end
+        __flush() -- emit everything up to (not including) the newline as one line
+        start = nl + 1
       end
+    end
+    function Tell(text) __appendCell("", "", text) end
+    function ColourTell(...) -- buffer each triple as a coloured cell (newline-aware)
+      local a, n = {...}, select("#", ...)
+      for b = 1, n, 3 do __appendCell(a[b], a[b + 1], a[b + 2]) end
     end
     function Note(text)
       text = text == nil and "" or tostring(text)
