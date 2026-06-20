@@ -145,11 +145,13 @@ extension LuaRuntime {
     return addxml
     """
 
-    /// The load-bearing `aardwolf_colors` functions (clean-room): the 4 the
-    /// corpus uses on Aardwolf `@`-colour codes — `strip_colours`,
-    /// `ColoursToANSI`, `ColoursToStyles`, `StylesToColours`. Defined as
-    /// globals (like MUSHclient's). The miniwindow-drawing functions
-    /// (`TruncateStyles`/`StylesWidth`/…) are intentionally omitted.
+    /// The load-bearing `aardwolf_colors` functions (clean-room), defined as
+    /// globals like MUSHclient's: `strip_colours`, `ColoursToANSI`,
+    /// `ColoursToStyles`, `StylesToColours`, plus `StylesToColoursOneLine` and
+    /// its `TruncateStyles` helper (a pure styles-table column slice — used by
+    /// rsocial capture's whole-line form and mudbin's line-copy column form).
+    /// The miniwindow-measuring/drawing functions (`StylesWidth`/`PickStyles`/…)
+    /// stay omitted — they need font metrics on a window, not just style data.
     private static let aardwolfColorsSource = """
     local ANSI = {
       k="0;30", r="0;31", g="0;32", y="0;33", b="0;34", m="0;35", c="0;36", w="0;37",
@@ -248,6 +250,61 @@ extension LuaRuntime {
     -- plugins (dinv's dbot.print) use to render coloured output.
     function stylesToANSI(styles)
       return ColoursToANSI(StylesToColours(styles))
+    end
+
+    -- TruncateStyles(styles, startcol, endcol): a style-run table sliced to a
+    -- 1-based character column range (negatives measure from the end; order of
+    -- the bounds doesn't matter). Ported verbatim from aardwolf_colors, with its
+    -- copytable.shallow inlined (a style run is a flat table).
+    local function shallowStyle(style)
+      local copy = {}
+      for key, value in pairs(style) do copy[key] = value end
+      return copy
+    end
+
+    function TruncateStyles(styles, startcol, endcol)
+      if (styles == nil) or (styles[1] == nil) then return styles end
+      local startcol = startcol or 1
+      local endcol = endcol or 99999
+      if (startcol < 0) or (endcol < 0) then
+        local total_chars = 0
+        for _, v in ipairs(styles) do total_chars = total_chars + v.length end
+        if startcol < 0 then startcol = total_chars + startcol + 1 end
+        if endcol < 0 then endcol = total_chars + endcol + 1 end
+      end
+      if startcol > endcol then startcol, endcol = endcol, startcol end
+      local found_first, col_counter, new_styles, break_after = false, 0, {}, false
+      for _, v in ipairs(styles) do
+        local new_style = shallowStyle(v)
+        col_counter = col_counter + new_style.length
+        if endcol <= col_counter then
+          local marker = endcol - (col_counter - v.length)
+          new_style.text = new_style.text:sub(1, marker)
+          new_style.length = marker
+          break_after = true
+        end
+        if startcol <= col_counter then
+          if not found_first then
+            local marker = startcol - (col_counter - v.length)
+            found_first = true
+            new_style.text = new_style.text:sub(marker)
+            new_style.length = new_style.length - marker + 1
+          end
+          table.insert(new_styles, new_style)
+        end
+        if break_after then break end
+      end
+      return new_styles
+    end
+
+    -- StylesToColoursOneLine(styles[, startcol, endcol]): the @-coded string for a
+    -- style-run table, optionally truncated to a column range. No range → the
+    -- whole line (rsocial capture); with a range → truncated (mudbin line-copy).
+    function StylesToColoursOneLine(styles, startcol, endcol)
+      if startcol or endcol then
+        return StylesToColours(TruncateStyles(styles, startcol, endcol))
+      end
+      return StylesToColours(styles)
     end
 
     return true

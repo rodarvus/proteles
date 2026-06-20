@@ -38,6 +38,23 @@ struct AardwolfColorsHelperTests {
         #expect(try await lua.boolean("ColoursToStyles('@Rx')[1].bold == true"))
     }
 
+    @Test("StylesToColoursOneLine with no range == StylesToColours (rsocial path)")
+    func stylesToColoursOneLineWhole() async throws {
+        let lua = try await shimmed()
+        try await lua.run("require 'aardwolf_colors'")
+        let whole = try await lua.string("StylesToColoursOneLine(ColoursToStyles('@rred@Ggreen'))")
+        #expect(whole == "@rred@Ggreen")
+    }
+
+    @Test("StylesToColoursOneLine truncates to a column range (mudbin path)")
+    func stylesToColoursOneLineTruncated() async throws {
+        let lua = try await shimmed()
+        try await lua.run("require 'aardwolf_colors'")
+        // "redgreen" cols 2..6 = "edgre" → "ed"(red) + "gre"(green) → @-coded.
+        let cut = try await lua.string("StylesToColoursOneLine(ColoursToStyles('@rred@Ggreen'), 2, 6)")
+        #expect(cut == "@red@Ggre")
+    }
+
     @Test("proteles.echoAard renders @-codes as a styled echo")
     func echoAardNative() async throws {
         let lua = try LuaRuntime()
