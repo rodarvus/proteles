@@ -8,9 +8,9 @@ import Foundation
 enum LuaSourceContext {
     /// One line of a source-context window.
     struct WindowLine: Equatable {
-        public let number: Int
-        public let text: String
-        public let isError: Bool
+        let number: Int
+        let text: String
+        let isError: Bool
     }
 
     /// The topmost `<chunk>:<line>` reference in a Lua error/traceback whose
@@ -38,7 +38,7 @@ enum LuaSourceContext {
         guard line >= 1, line <= lines.count else { return nil }
         let lower = max(1, line - radius)
         let upper = min(lines.count, line + radius)
-        return (lower ... upper).map { number in
+        return (lower...upper).map { number in
             WindowLine(number: number, text: String(lines[number - 1]), isError: number == line)
         }
     }

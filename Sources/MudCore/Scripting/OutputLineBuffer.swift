@@ -67,8 +67,13 @@ public struct OutputLineBuffer: Sendable {
         self.connectedAt = connectedAt
     }
 
-    public var lineCount: Int { totalReceived }
-    public var linesInBuffer: Int { lines.count }
+    public var lineCount: Int {
+        totalReceived
+    }
+
+    public var linesInBuffer: Int {
+        lines.count
+    }
 
     /// `GetLineInfo(lineNumber, infoType)`. `lineNumber` is 1-indexed (1 = oldest
     /// buffered line). The infotype-0 "all fields" table is assembled in the shim
@@ -99,8 +104,8 @@ public struct OutputLineBuffer: Sendable {
         case 1, 2, 3: return Self.styleText(line.text, run, infoType)
         case 4, 5, 6, 7: return Self.styleAction(run.link, infoType)
         case 8, 9, 10, 11, 12, 13: return Self.styleFlag(run.style, infoType)
-        case 14: return .number(Double(Self.colourref(run.style.foreground, fallback: 0xC0_C0C0)))
-        case 15: return .number(Double(Self.colourref(run.style.background, fallback: 0x00_0000)))
+        case 14: return .number(Double(Self.colourref(run.style.foreground, fallback: 0xC0C0C0)))
+        case 15: return .number(Double(Self.colourref(run.style.background, fallback: 0x000000)))
         default: return .nil
         }
     }
@@ -199,6 +204,6 @@ public struct OutputLineBuffer: Sendable {
               let start = lower.samePosition(in: text),
               let end = upper.samePosition(in: text)
         else { return nil }
-        return (String(text[start ..< end]), text[text.startIndex ..< start].utf8.count)
+        return (String(text[start..<end]), text[text.startIndex..<start].utf8.count)
     }
 }

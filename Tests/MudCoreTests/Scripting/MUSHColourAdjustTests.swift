@@ -18,7 +18,7 @@ struct MUSHColourAdjustTests {
     func noOp() {
         #expect(MUSHColour.adjustColour(0x123456, method: 0) == 0x123456)
         #expect(MUSHColour.adjustColour(0x123456, method: 99) == 0x123456)
-        #expect(MUSHColour.adjustColour(0xFF123456, method: 0) == 0x123456) // high byte dropped
+        #expect(MUSHColour.adjustColour(0xFF12_3456, method: 0) == 0x123456) // high byte dropped
     }
 
     @Test("lighter/darker step luminance (grey, the sat<=0 path)")

@@ -181,8 +181,13 @@ public struct TimerRecord: Sendable {
     /// reports `max(0, fireAt − now)`. Nil when the timer is not scheduled.
     public let fireAt: Date?
 
-    private var isAtTime: Bool { if case .atTimeOfDay = schedule { true } else { false } }
-    private var isOneShot: Bool { if case .after = schedule { true } else { false } }
+    private var isAtTime: Bool {
+        if case .atTimeOfDay = schedule { true } else { false }
+    }
+
+    private var isOneShot: Bool {
+        if case .after = schedule { true } else { false }
+    }
 
     /// Hours/minutes/seconds the timer is configured with (infotypes 1/2/3),
     /// matching MUSHclient's stored hour/minute/second breakdown.

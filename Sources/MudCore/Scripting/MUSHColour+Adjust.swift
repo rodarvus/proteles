@@ -13,7 +13,7 @@ import Foundation
 /// colour in/out is a COLORREF (red low byte), as elsewhere in ``MUSHColour``.
 extension MUSHColour {
     public static func adjustColour(_ colour: Int, method: Int) -> Int {
-        let colourref = colour & 0xFF_FFFF
+        let colourref = colour & 0xFFFFFF
         switch method {
         case 1: // invert
             let red = colourref & 0xFF
@@ -57,13 +57,12 @@ extension MUSHColour {
         var saturation = luminance < 0.5
             ? colordiff / (maxcolor + mincolor)
             : colordiff / (2.0 - (maxcolor + mincolor))
-        var hue: Double
-        if red == maxcolor {
-            hue = 60.0 * (green - blue) / colordiff
+        var hue = if red == maxcolor {
+            60.0 * (green - blue) / colordiff
         } else if green == maxcolor {
-            hue = 60.0 * (blue - red) / colordiff + 120.0
+            60.0 * (blue - red) / colordiff + 120.0
         } else {
-            hue = 60.0 * (red - green) / colordiff + 240.0
+            60.0 * (red - green) / colordiff + 240.0
         }
         if hue < 0.0 { hue += 360.0 } else if hue > 360.0 { hue -= 360.0 }
         if saturation > 1.0 { saturation = 1.0 } else if saturation < 0.0 { saturation = 0.0 }

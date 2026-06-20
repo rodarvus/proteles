@@ -199,7 +199,7 @@ extension MUSHColour {
     /// name matches. Mirrors `ColourToName`; on an aliased value we return the
     /// first name in source order (deterministic; see the type doc).
     public static func rgbColourToName(_ colour: Int) -> String {
-        let colourref = colour & 0xFF_FFFF
+        let colourref = colour & 0xFFFFFF
         let source = swapRedBlue(colourref)
         if let match = names.first(where: { $0.rgb == source }) {
             return match.name
@@ -214,7 +214,7 @@ extension MUSHColour {
     /// this once (source `0xRRGGBB` → COLORREF `0x00BBGGRR`); it is its own
     /// inverse, so the same call converts a COLORREF back for table lookup.
     private static func swapRedBlue(_ value: Int) -> Int {
-        let bits = value & 0xFF_FFFF
+        let bits = value & 0xFFFFFF
         return ((bits & 0xFF) << 16) | (bits & 0xFF00) | ((bits >> 16) & 0xFF)
     }
 }

@@ -19,8 +19,8 @@ public enum ScriptIdentifiers {
 
     public static func uniqueID() -> String {
         var generator = SystemRandomNumberGenerator()
-        return (0 ..< 12)
-            .map { _ in String(format: "%02x", UInt8.random(in: 0 ... 255, using: &generator)) }
+        return (0..<12)
+            .map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }
             .joined()
     }
 }

@@ -22,7 +22,9 @@ struct OutputLineBufferTests {
     @Test("total-received vs buffered count, with bounded eviction")
     func counts() {
         var buffer = OutputLineBuffer(maxLines: 3)
-        for index in 1 ... 5 { buffer.append(line(UInt64(index), "line \(index)")) }
+        for index in 1...5 {
+            buffer.append(line(UInt64(index), "line \(index)"))
+        }
         #expect(buffer.lineCount == 5) // running total, never decremented
         #expect(buffer.linesInBuffer == 3) // bounded
         #expect(buffer.lineInfo(1, 1) == .string("line 3")) // oldest two evicted
@@ -57,7 +59,7 @@ struct OutputLineBufferTests {
         // "café X": é is 1 UTF-16 unit but 2 UTF-8 bytes; the run covers " X".
         let text = "caf\u{E9} X"
         let run = StyledRun(
-            utf16Range: 4 ..< 6,
+            utf16Range: 4..<6,
             style: StyleAttributes(foreground: .brightNamed(.red), bold: true)
         )
         var buffer = OutputLineBuffer()
@@ -76,12 +78,12 @@ struct OutputLineBufferTests {
     func styleInfoLinks() {
         var buffer = OutputLineBuffer()
         let urlRun = StyledRun(
-            utf16Range: 0 ..< 3,
+            utf16Range: 0..<3,
             style: .default,
             link: LineLink(action: .openURL("https://x"), hint: "open")
         )
         let cmdRun = StyledRun(
-            utf16Range: 3 ..< 6,
+            utf16Range: 3..<6,
             style: .default,
             link: LineLink(action: .sendCommand("north"))
         )
@@ -96,7 +98,9 @@ struct OutputLineBufferTests {
     @Test("recentLines joins the last N lines")
     func recent() {
         var buffer = OutputLineBuffer()
-        for index in 1 ... 4 { buffer.append(line(UInt64(index), "L\(index)")) }
+        for index in 1...4 {
+            buffer.append(line(UInt64(index), "L\(index)"))
+        }
         #expect(buffer.recentLines(2) == "L3\nL4")
         #expect(buffer.recentLines(99) == "L1\nL2\nL3\nL4")
         #expect(buffer.recentLines(0).isEmpty)
@@ -122,7 +126,7 @@ struct OutputBufferShimTests {
             id: 2,
             timestamp: Date(timeIntervalSince1970: 1002),
             text: "world",
-            runs: [StyledRun(utf16Range: 0 ..< 5, style: StyleAttributes(foreground: .brightNamed(.red)))],
+            runs: [StyledRun(utf16Range: 0..<5, style: StyleAttributes(foreground: .brightNamed(.red)))],
             kind: .note
         )
         func console(_ code: String, _ expected: String) async {

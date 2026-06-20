@@ -5,7 +5,7 @@ import Foundation
 /// `LuaRuntime+CompatShim.swift` purely for the file-length budget;
 /// `automationShimSource` concatenates the two into one Lua chunk.
 extension LuaRuntime {
-    internal nonisolated static let shimSourceCore = #"""
+    nonisolated static let shimSourceCore = #"""
     -- Name registries so IsTrigger/IsTimer/IsAlias can answer existence
     -- (MUSHclient object names are world-unique). Add*/Delete* keep these in
     -- sync; dinv's de-init whacks objects by name and treats "not found" as a

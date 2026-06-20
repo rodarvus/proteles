@@ -33,7 +33,7 @@ struct LuaTracebackTests {
         do {
             _ = try await runtime.run(nested)
             Issue.record("expected the chunk to throw")
-        } catch let LuaRuntime.LuaError.runtime(message) {
+        } catch LuaRuntime.LuaError.runtime(let message) {
             #expect(message.contains("boom"))
             #expect(message.contains("stack traceback"))
         }
