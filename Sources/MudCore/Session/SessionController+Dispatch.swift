@@ -74,7 +74,12 @@ extension SessionController {
             return
         }
         if let scriptEngine {
-            await applyScriptEffects(scriptEngine.expandInput(command))
+            switch await scriptEngine.expandInputForDispatch(command) {
+            case .effects(let effects):
+                await applyScriptEffects(effects)
+            case .passthrough(let command):
+                await sendCommandThroughPlugins(command)
+            }
             await persistVariablesIfDirty()
             // A command may schedule a one-shot (a plugin's wait.make/DoAfter
             // coroutine, e.g. dinv's build queue). The loop idles when no timers

@@ -374,21 +374,34 @@ public actor ScriptEngine {
 
     // MARK: - Input expansion
 
+    /// Expand a typed line through the aliases → effects. No match is returned
+    /// as passthrough, because typed input has already had command stacking
+    /// applied by the session.
+    public func expandInputForDispatch(_ input: String) async -> ScriptInputExpansion {
+        // While suspended (Note mode), input goes straight to the MUD.
+        if suspended { return .passthrough(input) }
+        let firings = aliases.match(input)
+        guard !firings.isEmpty else {
+            // No user alias matched — offer the command to native plugins
+            // before sending it verbatim.
+            if let effects = nativePlugins.handleCommand(input) { return .effects(effects) }
+            return .passthrough(input)
+        }
+
+        let effects = await expandAliasFirings(firings)
+        return .effects(effects)
+    }
+
     /// Expand a typed line through the aliases → effects. No match → sent
     /// verbatim. `.execute` re-dispatches each line through the session's full
     /// command pipeline (native `mapper`/S&D interception, then alias
     /// expansion); `.script` runs Lua; `.output` echoes locally.
     public func expandInput(_ input: String) async -> [ScriptEffect] {
-        // While suspended (Note mode), input goes straight to the MUD.
-        if suspended { return [.send(input)] }
-        let firings = aliases.match(input)
-        guard !firings.isEmpty else {
-            // No user alias matched — offer the command to native plugins
-            // before sending it verbatim.
-            if let effects = nativePlugins.handleCommand(input) { return effects }
-            return [.send(input)]
-        }
+        await expandInputForDispatch(input).effectsForCompatibility
+    }
 
+    private func expandAliasFirings(_ firings: [AliasFiring]) async -> [ScriptEffect] {
+        // While suspended (Note mode), input goes straight to the MUD.
         var effects: [ScriptEffect] = []
         for firing in firings {
             guard let send = firing.send else { continue }

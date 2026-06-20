@@ -336,6 +336,24 @@ public enum ScriptEffect: Sendable, Equatable {
     case loadMiniWindowImage(pluginID: String, imageID: String, data: Data)
 }
 
+/// Result of expanding user-typed input through the script/native command layer.
+///
+/// A command that matched an alias or native command produces normal
+/// ``ScriptEffect`` values. A command with no match is already the result of the
+/// typed-input command-stack pass, so the session should pass it through to the
+/// send hook without applying command-stack splitting a second time.
+public enum ScriptInputExpansion: Sendable, Equatable {
+    case effects([ScriptEffect])
+    case passthrough(String)
+
+    public var effectsForCompatibility: [ScriptEffect] {
+        switch self {
+        case .effects(let effects): effects
+        case .passthrough(let command): [.send(command)]
+        }
+    }
+}
+
 /// An outbound HTTP request a plugin's `async` helper asked for (the network
 /// half of `doAsyncRemoteRequest`/`HEAD`/`GETFILE`). `id` keys the stored Lua
 /// callback in the ``LuaRuntime``; the host performs the request and re-enters

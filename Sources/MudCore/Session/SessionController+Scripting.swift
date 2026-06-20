@@ -212,7 +212,7 @@ public extension SessionController {
     /// send hook). A plugin blocking it suppresses the raw send — it handled it
     /// (dinv strips its `DINV_BYPASS` prefix + re-sends). Hook effects applied,
     /// re-entrancy-guarded. No script engine → sends straight to the MUD.
-    private func sendCommandThroughPlugins(_ command: String) async {
+    func sendCommandThroughPlugins(_ command: String) async {
         // While OnPluginSend is processing, a send goes straight to the MUD
         // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
         // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered
