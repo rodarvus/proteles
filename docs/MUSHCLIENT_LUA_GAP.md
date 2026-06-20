@@ -23,17 +23,24 @@ distinct files calling it — a better demand signal than raw calls (a fn called
 90× by one plugin matters less than one used across 14). **Spot-check the shim
 before implementing any entry.**
 
-## Headline (2026-06-16)
+## Headline (re-run 2026-06-20)
 
 | | count |
 |---|---|
 | MUSHclient world functions | **418** |
-| Provided by our generic shim | **~107** |
-| **Missing AND used by real plugins** | **296** |
+| Provided by our generic shim | **120** (an undercount — see note) |
+| **Missing AND used by real plugins** | **283** |
 | Missing AND unused (ignorable) | 15 |
 
-296 sounds huge, but it's a long tail: the actionable demand is the ~25 below;
-the rest are mostly single incidental uses.
+Down from 296 missing (2026-06-16) as Tier 1 plus the Tier 2 introspection and
+output-buffer families shipped. Still a long tail: the actionable remaining
+demand is the Options family + a handful of control/diagnostic fns below.
+
+**Provided is undercounted.** The "provided" detector greps for `function <Name>`,
+so globals we expose by *assignment* (`EnableTriggerGroup = EnableGroup`,
+`load = loadstring`, …) read as missing. Concretely, `EnableTriggerGroup` (35)
+still appears in the missing list below but is **shipped** — spot-check the shim
+before treating any single entry as a real gap.
 
 ## Tier 1 — high value, low effort (do first)
 
@@ -51,32 +58,44 @@ Broadly used, and either the primitive already exists or the function is pure:
 
 **Tier 1 is complete** — all seven shipped.
 
-## Tier 2 — medium value/effort (engine introspection + control)
+## Tier 2 — engine introspection + control (largely SHIPPED)
 
 Real plugin-compat value; needs wiring into our trigger/alias/timer engines or
-config:
+config. The introspection and output-buffer families are done; the Options
+family is the main remaining cluster.
 
-- **Trigger/alias/timer control + introspection:** `EnableTriggerGroup` (35/6),
-  `StopEvaluatingTriggers` (25/8), `GetTriggerList`/`GetTriggerInfo`,
-  `GetTimerInfo`/`GetTimerOption`/`ResetTimer`, `GetAliasList`/`SetAliasOption`,
-  `GetPluginTriggerList`/`GetPluginTriggerInfo`.
-- **Options:** `SetOption` (24/9), `GetGlobalOption` (5), `GetOptionList`,
-  `GetAlphaOptionList`.
-- **Output-buffer introspection:** `GetLineInfo` (4/3), `GetLineCount`,
-  `GetLinesInBufferCount` (5/4) — *this is the Sath traceback thread*; tie the
-  semantics to our scrollback model.
-- **Diagnostics:** `TraceOut` (23/2 — concentrated) → map to a debug note/log.
-- **Status surface:** `SetStatus` (15/6).
-- **Plugin management:** `LoadPlugin`/`UnloadPlugin` (3–4), `GetPluginList`,
-  `PluginSupports`, `Connect` (5/4).
+- **Trigger/alias/timer introspection — ✅ SHIPPED** (`994644b`):
+  `GetTriggerInfo`/`GetTriggerList`, `GetAliasInfo`/`GetAliasList`,
+  `GetTimerInfo`/`GetTimerList`, `GetPluginTriggerList`, `ResetTimer`. Backed by a
+  runtime-side `AutomationSnapshot` projected from the engines after each change;
+  InfoType field numbers ported from `methods_{triggers,timers,aliases}.cpp`.
+  Shim timers (AddTimer doAfter chains) read from the shim's `__protelesTimer*`
+  tables first, falling back to the snapshot for XML/engine timers.
+- **Trigger/timer group control — ✅ SHIPPED:** `EnableTriggerGroup`/
+  `EnableTimerGroup` (assignment aliases of `EnableGroup`; the call-site regex
+  misses them, so `EnableTriggerGroup` (35) still shows "missing" above).
+- **Output-buffer introspection — ✅ SHIPPED** (`e3d600d`): `GetLineCount`,
+  `GetLinesInBufferCount`, `GetLineInfo`, `GetStyleInfo`, `GetRecentLines` — the
+  Sath traceback thread; semantics from `methods_info.cpp`, tied to the bounded
+  `OutputLineBuffer` scrollback mirror.
+- **Still pending — Options family (now the top real gap):** `GetOption` (41),
+  `SetOption` (24/9), `GetGlobalOption` (5), `GetAlphaOption`-list/`GetOptionList`.
+  Read/write world config; needs a config bridge into our settings model.
+- **Still pending — misc control/introspection:** `StopEvaluatingTriggers`
+  (25/8), `GetTimerOption`, `SetAliasOption`, `GetPluginTriggerInfo`.
+- **Still pending — diagnostics/status:** `TraceOut` (23/2 — concentrated) → a
+  debug note/log; `SetStatus` (15/6).
+- **Still pending — plugin management:** `LoadPlugin`/`UnloadPlugin` (3–4),
+  `GetPluginList`, `PluginSupports`, `Connect` (5/4).
 
 ## Tier 3 — display / miniwindow (native-panel territory, defer)
 
 Mostly tied to MUSHclient's miniwindow drawing, which Proteles replaces with
 native panels — implement only if a load-bearing plugin needs it:
-`Repaint` (19), `Redraw` (11), `NoteStyle` (12), `NoteHr` (7), `GetStyleInfo` (6),
+`Repaint` (19), `Redraw` (11), `NoteStyle` (12), `NoteHr` (7),
 `SetScroll` (8), `PickColour` (19), `TextRectangle`, `SetBackgroundImage`,
-`SetCursor`, the `GetSelection*` family.
+`SetCursor`, the `GetSelection*` family. (`GetStyleInfo` moved to Tier 2 —
+shipped with the output-buffer family.)
 
 ## Tier 4 — low value (rarely needed by Aardwolf plugins)
 
