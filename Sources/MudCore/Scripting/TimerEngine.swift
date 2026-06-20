@@ -135,6 +135,21 @@ public struct TimerEngine {
         timers[index].enabled = enabled
     }
 
+    /// Re-arm a timer's countdown from `now`, as MUSHclient `ResetTimer` does —
+    /// the next fire is recomputed as if the timer had just been added. A no-op
+    /// for an unknown id.
+    public mutating func reset(id: UUID, now: Date = Date()) {
+        guard let timer = timers.first(where: { $0.id == id }) else { return }
+        nextFire[id] = firstFire(for: timer.schedule, now: now)
+    }
+
+    /// When the timer is next due, for the introspection mirror
+    /// (`GetTimerInfo(_, 13)` reports the seconds remaining). Nil for an unknown
+    /// or unscheduled id.
+    public func fireDate(for id: UUID) -> Date? {
+        nextFire[id]
+    }
+
     /// Enable/disable every timer in a group (MUSHclient bulk-sets each member's
     /// individual `enabled` flag; an individual enable later overrides).
     public mutating func setGroupEnabled(_ enabled: Bool, group: String) {

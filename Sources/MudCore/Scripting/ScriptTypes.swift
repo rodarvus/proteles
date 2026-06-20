@@ -214,6 +214,8 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Enable/disable every trigger and timer in a named group (MUSHclient
     /// `EnableGroup`).
     case enableGroup(name: String, on: Bool)
+    /// Re-arm a named timer's countdown from now (MUSHclient `ResetTimer`).
+    case resetTimer(name: String)
     /// Schedule a one-shot deferred action after `seconds` (MUSHclient
     /// `DoAfter`/`DoAfterSpecial`). `isScript` runs `body` as Lua in the
     /// owning plugin's runtime; otherwise `body` is sent to the MUD. Consumed

@@ -35,6 +35,11 @@ public actor ScriptEngine {
     /// script runs in its plugin's environment. Absent ⇒ a user automation
     /// (runs in the shared globals).
     var automationOwners: [UUID: String] = [:]
+    /// Set whenever the trigger/alias/timer set changes, so the runtime's
+    /// introspection mirror is re-projected before the next script reads it
+    /// (`GetTriggerInfo`/`GetPluginTriggerList`/…). Starts true so the first
+    /// read projects. See ``syncAutomationSnapshot``.
+    var automationDirty = true
 
     /// The well-known id of the Aardwolf GMCP-handler plugin. Native GMCP is
     /// handled in Swift, but plugins gate `OnPluginBroadcast` on this id, so
@@ -239,6 +244,7 @@ public actor ScriptEngine {
         timers = TimerEngine()
         loadedPluginIDs.removeAll()
         automationOwners.removeAll()
+        automationDirty = true
         await runtime.clearPluginEnvironments()
         load(document, now: now)
     }
@@ -284,6 +290,9 @@ public actor ScriptEngine {
             if let name = timer.label { timerIDsByName[name] = timer.id }
         }
         if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
+        // The XML-declared triggers/aliases/timers above register directly (not
+        // via applyAutomationEffect), so flag the introspection mirror stale.
+        automationDirty = true
         // OnPluginInstall commonly registers triggers/aliases/timers (dinv does
         // at init); consume those registrations too rather than leaking them.
         await effects.append(contentsOf: consumeRegistrations(
@@ -454,26 +463,6 @@ public actor ScriptEngine {
         return Self.applyingHighlights(highlights, to: disposition, original: line)
     }
 
-    /// Run a trigger/alias script: in the owning plugin's environment when
-    /// `owner` is set, otherwise in the shared globals (a user script).
-    private func runOwnedScript(
-        _ script: String,
-        owner: String?,
-        matches: [String],
-        named: [String: String],
-        styles: [ScriptStyleRun] = []
-    ) async -> [ScriptEffect] {
-        let raw: [ScriptEffect] = if let owner {
-            await runtime.runPluginScript(
-                script, pluginID: owner, matches: matches, named: named, styles: styles
-            )
-        } else {
-            await runScript(script, matches: matches, named: named, styles: styles)
-        }
-        // Apply programmatic automation (AddTimer/AddTriggerEx/…); pass the rest on.
-        return consumeRegistrations(raw, owner: owner)
-    }
-
     /// Project a GMCP message into the live `proteles.gmcp` table, fire its
     /// `gmcp.*` events, and (with MUSHclient plugins loaded) synthesise the
     /// handler's `OnPluginBroadcast(1, id, "GMCP", package)`. Returns effects.
@@ -495,6 +484,7 @@ public actor ScriptEngine {
     /// bare, return false to drop the prefixed one).
     public func fireOnPluginSend(_ text: String) async -> (blocked: Bool, effects: [ScriptEffect]) {
         guard !suspended else { return (false, []) }
+        await syncAutomationSnapshot() // OnPluginSend may read its own automation
         var effects: [ScriptEffect] = []
         var blocked = false
         for id in loadedPluginIDs {
@@ -577,7 +567,9 @@ public actor ScriptEngine {
 
     // MARK: - Private
 
-    private func runScript(
+    /// Run a user/plugin script chunk with the firing captures. Internal (not
+    /// private) so ``runOwnedScript`` in the automation extension can reach it.
+    func runScript(
         _ script: String,
         matches: [String],
         named: [String: String],

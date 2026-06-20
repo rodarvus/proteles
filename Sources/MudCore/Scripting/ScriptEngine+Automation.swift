@@ -36,6 +36,29 @@ extension ScriptEngine {
         effects.filter { !applyAutomationEffect($0, owner: owner) }
     }
 
+    /// Run a trigger/alias script: in the owning plugin's environment when
+    /// `owner` is set, otherwise in the shared globals (a user script). Syncs the
+    /// introspection mirror first, so the script's `Get*Info`/`Get*List` reads
+    /// see the current automation set.
+    func runOwnedScript(
+        _ script: String,
+        owner: String?,
+        matches: [String],
+        named: [String: String],
+        styles: [ScriptStyleRun] = []
+    ) async -> [ScriptEffect] {
+        await syncAutomationSnapshot()
+        let raw: [ScriptEffect] = if let owner {
+            await runtime.runPluginScript(
+                script, pluginID: owner, matches: matches, named: named, styles: styles
+            )
+        } else {
+            await runScript(script, matches: matches, named: named, styles: styles)
+        }
+        // Apply programmatic automation (AddTimer/AddTriggerEx/…); pass the rest on.
+        return consumeRegistrations(raw, owner: owner)
+    }
+
     /// Apply one programmatic-automation effect to the engines. Returns `true`
     /// if consumed, `false` if it's an outward effect the session should render.
     private func applyAutomationEffect(_ effect: ScriptEffect, owner: String?) -> Bool {
@@ -58,15 +81,19 @@ extension ScriptEngine {
                 triggers.remove(id: id)
                 automationOwners[id] = nil
             }
-        case .enableTrigger, .enableTimer, .enableAlias, .enableGroup:
+        case .enableTrigger, .enableTimer, .enableAlias, .enableGroup, .resetTimer:
             applyEnableEffect(effect)
         default:
             return false
         }
+        // Any consumed automation effect changes the introspection mirror; flag
+        // it so the next script run re-projects the snapshot (see
+        // ``syncAutomationSnapshot``).
+        automationDirty = true
         return true
     }
 
-    /// Apply a name-based enable/disable to the matching engine.
+    /// Apply a name-based enable/disable (or timer reset) to the matching engine.
     private func applyEnableEffect(_ effect: ScriptEffect) {
         switch effect {
         case .enableTrigger(let name, let on):
@@ -78,6 +105,8 @@ extension ScriptEngine {
         case .enableGroup(let name, let on):
             triggers.setGroupEnabled(on, group: name)
             timers.setGroupEnabled(on, group: name)
+        case .resetTimer(let name):
+            if let id = timerIDsByName[name] { timers.reset(id: id) }
         default:
             break
         }
@@ -88,6 +117,7 @@ extension ScriptEngine {
     /// may AddTimer/AddTriggerEx (dinv's init coroutine yields on wait.time → a
     /// resume timer); returning them raw drops it and the coroutine hangs.
     func fireCallbackOnAll(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
+        await syncAutomationSnapshot() // callbacks may read their own automation
         var effects: [ScriptEffect] = []
         for pluginID in loadedPluginIDs {
             let raw = await runtime.callPluginCallback(pluginID, name, arguments)
@@ -146,6 +176,7 @@ extension ScriptEngine {
         aliasIDsByName = aliasIDsByName.filter { !ownedIDs.contains($0.value) }
         timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
         loadedPluginIDs.removeAll { $0 == id }
+        automationDirty = true
         let windowEffects = await runtime.removeMiniWindows(ownedBy: id)
         await runtime.clearPluginRegistrations(id)
         await runtime.clearPluginEnvironment(id)

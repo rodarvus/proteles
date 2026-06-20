@@ -26,7 +26,9 @@ extension LuaRuntime {
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
              .createGUID, .uniqueID:
             miscValue(function, arguments)
-        default: []
+        // Trigger/alias/timer introspection (LuaRuntime+AutomationInfo.swift) —
+        // routed via the default so this switch gains no new branch.
+        default: automationValue(function, arguments)
         }
     }
 
@@ -408,7 +410,8 @@ extension LuaRuntime {
         .sendGMCP: ScriptEffect.sendGMCP, .echoAard: ScriptEffect.echoAard,
         .echoAnsi: ScriptEffect.echoAnsi, .simulate: ScriptEffect.simulate,
         .removeTrigger: ScriptEffect.removeTrigger,
-        .reloadPlugin: { ScriptEffect.reloadPlugin(id: $0) }
+        .reloadPlugin: { ScriptEffect.reloadPlugin(id: $0) },
+        .resetTimer: { ScriptEffect.resetTimer(name: $0) }
     ]
 
     /// Record an inert output effect (`send`/`echo`/`note`/`colourNote`/…)

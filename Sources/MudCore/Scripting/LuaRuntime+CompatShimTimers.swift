@@ -246,5 +246,69 @@ extension LuaRuntime {
       __timerTemporary = {}
       return n
     end
+    -- Trigger/alias introspection (MUSHclient GetTriggerInfo/GetAliasInfo +
+    -- the Get*List family) — broadly used by plugins to render and reflect on
+    -- their own automation (print a trigger table, read back a pattern/enabled
+    -- state). Triggers and aliases — XML-declared and AddTriggerEx/AddAlias
+    -- alike — live on the host engines, so these read straight from the host's
+    -- snapshot mirror. The `InfoType` numbers are MUSHclient's exactly. A
+    -- missing name/field yields nil (MUSHclient VT_EMPTY); an empty list yields
+    -- nil (the Get*List functions can't return an empty array).
+    function GetTriggerInfo(name, infotype)
+      return proteles.triggerInfo(tostring(name), tonumber(infotype) or 0)
+    end
+    function GetAliasInfo(name, infotype)
+      return proteles.aliasInfo(tostring(name), tonumber(infotype) or 0)
+    end
+    function GetTriggerList() return proteles.triggerList() end
+    function GetAliasList() return proteles.aliasList() end
+    function GetPluginTriggerList(id) return proteles.pluginTriggerList(tostring(id or "")) end
+    -- Timer introspection. Shim timers (AddTimer) are doAfter chains tracked in
+    -- the __protelesTimer* tables, not host TimerEngine entries, so consult
+    -- those first; fall back to the host snapshot for XML/engine timers. The
+    -- field numbers match MUSHclient's GetTimerInfo.
+    function GetTimerInfo(name, infotype)
+      local key, t = tostring(name), tonumber(infotype) or 0
+      local spec = __protelesTimerSpec[key]
+      if spec then
+        local s = spec.seconds or 0
+        if t == 1 then return math.floor(s / 3600) end
+        if t == 2 then return math.floor((s % 3600) / 60) end
+        if t == 3 then return s - math.floor(s / 60) * 60 end
+        if t == 5 then return spec.script or "" end
+        if t == 6 then return __protelesTimerLive[key] and true or false end
+        if t == 7 then return not spec.recurring end
+        if t == 8 then return false end                       -- not an at-time timer
+        if t == 14 then return __timerTemporary[key] and true or false end
+        return nil
+      end
+      return proteles.timerInfo(key, t)
+    end
+    function GetTimerList()
+      local names, seen = {}, {}
+      for key in pairs(__timerNames) do names[#names + 1] = key; seen[key] = true end
+      local engine = proteles.timerList()
+      if engine then
+        for _, key in ipairs(engine) do
+          if not seen[key] then names[#names + 1] = key; seen[key] = true end
+        end
+      end
+      if #names == 0 then return nil end
+      return names
+    end
+    -- ResetTimer: re-arm a timer's countdown from now. A shim timer re-arms its
+    -- doAfter chain (bump the generation so any pending fire self-skips, then
+    -- re-arm from its spec); an engine timer routes to the host. Returns eOK.
+    function ResetTimer(name)
+      local key = tostring(name)
+      if __protelesTimerSpec[key] then
+        __protelesTimerLive[key] = true
+        __protelesTimerGen[key] = (__protelesTimerGen[key] or 0) + 1
+        __protelesArmTimer(key)
+        return error_code.eOK
+      end
+      proteles.resetTimer(key)
+      return error_code.eOK
+    end
     """#
 }

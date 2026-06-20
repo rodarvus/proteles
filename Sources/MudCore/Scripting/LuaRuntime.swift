@@ -170,6 +170,13 @@ public actor LuaRuntime {
     /// host dispatch. See ``OutputLineBuffer``.
     nonisolated(unsafe) var outputBuffer = OutputLineBuffer()
 
+    /// Read-only mirror of the live triggers/aliases/timers, backing the
+    /// MUSHclient introspection world functions (`GetTriggerInfo`/`GetTimerInfo`/
+    /// `GetAliasInfo`, the `Get*List` family, `GetPluginTriggerList`). Projected
+    /// by `ScriptEngine` via ``setAutomationSnapshot(_:)`` after each automation
+    /// change; read synchronously by the host dispatch. See ``AutomationSnapshot``.
+    nonisolated(unsafe) var automationSnapshot = AutomationSnapshot()
+
     /// Per-character `~/Documents/Proteles/Databases/<character>/` (trailing
     /// slash), surfaced to plugins as `proteles.databaseDir()` so a plugin can
     /// keep its DB flat in the shared Databases tree (#43/#44). Empty until the
@@ -418,6 +425,14 @@ public actor LuaRuntime {
         setHostFunction("button", .button)
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("enableAlias", .enableAlias)
+        setHostFunction("triggerInfo", .triggerInfo)
+        setHostFunction("aliasInfo", .aliasInfo)
+        setHostFunction("timerInfo", .timerInfo)
+        setHostFunction("triggerList", .triggerList)
+        setHostFunction("aliasList", .aliasList)
+        setHostFunction("timerList", .timerList)
+        setHostFunction("pluginTriggerList", .pluginTriggerList)
+        setHostFunction("resetTimer", .resetTimer)
         setHostFunction("monotonic", .monotonic)
         setHostFunction("fileExists", .fileExists)
         setHostFunction("makeDirectory", .makeDirectory)
@@ -452,7 +467,7 @@ public actor LuaRuntime {
              .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
-             .sndCall, .playSound, .speak, .simulate:
+             .sndCall, .playSound, .speak, .simulate, .resetTimer:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -470,7 +485,9 @@ public actor LuaRuntime {
              .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
              .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
              .adjustColour, .createGUID, .uniqueID,
-             .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines:
+             .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
+             .triggerInfo, .aliasInfo, .timerInfo,
+             .triggerList, .aliasList, .timerList, .pluginTriggerList:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the

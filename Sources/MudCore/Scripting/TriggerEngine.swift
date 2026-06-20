@@ -31,6 +31,12 @@ public enum TriggerPattern: Sendable, Equatable, Codable {
         }
     }
 
+    /// Whether this pattern is an authored regular expression — backs the
+    /// `GetTriggerInfo`/`GetAliasInfo` "is regexp" introspection field.
+    var isRegex: Bool {
+        if case .regex = self { true } else { false }
+    }
+
     /// The regex source this pattern compiles to.
     func regexSource() -> String {
         switch self {

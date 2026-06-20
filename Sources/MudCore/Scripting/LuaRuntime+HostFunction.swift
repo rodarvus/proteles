@@ -35,6 +35,13 @@ extension LuaRuntime {
         case colourNameToRGB, rgbColourToName, adjustColour
         case createGUID, uniqueID
         case lineCount, linesInBuffer, lineInfo, styleInfo, recentLines
+        // Trigger/alias/timer introspection (see LuaRuntime+AutomationInfo.swift).
+        // The *Info calls are synchronous queries returning a field value; the
+        // *List calls return a Lua array via the registry-ref bridge; resetTimer
+        // re-arms a timer's countdown (a deferred control effect).
+        case triggerInfo, aliasInfo, timerInfo
+        case triggerList, aliasList, timerList, pluginTriggerList
+        case resetTimer
         case sqliteAllowed
         case mapperMergeSQL
         case publish
