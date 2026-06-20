@@ -14,6 +14,8 @@ struct DevelopmentSettingsView: View {
     let pluginDBs: PluginDatabasesModel
 
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
+    @AppStorage(PerformanceDiagnosticsDefaults.key)
+    private var performanceDiagnosticsMode = PerformanceDiagnosticsDefaults.defaultMode
     /// Feedback line for the manual recording buttons.
     @State private var recordingStatus: String?
 
@@ -36,6 +38,17 @@ struct DevelopmentSettingsView: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
+            }
+
+            Section("Performance Diagnostics") {
+                Picker("Recording detail", selection: $performanceDiagnosticsMode) {
+                    ForEach(PerformanceProbe.Mode.allCases, id: \.rawValue) { mode in
+                        Text(label(for: mode)).tag(mode.rawValue)
+                    }
+                }
+                Text(description(for: selectedPerformanceMode))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Import Databases") {
@@ -92,4 +105,34 @@ struct DevelopmentSettingsView: View {
             recordingStatus = "Recording stopped."
         }
     }
+
+    private var selectedPerformanceMode: PerformanceProbe.Mode {
+        PerformanceProbe.Mode(rawValue: performanceDiagnosticsMode) ?? .stallOnly
+    }
+
+    private func label(for mode: PerformanceProbe.Mode) -> String {
+        switch mode {
+        case .off: "Off"
+        case .stallOnly: "Stall notes only"
+        case .full: "Full attribution"
+        }
+    }
+
+    private func description(for mode: PerformanceProbe.Mode) -> String {
+        switch mode {
+        case .off:
+            "Do not add performance notes to session recordings."
+        case .stallOnly:
+            "Default for public builds. Records only UI-stall notes when the "
+                + "main thread is visibly blocked."
+        case .full:
+            "Records phase timings, burst summaries, render health, and stall "
+                + "attribution. Use this when collecting performance evidence."
+        }
+    }
+}
+
+enum PerformanceDiagnosticsDefaults {
+    static let key = "performanceDiagnosticsMode"
+    static let defaultMode = PerformanceProbe.Mode.stallOnly.rawValue
 }

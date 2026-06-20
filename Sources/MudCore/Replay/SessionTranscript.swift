@@ -29,7 +29,8 @@ import Foundation
 /// Like ``SessionRecorder`` it is append-only, thread-safe (one `NSLock`),
 /// best-effort (write failures silence further writes rather than throw), and
 /// written next to the binary recording (`session-….log` beside
-/// `session-….jsonl`).
+/// `session-….jsonl`). Writes are queued onto a private serial writer so a
+/// slow filesystem cannot block live session processing.
 public final class SessionTranscript: @unchecked Sendable {
     /// The kind of event a transcript line records.
     public enum Category: String, Sendable {
@@ -53,9 +54,10 @@ public final class SessionTranscript: @unchecked Sendable {
     public let url: URL
 
     private let fileHandle: FileHandle
+    private let writerQueue: DispatchQueue
     private let lock = NSLock()
     private var isClosed = false
-    private let formatter: ISO8601DateFormatter
+    private let timestampFormatter: TranscriptTimestampFormatter
 
     /// Open `url` for appending. Creates the file (and any missing parent
     /// directories) if needed.
@@ -80,27 +82,49 @@ public final class SessionTranscript: @unchecked Sendable {
         } catch {
             throw SessionRecorder.RecorderError.openFailed(error.localizedDescription)
         }
+        writerQueue = DispatchQueue(
+            label: "com.proteles.session-transcript",
+            qos: .utility
+        )
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        // Local time (with offset) so timestamps match the user's wall clock; a
-        // non-UTC zone makes `.withInternetDateTime` emit `+HH:MM` instead of `Z`.
-        formatter.timeZone = TimeZone.current
-        self.formatter = formatter
+        timestampFormatter = TranscriptTimestampFormatter()
     }
 
     deinit {
-        try? fileHandle.close()
+        close()
     }
 
     /// Append one event. Embedded newlines/carriage returns in `text` are
     /// escaped so each event stays on a single line (grep-friendly).
     public func log(_ category: Category, _ text: String, timestamp: Date = Date()) {
-        PerformanceProbe.shared.measure(
-            "transcript.write",
-            events: 1,
-            thresholdMS: 100
-        ) {
+        lock.withLock {
+            guard !isClosed else { return }
+            writerQueue.async { [fileHandle, timestampFormatter] in
+                PerformanceProbe.shared.measure(
+                    "transcript.write",
+                    events: 1,
+                    thresholdMS: 100
+                ) {
+                    Self.write(
+                        category,
+                        text,
+                        timestamp: timestamp,
+                        formatter: timestampFormatter,
+                        fileHandle: fileHandle
+                    )
+                }
+            }
+        }
+    }
+
+    private static func write(
+        _ category: Category,
+        _ text: String,
+        timestamp: Date,
+        formatter: TranscriptTimestampFormatter,
+        fileHandle: FileHandle
+    ) {
+        do {
             let stamp = formatter.string(from: timestamp)
             let escaped = text
                 .replacingOccurrences(of: "\\", with: "\\\\")
@@ -109,25 +133,24 @@ public final class SessionTranscript: @unchecked Sendable {
             let tag = category.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)
             let line = "\(stamp) \(tag) \(escaped)\n"
             guard let data = line.data(using: .utf8) else { return }
-            lock.withLock {
-                guard !isClosed else { return }
-                do {
-                    try fileHandle.write(contentsOf: data)
-                } catch {
-                    isClosed = true
-                }
-            }
+            try fileHandle.write(contentsOf: data)
+        } catch {
+            // Best-effort transcript: write failures are intentionally ignored.
         }
     }
 
     /// Close the file. Subsequent ``log(_:_:timestamp:)`` calls are no-ops;
     /// safe to call multiple times.
     public func close() {
-        lock.withLock {
-            guard !isClosed else { return }
+        let shouldClose = lock.withLock {
+            if isClosed { return false }
+            isClosed = true
+            return true
+        }
+        guard shouldClose else { return }
+        writerQueue.sync {
             try? fileHandle.synchronize()
             try? fileHandle.close()
-            isClosed = true
         }
     }
 
@@ -135,5 +158,22 @@ public final class SessionTranscript: @unchecked Sendable {
     /// directory and stem, `.log` extension instead of `.jsonl`.
     public static func url(pairedWith recordingURL: URL) -> URL {
         recordingURL.deletingPathExtension().appendingPathExtension("log")
+    }
+}
+
+private final class TranscriptTimestampFormatter: @unchecked Sendable {
+    private let formatter: ISO8601DateFormatter
+
+    init() {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        // Local time (with offset) so timestamps match the user's wall clock; a
+        // non-UTC zone makes `.withInternetDateTime` emit `+HH:MM` instead of `Z`.
+        formatter.timeZone = TimeZone.current
+        self.formatter = formatter
+    }
+
+    func string(from date: Date) -> String {
+        formatter.string(from: date)
     }
 }

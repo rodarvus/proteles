@@ -7,6 +7,16 @@ import SwiftUI
 /// Split from `ContentView.swift` for the file-length budget (and because
 /// these are instruments, not UI).
 extension ContentView {
+    func syncPerformanceDiagnosticsMode(_ rawValue: String) {
+        let mode = PerformanceProbe.Mode(rawValue: rawValue) ?? .stallOnly
+        PerformanceProbe.shared.setMode(mode)
+        Task {
+            await session.recordNote(
+                "performance diagnostics: \(mode.transcriptLabel)"
+            )
+        }
+    }
+
     /// A ~50ms MainActor heartbeat; a late wake means the UI thread was
     /// blocked that long, logged to the transcript so perf hitches are
     /// visible in a recording. Log when a wake overruns its budget by
@@ -20,6 +30,7 @@ extension ContentView {
             let now = Date()
             let overrun = now.timeIntervalSince(last) - budget
             last = now
+            guard PerformanceProbe.shared.recordsStalls else { continue }
             if overrun > 0.08 {
                 let note = PerformanceProbe.shared.stallNote(
                     blockedMS: Int(overrun * 1000),
@@ -57,6 +68,7 @@ extension ContentView {
     /// Every frame also lands in ``renderStats`` for the health loop.
     func logSlowFrame(_ stats: RenderFrameStats) {
         renderStats.latest = stats
+        guard PerformanceProbe.shared.recordsAttribution else { return }
         let flushMS = stats.flushDuration / .milliseconds(1)
         let latencyMS = stats.maxArrivalLatency * 1000
         guard flushMS > 12 || latencyMS > 120 else { return }
@@ -72,12 +84,23 @@ extension ContentView {
     func renderHealthLoop() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(600))
+            guard PerformanceProbe.shared.recordsAttribution else { continue }
             guard let stats = renderStats.latest else { continue }
             let flushMS = stats.flushDuration / .milliseconds(1)
             await session.recordNote(
                 "render-health: doc \(stats.documentLines) lines/"
                     + "\(stats.documentUTF16Length) u16, last flush \(Int(flushMS))ms"
             )
+        }
+    }
+}
+
+private extension PerformanceProbe.Mode {
+    var transcriptLabel: String {
+        switch self {
+        case .off: "off"
+        case .stallOnly: "stall notes only"
+        case .full: "full attribution"
         }
     }
 }

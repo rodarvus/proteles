@@ -82,6 +82,8 @@ struct ContentView: View {
     /// Connection preferences (pushed to the session like omitBlankLines).
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
+    @AppStorage(PerformanceDiagnosticsDefaults.key)
+    private var performanceDiagnosticsMode = PerformanceDiagnosticsDefaults.defaultMode
     @AppStorage("keepAlive") private var keepAlive = true
     /// User session logging (Logging preferences); pushed to the session, takes
     /// effect on the next connect.
@@ -170,6 +172,10 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.2), value: resumeBanner)
         .toolbar {
             ToolbarItem(placement: .primaryAction) { panelsMenu }
+        }
+        .onAppear { syncPerformanceDiagnosticsMode(performanceDiagnosticsMode) }
+        .onChange(of: performanceDiagnosticsMode) { _, _ in
+            syncPerformanceDiagnosticsMode(performanceDiagnosticsMode)
         }
         .task {
             for await networkState in session.connectionStates {

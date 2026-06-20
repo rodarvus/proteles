@@ -8,6 +8,12 @@ import Foundation
 public final class PerformanceProbe: @unchecked Sendable {
     public static let shared = PerformanceProbe()
 
+    public enum Mode: String, Sendable, CaseIterable {
+        case off
+        case stallOnly
+        case full
+    }
+
     public struct Snapshot: Sendable, Equatable {
         public let phase: String
         public let durationMS: Int
@@ -29,6 +35,7 @@ public final class PerformanceProbe: @unchecked Sendable {
     public var stallAttributionWindow: TimeInterval = 5
 
     private let lock = NSLock()
+    private var mode: Mode = .stallOnly
     private var inGameAt: Date?
     private var lastSnapshot: Snapshot?
     private var pendingNotes: [String] = []
@@ -39,6 +46,28 @@ public final class PerformanceProbe: @unchecked Sendable {
     private var maxPhase: String?
 
     public init() {}
+
+    public func setMode(_ mode: Mode) {
+        lock.withLock {
+            self.mode = mode
+            if mode != .full {
+                lastSnapshot = nil
+                pendingNotes.removeAll()
+                measuredPhases = 0
+                slowPhases = 0
+                maxDurationMS = 0
+                maxPhase = nil
+            }
+        }
+    }
+
+    public var recordsStalls: Bool {
+        lock.withLock { mode != .off }
+    }
+
+    public var recordsAttribution: Bool {
+        lock.withLock { mode == .full }
+    }
 
     public func reset(now: Date = Date()) {
         lock.withLock {
@@ -68,6 +97,7 @@ public final class PerformanceProbe: @unchecked Sendable {
         thresholdMS: Int,
         _ body: () throws -> T
     ) rethrows -> T {
+        guard recordsAttribution else { return try body() }
         let start = ContinuousClock.now
         do {
             let value = try body()
@@ -98,6 +128,7 @@ public final class PerformanceProbe: @unchecked Sendable {
     ) {
         let durationMS = max(0, Int(duration / .milliseconds(1)))
         lock.withLock {
+            guard mode == .full else { return }
             measuredPhases += 1
             if durationMS > maxDurationMS {
                 maxDurationMS = durationMS
@@ -124,6 +155,7 @@ public final class PerformanceProbe: @unchecked Sendable {
     ) {
         guard events >= thresholdEvents else { return }
         lock.withLock {
+            guard mode == .full else { return }
             let detail = fields
                 .map { "\($0.0) \($0.1)" }
                 .joined(separator: " ")
@@ -152,6 +184,10 @@ public final class PerformanceProbe: @unchecked Sendable {
 
     public func drainPendingNotes() -> [String] {
         lock.withLock {
+            guard mode == .full else {
+                pendingNotes.removeAll()
+                return []
+            }
             let notes = pendingNotes
             pendingNotes.removeAll(keepingCapacity: true)
             return notes
@@ -160,6 +196,14 @@ public final class PerformanceProbe: @unchecked Sendable {
 
     public func drainSummary(now: Date = Date()) -> Summary? {
         lock.withLock {
+            guard mode == .full else {
+                summaryStartedAt = now
+                measuredPhases = 0
+                slowPhases = 0
+                maxDurationMS = 0
+                maxPhase = nil
+                return nil
+            }
             let interval = now.timeIntervalSince(summaryStartedAt)
             guard measuredPhases > 0 else {
                 summaryStartedAt = now

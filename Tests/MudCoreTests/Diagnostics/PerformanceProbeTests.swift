@@ -9,6 +9,7 @@ struct PerformanceProbeTests {
         let probe = PerformanceProbe()
         let now = Date(timeIntervalSince1970: 1000)
         probe.reset(now: now)
+        probe.setMode(.full)
 
         probe.recordPhase(
             "fast.phase",
@@ -36,6 +37,7 @@ struct PerformanceProbeTests {
         let probe = PerformanceProbe()
         let login = Date(timeIntervalSince1970: 2000)
         probe.reset(now: login)
+        probe.setMode(.full)
         probe.stallAttributionWindow = 5
         probe.markInGame(at: login)
         probe.recordPhase(
@@ -58,6 +60,7 @@ struct PerformanceProbeTests {
         let probe = PerformanceProbe()
         let login = Date(timeIntervalSince1970: 2100)
         probe.reset(now: login)
+        probe.setMode(.full)
         probe.stallAttributionWindow = 5
         probe.markInGame(at: login)
         probe.recordPhase(
@@ -80,6 +83,7 @@ struct PerformanceProbeTests {
         let login = Date(timeIntervalSince1970: 3000)
         probe.startupWindow = 120
         probe.reset(now: login)
+        probe.setMode(.full)
         probe.markInGame(at: login)
 
         probe.recordPhase(
@@ -100,6 +104,7 @@ struct PerformanceProbeTests {
         let probe = PerformanceProbe()
         let now = Date(timeIntervalSince1970: 4000)
         probe.reset(now: now)
+        probe.setMode(.full)
         probe.recordPhase(
             "session.lines.process",
             duration: .milliseconds(10),
@@ -128,6 +133,7 @@ struct PerformanceProbeTests {
         let probe = PerformanceProbe()
         let now = Date(timeIntervalSince1970: 4500)
         probe.reset(now: now)
+        probe.setMode(.full)
         probe.markInGame(at: now)
 
         probe.recordEventSummary(
@@ -160,5 +166,40 @@ struct PerformanceProbeTests {
         let note = probe.stallNote(blockedMS: 90, at: now)
         #expect(note.contains("login unknown"))
         #expect(note.contains("last perf phase: none"))
+    }
+
+    @Test("stall-only mode suppresses attribution notes and summaries")
+    func stallOnlySuppressesAttribution() {
+        let probe = PerformanceProbe()
+        let now = Date(timeIntervalSince1970: 6000)
+        probe.reset(now: now)
+        probe.setMode(.stallOnly)
+        probe.recordPhase(
+            "session.lines.process",
+            duration: .milliseconds(250),
+            events: 10,
+            thresholdMS: 100,
+            at: now
+        )
+        probe.recordEventSummary(
+            "session.lines.batch",
+            events: 100,
+            fields: [("displayed", 50), ("gagged", 50)],
+            thresholdEvents: 50
+        )
+
+        #expect(probe.recordsStalls)
+        #expect(!probe.recordsAttribution)
+        #expect(probe.drainPendingNotes().isEmpty)
+        #expect(probe.drainSummary(now: now.addingTimeInterval(30)) == nil)
+    }
+
+    @Test("off mode suppresses stall notes and attribution")
+    func offSuppressesAllDiagnostics() {
+        let probe = PerformanceProbe()
+        probe.setMode(.off)
+
+        #expect(!probe.recordsStalls)
+        #expect(!probe.recordsAttribution)
     }
 }
