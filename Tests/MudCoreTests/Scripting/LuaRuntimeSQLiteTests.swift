@@ -19,6 +19,33 @@ struct LuaRuntimeSQLiteTests {
         #expect(effects == [.echo("Square")])
     }
 
+    @Test("close_vm + GC + close does not use-after-free (lsqlite3 GC hardening)")
+    func closeVmThenGCThenCloseSurvives() async throws {
+        // Regression for the v0.8.3 crash: db:close_vm() finalizes a statement's
+        // vm and nils it but kept the registry entry; once that svm was GC'd the
+        // original dbvm_gc skipped cleanup (vm == NULL), so the stale lightuserdata
+        // key outlived the freed svm and a later cleanupdb (db:close()/db_gc)
+        // dereferenced the dangling pointer — a SIGSEGV in luaH_get/mainposition.
+        // The Search-and-Destroy plugin uses exactly this close_vm-without-close
+        // pattern on many firings. Without the lsqlite3.c fix this test crashes
+        // the whole test process rather than failing an expectation.
+        let lua = try LuaRuntime()
+        let effects = try await lua.run("""
+        local db = sqlite3.open(":memory:")
+        db:exec("CREATE TABLE t(x); INSERT INTO t VALUES(1),(2),(3)")
+        do
+          local stmt = db:prepare("SELECT x FROM t")  -- svm registered, vm != NULL
+          stmt:step()                                  -- stmt then goes out of scope
+        end
+        db:close_vm()              -- finalizes stmt's vm, nils it, leaves the entry
+        collectgarbage("collect")  -- svm GC'd: entry would orphan, svm freed
+        collectgarbage("collect")
+        db:close()                 -- cleanupdb walks the (formerly dangling) entry
+        proteles.echo("ok")
+        """)
+        #expect(effects == [.echo("ok")])
+    }
+
     @Test("ATTACH is denied by the engine authorizer (sandbox can't be escaped)")
     func attachDenied() async throws {
         let lua = try LuaRuntime()

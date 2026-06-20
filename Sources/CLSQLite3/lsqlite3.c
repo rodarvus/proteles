@@ -162,12 +162,23 @@ static sdb_vm *newvm(lua_State *L, sdb *db) {
 }
 
 static int cleanupvm(lua_State *L, sdb_vm *svm) {
-    /* remove entry in database table - no harm if not present in the table */
+    /* remove entry in database table - no harm if not present in the table.
+    ** Proteles: only mutate the db's vm-tracking table when it is actually
+    ** still a table. During GC the database can be finalized *before* one of
+    ** its statements (db_gc -> cleanupdb removes REGISTRY[db]); a later
+    ** dbvm_gc for that statement would then find nil here and the raw
+    ** lua_rawset would dereference a garbage Table* (hvalue of a nil value),
+    ** faulting in luaH_get/mainposition. Skipping the removal when the table
+    ** is gone is exactly the documented "no harm if not present" behaviour.
+    ** Paired with the dbvm_gc change below, this closes the use-after-free
+    ** that crashed the Search-and-Destroy runtime mid-GC. */
     lua_pushlightuserdata(L, svm->db);
     lua_rawget(L, LUA_REGISTRYINDEX);
-    lua_pushlightuserdata(L, svm);
-    lua_pushnil(L);
-    lua_rawset(L, -3);
+    if (lua_istable(L, -1)) {
+        lua_pushlightuserdata(L, svm);
+        lua_pushnil(L);
+        lua_rawset(L, -3);
+    }
     lua_pop(L, 1);
 
     svm->columns = 0;
@@ -242,8 +253,14 @@ static int dbvm_tostring(lua_State *L) {
 
 static int dbvm_gc(lua_State *L) {
     sdb_vm *svm = lsqlite_getvm(L, 1);
-    if (svm->vm != NULL)  /* ignore closed vms */
-        cleanupvm(L, svm);
+    /* Proteles: always drop the statement's entry from the db's vm-tracking
+    ** table, even for an already-closed vm (svm->vm == NULL, e.g. after
+    ** db:close_vm()). The original code skipped cleanup for closed vms, so the
+    ** stale lightuserdata key outlived the freed svm; a later db_gc/cleanupdb
+    ** then dereferenced that dangling pointer (svm->db / svm->vm of freed
+    ** memory) and crashed in luaH_get/mainposition. cleanupvm no-ops the
+    ** sqlite3_finalize when vm is already NULL, so this only removes the entry. */
+    cleanupvm(L, svm);
     return 0;
 }
 
