@@ -14,7 +14,7 @@ enum SessionTestSupport {
     /// async timer loop, which is starved under CI load (#26) — it returns the
     /// instant the condition holds, so a passing test pays no extra time.
     static func poll(_ check: () async -> Bool) async -> Bool {
-        for _ in 0 ..< 400 {
+        for _ in 0..<400 {
             if await check() { return true }
             try? await Task.sleep(for: .milliseconds(20))
         }
