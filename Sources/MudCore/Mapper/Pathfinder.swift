@@ -94,7 +94,7 @@ public struct Pathfinder: Sendable {
 
     // MARK: - Edges
 
-    private struct Edge {
+    struct Edge: Equatable {
         let dir: String
         let to: String
         let cost: Int
@@ -117,10 +117,7 @@ public struct Pathfinder: Sendable {
               let room = graph.rooms[uid]
         else { return [] }
 
-        var result: [Edge] = []
-        for (dir, exit) in room.exits where Self.isUsable(exit.to) && exit.level <= options.level {
-            result.append(Edge(dir: dir, to: exit.to, cost: exit.weight ?? 1))
-        }
+        var result = Self.ownEdges(of: room, level: options.level)
         let jumpLevel = options.level + options.tier * 10
         if options.allowPortals, !room.noportal {
             appendJumpEdges(RoomGraph.portalUID, jumpLevel: jumpLevel, into: &result)
@@ -129,6 +126,40 @@ public struct Pathfinder: Sendable {
             appendJumpEdges(RoomGraph.recallUID, jumpLevel: jumpLevel, into: &result)
         }
         return result
+    }
+
+    /// A room's own (non-pseudo) exits as routing edges, collapsed to **one edge
+    /// per destination**. When a plain cardinal exit and a custom-exit *command*
+    /// reach the SAME room — e.g. GMCP's `w` and a player's `open west;west`,
+    /// both → room 1028 in the petting zoo — the custom command is the one to
+    /// route through: the player added it precisely because the bare direction
+    /// is blocked (a closed/warded door), so a speedwalk that fires a plain `w`
+    /// bounces off the door ("Magical wards around the door bounce you back.")
+    /// and the walk aborts. Prefer the custom exit deterministically.
+    ///
+    /// The reference mapper's BFS (`find_paths`) dedupes by first-seen in Lua
+    /// hash order, so it picks one of the two non-deterministically — which is
+    /// why the custom exit *sometimes* worked and sometimes didn't.
+    static func ownEdges(of room: Room, level: Int) -> [Edge] {
+        var best: [String: Edge] = [:]
+        for exit in room.exits.values where isUsable(exit.to) && exit.level <= level {
+            let candidate = Edge(dir: exit.dir, to: exit.to, cost: exit.weight ?? 1)
+            if let existing = best[exit.to], !prefers(candidate, over: existing) { continue }
+            best[exit.to] = candidate
+        }
+        return Array(best.values)
+    }
+
+    /// Tie-break between two exits to the same room: a custom-exit *command*
+    /// beats a plain cardinal (see ``ownEdges(of:level:)``); failing that the
+    /// cheaper edge wins; failing that the lexically-smaller `dir`, so the
+    /// choice is stable regardless of dictionary iteration order.
+    static func prefers(_ candidate: Edge, over existing: Edge) -> Bool {
+        let candidateCustom = !RichExits.isCardinalDirection(candidate.dir)
+        let existingCustom = !RichExits.isCardinalDirection(existing.dir)
+        if candidateCustom != existingCustom { return candidateCustom }
+        if candidate.cost != existing.cost { return candidate.cost < existing.cost }
+        return candidate.dir < existing.dir
     }
 
     private func appendJumpEdges(_ pseudoUID: String, jumpLevel: Int, into result: inout [Edge]) {

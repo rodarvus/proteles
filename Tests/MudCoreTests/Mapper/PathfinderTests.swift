@@ -95,6 +95,37 @@ struct PathfinderTests {
         let path = pf.path(from: "1", to: "99")
         #expect(path?.map(\.dir) == ["n", "enter portal"])
     }
+
+    @Test("A custom-exit command is preferred over a coincident cardinal exit")
+    func customExitPreferredOverCardinal() {
+        // Petting-zoo room 986 has BOTH a GMCP `w` and a player cexit
+        // `open west;west` to room 1028 — the cexit opens a warded door the bare
+        // `w` bounces off. The two exits must collapse to the cexit, not the `w`.
+        var room = Room(uid: "986")
+        room.exits["w"] = Exit(dir: "w", to: "1028")
+        room.exits["open west;west"] = Exit(dir: "open west;west", to: "1028")
+        let toDest = Pathfinder.ownEdges(of: room, level: 0).filter { $0.to == "1028" }
+        #expect(toDest.count == 1) // collapsed to a single edge
+        #expect(toDest.first?.dir == "open west;west") // …and it's the cexit
+    }
+
+    @Test("Routing through a cardinal+cexit pair uses the cexit, not the bare direction")
+    func routePrefersCustomExit() {
+        // End-to-end: A -s-> B, and B reaches D by both `w` and `open west;west`.
+        // The speedwalk must end with the cexit command, not a bare `w` that
+        // would bounce off the closed door and strand the walk in B.
+        var roomA = Room(uid: "A")
+        roomA.exits["s"] = Exit(dir: "s", to: "B")
+        var roomB = Room(uid: "B")
+        roomB.exits["w"] = Exit(dir: "w", to: "D")
+        roomB.exits["open west;west"] = Exit(dir: "open west;west", to: "D")
+        var g = RoomGraph()
+        g.rooms["A"] = roomA
+        g.rooms["B"] = roomB
+        g.rooms["D"] = Room(uid: "D")
+        let path = Pathfinder(graph: g).path(from: "A", to: "D")
+        #expect(path?.map(\.dir) == ["s", "open west;west"])
+    }
 }
 
 @Suite("Speedwalk + StepWalker")
