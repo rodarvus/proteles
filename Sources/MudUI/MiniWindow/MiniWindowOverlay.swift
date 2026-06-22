@@ -70,7 +70,8 @@ private struct MiniWindowFrame: View {
                 .updating($drag) { value, state, _ in state = value.translation }
                 .onEnded { value in
                     store.setPosition(clamp(base: base, translation: value.translation), for: scene)
-                }
+                },
+            including: .gesture
         )
     }
 

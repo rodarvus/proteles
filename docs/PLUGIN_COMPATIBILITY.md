@@ -69,9 +69,10 @@ These don't fully work yet:
 ### Themed pop-up–window plugins
 Plugins built on the Aardwolf package's *themed* miniwindow library — several
 info/damage/equipment windows, GQ/NPC panels, a themed clock, and similar — don't
-render fully yet; they use parts of the window API Proteles still stubs. Plugins
-using the *basic* window API do draw (e.g. Kelaire's EnemyStatus and WhatRoom).
-Completing this is the single largest piece of remaining plugin work.
+render fully yet; they use advanced parts of the window API Proteles still
+stubs. Plugins using the *basic* window API do draw (e.g. Kelaire's EnemyStatus
+and WhatRoom), and the common window/font/image/hotspot query calls are now
+implemented for themed-library layouts.
 
 ### Plugins on authors' own shared frameworks
 The "Epic" plugin family (Tallimos) and Winkle's GUI plugins build on shared
@@ -125,7 +126,7 @@ replaced by native panels.
 | `GetPluginVariable` | ✅ | cross-plugin reads |
 | `GetInfo(n)` | 🟡 | the path/identity/time/flag subset the corpus uses; window-geometry numbers stubbed |
 | `GetPluginID` | ✅ | |
-| `GetPluginInfo(id, n)` | 🟡 | the plugin directory + identity/script fields the corpus uses |
+| `GetPluginInfo(id, n)` | 🟡 | loaded-plugin and native-bridge identity/enabled fields the corpus uses |
 | `CallPlugin` | ✅ | per-plugin call routing — routes to native plugins (GMCP handler, mapper, Chat Capture) by id and forwards results; reports `eOK` |
 | `BroadcastPlugin` / `OnPluginBroadcast` | ✅ | pub/sub; native GMCP is bridged in as the GMCP-handler's broadcast |
 | `IsConnected` | ✅ | live connection state |
@@ -138,7 +139,7 @@ replaced by native panels.
 | `OpenBrowser` | ✅ | web links only, per-plugin confirmation (0.8.5) |
 | `EnableTrigger`/`EnableTimer`/`EnableGroup`/`EnableAliasGroup` | ✅ | name-based enable/disable; triggers/timers carry loader-assigned names |
 | `AddTriggerEx`, `AddAlias`, `AddTimer` (programmatic) | ✅ | runtime registration through the shim → `ScriptEngine` (alongside declarative XML); recurring `AddTimer` fires repeatedly |
-| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; the *themed* library's advanced calls are stubbed (see Known gaps) |
+| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, while advanced transform/filter/window-image calls remain stubbed (see Known gaps) |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 | raw `socket` / `ssl` TLS | ❌ | not exposed to plugins (sandboxing) |
 
@@ -147,7 +148,7 @@ replaced by native panels.
 `OnPluginInstall` ✅ · `OnPluginConnect`/`OnPluginDisconnect` ✅ ·
 `OnPluginBroadcast` ✅ · `OnPluginSaveState` ✅ (fired; host persists vars) ·
 `OnPluginListChanged` ⬜ · `OnPluginEnable`/`OnPluginDisable` ⬜ ·
-`OnPluginTelnetSubnegotiation` ⬜ (native GMCP usually makes it unnecessary).
+`OnPluginTelnetSubnegotiation` ✅ (native GMCP usually makes it unnecessary).
 
 ### Module loading & helper libraries
 

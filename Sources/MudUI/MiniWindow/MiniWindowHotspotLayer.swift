@@ -54,28 +54,34 @@ private struct HotspotRegion: View {
             .help(hotspot.tooltip)
             .onHover { inside in
                 if inside {
-                    fire(.mouseOver, hotspot.mouseOver)
+                    fire(.mouseOver, hotspot.mouseOver, x: hotspot.left, y: hotspot.top)
                 } else {
-                    fire(.cancelMouseOver, hotspot.cancelMouseOver)
+                    fire(.cancelMouseOver, hotspot.cancelMouseOver, x: hotspot.left, y: hotspot.top)
                 }
             }
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !pressed else { return }
-                        pressed = true
-                        fire(.mouseDown, hotspot.mouseDown)
+                    .onChanged { value in
+                        let point = windowPoint(value.location)
+                        if pressed {
+                            fire(.dragMove, hotspot.dragMove, x: point.x, y: point.y)
+                        } else {
+                            pressed = true
+                            fire(.mouseDown, hotspot.mouseDown, x: point.x, y: point.y)
+                        }
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
+                        let point = windowPoint(value.location)
                         pressed = false
-                        fire(.mouseUp, hotspot.mouseUp)
+                        fire(.mouseUp, hotspot.mouseUp, x: point.x, y: point.y)
+                        fire(.dragRelease, hotspot.dragRelease, x: point.x, y: point.y)
                     }
             )
     }
 
     /// Emit an event only when the plugin registered a callback for it (MUSHclient
     /// passes "" for "no handler").
-    private func fire(_ kind: MiniWindowEvent.Kind, _ callback: String) {
+    private func fire(_ kind: MiniWindowEvent.Kind, _ callback: String, x: Int, y: Int) {
         guard !callback.isEmpty else { return }
         onEvent(MiniWindowEvent(
             windowName: scene.name,
@@ -83,7 +89,16 @@ private struct HotspotRegion: View {
             hotspotID: hotspot.id,
             kind: kind,
             callback: callback,
-            flags: 0 // modifier/button decoding deferred (spike)
+            flags: 0, // modifier/button decoding deferred (spike)
+            x: x,
+            y: y
         ))
+    }
+
+    private func windowPoint(_ location: CGPoint) -> (x: Int, y: Int) {
+        (
+            x: hotspot.left + Int(location.x.rounded(.down)),
+            y: hotspot.top + Int(location.y.rounded(.down))
+        )
     }
 }

@@ -42,7 +42,8 @@ extension SessionController {
         let effects = await scriptEngine.callPluginFunction(
             event.pluginID,
             event.callback,
-            [.number(Double(event.flags)), .string(event.hotspotID)]
+            [.number(Double(event.flags)), .string(event.hotspotID)],
+            event: event
         )
         if !effects.isEmpty { await applyScriptEffects(effects) }
     }

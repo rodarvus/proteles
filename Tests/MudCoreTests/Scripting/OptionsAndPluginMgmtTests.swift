@@ -115,6 +115,20 @@ struct OptionsAndPluginMgmtTests {
         #expect(effects.contains(.send("hasnot=30036"))) // == eNoSuchRoutine
     }
 
+    @Test("GetPluginInfo reports loaded and bridged companion plugins")
+    func getPluginInfoForCompanions() async throws {
+        let engine = try ScriptEngine()
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: companionPlugin))
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: pluginInfoProbe))
+
+        let effects = await engine.process(line: "info").effects
+        #expect(effects.contains(.send("installed=true")))
+        #expect(effects.contains(.send("enabled=true")))
+        #expect(effects.contains(.send("name=Companion")))
+        #expect(effects.contains(.send("bridge=true")))
+        #expect(effects.contains(.send("bridgeName=Aardwolf GMCP Handler")))
+    }
+
     private let pluginMgmtPlugin = """
     <muclient>
     <plugin id="com.test.pmgmt" name="PMgmt"/>
@@ -130,6 +144,31 @@ struct OptionsAndPluginMgmtTests {
     <script><![CDATA[
     function MyRoutine() end
     ]]></script>
+    </muclient>
+    """
+
+    private let companionPlugin = """
+    <muclient>
+    <plugin id="com.test.companion" name="Companion" version="2.3"/>
+    <script><![CDATA[
+    function CompanionRoutine() end
+    ]]></script>
+    </muclient>
+    """
+
+    private let pluginInfoProbe = """
+    <muclient>
+    <plugin id="com.test.pinfo" name="PInfo"/>
+    <triggers>
+      <trigger name="info" enabled="y" regexp="y" match="^info$" send_to="12"><send>
+        local id = "com.test.companion"
+        Send("installed=" .. tostring(IsPluginInstalled(id)))
+        Send("enabled=" .. tostring(GetPluginInfo(id, 17)))
+        Send("name=" .. tostring(GetPluginName(id)))
+        Send("bridge=" .. tostring(GetPluginInfo("3e7dedbe37e44942dd46d264", 17)))
+        Send("bridgeName=" .. tostring(GetPluginInfo("3e7dedbe37e44942dd46d264", 1)))
+      </send></trigger>
+    </triggers>
     </muclient>
     """
 }

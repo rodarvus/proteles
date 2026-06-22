@@ -249,6 +249,9 @@ public actor LuaRuntime {
     /// op of a run clears the prior frame's commands/hotspots, so a re-draw pass
     /// replaces wholesale (one `.updateMiniWindow` == one frame), bounding growth.
     nonisolated(unsafe) var miniWindowFramePainted: Set<String> = []
+    /// Last pointer state per miniwindow, backing `WindowInfo` mouse/hotspot
+    /// queries during hotspot callbacks.
+    nonisolated(unsafe) var miniWindowPointerStates: [String: MiniWindowPointerState] = [:]
 
     /// Create a runtime. When `sandboxed` (the default), the dangerous
     /// standard-library surface is removed before use (see ``sandboxScript``);
@@ -456,6 +459,7 @@ public actor LuaRuntime {
         setHostFunction("trace", .trace)
         setHostFunction("pluginList", .pluginList)
         setHostFunction("pluginSupports", .pluginSupports)
+        setHostFunction("pluginInfo", .pluginInfo)
         setHostFunction("unloadPlugin", .unloadPlugin)
         setHostFunction("connect", .connect)
         setHostFunction("outputFontName", .outputFontName)

@@ -11,8 +11,12 @@ public extension ScriptEngine {
     func callPluginFunction(
         _ pluginID: String,
         _ name: String,
-        _ arguments: [LuaValue] = []
+        _ arguments: [LuaValue] = [],
+        event: MiniWindowEvent? = nil
     ) async -> [ScriptEffect] {
-        await runtime.callPluginCallback(pluginID, name, arguments)
+        if let event {
+            runtime.recordMiniWindowEvent(event)
+        }
+        return await runtime.callPluginCallback(pluginID, name, arguments)
     }
 }

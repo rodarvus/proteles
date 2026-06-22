@@ -32,7 +32,9 @@ extension LuaRuntime {
         ("windowResize", .windowResize), ("windowPosition", .windowPosition), ("windowRectOp", .windowRectOp),
         ("windowText", .windowText), ("windowLine", .windowLine), ("windowSetPixel", .windowSetPixel),
         ("windowFont", .windowFont), ("windowTextWidth", .windowTextWidth), ("windowInfo", .windowInfo),
-        ("windowFontInfo", .windowFontInfo), ("windowAddHotspot", .windowAddHotspot),
+        ("windowFontInfo", .windowFontInfo), ("windowList", .windowList), ("windowInfoList", .windowInfoList),
+        ("windowFontList", .windowFontList), ("windowImageList", .windowImageList),
+        ("windowHotspotList", .windowHotspotList), ("windowAddHotspot", .windowAddHotspot),
         ("windowDeleteHotspot", .windowDeleteHotspot), ("windowDeleteAllHotspots", .windowDeleteAllHotspots),
         ("windowMoveHotspot", .windowMoveHotspot), ("windowHotspotInfo", .windowHotspotInfo),
         ("windowDragHandler", .windowDragHandler), ("windowScrollwheelHandler", .windowScrollwheelHandler),
@@ -51,7 +53,8 @@ extension LuaRuntime {
         switch function {
         case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition,
              .windowRectOp, .windowText, .windowLine, .windowSetPixel, .windowFont,
-             .windowTextWidth, .windowInfo, .windowFontInfo, .windowAddHotspot, .windowDeleteHotspot,
+             .windowTextWidth, .windowInfo, .windowFontInfo, .windowList, .windowInfoList,
+             .windowFontList, .windowImageList, .windowHotspotList, .windowAddHotspot, .windowDeleteHotspot,
              .windowDeleteAllHotspots, .windowMoveHotspot, .windowHotspotInfo, .windowDragHandler,
              .windowScrollwheelHandler, .windowMenu, .windowLoadImage, .windowDrawImage,
              .windowImageInfo, .windowCircleOp, .windowGradient, .windowPolygon, .windowArc,
@@ -110,6 +113,8 @@ extension LuaRuntime {
             return [.number(appendText(name, arguments))]
         case .windowTextWidth, .windowInfo, .windowFontInfo:
             return [miniWindowQuery(function, name, arguments)]
+        case .windowList, .windowInfoList, .windowFontList, .windowImageList, .windowHotspotList:
+            return [miniWindowListValue(function, name)]
         default:
             return miniWindowExtraCall(function, name, arguments)
         }
@@ -173,6 +178,7 @@ extension LuaRuntime {
             backgroundColour: Int(Self.argDouble(arguments, 7)),
             visible: previous?.visible ?? true,
             fonts: previous?.fonts ?? [:],
+            images: previous?.images ?? [:],
             hotspots: keepHotspots ? (previous?.hotspots ?? []) : []
         )
         // Recreate paints a fresh surface filled with the background colour.
@@ -288,22 +294,80 @@ extension LuaRuntime {
 
     // MARK: - Queries
 
-    /// `WindowInfo(name, infoType)` — the subset plugins actually read for
-    /// layout. Window geometry (1=left, 2=top, 3=width, 4=height), visibility (5),
-    /// background (8). Unknown info types return nil (MUSHclient parity-ish).
+    /// `WindowInfo(name, infoType)` — geometry, visibility, pointer state, and
+    /// owner metadata used by Aardwolf-package miniwindow helpers.
     private nonisolated func miniWindowInfoValue(_ name: String, _ info: Int) -> LuaValue {
         guard let scene = miniWindows[name] else { return .nil }
+        if let value = miniWindowBaseInfoValue(scene, info) { return value }
+        if let value = miniWindowBoundsInfoValue(scene, info) { return value }
+        if let value = miniWindowPointerInfoValue(miniWindowPointerStates[name], info) { return value }
         switch info {
-        case 1: return .number(Double(scene.left))
-        case 2: return .number(Double(scene.top))
-        case 3: return .number(Double(scene.width))
-        case 4: return .number(Double(scene.height))
-        case 5: return .boolean(scene.visible)
-        case 6: return .number(Double(scene.position))
-        case 7: return .number(Double(scene.flags))
-        case 8: return .number(Double(scene.backgroundColour))
+        case 20: return .number(Double(scene.zOrder))
+        case 23: return .string(scene.pluginID)
         default: return .nil
         }
+    }
+
+    private nonisolated func miniWindowBaseInfoValue(_ scene: MiniWindowScene, _ info: Int) -> LuaValue? {
+        switch info {
+        case 1: .number(Double(scene.left))
+        case 2: .number(Double(scene.top))
+        case 3: .number(Double(scene.width))
+        case 4: .number(Double(scene.height))
+        case 5: .boolean(scene.visible)
+        case 6: .number(Double(scene.position))
+        case 7: .number(Double(scene.flags))
+        case 8: .number(Double(scene.backgroundColour))
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowBoundsInfoValue(_ scene: MiniWindowScene, _ info: Int) -> LuaValue? {
+        switch info {
+        case 10: .number(Double(scene.left))
+        case 11: .number(Double(scene.top))
+        case 12: .number(Double(scene.left + scene.width))
+        case 13: .number(Double(scene.top + scene.height))
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowPointerInfoValue(
+        _ pointer: MiniWindowPointerState?, _ info: Int
+    ) -> LuaValue? {
+        switch info {
+        case 14: .number(Double(pointer?.downX ?? 0))
+        case 15: .number(Double(pointer?.downY ?? 0))
+        case 17: .number(Double(pointer?.currentX ?? 0))
+        case 18: .number(Double(pointer?.currentY ?? 0))
+        case 19: .string(pointer?.hotspotID ?? "")
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowListValue(_ function: HostFunction, _ name: String) -> LuaValue {
+        switch function {
+        case .windowList:
+            pushNameArray(miniWindows.keys.sorted())
+        case .windowInfoList:
+            pushNameArray(miniWindows[name].map { windowInfoKeys(for: $0) } ?? [])
+        case .windowFontList:
+            pushNameArray(miniWindows[name]?.fonts.keys.sorted() ?? [])
+        case .windowImageList:
+            pushNameArray(miniWindows[name]?.images.keys.sorted() ?? [])
+        case .windowHotspotList:
+            pushNameArray(miniWindows[name]?.hotspots.map(\.id).sorted() ?? [])
+        default:
+            pushNameArray([])
+        }
+    }
+
+    private nonisolated func windowInfoKeys(for scene: MiniWindowScene) -> [String] {
+        var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "10", "11", "12", "13", "20", "23"]
+        if miniWindowPointerStates[scene.name] != nil {
+            keys.append(contentsOf: ["14", "15", "17", "18", "19"])
+        }
+        return keys
     }
 
     /// `WindowFontInfo(name, fontID, infoType)` — the metrics plugins read for
@@ -382,5 +446,27 @@ extension LuaRuntime {
             $0.commands.removeAll(keepingCapacity: true)
             $0.hotspots.removeAll(keepingCapacity: true)
         }
+    }
+}
+
+struct MiniWindowPointerState: Equatable {
+    var currentX: Int = 0
+    var currentY: Int = 0
+    var downX: Int = 0
+    var downY: Int = 0
+    var hotspotID: String = ""
+}
+
+extension LuaRuntime {
+    nonisolated func recordMiniWindowEvent(_ event: MiniWindowEvent) {
+        var state = miniWindowPointerStates[event.windowName] ?? MiniWindowPointerState()
+        state.currentX = event.x
+        state.currentY = event.y
+        state.hotspotID = event.hotspotID
+        if event.kind == .mouseDown {
+            state.downX = event.x
+            state.downY = event.y
+        }
+        miniWindowPointerStates[event.windowName] = state
     }
 }

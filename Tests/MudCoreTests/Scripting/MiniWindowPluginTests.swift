@@ -95,4 +95,68 @@ struct MiniWindowPluginTests {
         }
         #expect(notes.contains("clicked"))
     }
+
+    @Test("miniwindow list/info/image queries reflect retained scene state")
+    func listAndImageQueries() async throws {
+        let png1x1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" +
+            "AAAADUlEQVR42mP8z8BQDwAFgwJ/lD0RTwAAAABJRU5ErkJggg=="
+        let xml = """
+        <muclient><plugin id="dddddddddddddddddddddddd" name="MWLists"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          WindowCreate("w", 10, 20, 120, 40, miniwin.pos_top_left, 0, 0x101010)
+          WindowFont("w", "f", "Menlo", 11)
+          WindowLoadImageMemory("w", "img", "\(png1x1)")
+          WindowAddHotspot("w", "h", 0, 0, 120, 40, "", "", "onDown", "", "", "tip", miniwin.cursor_hand, 0)
+          local windows = WindowList()
+          local fonts = WindowFontList("w")
+          local images = WindowImageList("w")
+          local hotspots = WindowHotspotList("w")
+          Send("window=" .. tostring(windows[1]))
+          Send("font=" .. tostring(fonts[1]))
+          Send("image=" .. tostring(images[1]))
+          Send("hotspot=" .. tostring(hotspots[1]))
+          Send("bounds=" .. tostring(WindowInfo("w", 10)) .. "," .. tostring(WindowInfo("w", 11)) .. "," ..
+            tostring(WindowInfo("w", 12)) .. "," .. tostring(WindowInfo("w", 13)))
+          Send("owner=" .. tostring(WindowInfo("w", 23)))
+          Send("imgsize=" .. tostring(WindowImageInfo("w", "img", 2)) .. "x" ..
+            tostring(WindowImageInfo("w", "img", 3)))
+        end
+        function onDown(flags, id)
+          Send("pointer=" .. tostring(WindowInfo("w", 14)) .. "," .. tostring(WindowInfo("w", 15)) .. "," ..
+            tostring(WindowInfo("w", 17)) .. "," .. tostring(WindowInfo("w", 18)) .. "," ..
+            tostring(WindowInfo("w", 19)))
+        end
+        ]]></script>
+        </muclient>
+        """
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        let installEffects = await engine.loadPlugin(plugin)
+        #expect(installEffects.contains(.send("window=w")))
+        #expect(installEffects.contains(.send("font=f")))
+        #expect(installEffects.contains(.send("image=img")))
+        #expect(installEffects.contains(.send("hotspot=h")))
+        #expect(installEffects.contains(.send("bounds=10,20,130,60")))
+        #expect(installEffects.contains(.send("owner=dddddddddddddddddddddddd")))
+        #expect(installEffects.contains(.send("imgsize=1x1")))
+
+        let event = MiniWindowEvent(
+            windowName: "w",
+            pluginID: "dddddddddddddddddddddddd",
+            hotspotID: "h",
+            kind: .mouseDown,
+            callback: "onDown",
+            flags: 0,
+            x: 7,
+            y: 8
+        )
+        let callbackEffects = await engine.callPluginFunction(
+            "dddddddddddddddddddddddd",
+            "onDown",
+            [.number(0), .string("h")],
+            event: event
+        )
+        #expect(callbackEffects.contains(.send("pointer=7,8,7,8,h")))
+    }
 }

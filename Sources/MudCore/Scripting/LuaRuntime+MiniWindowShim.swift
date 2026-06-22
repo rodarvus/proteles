@@ -138,10 +138,10 @@ extension LuaRuntime {
     function WindowCreateImage(...) return eOK end
     function WindowWrite(...) return eOK end
     function WindowGetPixel(...) return -1 end
-    function WindowList() return {} end
-    function WindowInfoList() return {} end
-    function WindowFontList(...) return {} end
-    function WindowImageList(...) return {} end
-    function WindowHotspotList(...) return {} end
+    function WindowList() return proteles.windowList() end
+    function WindowInfoList(...) return proteles.windowInfoList(...) end
+    function WindowFontList(...) return proteles.windowFontList(...) end
+    function WindowImageList(...) return proteles.windowImageList(...) end
+    function WindowHotspotList(...) return proteles.windowHotspotList(...) end
     """#
 }

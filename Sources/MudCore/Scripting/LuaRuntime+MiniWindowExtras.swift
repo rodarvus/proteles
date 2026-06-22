@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// Phase 2–4 of the miniwindow surface: hotspots + mouse routing (Phase 2),
 /// images (Phase 3), and the shape/gradient tail (Phase 4). Split from
@@ -32,7 +33,7 @@ extension LuaRuntime {
         switch function {
         case .windowLoadImage: loadMiniWindowImage(name, arguments)
         case .windowDrawImage: appendImageDraw(name, arguments)
-        case .windowImageInfo: return [.nil]
+        case .windowImageInfo: return [miniWindowImageInfoValue(name, arguments)]
         case .windowCircleOp: appendCircleOp(name, arguments)
         case .windowGradient: appendGradient(name, arguments)
         case .windowPolygon: appendPolygon(name, arguments)
@@ -131,7 +132,7 @@ extension LuaRuntime {
     /// read sandbox-gated. Records a `.loadMiniWindowImage` effect the session
     /// forwards to the renderer's image store. Bytes travel once, here — draw
     /// commands then reference only the id.
-    private nonisolated func loadMiniWindowImage(_: String, _ arguments: [LuaValue]) {
+    private nonisolated func loadMiniWindowImage(_ name: String, _ arguments: [LuaValue]) {
         let imageID = Self.argString(arguments, 1)
         guard !imageID.isEmpty else { return }
         let source = Self.argString(arguments, 2)
@@ -140,7 +141,33 @@ extension LuaRuntime {
             ? (Data(base64Encoded: source) ?? source.data(using: .utf8))
             : readFileData(source)
         guard let data, !data.isEmpty else { return }
+        let metadata = Self.imageMetadata(id: imageID, data: data)
+        updateMiniWindow(name) { scene in
+            scene.images[imageID] = metadata
+        }
         effects.append(.loadMiniWindowImage(pluginID: pluginContext.pluginID, imageID: imageID, data: data))
+    }
+
+    private nonisolated func miniWindowImageInfoValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
+        let imageID = Self.argString(arguments, 1)
+        guard let image = miniWindows[name]?.images[imageID] else { return .nil }
+        switch Int(Self.argDouble(arguments, 2)) {
+        case 2: return .number(Double(image.width))
+        case 3: return .number(Double(image.height))
+        default: return .nil
+        }
+    }
+
+    private nonisolated static func imageMetadata(id: String, data: Data) -> MiniWindowImageInfo {
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        else {
+            return MiniWindowImageInfo(id: id, width: 0, height: 0)
+        }
+        let width = properties[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let height = properties[kCGImagePropertyPixelHeight] as? Int ?? 0
+        return MiniWindowImageInfo(id: id, width: width, height: height)
     }
 
     private nonisolated func appendImageDraw(_ name: String, _ arguments: [LuaValue]) {

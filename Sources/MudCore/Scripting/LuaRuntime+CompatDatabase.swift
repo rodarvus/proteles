@@ -26,6 +26,16 @@ extension LuaRuntime {
     -- A shared global (the shim loads once); keyed by the plugin-chosen name.
     __protelesDatabases = __protelesDatabases or {}
     local function __db(name) return __protelesDatabases[tostring(name)] end
+    local function __sqliteTypeFor(value)
+      if value == nil then return sqlite3.NULL or 5 end
+      local kind = type(value)
+      if kind == "number" then
+        if value == math.floor(value) then return sqlite3.INTEGER or 1 end
+        return sqlite3.FLOAT or 2
+      end
+      if kind == "string" then return sqlite3.TEXT or 3 end
+      return sqlite3.BLOB or 4
+    end
 
     function DatabaseOpen(name, filename, flags)
       name = tostring(name)
@@ -37,7 +47,9 @@ extension LuaRuntime {
       -- pcall: the guarded sqlite3.open raises on a sandbox-denied path.
       local ok, db, code = pcall(sqlite3.open, tostring(filename))
       if not ok or not db then return code or -1 end
-      __protelesDatabases[name] = { db = db, path = filename, stmt = nil, cols = 0 }
+      __protelesDatabases[name] = {
+        db = db, path = filename, stmt = nil, cols = 0, validRow = false, types = {}
+      }
       return sqlite3.OK
     end
 
@@ -64,13 +76,21 @@ extension LuaRuntime {
     function DatabaseStep(name)
       local d = __db(name)
       if not (d and d.stmt) then return -4 end
-      return d.stmt:step() -- raw rc; plugins compare to sqlite3.ROW / sqlite3.DONE
+      local rc = d.stmt:step() -- raw rc; plugins compare to sqlite3.ROW / sqlite3.DONE
+      d.validRow = rc == sqlite3.ROW
+      d.types = {}
+      if d.validRow then
+        for index, value in ipairs(d.stmt:get_values()) do
+          d.types[index] = __sqliteTypeFor(value)
+        end
+      end
+      return rc
     end
 
     function DatabaseFinalize(name)
       local d = __db(name)
       if not d then return -1 end
-      if d.stmt then d.stmt:finalize(); d.stmt = nil; d.cols = 0 end
+      if d.stmt then d.stmt:finalize(); d.stmt = nil; d.cols = 0; d.validRow = false; d.types = {} end
       return sqlite3.OK
     end
 
@@ -78,6 +98,8 @@ extension LuaRuntime {
       local d = __db(name)
       if not (d and d.stmt) then return -4 end
       d.stmt:reset()
+      d.validRow = false
+      d.types = {}
       return sqlite3.OK
     end
 
@@ -106,6 +128,12 @@ extension LuaRuntime {
     function DatabaseColumnText(name, col)
       local v = DatabaseColumnValue(name, col)
       return v ~= nil and tostring(v) or ""
+    end
+    function DatabaseColumnType(name, col)
+      local d = __db(name)
+      if not (d and d.stmt) then return 5 end
+      local index = tonumber(col) or 1
+      return (d.types and d.types[index]) or 5
     end
 
     -- Array accessors: lsqlite3 get_values/get_names are already 1-indexed.
@@ -137,10 +165,24 @@ extension LuaRuntime {
       local d = __db(name)
       return (d and d.db:changes()) or 0
     end
+    function DatabaseTotalChanges(name)
+      local d = __db(name)
+      return (d and d.db:total_changes()) or 0
+    end
 
     function DatabaseLastInsertRowid(name)
       local d = __db(name)
       return (d and d.db:last_insert_rowid()) or 0
+    end
+    function DatabaseInfo(name, infoType)
+      local d = __db(name)
+      if not d then return nil end
+      local n = tonumber(infoType) or 0
+      if n == 1 then return d.path end
+      if n == 2 then return d.stmt ~= nil end
+      if n == 3 then return d.validRow == true end
+      if n == 4 then return d.cols or 0 end
+      return nil
     end
 
     -- Convenience: prepare -> step -> first column -> finalize.

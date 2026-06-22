@@ -358,20 +358,14 @@ public extension LuaRuntime {
     -- GetPluginInfo(id, 20) = the plugin's directory; resolved for the
     -- current plugin via GetInfo(60). Other infotypes/plugins return nil.
     function GetPluginInfo(id, n)
-      if id ~= GetPluginID() then return nil end
-      if n == 20 then return proteles.info(60) end -- directory
-      -- 6 = plugin source-file path. We don't track the .xml filename, but many
-      -- plugins (fixpath.lua, self-updaters) only string.match it down to the
-      -- directory — so returning the plugin dir keeps them from crashing on a nil.
-      if n == 6 then return proteles.info(60) end
-      if n == 17 then return true end -- enabled: the current plugin is loaded + running
-      return proteles.info(n) -- 1 = name, 19 = version (others → nil)
+      local value = proteles.pluginInfo(tostring(id or GetPluginID()), tonumber(n) or 0)
+      if value ~= nil then return value end
+      return nil
     end
     -- GetPluginName() = the current plugin's name; GetPluginName(id) for any
-    -- other plugin is unknown to us (we only host the current one) → "".
+    -- loaded/bridged plugin queries the host registry.
     function GetPluginName(id)
-      if id == nil or id == GetPluginID() then return proteles.info(1) or "" end
-      return ""
+      return proteles.pluginInfo(tostring(id or GetPluginID()), 1) or ""
     end
     -- Plugin enable/disable + presence. We host one plugin per environment and
     -- can't toggle another plugin from Lua, so these are benign no-ops that

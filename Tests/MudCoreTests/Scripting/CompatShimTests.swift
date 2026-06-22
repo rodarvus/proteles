@@ -342,13 +342,14 @@ struct CompatShimTests {
         #expect(try await lua.boolean("IsConnected() == true"))
     }
 
-    @Test("GetPluginInfo(id, 20) returns the plugin directory")
+    @Test("GetPluginInfo directory fields return the plugin directory")
     func getPluginInfoDirectory() async throws {
         let lua = try await shimmed()
         await lua.setPluginContext(PluginContext(
             pluginID: "p", pluginName: "P", pluginDirectory: "/plugins/p"
         ))
         #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p")
+        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 6)") == "/plugins/p")
     }
 
     @Test("Execute runs script-prefixed text as Lua, plain text as a command")

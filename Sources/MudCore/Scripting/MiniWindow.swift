@@ -58,6 +58,21 @@ public struct MiniWindowFont: Sendable, Equatable {
     }
 }
 
+/// Metadata for an image loaded into a miniwindow by `WindowLoadImage*`.
+/// The actual bytes stay in the renderer's image store; the runtime keeps only
+/// enough information for synchronous `WindowImageInfo` and list queries.
+public struct MiniWindowImageInfo: Sendable, Equatable {
+    public let id: String
+    public let width: Int
+    public let height: Int
+
+    public init(id: String, width: Int, height: Int) {
+        self.id = id
+        self.width = width
+        self.height = height
+    }
+}
+
 /// An interactive region (`WindowAddHotspot`). Each callback is a **Lua function
 /// name** (a global in the owning plugin's environment) the host invokes when
 /// the mouse interacts with the region — mirroring MUSHclient, where hotspot
@@ -185,6 +200,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
     public var visible: Bool
     public var zOrder: Int
     public var fonts: [String: MiniWindowFont]
+    public var images: [String: MiniWindowImageInfo]
     public var commands: [MiniWindowCommand]
     public var hotspots: [MiniWindowHotspot]
 
@@ -205,6 +221,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
         visible: Bool = true,
         zOrder: Int = 0,
         fonts: [String: MiniWindowFont] = [:],
+        images: [String: MiniWindowImageInfo] = [:],
         commands: [MiniWindowCommand] = [],
         hotspots: [MiniWindowHotspot] = []
     ) {
@@ -220,6 +237,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
         self.visible = visible
         self.zOrder = zOrder
         self.fonts = fonts
+        self.images = images
         self.commands = commands
         self.hotspots = hotspots
     }
@@ -302,6 +320,9 @@ public struct MiniWindowEvent: Sendable, Equatable {
     public let callback: String
     /// MUSHclient hotspot flag bits (shift/ctrl/alt/buttons), already packed.
     public let flags: Int
+    /// Mouse coordinates in the miniwindow's pixel space at event dispatch.
+    public let x: Int
+    public let y: Int
 
     public init(
         windowName: String,
@@ -309,7 +330,9 @@ public struct MiniWindowEvent: Sendable, Equatable {
         hotspotID: String,
         kind: Kind,
         callback: String,
-        flags: Int
+        flags: Int,
+        x: Int = 0,
+        y: Int = 0
     ) {
         self.windowName = windowName
         self.pluginID = pluginID
@@ -317,6 +340,8 @@ public struct MiniWindowEvent: Sendable, Equatable {
         self.kind = kind
         self.callback = callback
         self.flags = flags
+        self.x = x
+        self.y = y
     }
 }
 

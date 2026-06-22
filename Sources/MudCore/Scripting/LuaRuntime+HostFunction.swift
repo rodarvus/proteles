@@ -53,7 +53,7 @@ extension LuaRuntime {
         case setAliasOption, stopEvaluatingTriggers, trace
         /// Plugin management: pluginList/pluginSupports are synchronous queries
         /// over the loaded-plugin set; unloadPlugin/connect are control effects.
-        case pluginList, pluginSupports, unloadPlugin, connect
+        case pluginList, pluginSupports, pluginInfo, unloadPlugin, connect
         /// The configured output font name (GetAlphaOption("output_font_name")).
         case outputFontName
         case sqliteAllowed
@@ -81,6 +81,7 @@ extension LuaRuntime {
         case windowCreate, windowShow, windowDelete, windowResize, windowPosition
         case windowRectOp, windowText, windowLine, windowSetPixel, windowFont
         case windowTextWidth, windowInfo, windowFontInfo
+        case windowList, windowInfoList, windowFontList, windowImageList, windowHotspotList
         case windowAddHotspot, windowDeleteHotspot, windowDeleteAllHotspots
         case windowMoveHotspot, windowHotspotInfo
         case windowDragHandler, windowScrollwheelHandler, windowMenu

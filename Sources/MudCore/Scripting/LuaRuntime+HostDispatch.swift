@@ -46,7 +46,7 @@ extension LuaRuntime {
              .triggerInfo, .aliasInfo, .timerInfo,
              .triggerList, .aliasList, .timerList, .pluginTriggerList,
              .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo,
-             .pluginList, .pluginSupports, .outputFontName,
+             .pluginList, .pluginSupports, .pluginInfo, .outputFontName,
              .regexValid, .regexMatch:
             return queryValue(function, arguments)
         default:
@@ -70,7 +70,7 @@ extension LuaRuntime {
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         case .regexValid, .regexMatch: regexValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
-             .createGUID, .uniqueID, .pluginList, .pluginSupports, .outputFontName:
+             .createGUID, .uniqueID, .pluginList, .pluginSupports, .pluginInfo, .outputFontName:
             miscValue(function, arguments)
         // Trigger/alias/timer introspection (LuaRuntime+AutomationInfo.swift) —
         // routed via the default so this switch gains no new branch.
@@ -106,7 +106,7 @@ extension LuaRuntime {
             }())]
         case .createGUID: [.string(ScriptIdentifiers.createGUID())]
         case .uniqueID: [.string(ScriptIdentifiers.uniqueID())]
-        case .pluginList, .pluginSupports: pluginQueryValue(function, arguments)
+        case .pluginList, .pluginSupports, .pluginInfo: pluginQueryValue(function, arguments)
         case .outputFontName: [.string(outputFontName)]
         default: []
         }
