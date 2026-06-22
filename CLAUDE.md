@@ -9,7 +9,7 @@ rules, and the gotchas.
 
 ## Current status
 
-**Feature-complete for 1.0. Shipped `v0.8.3`** (build 51; tag + GitHub release,
+**Feature-complete for 1.0. Shipped `v0.8.5`** (build 53; tag + GitHub release,
 **notarized Developer-ID build**; `scripts/release.sh` runs the
 build→sign→notarize→staple→verify flow). The build-out phases are **done**; the
 work now is **UI/UX polish + live-play debugging** ahead of tagging 1.0. Everything
@@ -21,8 +21,12 @@ text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). The
 document is bounded at 10k lines independently of the store (#65), resume fills
 panels in one batch (#42), and chat intake reverted to direct-append (#57). The
 `v0.8.x` line adds client identification (TTYPE/MTTS/NAWS), the per-character
-mapper DB split (D-111), pending group invitations, and a ground-up command
-input rewrite on `NSTextView` (#71). ~1720 tests, four gates green. See
+mapper DB split (D-111), pending group invitations, a ground-up command input
+rewrite on `NSTextView` (#71), a broad MUSHclient plugin-compatibility expansion
+(`rex`/PCRE, the `Database*` SQLite API, trigger/alias/timer introspection +
+group-delete, `OpenBrowser`), a custom colour theme editor, and a public
+per-plugin compatibility reference (`docs/PLUGIN_COMPATIBILITY.md`, from the
+AardCentral community-plugin sweep). ~1836 tests, four gates green. See
 **ARCHITECTURE.md §0** for what works and **docs/DECISIONS.md** for history.
 
 ## Backlog — GitHub Issues are the source of truth
