@@ -11,16 +11,16 @@ import Foundation
 /// ARCHITECTURE.md §6.6 — additional palettes (Solarized, MUSHclient-default,
 /// user-edited) ship in Phase 7 alongside the theme picker.
 public struct ColorPalette: Sendable, Equatable, Codable {
-    public let named: [NamedColor: RGB]
-    public let brightNamed: [NamedColor: RGB]
-    public let defaultForeground: RGB
-    public let defaultBackground: RGB
+    public var named: [NamedColor: RGB]
+    public var brightNamed: [NamedColor: RGB]
+    public var defaultForeground: RGB
+    public var defaultBackground: RGB
     /// Minimum foreground/background contrast ratio (WCAG-style) to enforce, or
     /// `nil` for none. Light themes set this (~3) so MUD-sent near-white text —
     /// designed for a black background — doesn't vanish on a light one: any
     /// resolved foreground below the floor falls back to ``defaultForeground``
     /// (the theme's ink). The bit Mudlet/MUSHclient never did.
-    public let minForegroundContrast: Double?
+    public var minForegroundContrast: Double?
     /// Remap the very-darkest xterm-256 indices to readable substitutes before
     /// resolving them — the dark-theme counterpart to ``minForegroundContrast``.
     /// This is **not** an invented clamp: it replicates Aardwolf's own
@@ -30,7 +30,7 @@ public struct ColorPalette: Sendable, Equatable, Codable {
     /// ``remappedDarkIndex(_:)`` for the exact mapping. Off for light themes
     /// (which use the contrast clamp instead, and where black→silver would be
     /// wrong).
-    public let remapsDarkXterm: Bool
+    public var remapsDarkXterm: Bool
 
     public init(
         named: [NamedColor: RGB],

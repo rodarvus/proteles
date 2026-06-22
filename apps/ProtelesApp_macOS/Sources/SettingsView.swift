@@ -58,13 +58,23 @@ struct SettingsView: View {
 /// clean-ups applied to incoming lines.
 private struct AppearanceSettingsView: View {
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
     @AppStorage("omitBlankLines") private var omitBlankLines = false
     @AppStorage("gagTagLines") private var gagTagLines = false
+    @State private var showingThemeBrowser = false
+    @State private var editingTheme: Theme?
+    @State private var pendingBrowserEdit: Theme?
+    @State private var deletingTheme: Theme?
 
     private var theme: Theme {
-        Theme.with(id: themeID)
+        _ = themeRevision
+        return Theme.with(id: themeID)
+    }
+
+    private var isUserTheme: Bool {
+        ThemeStore.shared.isUserTheme(id: theme.id)
     }
 
     /// Bundled fonts (registered at launch from Resources/Fonts; OFL except Hack
@@ -103,6 +113,23 @@ private struct AppearanceSettingsView: View {
                 }
                 .help("The colour palette for game output and panels")
                 ThemePreview(theme: theme, fontSize: outputFontSize, fontName: outputFontName)
+                HStack {
+                    Button("Browse Themes…") { showingThemeBrowser = true }
+                    Button(isUserTheme ? "Edit Theme…" : "Duplicate & Edit…") {
+                        if isUserTheme {
+                            editingTheme = theme
+                        } else {
+                            let copy = ThemeStore.shared.duplicateTheme(id: theme.id)
+                            themeID = copy.id
+                            themeRevision += 1
+                            editingTheme = copy
+                        }
+                    }
+                    if isUserTheme {
+                        Button("Delete Theme…", role: .destructive) { deletingTheme = theme }
+                    }
+                    Spacer()
+                }
             }
             Section("Game Output") {
                 Picker("Font", selection: $outputFontName) {
@@ -139,50 +166,55 @@ private struct AppearanceSettingsView: View {
             }
         }
         .formStyle(.grouped)
-    }
-}
-
-/// A compact sample of game output rendered through a theme's palette + font.
-private struct ThemePreview: View {
-    let theme: Theme
-    let fontSize: Double
-    let fontName: String
-
-    private var font: Font {
-        fontName.isEmpty
-            ? .system(size: fontSize, design: .monospaced)
-            : .custom(fontName, fixedSize: fontSize)
-    }
-
-    var body: some View {
-        let palette = theme.palette
-        VStack(alignment: .leading, spacing: 1) {
-            Text("Twisted Mind of a Psionicist")
-                .foregroundStyle(color(palette.brightNamed[.cyan]))
-            Text("[ Exits: north east south ]")
-                .foregroundStyle(color(palette.brightNamed[.green]))
-            Text("A psionicist ").foregroundStyle(color(palette.defaultForeground))
-                + Text("(White Aura)").foregroundStyle(color(palette.brightNamed[.white]))
-                + Text(" floats here.").foregroundStyle(color(palette.defaultForeground))
-            Text("3004hp ").foregroundStyle(color(palette.brightNamed[.red]))
-                + Text("2458mn ").foregroundStyle(color(palette.brightNamed[.blue]))
-                + Text("1686mv").foregroundStyle(color(palette.brightNamed[.green]))
-        }
-        .font(font)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(color(palette.defaultBackground), in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
-    }
-
-    private func color(_ rgb: RGB?) -> Color {
-        guard let rgb else { return .primary }
-        return Color(
-            .sRGB,
-            red: Double(rgb.red) / 255,
-            green: Double(rgb.green) / 255,
-            blue: Double(rgb.blue) / 255
+        .sheet(
+            isPresented: $showingThemeBrowser,
+            onDismiss: {
+                guard let theme = pendingBrowserEdit else { return }
+                pendingBrowserEdit = nil
+                editingTheme = theme
+            },
+            content: {
+                ThemeBrowserSheet(
+                    selectedThemeID: $themeID,
+                    themeRevision: $themeRevision,
+                    fontSize: outputFontSize,
+                    fontName: outputFontName,
+                    duplicateAndEdit: { theme in
+                        pendingBrowserEdit = theme
+                    }
+                )
+            }
         )
+        .sheet(item: $editingTheme) { theme in
+            ThemeEditorSheet(
+                initialTheme: theme,
+                selectedThemeID: $themeID,
+                themeRevision: $themeRevision,
+                fontSize: outputFontSize,
+                fontName: outputFontName
+            )
+        }
+        .confirmationDialog(
+            "Delete \(deletingTheme?.name ?? "theme")?",
+            isPresented: Binding(
+                get: { deletingTheme != nil },
+                set: { isPresented in
+                    if !isPresented { deletingTheme = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Theme", role: .destructive) {
+                guard let theme = deletingTheme else { return }
+                ThemeStore.shared.delete(id: theme.id)
+                if themeID == theme.id { themeID = Theme.default.id }
+                themeRevision += 1
+                deletingTheme = nil
+            }
+            Button("Cancel", role: .cancel) {
+                deletingTheme = nil
+            }
+        }
     }
 }
 

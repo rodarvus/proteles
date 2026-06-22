@@ -20,7 +20,16 @@ import Foundation
 ///     the **first name in source order** so the result is stable.
 ///   - An over-long `#` run returns -1 here; MUSHclient has a quirky partial
 ///     parse. (`"#"` alone → black in both, matching `SetColour`.)
-extension MUSHColour {
+public extension MUSHColour {
+    struct NamedColourChoice: Sendable, Equatable, Identifiable {
+        public var id: String {
+            name
+        }
+
+        public let name: String
+        public let rgb: RGB
+    }
+
     /// `MXP_colours[]` in source order. `rgb` is the source `0xRRGGBB` value;
     /// the COLORREF a script sees is ``swapRedBlue(_:)`` of it.
     static let names: [(name: String, rgb: Int)] = [
@@ -178,11 +187,14 @@ extension MUSHColour {
     private static let sourceByName: [String: Int] =
         Dictionary(names.map { ($0.name, $0.rgb) }, uniquingKeysWith: { _, new in new })
 
+    static let namedColourChoices: [NamedColourChoice] =
+        names.map { NamedColourChoice(name: $0.name, rgb: RGB(hex: UInt32($0.rgb))) }
+
     /// `ColourNameToRGB(name)` — a named colour or `"#rrggbb"` literal to a
     /// COLORREF (red low byte), or -1 if the name is unknown. Mirrors `SetColour`:
     /// trims, lowercases, parses a leading `#` hex run (R↔B swapped), else looks
     /// up the name table.
-    public static func colourNameToRGB(_ name: String) -> Int {
+    static func colourNameToRGB(_ name: String) -> Int {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if trimmed.isEmpty { return -1 }
         if trimmed.hasPrefix("#") {
@@ -198,7 +210,7 @@ extension MUSHColour {
     /// `RGBColourToName(colour)` — a COLORREF to its name, or `"#RRGGBB"` if no
     /// name matches. Mirrors `ColourToName`; on an aliased value we return the
     /// first name in source order (deterministic; see the type doc).
-    public static func rgbColourToName(_ colour: Int) -> String {
+    static func rgbColourToName(_ colour: Int) -> String {
         let colourref = colour & 0xFFFFFF
         let source = swapRedBlue(colourref)
         if let match = names.first(where: { $0.rgb == source }) {

@@ -22,10 +22,10 @@ public struct Theme: Identifiable, Equatable, Sendable, Codable {
         case dark, light
     }
 
-    public let id: String
-    public let name: String
-    public let appearance: Appearance
-    public let palette: ColorPalette
+    public var id: String
+    public var name: String
+    public var appearance: Appearance
+    public var palette: ColorPalette
 
     public init(id: String, name: String, appearance: Appearance, palette: ColorPalette) {
         self.id = id
@@ -36,12 +36,17 @@ public struct Theme: Identifiable, Equatable, Sendable, Codable {
 }
 
 public extension Theme {
-    /// Every shipped theme, in display order (Aardwolf first — the default).
-    static let all: [Theme] = [
+    /// Every built-in theme, in display order (Aardwolf first — the default).
+    static let builtIns: [Theme] = [
         aardwolf, midnightInk,
         dracula, nord, tokyoNight, catppuccinMocha, gruvboxDark, oneDark, snazzy,
         catppuccinLatte
     ]
+
+    /// Built-in themes plus any user-created themes loaded from Settings/themes.json.
+    static var all: [Theme] {
+        builtIns + ThemeStore.shared.themes
+    }
 
     /// The default theme: exact stock-MUSHclient Aardwolf colours.
     static let `default` = aardwolf
@@ -49,6 +54,10 @@ public extension Theme {
     /// Look up a theme by id, falling back to the default.
     static func with(id: String) -> Theme {
         all.first { $0.id == id } ?? .default
+    }
+
+    static func isBuiltIn(id: String) -> Bool {
+        builtIns.contains { $0.id == id }
     }
 
     // MARK: - Presets

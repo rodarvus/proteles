@@ -11,6 +11,7 @@ import SwiftUI
 struct HelpPanelView: View {
     let model: HelpPanelModel
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
     @AppStorage("outputFontSize") private var outputFontSize = 13.0
     @AppStorage("outputFontName") private var outputFontName = "JetBrains Mono NL"
     @State private var query = ""
@@ -22,7 +23,7 @@ struct HelpPanelView: View {
             ZStack {
                 MudOutputView(
                     store: model.store,
-                    palette: Theme.with(id: themeID).palette,
+                    palette: palette,
                     fontSize: CGFloat(outputFontSize),
                     fontName: outputFontName,
                     showsLiveTail: false,
@@ -40,6 +41,11 @@ struct HelpPanelView: View {
                 }
             }
         }
+    }
+
+    private var palette: ColorPalette {
+        _ = themeRevision
+        return Theme.with(id: themeID).palette
     }
 
     private var toolbar: some View {

@@ -8,6 +8,7 @@ import SwiftUI
 public struct ChatView: View {
     @Bindable private var model: ChatModel
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
     @AppStorage("chat.timestamps") private var showTimestamps = false
     @AppStorage("chat.timestampSeconds") private var timestampSeconds = false
     /// 1 except in a translucent floating miniwindow (the chrome fades the
@@ -26,7 +27,8 @@ public struct ChatView: View {
     }
 
     private var palette: ColorPalette {
-        Theme.with(id: themeID).palette
+        _ = themeRevision
+        return Theme.with(id: themeID).palette
     }
 
     public var body: some View {

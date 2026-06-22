@@ -90,6 +90,7 @@ struct ProtelesApp: App {
         // UserDefaults before any @AppStorage view reads them, then mirror
         // changes back (#43).
         PreferencesFile.shared.start()
+        ThemeStore.shared.load()
 
         // Scrollback + chat persistence (split out for the init-length budget).
         let persistence = Self.makeScrollbackPersistence()

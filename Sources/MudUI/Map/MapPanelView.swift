@@ -10,6 +10,7 @@ public struct MapPanelView: View {
     @Bindable private var model: MapPanelModel
     /// Theme palette for the continent bigmap's ANSI cell colours.
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
 
     @State private var zoom: CGFloat = 1
     @State private var zoomStart: CGFloat = 1
@@ -64,7 +65,7 @@ public struct MapPanelView: View {
             ContinentMapView(
                 map: map,
                 position: continent,
-                palette: Theme.with(id: themeID).palette
+                palette: palette
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(MapPalette.background)
@@ -77,6 +78,11 @@ public struct MapPanelView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(MapPalette.background)
         }
+    }
+
+    private var palette: ColorPalette {
+        _ = themeRevision
+        return Theme.with(id: themeID).palette
     }
 
     private var emptyState: some View {

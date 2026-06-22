@@ -15,6 +15,7 @@ public struct InfoPanel: View {
     }
 
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
     /// 1 except in a translucent floating miniwindow (see FloatingMiniWindow).
     @Environment(\.panelBackgroundOpacity) private var panelBackgroundOpacity
 
@@ -31,7 +32,8 @@ public struct InfoPanel: View {
     }
 
     private var palette: ColorPalette {
-        Theme.with(id: themeID).palette
+        _ = themeRevision
+        return Theme.with(id: themeID).palette
     }
 
     private var goldColor: Color {

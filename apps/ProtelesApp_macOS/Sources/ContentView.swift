@@ -109,6 +109,7 @@ struct ContentView: View {
     /// Selected colour theme (Appearance preference). Drives the output palette
     /// and the app-wide light/dark chrome appearance.
     @AppStorage("themeID") private var themeID = Theme.default.id
+    @AppStorage("themeRevision") private var themeRevision = 0
     /// Keyboard "Navigation mode" (⌥⌘N, View menu). While on, bare-key macros
     /// fire on an empty input line; keypad/chord macros fire regardless. Shared
     /// with the menu toggle via the same UserDefaults key.
@@ -131,7 +132,8 @@ struct ContentView: View {
     @AppStorage("statusBar.color.enemy") private var statusColorEnemy = "#FF3333"
 
     private var theme: Theme {
-        Theme.with(id: themeID)
+        _ = themeRevision
+        return Theme.with(id: themeID)
     }
 
     /// Assemble the persisted per-bar toggles + number mode into the value the
@@ -360,7 +362,7 @@ struct ContentView: View {
                 onFrameFlush: { stats in logSlowFrame(stats) }
             )
             // Recreate (and re-render) when the theme or output font changes.
-            .id("\(themeID)|\(outputFontName)|\(outputFontSize)")
+            .id("\(themeID)|\(themeRevision)|\(outputFontName)|\(outputFontSize)")
             // Backs Edit ▸ Find/Find Next/Find Previous (⌘F/⌘G/⇧⌘G, D-104):
             // route the action to this window's findable output view.
             .focusedSceneValue(\.outputFindAction) { action in

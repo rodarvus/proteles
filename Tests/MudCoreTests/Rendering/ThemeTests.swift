@@ -6,14 +6,14 @@ struct ThemeTests {
     @Test("The default is Aardwolf and every preset has a unique id")
     func defaultAndIDs() {
         #expect(Theme.default.id == "aardwolf")
-        let ids = Theme.all.map(\.id)
+        let ids = Theme.builtIns.map(\.id)
         #expect(Set(ids).count == ids.count, "ids must be unique")
         #expect(Theme.with(id: "nope").id == "aardwolf", "unknown id falls back to default")
     }
 
     @Test("Every preset defines all 8 normal + 8 bright ANSI colours")
     func completePalettes() {
-        for theme in Theme.all {
+        for theme in Theme.builtIns {
             #expect(theme.palette.named.count == 8, "\(theme.id) normal")
             #expect(theme.palette.brightNamed.count == 8, "\(theme.id) bright")
         }
@@ -30,13 +30,28 @@ struct ThemeTests {
 
     @Test("Only light themes enable the legibility clamp")
     func clampOnLightOnly() {
-        for theme in Theme.all {
+        for theme in Theme.builtIns {
             if theme.appearance == .light {
                 #expect(theme.palette.minForegroundContrast != nil, "\(theme.id) should clamp")
             } else {
                 #expect(theme.palette.minForegroundContrast == nil, "\(theme.id) shouldn't clamp")
             }
         }
+    }
+
+    @Test("User theme collections ignore reserved ids and incomplete palettes")
+    func userThemeSanitizing() {
+        var valid = Theme.aardwolf
+        valid.id = "user.ok"
+        valid.name = "Custom"
+        var reserved = valid
+        reserved.id = Theme.aardwolf.id
+        var incomplete = valid
+        incomplete.id = "user.bad"
+        incomplete.palette.named[.red] = nil
+
+        let sanitized = UserThemeCollection(themes: [reserved, incomplete, valid, valid]).sanitized()
+        #expect(sanitized.themes.map(\.id) == ["user.ok"])
     }
 }
 
