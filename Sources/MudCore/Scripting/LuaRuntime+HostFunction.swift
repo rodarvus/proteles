@@ -58,7 +58,7 @@ extension LuaRuntime {
         case mapperMergeSQL
         case publish
         case enableTrigger, enableTimer, enableGroup, doAfter
-        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, monotonic, addAlias
+        case addTrigger, setTriggerGroup, enableAlias, removeTrigger, removeAlias, monotonic, addAlias
         case setTriggerOption
         case notify
         case button

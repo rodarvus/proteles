@@ -79,11 +79,8 @@ extension ScriptEngine {
             // Not a snapshot change, so return early — don't dirty the mirror.
             stopTriggerEvaluation = true
             return true
-        case .removeTrigger(let name):
-            if let id = triggerIDsByName.removeValue(forKey: name) {
-                triggers.remove(id: id)
-                automationOwners[id] = nil
-            }
+        case .removeTrigger, .removeAlias:
+            applyRemoveEffect(effect)
         case .enableTrigger, .enableTimer, .enableAlias, .enableGroup, .resetTimer:
             applyEnableEffect(effect)
         default:
@@ -113,6 +110,26 @@ extension ScriptEngine {
     }
 
     /// Apply a name-based enable/disable (or timer reset) to the matching engine.
+    /// Remove a runtime-registered trigger/alias by name (DeleteTrigger/
+    /// DeleteAlias), split out of ``applyAutomationEffect`` for the complexity
+    /// budget.
+    private func applyRemoveEffect(_ effect: ScriptEffect) {
+        switch effect {
+        case .removeTrigger(let name):
+            if let id = triggerIDsByName.removeValue(forKey: name) {
+                triggers.remove(id: id)
+                automationOwners[id] = nil
+            }
+        case .removeAlias(let name):
+            if let id = aliasIDsByName.removeValue(forKey: name) {
+                aliases.remove(id: id)
+                automationOwners[id] = nil
+            }
+        default:
+            break
+        }
+    }
+
     private func applyEnableEffect(_ effect: ScriptEffect) {
         switch effect {
         case .enableTrigger(let name, let on):
@@ -122,8 +139,12 @@ extension ScriptEngine {
         case .enableAlias(let name, let on):
             if let id = aliasIDsByName[name] { aliases.setEnabled(on, id: id) }
         case .enableGroup(let name, let on):
+            // MUSHclient groups share a namespace across kinds; enable the group
+            // on all three engines so EnableTriggerGroup/EnableAliasGroup/
+            // EnableTimerGroup (all routed here) each affect their own kind.
             triggers.setGroupEnabled(on, group: name)
             timers.setGroupEnabled(on, group: name)
+            aliases.setGroupEnabled(on, group: name)
         case .resetTimer(let name):
             if let id = timerIDsByName[name] { timers.reset(id: id) }
         default:

@@ -142,6 +142,8 @@ public enum ScriptEffect: Sendable, Equatable {
     case echoAnsi(String)
     /// Remove a runtime-registered trigger by name (MUSHclient `DeleteTrigger`).
     case removeTrigger(String)
+    /// Remove a runtime-registered alias by name (MUSHclient `DeleteAlias`).
+    case removeAlias(String)
     /// Re-inject text as if it had arrived from the MUD (MUSHclient's
     /// `Simulate`): the host feeds each line back through the inbound pipeline
     /// so triggers (user + S&D) see it and it displays. S&D uses this for its

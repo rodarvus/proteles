@@ -356,6 +356,11 @@ public extension LuaRuntime {
     function GetPluginInfo(id, n)
       if id ~= GetPluginID() then return nil end
       if n == 20 then return proteles.info(60) end -- directory
+      -- 6 = plugin source-file path. We don't track the .xml filename, but many
+      -- plugins (fixpath.lua, self-updaters) only string.match it down to the
+      -- directory — so returning the plugin dir keeps them from crashing on a nil.
+      if n == 6 then return proteles.info(60) end
+      if n == 17 then return true end -- enabled: the current plugin is loaded + running
       return proteles.info(n) -- 1 = name, 19 = version (others → nil)
     end
     -- GetPluginName() = the current plugin's name; GetPluginName(id) for any
@@ -533,6 +538,9 @@ public extension LuaRuntime {
     function EnableGroup(name, flag) proteles.enableGroup(name, __on(flag)); return error_code.eOK end
     EnableTriggerGroup = EnableGroup
     EnableTimerGroup = EnableGroup
+    -- EnableAliasGroup: the host enableGroup now toggles the named group across
+    -- triggers/timers/aliases, so the alias-group variant routes here too.
+    EnableAliasGroup = EnableGroup
 
     -- String helpers MUSHclient exposes globally ---------------------------
     function Trim(s)

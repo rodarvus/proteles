@@ -7,7 +7,10 @@ import Foundation
 /// falls back to the real globals (`_G`), so a plugin reads the shared shim
 /// (`Send`, `Note`, `require`, …) and helper libraries normally, but anything
 /// it *defines* (its functions, its `OnPluginBroadcast`, top-level state)
-/// lands in its own table — isolated from other plugins.
+/// lands in its own table — isolated from other plugins. Crucially `_G` inside a
+/// plugin aliases that env (`env._G = env`), matching MUSHclient's per-plugin
+/// global namespace — so a global the script sets is reachable as `_G.x` from the
+/// plugin's required modules, not just as a bare name.
 ///
 /// The plugin's script, its lifecycle callbacks, and its trigger/alias/timer
 /// scripts all run in this env (the host owner-routes them), so a plugin's
@@ -18,11 +21,21 @@ public extension LuaRuntime {
         if let existing = pluginEnvs[pluginID] {
             luaL_unref(state, LUA_REGISTRYINDEX, existing)
         }
-        lua_createtable(state, 0, 0) // [env]
+        lua_createtable(state, 0, 1) // [env]
         lua_createtable(state, 0, 1) // [env, mt]
         lua_pushvalue(state, LUA_GLOBALSINDEX) // [env, mt, _G]
         lua_setfield(state, -2, "__index") // mt.__index = _G; [env, mt]
         lua_setmetatable(state, -2) // setmetatable(env, mt); [env]
+        // `_G` inside a plugin must alias the plugin's OWN environment, not the
+        // shared real globals (MUSHclient gives each plugin its own global
+        // namespace). Without this, a global the plugin sets in its <script>
+        // (e.g. `plugin_short_name = "XC"`) lands in `env` but `_G.plugin_short_name`
+        // — read from a required module — resolves against the real globals and
+        // comes back nil. Self-referencing `env._G = env` makes plugin-set globals
+        // visible via `_G.x`, while inherited shim globals + injected `matches`/
+        // `named` still resolve through the metatable's `__index = _G` fallback.
+        lua_pushvalue(state, -1) // [env, env]
+        lua_setfield(state, -2, "_G") // env._G = env; pops the copy; [env]
         pluginEnvs[pluginID] = luaL_ref(state, LUA_REGISTRYINDEX) // pops env
     }
 

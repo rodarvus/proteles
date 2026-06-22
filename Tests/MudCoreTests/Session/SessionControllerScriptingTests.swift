@@ -157,4 +157,26 @@ struct SessionControllerScriptingTests {
         #expect(line.runs.count == 1)
         #expect(line.runs[0].style.foreground == .rgb(red: 0xFF, green: 0x88, blue: 0x00))
     }
+
+    @Test("ColourNote resolves MUSHclient's extended named colours (e.g. orange)")
+    func colourNoteExtendedNamedColour() {
+        // "orange" (0xFFA500) is not one of the 8 ANSI names, so before the
+        // 148-name table fallback it rendered colourless; now it's a real RGB run.
+        let line = SessionController.colourNoteLine([
+            NoteSegment(text: "warn", foreground: "orange", background: "dodgerblue")
+        ])
+        #expect(line.runs.count == 1)
+        #expect(line.runs[0].style.foreground == .rgb(red: 0xFF, green: 0xA5, blue: 0x00))
+        #expect(line.runs[0].style.background == .rgb(red: 0x1E, green: 0x90, blue: 0xFF))
+        // The 8 ANSI names still map to theme-aware NamedColors, not RGB.
+        let ansi = SessionController.colourNoteLine([
+            NoteSegment(text: "x", foreground: "red", background: nil)
+        ])
+        #expect(ansi.runs[0].style.foreground == .named(.red))
+        // A truly unknown name stays unstyled (no run).
+        let unknown = SessionController.colourNoteLine([
+            NoteSegment(text: "x", foreground: "notacolour", background: nil)
+        ])
+        #expect(unknown.runs.isEmpty)
+    }
 }

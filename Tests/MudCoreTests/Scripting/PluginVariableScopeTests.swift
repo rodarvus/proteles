@@ -43,6 +43,127 @@ struct PluginVariableScopeTests {
         #expect(snapshot["com.b"]?["flag"] == "com.b")
     }
 
+    @Test("a plugin-set global is readable via _G.x, and shim globals still resolve")
+    func globalReadableViaUnderscoreG() async throws {
+        // Regression: a global the plugin sets in its <script> must be visible as
+        // `_G.x` (MUSHclient gives each plugin its own global namespace). Without
+        // `env._G = env`, `_G.plugin_short_name` resolved against the shared real
+        // globals and came back nil — so Zhalut's caster fell back to the full
+        // plugin name instead of "XC".
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.gtest" name="Global_Test"/>
+        <script><![CDATA[
+        plugin_short_name = "XC"
+        function OnPluginInstall()
+          proteles.send("tag:" .. tostring(_G.plugin_short_name))
+          proteles.send("shimfn:" .. type(_G.GetPluginID))
+        end
+        ]]></script>
+        </muclient>
+        """)
+        let effects = try await engine.loadPlugin(plugin)
+        #expect(effects.contains(.send("tag:XC"))) // plugin global via _G
+        #expect(effects.contains(.send("shimfn:function"))) // inherited shim global via _G
+    }
+
+    @Test("AddAlias(regex) fires on input; EnableAliasGroup + DeleteAlias control it")
+    func aliasGroupAndDeleteFunctional() async throws {
+        // End-to-end check mirroring the Proteles_AliasGroup_Test mock: control
+        // aliases (fired via input, so their effects are consumed into the engine)
+        // arm a runtime regex alias, toggle its group, and delete it. The runtime
+        // alias REQUIRES alias_flag.RegularExpression — without it `^aggrp$` is a
+        // literal/wildcard that never matches "aggrp".
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.ag" name="AG"/>
+        <aliases>
+          <alias match="^ag arm$" enabled="y" regexp="y" send_to="12"><send>ag_arm()</send></alias>
+          <alias match="^ag off$" enabled="y" regexp="y" send_to="12"><send>ag_off()</send></alias>
+          <alias match="^ag on$"  enabled="y" regexp="y" send_to="12"><send>ag_on()</send></alias>
+          <alias match="^ag del$" enabled="y" regexp="y" send_to="12"><send>ag_del()</send></alias>
+        </aliases>
+        <script><![CDATA[
+        function g_fire() proteles.send("grp-fired") end
+        function ag_off() EnableAliasGroup("agtg", false) end
+        function ag_on() EnableAliasGroup("agtg", true) end
+        function ag_del() DeleteAlias("aggrp") end
+        function ag_arm()
+          AddAlias("aggrp", "^aggrp$", "", alias_flag.Enabled + alias_flag.RegularExpression, "g_fire")
+          SetAliasOption("aggrp", "group", "agtg")
+        end
+        ]]></script></muclient>
+        """)
+        _ = try await engine.loadPlugin(plugin)
+        _ = await engine.expandInput("ag arm")
+        #expect(await engine.expandInput("aggrp").contains(.send("grp-fired"))) // fires
+        _ = await engine.expandInput("ag off")
+        #expect(await !engine.expandInput("aggrp").contains(.send("grp-fired"))) // group disabled
+        _ = await engine.expandInput("ag on")
+        #expect(await engine.expandInput("aggrp").contains(.send("grp-fired"))) // re-enabled
+        _ = await engine.expandInput("ag del")
+        #expect(await !engine.expandInput("aggrp").contains(.send("grp-fired"))) // deleted
+    }
+
+    @Test("a bundled module's bare global (movewindow) is usable after require")
+    func bundledModuleGlobalReachesPlugin() async throws {
+        // Regression: plugins `require "movewindow"` and discard the return, then
+        // call the BARE GLOBAL `movewindow.install(...)` (e.g. Aard_Affects). The
+        // bundled stub must define `movewindow` as a global (like the real lib +
+        // gmcphelper), not just return a local table — else the bare use hits
+        // "attempt to index global 'movewindow' (a nil value)".
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.mw" name="MW_Test"/>
+        <script><![CDATA[
+        require "movewindow"
+        function OnPluginInstall()
+          local info = movewindow.install(0, 6, 2, true)
+          proteles.send("mw:" .. type(movewindow) .. ":" .. type(info))
+        end
+        ]]></script>
+        </muclient>
+        """)
+        let effects = try await engine.loadPlugin(plugin)
+        #expect(effects.contains(.send("mw:table:table")))
+    }
+
+    @Test("DeleteTemporaryTriggers only removes the calling plugin's own triggers")
+    func deleteTemporaryTriggersScopedPerPlugin() async throws {
+        // Plugin A arms a TEMPORARY gag trigger; plugin B then calls
+        // DeleteTemporaryTriggers. The shim tracking tables are shared across
+        // plugins, so an unscoped bulk-clear would delete A's trigger from B's
+        // call. Owner-scoping keeps A's intact (still gags its line). Regression
+        // for the same class of bug as ResetTimers stealing dinv's wish timer.
+        let engine = try ScriptEngine()
+        let pluginA = """
+        <muclient>
+        <plugin id="com.a" name="A"/>
+        <script><![CDATA[
+        require "addxml"
+        function OnPluginInstall()
+          addxml.trigger { match = "AAA", regexp = false, temporary = true,
+            omit_from_output = true, enabled = true }
+        end
+        ]]></script>
+        </muclient>
+        """
+        let pluginB = """
+        <muclient>
+        <plugin id="com.b" name="B"/>
+        <script><![CDATA[
+        function OnPluginInstall() DeleteTemporaryTriggers() end
+        ]]></script>
+        </muclient>
+        """
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: pluginA))
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: pluginB))
+        // A's temporary trigger must survive B's DeleteTemporaryTriggers and still gag.
+        #expect(await engine.process(line: "AAA").gag)
+    }
+
     @Test("a saved variable round-trips back to the same plugin on reload")
     func reloadRoundTrip() async throws {
         // Session 1: load A + B, save state, snapshot variables (as on disk).

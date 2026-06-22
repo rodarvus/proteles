@@ -25,6 +25,24 @@ extension LuaRuntime {
     -- Names of timers armed with timer_flag.Temporary, so DeleteTemporaryTimers
     -- can bulk-clear exactly those (MUSHclient parity).
     __timerTemporary = __timerTemporary or {}
+    -- The plugin id that armed each shim timer. These tables are shared across
+    -- ALL plugins (the shim loads once into the real globals), so any bulk op
+    -- (ResetTimers) MUST scope to the calling plugin's own timers — otherwise
+    -- re-arming runs `proteles.doAfter` in the *caller's* env and steals another
+    -- plugin's timer into it (e.g. dinv's wish timer firing where `dbot` is nil).
+    __protelesTimerOwner = __protelesTimerOwner or {}
+    -- Absolute (monotonic) fire deadline per shim timer, so GetTimerInfo can
+    -- answer infotype 13 ("seconds to go") — plugins drive countdown displays off
+    -- it (e.g. Aard_Affects' affect timers). Set on every (re-)arm.
+    __protelesTimerDeadline = __protelesTimerDeadline or {}
+    -- Full teardown of a shim timer's tracking (shared by DeleteTimer and the
+    -- one-shot fire body — a one-shot must stop "existing" once it fires, like
+    -- MUSHclient, so the common `if IsTimer(x) ~= eOK then AddTimer(...)` re-arm
+    -- idiom works; without this IsTimer stayed eOK forever and broke it).
+    function __protelesClearTimer(key)
+      __timerNames[key] = nil; __protelesTimerLive[key] = nil; __protelesTimerSpec[key] = nil
+      __timerTemporary[key] = nil; __protelesTimerOwner[key] = nil; __protelesTimerDeadline[key] = nil
+    end
     -- Re-arm a recurring timer one interval after it fires. Runs in _G (the host
     -- only needs to re-schedule, not touch the plugin env), but is *called from*
     -- the fire body, which runs in the plugin env. It re-checks liveness +
@@ -54,9 +72,16 @@ extension LuaRuntime {
       local fire = string.format(
         "if __protelesTimerLive[%q] and __protelesTimerGen[%q] == %d then %s(%q)",
         key, key, gen, s.script, key)
-      if s.recurring then fire = fire .. string.format(" __protelesReschedule(%q, %d)", key, gen) end
+      if s.recurring then
+        fire = fire .. string.format(" __protelesReschedule(%q, %d)", key, gen)
+      else
+        -- A one-shot tears itself down after firing (MUSHclient deletes one-shot
+        -- timers on fire), so IsTimer reports it gone and re-arm idioms work.
+        fire = fire .. string.format(" __protelesClearTimer(%q)", key)
+      end
       fire = fire .. " end"
       s.body = fire; s.gen = gen
+      __protelesTimerDeadline[key] = proteles.monotonic() + (s.seconds or 0)
       proteles.doAfter(s.seconds, fire, true)
     end
     function AddTimer(name, hour, minute, second, response, flags, script)
@@ -65,6 +90,7 @@ extension LuaRuntime {
       local key = tostring(name)
       local f = tonumber(flags) or 0
       __timerNames[key] = true
+      __protelesTimerOwner[key] = GetPluginID() -- scope ResetTimers to this plugin
       __protelesTimerLive[key] = true
       __protelesTimerGen[key] = (__protelesTimerGen[key] or 0) + 1
       -- Bit 2 (value 4 = timer_flag.OneShot) — Lua 5.1 has no bitops, so isolate
@@ -129,8 +155,14 @@ extension LuaRuntime {
     -- Names of triggers armed with trigger_flag.Temporary (bit 14), so
     -- DeleteTemporaryTriggers can bulk-clear exactly those (MUSHclient parity).
     __triggerTemporary = __triggerTemporary or {}
+    -- Which plugin added each trigger — the tracking tables are shared across all
+    -- plugins, so DeleteTemporaryTriggers must scope to the caller's own (a bulk
+    -- wipe would delete other plugins' temporary triggers). Same rationale as
+    -- __protelesTimerOwner.
+    __triggerOwner = __triggerOwner or {}
     local function __trackTriggerTemporary(key, flags)
       __triggerTemporary[key] = ((math.floor(flags / trigger_flag.Temporary) % 2) >= 1) or nil
+      __triggerOwner[key] = GetPluginID()
     end
     function AddTriggerEx(name, match, response, flags, colour, wildcard, sound, script, sendto, seq)
       local key, f = tostring(name), tonumber(flags) or 0
@@ -152,6 +184,14 @@ extension LuaRuntime {
       local key = tostring(name)
       proteles.removeTrigger(key); __triggerNames[key] = nil
       __triggerTemporary[key] = nil
+      __triggerOwner[key] = nil
+      return error_code.eOK
+    end
+    -- DeleteAlias: the alias counterpart to DeleteTrigger (many plugins clear
+    -- their temp aliases in a `for … DeleteAlias(list[i])` loop on disable).
+    function DeleteAlias(name)
+      local key = tostring(name)
+      proteles.removeAlias(key); __aliasNames[key] = nil
       return error_code.eOK
     end
     -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
@@ -166,11 +206,9 @@ extension LuaRuntime {
       return error_code.eOK
     end
     function DeleteTimer(name)
-      local key = tostring(name)
-      __timerNames[key] = nil
-      __protelesTimerLive[key] = nil -- cancel pending fire (it self-skips); stops recurrence
-      __protelesTimerSpec[key] = nil
-      __timerTemporary[key] = nil
+      -- Clearing liveness cancels the pending fire (it self-skips); the rest is
+      -- the shared teardown. (Mirrors what a one-shot does to itself on fire.)
+      __protelesClearTimer(tostring(name))
       return error_code.eOK
     end
     -- Existence checks (MUSHclient world API): eOK when the named object exists,
@@ -226,24 +264,31 @@ extension LuaRuntime {
       return error_code.eOK
     end
     -- Bulk-clear temporary automation (MUSHclient parity): remove exactly the
-    -- triggers/timers armed with the Temporary flag, returning the count.
+    -- triggers/timers armed with the Temporary flag — but ONLY the CALLING
+    -- plugin's own (the tracking tables are shared across all plugins, so a blind
+    -- wipe would delete another plugin's temporary objects). Returns the count.
     function DeleteTemporaryTriggers()
-      local n = 0
+      local me, n = GetPluginID(), 0
       for key in pairs(__triggerTemporary) do
-        proteles.removeTrigger(key)
-        __triggerNames[key] = nil
-        n = n + 1
+        if __triggerOwner[key] == me then
+          proteles.removeTrigger(key)
+          __triggerNames[key] = nil
+          __triggerTemporary[key] = nil
+          __triggerOwner[key] = nil
+          n = n + 1
+        end
       end
-      __triggerTemporary = {}
       return n
     end
     function DeleteTemporaryTimers()
-      local n = 0
+      local me, n = GetPluginID(), 0
       for key in pairs(__timerTemporary) do
-        __timerNames[key] = nil; __protelesTimerLive[key] = nil; __protelesTimerSpec[key] = nil
-        n = n + 1
+        if __protelesTimerOwner[key] == me then
+          __timerNames[key] = nil; __protelesTimerLive[key] = nil; __protelesTimerSpec[key] = nil
+          __timerTemporary[key] = nil; __protelesTimerOwner[key] = nil
+          n = n + 1
+        end
       end
-      __timerTemporary = {}
       return n
     end
     -- Trigger/alias introspection (MUSHclient GetTriggerInfo/GetAliasInfo +
@@ -301,6 +346,8 @@ extension LuaRuntime {
         if t == 6 then return __protelesTimerLive[key] and true or false end
         if t == 7 then return not spec.recurring end
         if t == 8 then return false end                       -- not an at-time timer
+        -- 13 = seconds remaining until the timer fires (countdown displays use it).
+        if t == 13 then return math.max(0, (__protelesTimerDeadline[key] or 0) - proteles.monotonic()) end
         if t == 14 then return __timerTemporary[key] and true or false end
         return nil
       end
@@ -356,13 +403,122 @@ extension LuaRuntime {
     -- re-arm from its spec); an engine timer routes to the host. Returns eOK.
     function ResetTimer(name)
       local key = tostring(name)
-      if __protelesTimerSpec[key] then
+      -- Only re-arm a shim timer the CALLING plugin owns — re-arming runs
+      -- proteles.doAfter in the caller's env, so resetting another plugin's timer
+      -- would steal it into the wrong env. Non-owned/engine timers route to host.
+      if __protelesTimerSpec[key] and __protelesTimerOwner[key] == GetPluginID() then
         __protelesTimerLive[key] = true
         __protelesTimerGen[key] = (__protelesTimerGen[key] or 0) + 1
         __protelesArmTimer(key)
         return error_code.eOK
       end
       proteles.resetTimer(key)
+      return error_code.eOK
+    end
+    -- ImportXML(xml): install triggers/aliases/timers from an XML fragment, as
+    -- MUSHclient's world.ImportXML does. Plugins that build trigger/alias XML in
+    -- a loop and import it (rather than calling AddTriggerEx directly) rely on
+    -- this; without it they error in OnPluginInstall ("attempt to call global
+    -- 'ImportXML'"). We parse the fragment and dispatch to the existing
+    -- AddTriggerEx/AddAlias/AddTimer shim globals, returning the count installed
+    -- (-1 if the argument isn't a string), matching the reference's return.
+    -- LIMITATION: per-trigger highlight colours (other_text_colour /
+    -- other_back_colour / custom_colour) are parsed off but NOT applied — the
+    -- trigger registers and fires, it just doesn't recolour the matched line
+    -- (our engine highlights foreground-only and runtime-added triggers don't
+    -- yet carry a highlight). Tracked separately.
+    local function __xmlUnescape(v)
+      v = string.gsub(v, "&lt;", "<")
+      v = string.gsub(v, "&gt;", ">")
+      v = string.gsub(v, "&quot;", '"')
+      v = string.gsub(v, "&apos;", "'")
+      v = string.gsub(v, "&amp;", "&")
+      return v
+    end
+    local function __xmlAttrs(blob)
+      local a = {}
+      for k, v in string.gmatch(blob, '([%w_]+)%s*=%s*"(.-)"') do a[k] = __xmlUnescape(v) end
+      return a
+    end
+    local function __xmlTruthy(v) return v == "y" or v == "yes" or v == "1" or v == true end
+    local function __xmlFalsy(v) return v == "n" or v == "no" or v == "0" or v == false end
+    local __importSeq = 0
+    local function __importName(a, prefix)
+      if a.name and a.name ~= "" then return a.name end
+      __importSeq = __importSeq + 1
+      return prefix .. "_importxml_" .. __importSeq
+    end
+    function ImportXML(xml)
+      if type(xml) ~= "string" then return -1 end
+      local count = 0
+      for blob in string.gmatch(xml, "<trigger%s(.-)>") do
+        local a = __xmlAttrs(blob)
+        local f = (__xmlFalsy(a.enabled) and 0) or trigger_flag.Enabled
+        if __xmlTruthy(a.regexp) or __xmlTruthy(a.regular_expression) then
+          f = f + trigger_flag.RegularExpression
+        end
+        if __xmlTruthy(a.ignore_case) then f = f + trigger_flag.IgnoreCase end
+        if __xmlTruthy(a.keep_evaluating) then f = f + trigger_flag.KeepEvaluating end
+        if __xmlTruthy(a.omit_from_output) then f = f + trigger_flag.OmitFromOutput end
+        if __xmlTruthy(a.omit_from_log) then f = f + trigger_flag.OmitFromLog end
+        if __xmlTruthy(a.expand_variables) then f = f + trigger_flag.ExpandVariables end
+        if __xmlTruthy(a.temporary) then f = f + trigger_flag.Temporary end
+        if __xmlTruthy(a.one_shot) then f = f + trigger_flag.OneShot end
+        local name = __importName(a, "trigger")
+        AddTriggerEx(name, a.match or "", a.send or "", f, custom_colour.NoChange, "", "",
+          a.script or "", tonumber(a.send_to) or sendto.world, tonumber(a.sequence) or 100)
+        if a.group and a.group ~= "" then SetTriggerOption(name, "group", a.group) end
+        count = count + 1
+      end
+      for blob in string.gmatch(xml, "<alias%s(.-)>") do
+        local a = __xmlAttrs(blob)
+        local f = (__xmlFalsy(a.enabled) and 0) or alias_flag.Enabled
+        if __xmlTruthy(a.regexp) or __xmlTruthy(a.regular_expression) then
+          f = f + alias_flag.RegularExpression
+        end
+        if __xmlTruthy(a.ignore_case) then f = f + alias_flag.IgnoreCase end
+        if __xmlTruthy(a.omit_from_output) then f = f + alias_flag.OmitFromOutput end
+        if __xmlTruthy(a.temporary) then f = f + alias_flag.Temporary end
+        if __xmlTruthy(a.one_shot) then f = f + alias_flag.OneShot end
+        local name = __importName(a, "alias")
+        AddAlias(name, a.match or "", a.send or "", f, a.script or "")
+        if a.group and a.group ~= "" then SetAliasOption(name, "group", a.group) end
+        count = count + 1
+      end
+      for blob in string.gmatch(xml, "<timer%s(.-)>") do
+        local a = __xmlAttrs(blob)
+        local f = (__xmlFalsy(a.enabled) and 0) or timer_flag.Enabled
+        if __xmlTruthy(a.one_shot) then f = f + timer_flag.OneShot end
+        if __xmlTruthy(a.temporary) then f = f + timer_flag.Temporary end
+        AddTimer(__importName(a, "timer"), tonumber(a.hour) or 0, tonumber(a.minute) or 0,
+          tonumber(a.second) or 0, a.send or "", f, a.script or "")
+        count = count + 1
+      end
+      return count
+    end
+    -- Info bar (status strip): MUSHclient's one-line strip below the output. The
+    -- reference no-ops these when no info bar exists (methods_infobar.cpp); we
+    -- have none, so stub them so plugins driving one (quest/status trackers)
+    -- install + run without erroring. Their info-bar output simply isn't shown.
+    function ShowInfoBar(show) return error_code.eOK end
+    function Info(text) return error_code.eOK end
+    function InfoClear() return error_code.eOK end
+    function InfoColour(name) return error_code.eOK end
+    function InfoBackground(name) return error_code.eOK end
+    function InfoFont(name, size, style) return error_code.eOK end
+    -- NoteStyle(style): sets bold/underline/etc. for subsequent Note output in
+    -- MUSHclient. We don't carry per-note style state generically, so accept +
+    -- ignore (a no-op) so style-setting plugins run; the text still prints.
+    function NoteStyle(style) return error_code.eOK end
+    -- ResetTimers(): re-arm the CALLING plugin's shim timers (the plural form
+    -- some plugins call). Scoped by owner — the spec tables are shared across all
+    -- plugins, so resetting every entry would steal other plugins' timers into
+    -- this plugin's env. ResetTimer's own owner-guard makes this doubly safe.
+    function ResetTimers()
+      local me = GetPluginID()
+      for key in pairs(__protelesTimerSpec) do
+        if __protelesTimerOwner[key] == me then ResetTimer(key) end
+      end
       return error_code.eOK
     end
     """#

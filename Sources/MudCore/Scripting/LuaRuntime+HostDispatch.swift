@@ -440,6 +440,7 @@ extension LuaRuntime {
         .sendGMCP: ScriptEffect.sendGMCP, .echoAard: ScriptEffect.echoAard,
         .echoAnsi: ScriptEffect.echoAnsi, .simulate: ScriptEffect.simulate,
         .removeTrigger: ScriptEffect.removeTrigger,
+        .removeAlias: ScriptEffect.removeAlias,
         .reloadPlugin: { ScriptEffect.reloadPlugin(id: $0) },
         .resetTimer: { ScriptEffect.resetTimer(name: $0) }
     ]

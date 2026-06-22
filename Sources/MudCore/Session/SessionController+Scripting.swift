@@ -484,16 +484,26 @@ public extension SessionController {
         return Line(id: LineID(0), text: text, runs: runs)
     }
 
-    /// Resolve a MUSHclient colour string to an ``ANSIColor``: one of the
-    /// eight names (`"red"`, `"white"`, …) or a `#RRGGBB` hex value. Returns
-    /// `nil` for unrecognised input (rendered as the terminal default).
+    /// Resolve a MUSHclient colour string to an ``ANSIColor``: the eight ANSI
+    /// names map to theme-aware ``NamedColor``s, a `#RRGGBB` literal parses
+    /// directly, and anything else falls back to MUSHclient's full 148-name
+    /// table (`"orange"`, `"dodgerblue"`, …) so extended `ColourNote`/`ColourTell`
+    /// colours render instead of dropping to the default. `nil` if truly unknown.
     internal static func namedColor(_ name: String) -> ANSIColor? {
         if name.hasPrefix("#"), let rgb = hexColor(name) { return rgb }
         let names: [String: NamedColor] = [
             "black": .black, "red": .red, "green": .green, "yellow": .yellow,
             "blue": .blue, "magenta": .magenta, "cyan": .cyan, "white": .white
         ]
-        return names[name.lowercased()].map { .named($0) }
+        if let named = names[name.lowercased()] { return .named(named) }
+        // MUSHclient's named-colour table (COLORREF: red in the low byte).
+        let colourref = MUSHColour.colourNameToRGB(name)
+        guard colourref >= 0 else { return nil }
+        return .rgb(
+            red: UInt8(colourref & 0xFF),
+            green: UInt8((colourref >> 8) & 0xFF),
+            blue: UInt8((colourref >> 16) & 0xFF)
+        )
     }
 
     /// Parse a `#RRGGBB` hex colour into an ``ANSIColor/rgb``. `nil` unless

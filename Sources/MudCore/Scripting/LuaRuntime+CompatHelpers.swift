@@ -22,7 +22,8 @@ extension LuaRuntime {
         "json": jsonSource,
         "aardwolf_colors": aardwolfColorsSource,
         "addxml": addxmlSource,
-        "telnet_options": telnetOptionsSource
+        "telnet_options": telnetOptionsSource,
+        "movewindow": movewindowSource
     ]
 
     /// `telnet_options` (clean-room): the Aardwolf telnet-option constants
@@ -449,6 +450,36 @@ extension LuaRuntime {
       return result
     end
     return copytable
+    """
+
+    /// `movewindow` — the Aardwolf-package miniwindow drag/position helper. It's
+    /// a *shared* MUSHclient lib (lives in the global `lua/` dir, not in any
+    /// plugin folder), so importing a plugin's `.xml` never brings it and
+    /// `require "movewindow"` would fail — breaking any miniwindow plugin
+    /// (Aard_Affects and several others). Proteles' native miniwindow overlay
+    /// already owns dragging + position persistence, so we provide a quiet stub
+    /// (same shape as the S&D host's): `install` returns a neutral position
+    /// object and the drag/menu helpers are no-ops. The window is created at the
+    /// plugin's default position and the user can drag it; the overlay remembers
+    /// where. (Mirrors ``SearchAndDestroyHost/movewindowStub`` for the generic
+    /// runtime.)
+    private static let movewindowSource = """
+    -- Define `movewindow` as a GLOBAL: the real movewindow.lua does
+    -- `movewindow = {}` at top level, and plugins call the bare global
+    -- `movewindow.install(...)` after a bare `require "movewindow"` that discards
+    -- the return (e.g. Aard_Affects). As a bundled helper this runs in the shared
+    -- _G, so the global is visible to every plugin via the env __index fallback —
+    -- same pattern as gmcphelper's `gmcp`. (Returning it too covers
+    -- `local mw = require "movewindow"`.) The native overlay owns dragging, so
+    -- install returns a neutral position object and the helpers are no-ops.
+    movewindow = movewindow or {}
+    function movewindow.install(win, ...)
+      return { window_left = 0, window_top = 0, width = 0, height = 0 }
+    end
+    function movewindow.save_state(...) end
+    function movewindow.add_drag_handler(...) end
+    function movewindow.add_to_menu(...) end
+    return movewindow
     """
 
     /// `commas(n)` — group a number's integer part with thousands separators.

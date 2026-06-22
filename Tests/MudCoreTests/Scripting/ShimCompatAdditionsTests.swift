@@ -189,4 +189,57 @@ struct ShimCompatAdditionsTests {
         """)
         #expect(outside == [.echo("true")])
     }
+
+    @Test("ImportXML parses a fragment and dispatches to AddTriggerEx/AddAlias")
+    func importXMLRegisters() async throws {
+        let lua = try await shimmed()
+        // ImportXML resolves AddTriggerEx/AddAlias as globals at call time, so we
+        // capture them to observe what the fragment parser dispatched (without a
+        // live engine). Two triggers (one regexp) + one alias here.
+        let effects = try await lua.run("""
+        local captured = {}
+        function AddTriggerEx(name, match, response, flags)
+          captured[#captured + 1] = name .. "|" .. match .. "|" .. tostring(flags > 0)
+        end
+        function AddAlias(name, match)
+          captured[#captured + 1] = "alias:" .. name .. "|" .. match
+        end
+        local frag = "<triggers>"
+          .. '<trigger name="hi" match="^hello$" enabled="y" regexp="y"></trigger>'
+          .. '<trigger name="bye" match="^bye$" enabled="y"></trigger>'
+          .. "</triggers>"
+          .. '<aliases><alias name="a1" match="^xx$" enabled="y"></alias></aliases>'
+        proteles.echo(tostring(ImportXML(frag)))
+        proteles.echo(captured[1]); proteles.echo(captured[2]); proteles.echo(captured[3])
+        proteles.echo(tostring(ImportXML(42)))
+        """)
+        // 3 installed; trigger flags > 0 (enabled+regexp); non-string arg → -1.
+        #expect(effects == [
+            .echo("3"),
+            .echo("hi|^hello$|true"),
+            .echo("bye|^bye$|true"),
+            .echo("alias:a1|^xx$"),
+            .echo("-1")
+        ])
+    }
+
+    @Test("DeleteAlias removes an alias; NoteStyle/EnableAliasGroup are present")
+    func aliasDeleteAndGroupGlobals() async throws {
+        let lua = try await shimmed()
+        // AddAlias tracks __aliasNames → IsAlias eOK; DeleteAlias clears it →
+        // IsAlias not-found (the gap several cleanup-loop plugins hit).
+        let effects = try await lua.run("""
+        AddAlias("a1", "^x$", "", 0, "")
+        proteles.echo(tostring(IsAlias("a1") == error_code.eOK))
+        proteles.echo(tostring(DeleteAlias("a1") == error_code.eOK))
+        proteles.echo(tostring(IsAlias("a1") == error_code.eAliasNotFound))
+        proteles.echo(tostring(NoteStyle(5) == error_code.eOK))
+        proteles.echo(tostring(EnableAliasGroup("g", true) == error_code.eOK))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["true", "true", "true", "true", "true"])
+        // DeleteAlias routed to the host removeAlias effect; EnableAliasGroup → enableGroup.
+        #expect(effects.contains(.removeAlias("a1")))
+        #expect(effects.contains(.enableGroup(name: "g", on: true)))
+    }
 }
