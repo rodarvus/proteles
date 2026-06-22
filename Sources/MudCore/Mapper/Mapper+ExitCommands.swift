@@ -234,20 +234,25 @@ extension Mapper {
 
     // MARK: - Portals
 
-    /// `mapper portals [filter]` — list portals + recalls (filter by dest area).
-    /// `mapper portal <use-command> [destination] [level]` (reference
-    /// `map_portal`): store a portal from anywhere to the destination room
-    /// (default: the current room). Destination must be a *known* room. The
-    /// reference pops a dialog for the level when omitted; we take it as an
-    /// optional argument (default 0 = no lock).
+    /// `mapper portal <use-command>` (reference alias `^mapper portal (.+)$` →
+    /// `map_portal`): store a hand-held portal from *anywhere* to the **current**
+    /// room, keyed by the entire rest of the line. The keyword may contain
+    /// spaces and `;;`-stacked steps (`hold amulet;;enter`, or
+    /// `dinv portal use 3786029567`) and is NOT split — the reference passes the
+    /// whole `(.+)` capture through as `keyword`, with `destination` always the
+    /// current room and the level prompted (we default it to 0 = no lock). To
+    /// set an explicit destination/level *without standing there*, use the
+    /// separate `mapper fullportal {<command>} {<destination>} <level>` form
+    /// (``fullPortalCommand``); there is no space-separated destination/level on
+    /// the plain `mapper portal` alias.
     private func addPortalCommand(_ arg: String) -> [ScriptEffect] {
-        let tokens = arg.split(separator: " ").map(String.init)
-        guard let dir = tokens.first else {
-            return [Self.note("Usage: mapper portal <use-command> [destination-room] [level]")]
+        let keyword = arg.trimmingCharacters(in: .whitespaces)
+        guard !keyword.isEmpty else {
+            return [Self.note("Usage: mapper portal <use-command>  (ex: 'mapper portal recall')")]
         }
-        let destination = tokens.count > 1 ? tokens[1] : currentRoomUID
-        let level = tokens.count > 2 ? (Int(tokens[2]) ?? 0) : 0
-        return storePortal(dir: dir, touid: destination, level: level)
+        // `level: nil` → `storePortal` prompts for the level lock (reference
+        // `map_portal`'s `utils.inputbox`); the destination is the current room.
+        return storePortal(dir: keyword, touid: currentRoomUID, level: nil)
     }
 
     /// `mapper fullportal {use-command} {destination} <level>`.
@@ -262,10 +267,16 @@ extension Mapper {
         return storePortal(dir: groups[0], touid: groups[1], level: level)
     }
 
-    /// The shared `create_portal` body: validate the destination, auto-detect a
-    /// recall portal (home/hom/recall), store it, and emit the reference's
-    /// messages verbatim.
-    private func storePortal(dir rawDir: String, touid: String?, level: Int) -> [ScriptEffect] {
+    /// The shared `create_portal` body: validate the destination, resolve the
+    /// level lock (explicit for `fullportal`, prompted for plain `portal`),
+    /// auto-detect a recall portal (home/hom/recall), store it, and emit the
+    /// reference's messages verbatim.
+    ///
+    /// `level == nil` means "prompt" (the plain `mapper portal <cmd>` path);
+    /// `fullportal` passes the explicit level it parsed from the braces. The
+    /// reference orders this as: validate room → prompt level → store, so an
+    /// unknown room fails *before* we bother the user with a level dialog.
+    private func storePortal(dir rawDir: String, touid: String?, level: Int?) -> [ScriptEffect] {
         let dir = rawDir.trimmingCharacters(in: .whitespaces)
         guard let destination = touid else {
             return [Self
@@ -275,6 +286,15 @@ extension Mapper {
         }
         guard graph.rooms[destination] != nil else {
             return [Self.note("PORTAL [\(dir)] FAILED: Room \(destination) is unknown.")]
+        }
+        let resolvedLevel: Int
+        if let level {
+            resolvedLevel = level
+        } else if let prompted = promptPortalLevel(toRoom: destination) {
+            resolvedLevel = prompted
+        } else {
+            // Cancelled or invalid input (reference: `if not level then …`).
+            return [Self.note("No level given. Portal creation cancelled.")]
         }
         let recall = ["home", "hom", "recall"].contains(dir.lowercased())
         var out: [ScriptEffect] = []
@@ -292,16 +312,36 @@ extension Mapper {
             out.append(Self.note(""))
         }
         do {
-            try store.addPortal(dir: dir, touid: destination, level: level, recall: recall)
+            try store.addPortal(dir: dir, touid: destination, level: resolvedLevel, recall: recall)
             reloadGraphAndPublish()
             out.append(Self.note("Storing '\(dir)' as a portal to room \(destination)."))
             out.append(Self.note(""))
-            out.append(Self.note("Portal given minimum level lock of \(level)."))
+            out.append(Self.note("Portal given minimum level lock of \(resolvedLevel)."))
             out.append(Self.note(""))
             return out
         } catch {
             return [Self.note("Couldn't store that portal.")]
         }
+    }
+
+    /// Prompt for a portal's minimum level lock via the native input dialog —
+    /// the reference `map_portal` pops `utils.inputbox` (default "0", validated
+    /// as a non-negative integer; cancelling aborts creation). Returns the
+    /// entered level, or `nil` when the user cancelled or typed an invalid value
+    /// (mirroring the reference's `if not level then` abort). With no dialog
+    /// provider (headless/tests) it returns 0 — no lock — so creation succeeds.
+    private func promptPortalLevel(toRoom destination: String) -> Int? {
+        guard let dialogProvider else { return 0 }
+        let message = "Please enter the level of your portal to \(destination), "
+            + "or leave at 0 to not add a level-lock"
+        let result = dialogProvider(.input(
+            prompt: message, title: "Portal Level", defaultText: "0", multiline: false
+        ))
+        guard case .text(let entered?) = result else { return nil } // Cancel → nil.
+        guard let value = Int(entered.trimmingCharacters(in: .whitespaces)), value >= 0 else {
+            return nil // Non-numeric/negative — reference re-validates in-dialog; we abort.
+        }
+        return value
     }
 
     // MARK: - delete / purge

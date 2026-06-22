@@ -55,7 +55,7 @@ struct MapperPortalsTests {
     @Test("a stored portal renders a clickable row with the reference columns")
     func portalRow() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         let effects = await mapper.handleCommand("mapper portals")
         let out = notes(effects)
         // Header/border are byte-faithful anchors.
@@ -73,7 +73,7 @@ struct MapperPortalsTests {
     @Test("a recall portal row renders red")
     func recallRowRed() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal recall 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {recall} {100} 0")
         let effects = await mapper.handleCommand("mapper portals")
         let row = effects.first { firstSegment($0)?.link?.action == .sendCommand("mapper goto 100") }
         #expect(try firstSegment(#require(row))?.foreground == MapperOutput.errorColour)
@@ -83,7 +83,7 @@ struct MapperPortalsTests {
     func levelGatedRow() async throws {
         let mapper = try await makeMapper()
         // level lock 100 > reach (level 0 + tier 0) → plain, non-clickable note.
-        _ = await mapper.handleCommand("mapper portal nexus 100 100")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 100")
         let effects = await mapper.handleCommand("mapper portals")
         let row = effects.first { notes([$0]).first?.contains("nexus") == true }
         #expect(try firstSegment(#require(row))?.link == nil)
@@ -94,15 +94,66 @@ struct MapperPortalsTests {
     @Test("portal create prints the storing + level-lock messages")
     func createMessages() async throws {
         let mapper = try await makeMapper()
-        let out = await notes(mapper.handleCommand("mapper portal nexus 100 75"))
+        let out = await notes(mapper.handleCommand("mapper fullportal {nexus} {100} 75"))
         #expect(out.contains("Storing 'nexus' as a portal to room 100."))
         #expect(out.contains("Portal given minimum level lock of 75."))
+    }
+
+    @Test("mapper portal takes the WHOLE rest of the line as a multi-word keyword")
+    func multiWordKeywordToCurrentRoom() async throws {
+        // Regression for the live failure `mapper portal dinv portal use 3786029567`
+        // → "PORTAL [dinv] FAILED: Room portal is unknown." The reference alias
+        // `^mapper portal (.+)$` passes the entire capture through as the keyword
+        // and defaults the destination to the current room — it does NOT split on
+        // spaces (the old code mis-read token[1] "portal" as a destination room).
+        // makeMapper's current room is 1 (Square, ingested last).
+        let mapper = try await makeMapper()
+        let cmd = "dinv portal use 3786029567"
+        let out = await notes(mapper.handleCommand("mapper portal \(cmd)"))
+        // The whole multi-word command is the keyword; destination is the current room.
+        #expect(out.contains("Storing '\(cmd)' as a portal to room 1."))
+        #expect(!out.contains { $0.contains("FAILED") })
+    }
+
+    @Test("mapper portal prompts for the level lock (reference title/default) and stores it")
+    func portalLevelPromptViaDialog() async throws {
+        let mapper = try await makeMapper()
+        let captured = DialogCapture()
+        await mapper.setDialogProvider { request in
+            captured.store(request)
+            return .text("75")
+        }
+        // No level on the command line → the dialog supplies it (reference
+        // `map_portal` → `utils.inputbox`). Current room is 1 (Square).
+        let out = await notes(mapper.handleCommand("mapper portal nexus"))
+        #expect(out.contains("Storing 'nexus' as a portal to room 1."))
+        #expect(out.contains("Portal given minimum level lock of 75."))
+        // The prompt mirrors the reference utils.inputbox call exactly.
+        if case .input(let msg, let title, let def, let multiline) = captured.value {
+            #expect(title == "Portal Level")
+            #expect(def == "0")
+            #expect(multiline == false)
+            #expect(msg.contains("Please enter the level of your portal to 1"))
+        } else {
+            Issue.record("expected an .input dialog request, got \(String(describing: captured.value))")
+        }
+    }
+
+    @Test("cancelling the level prompt aborts portal creation")
+    func portalLevelPromptCancel() async throws {
+        let mapper = try await makeMapper()
+        await mapper.setDialogProvider { _ in .text(nil) } // user pressed Cancel
+        #expect(await notes(mapper.handleCommand("mapper portal nexus"))
+            == ["No level given. Portal creation cancelled."])
+        // Nothing was stored.
+        let list = await notes(mapper.handleCommand("mapper portals"))
+        #expect(!list.contains { $0.contains("nexus") })
     }
 
     @Test("a recall keyword auto-detects as a recall portal")
     func recallAutoDetect() async throws {
         let mapper = try await makeMapper()
-        let effects = await mapper.handleCommand("mapper portal recall 100 0")
+        let effects = await mapper.handleCommand("mapper fullportal {recall} {100} 0")
         let out = notes(effects)
         #expect(out.contains("PORTAL AUTO-DETECT: 'recall' was automatically recognized as a recall portal."))
         // The auto-detect notice is yellow.
@@ -113,7 +164,7 @@ struct MapperPortalsTests {
     @Test("portal to an unknown room fails with the reference message")
     func createUnknownRoom() async throws {
         let mapper = try await makeMapper()
-        #expect(await notes(mapper.handleCommand("mapper portal nexus 999 0"))
+        #expect(await notes(mapper.handleCommand("mapper fullportal {nexus} {999} 0"))
             == ["PORTAL [nexus] FAILED: Room 999 is unknown."])
     }
 
@@ -122,7 +173,7 @@ struct MapperPortalsTests {
     @Test("purge portals arms a confirm, and confirm clears all portals")
     func purgeConfirm() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         #expect(await notes(mapper.handleCommand("mapper purge portals")) == [
             "Are you sure you want to purge all portal exits? "
                 + "To confirm type 'mapper purge portals confirm'."
@@ -146,7 +197,7 @@ struct MapperPortalsTests {
     @Test("delete portal by #index reports the keywords + index")
     func deleteByIndex() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         #expect(await notes(mapper.handleCommand("mapper delete portal #1"))
             == ["Deleted mapper portal index #1 with keywords 'nexus'."])
     }
@@ -169,7 +220,7 @@ struct MapperPortalsTests {
     @Test("change portal renames the command")
     func changeCommand() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         #expect(await notes(mapper.handleCommand("mapper change portal {nexus} {warp}"))
             == ["Changed mapper portal to command 'warp'."])
     }
@@ -179,7 +230,7 @@ struct MapperPortalsTests {
     @Test("portalrecall toggles by index with the reference message")
     func portalRecallByIndex() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         #expect(await notes(mapper.handleCommand("mapper portalrecall 1"))
             == ["PORTALRECALL: Recall flag added to portal 'nexus' to 'Aylor Inn'."])
     }
@@ -194,7 +245,7 @@ struct MapperPortalsTests {
     @Test("portallevel sets the lock by index with the reference message")
     func portalLevelByIndex() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         #expect(await notes(mapper.handleCommand("mapper portallevel 1 60"))
             == ["Portal 'nexus' to 'Aylor Inn' given minimum level lock of 60."])
     }
@@ -204,8 +255,8 @@ struct MapperPortalsTests {
     @Test("bounceportal set/show/clear, and rejects a recall portal")
     func bouncePortal() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0") // #1 regular
-        _ = await mapper.handleCommand("mapper portal recall 100 0") // #2 recall
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0") // #1 regular
+        _ = await mapper.handleCommand("mapper fullportal {recall} {100} 0") // #2 recall
         #expect(await notes(mapper.handleCommand("mapper bounceportal")) ==
             ["BOUNCEPORTAL: Not currently set."])
         #expect(await notes(mapper.handleCommand("mapper bounceportal 1"))
@@ -224,7 +275,7 @@ struct MapperPortalsTests {
     @Test("a designated bounce portal is marked with * in the table")
     func bounceMarker() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0")
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
         _ = await mapper.handleCommand("mapper bounceportal 1")
         let out = await notes(mapper.handleCommand("mapper portals"))
         // The row's leading marker cell now carries '*' instead of a space.
@@ -247,7 +298,7 @@ struct MapperPortalsTests {
                 package: "room.info",
                 json: #"{"num":1,"name":"Square","zone":"aylor","exits":{}}"#
             )
-            _ = await mapper.handleCommand("mapper portal nexus 100 0")
+            _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0")
             _ = await mapper.handleCommand("mapper bounceportal 1")
             #expect(await mapper.bouncePortalDir == "nexus")
         }
@@ -259,8 +310,22 @@ struct MapperPortalsTests {
     @Test("bouncerecall requires a recall portal")
     func bounceRecall() async throws {
         let mapper = try await makeMapper()
-        _ = await mapper.handleCommand("mapper portal nexus 100 0") // #1 regular (not recall)
+        _ = await mapper.handleCommand("mapper fullportal {nexus} {100} 0") // #1 regular (not recall)
         #expect(await notes(mapper.handleCommand("mapper bouncerecall 1"))
             .first?.hasPrefix("BOUNCERECALL FAILED: Portal #1 is not a recall portal") == true)
+    }
+}
+
+/// Captures the last ``ScriptDialog`` request a provider received, so a test can
+/// assert the prompt's shape after the (synchronous, off-task) provider call.
+private final class DialogCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: ScriptDialog?
+    var value: ScriptDialog? {
+        lock.withLock { stored }
+    }
+
+    func store(_ dialog: ScriptDialog) {
+        lock.withLock { stored = dialog }
     }
 }

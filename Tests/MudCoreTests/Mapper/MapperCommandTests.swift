@@ -259,7 +259,9 @@ struct MapperCommandTests {
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
         // A recall keyword stores it as a recall to room 1 (reference wording).
-        #expect(await notes(mapper.handleCommand("mapper portal recall 1"))
+        // The explicit-destination form is `mapper fullportal {cmd} {dest} <lvl>`;
+        // plain `mapper portal <cmd>` always targets the *current* room.
+        #expect(await notes(mapper.handleCommand("mapper fullportal {recall} {1} 0"))
             .contains { $0 == "Storing 'recall' as a portal to room 1." })
         // A regular portal (use-command "enter cloud") to room 3, level 50.
         _ = await mapper.handleCommand("mapper fullportal {enter cloud} {3} 50")
@@ -403,7 +405,7 @@ struct MapperCommandTests {
         let (mapper, url) = try seeded()
         defer { try? FileManager.default.removeItem(at: url) }
         await seed(mapper)
-        _ = await mapper.handleCommand("mapper portal enter 3 0")
+        _ = await mapper.handleCommand("mapper fullportal {enter} {3} 0")
         // Change by keywords (reference wording).
         #expect(await notes(mapper.handleCommand("mapper change portal {enter} {step}"))
             == ["Changed mapper portal to command 'step'."])

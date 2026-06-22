@@ -122,6 +122,12 @@ public final class ScriptsModel {
         let disabledFeatures = await CoreFeatureStore.disabledFeatures(forProfile: id)
         // Attach the live map, backed by the global Databases/Aardwolf.db.
         if !disabledFeatures.contains("mapper"), let mapper = Self.makeMapper() {
+            // Share the app's native dialog provider so the mapper can prompt
+            // (e.g. the `mapper portal` level-lock) the same way the Lua
+            // `utils.inputbox` path does — see ``Mapper/dialogProvider``.
+            #if os(macOS)
+                await mapper.setDialogProvider(makeScriptDialogProvider())
+            #endif
             await session.attachMapper(mapper)
         }
         // Attach the native Search-and-Destroy host (if installed): its own
