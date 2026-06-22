@@ -5,6 +5,24 @@ import SwiftUI
     import AppKit
 
     extension CommandField {
+        /// SwiftUI re-invokes this on every state change; re-point the coordinator
+        /// callbacks + re-apply the live text-editing policy (spell-check, etc.).
+        func updateNSView(_: NSView, context: Context) {
+            context.coordinator.onSubmit = onSubmit
+            context.coordinator.vocabulary = vocabulary
+            context.coordinator.ghostHintEnabled = ghostHint
+            context.coordinator.autoRepeatLastCommand = autoRepeatLastCommand
+            context.coordinator.onHeightChange = onHeightChange
+            if let textView = context.coordinator.textView {
+                textView.onMacroKey = onMacroKey
+                textView.spellChecking = spellChecking
+                textView.applyTextEditingPolicy() // re-apply if toggled while focused
+                context.coordinator.lineHeight = Self.lineHeight(for: textView.font)
+                context.coordinator.updateHeight()
+            }
+            if !ghostHint { context.coordinator.hideGhost() }
+        }
+
         func makeScrollView() -> NSScrollView {
             let scrollView = NSScrollView()
             scrollView.borderType = .noBorder

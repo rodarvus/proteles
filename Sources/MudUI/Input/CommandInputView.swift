@@ -55,6 +55,7 @@ public struct CommandInputView: View {
     private let vocabulary: (@MainActor () -> CompletionVocabulary)?
     private let spellChecking: Bool
     private let ghostHint: Bool
+    private let autoRepeatLastCommand: Bool
 
     /// - Parameters:
     ///   - onSubmit: called with the line when the user presses Enter.
@@ -73,13 +74,15 @@ public struct CommandInputView: View {
         onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> MacroKeyOutcome)? = nil,
         vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
         spellChecking: Bool = false,
-        ghostHint: Bool = true
+        ghostHint: Bool = true,
+        autoRepeatLastCommand: Bool = false
     ) {
         self.onSubmit = onSubmit
         self.onMacroKey = onMacroKey
         self.vocabulary = vocabulary
         self.spellChecking = spellChecking
         self.ghostHint = ghostHint
+        self.autoRepeatLastCommand = autoRepeatLastCommand
     }
 
     /// Live editor height (one line by default; grows as lines are added, up to
@@ -94,6 +97,7 @@ public struct CommandInputView: View {
             vocabulary: vocabulary,
             spellChecking: spellChecking,
             ghostHint: ghostHint,
+            autoRepeatLastCommand: autoRepeatLastCommand,
             onHeightChange: { fieldHeight = $0 }
         )
         .frame(height: fieldHeight)
@@ -117,6 +121,7 @@ public struct CommandInputView: View {
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
         let spellChecking: Bool
         let ghostHint: Bool
+        let autoRepeatLastCommand: Bool
         let onHeightChange: (CGFloat) -> Void
 
         /// The input grows to five visual rows; beyond that the text view scrolls.
@@ -148,21 +153,6 @@ public struct CommandInputView: View {
             return container
         }
 
-        func updateNSView(_: NSView, context: Context) {
-            context.coordinator.onSubmit = onSubmit
-            context.coordinator.vocabulary = vocabulary
-            context.coordinator.ghostHintEnabled = ghostHint
-            context.coordinator.onHeightChange = onHeightChange
-            if let textView = context.coordinator.textView {
-                textView.onMacroKey = onMacroKey
-                textView.spellChecking = spellChecking
-                textView.applyTextEditingPolicy() // re-apply if toggled while focused
-                context.coordinator.lineHeight = Self.lineHeight(for: textView.font)
-                context.coordinator.updateHeight()
-            }
-            if !ghostHint { context.coordinator.hideGhost() }
-        }
-
         static func lineHeight(for font: NSFont?) -> CGFloat {
             guard let font else { return 20 }
             return ceil(font.ascender - font.descender + font.leading)
@@ -178,6 +168,9 @@ public struct CommandInputView: View {
             weak var ghost: NSTextField?
             /// As-you-type ghost hint on/off (the Settings toggle).
             var ghostHintEnabled = true
+            /// Opt-in: a bare Enter on an empty line resends the last command
+            /// (MUSHclient `auto_repeat`). Off by default — see ``submit()``.
+            var autoRepeatLastCommand = false
             /// Report the editor's desired height (#39 auto-grow).
             var onHeightChange: ((CGFloat) -> Void)?
             var lineHeight: CGFloat = 20
@@ -291,7 +284,6 @@ public struct CommandInputView: View {
                 history.record(text)
                 cycling = false
                 candidates = []
-                setText("")
                 // A multi-line buffer sends one command per line (#39); a plain
                 // single line (incl. an empty one — MUDs use a bare Enter to
                 // refresh the prompt) sends exactly itself.
@@ -301,6 +293,16 @@ public struct CommandInputView: View {
                     }
                 } else {
                     onSubmit(text)
+                }
+                // Auto-repeat (opt-in, MUSHclient `auto_repeat` / Mudlet keep-on-
+                // send): instead of clearing, keep the just-sent command in the
+                // box, fully selected — so a bare Enter resends it and typing
+                // replaces it. Empty and multi-line sends clear as usual (an empty
+                // line stays empty — never "repeat from nothing").
+                if autoRepeatLastCommand, !text.isEmpty, !text.contains("\n") {
+                    setText(text, selectAll: true)
+                } else {
+                    setText("")
                 }
             }
 
@@ -405,13 +407,18 @@ public struct CommandInputView: View {
             /// Replace the field text and put the caret at the end. Programmatic
             /// edits don't fire `controlTextDidChange`, so this won't clobber
             /// cycle / navigation state.
-            private func setText(_ text: String) {
+            private func setText(_ text: String, selectAll: Bool = false) {
                 guard let textView else { return }
                 hideGhost() // every programmatic edit clears the hint
                 let end = (text as NSString).length
                 programmaticEdit = true
                 textView.string = text
-                textView.setSelectedRange(NSRange(location: end, length: 0))
+                // Auto-repeat keeps the just-sent command *selected* (MUSHclient
+                // SetSel(0,-1) / Mudlet selectAll) so Enter resends it and typing
+                // replaces it; otherwise the caret sits at the end.
+                textView.setSelectedRange(
+                    selectAll ? NSRange(location: 0, length: end) : NSRange(location: end, length: 0)
+                )
                 programmaticEdit = false
                 updateHeight() // history recall / completion may add or drop lines
                 resetScrollIfAllContentFits()

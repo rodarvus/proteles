@@ -99,6 +99,10 @@ struct ContentView: View {
     /// commands). Default off — a command line squiggles a lot of game words.
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
     @AppStorage("inputGhostHint") private var inputGhostHint = true
+    /// Opt-in: pressing Enter on an empty line resends the last command
+    /// (MUSHclient's `auto_repeat`). Off by default — a bare Enter is normally
+    /// an Aardwolf prompt-nudge.
+    @AppStorage("autoRepeatCommand") private var autoRepeatCommand = false
     /// Deliver notifications even while Proteles is frontmost (opt-out of
     /// suppress-when-focused).
     @AppStorage("notifyWhenFocused") private var notifyWhenFocused = false
@@ -386,7 +390,8 @@ struct ContentView: View {
                 },
                 vocabulary: { makeCompletionVocabulary() },
                 spellChecking: commandSpellCheck,
-                ghostHint: inputGhostHint
+                ghostHint: inputGhostHint,
+                autoRepeatLastCommand: autoRepeatCommand
             )
             .overlay(alignment: .trailing) {
                 if navigationMode {

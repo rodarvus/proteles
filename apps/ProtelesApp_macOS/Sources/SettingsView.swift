@@ -285,6 +285,7 @@ private struct InputSettingsView: View {
     @AppStorage("inputGhostHint") private var inputGhostHint = true
     @AppStorage("commandSpellCheck") private var commandSpellCheck = false
     @AppStorage("navigationMode") private var navigationMode = false
+    @AppStorage("autoRepeatCommand") private var autoRepeatCommand = false
     @AppStorage("scriptErrorsInOutput") private var scriptErrorsInOutput = true
 
     var body: some View {
@@ -303,6 +304,16 @@ private struct InputSettingsView: View {
                 Text("Show spell-check squiggles in the command line. Visual only — "
                     + "auto-correct and smart quotes stay off so commands like "
                     + "cast 'armor' are never altered.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Commands") {
+                Toggle("Keep command after sending (repeat)", isOn: $autoRepeatCommand)
+                    .help("The sent command stays selected — press Enter to repeat it, or type to replace it")
+                Text("When on, after you send a command it stays in the input box, fully "
+                    + "selected (MUSHclient's auto-repeat / Mudlet's keep-on-send): press "
+                    + "Enter to repeat it, or just start typing to replace it. Off by default. "
+                    + "Empty lines are still sent as-is (a bare Enter refreshes the prompt).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
