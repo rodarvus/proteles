@@ -127,7 +127,8 @@
             let container = SplitOutputContainer(
                 scrollView: scrollView,
                 tailScrollView: tailScrollView,
-                tailHeight: tailHeight
+                tailHeight: tailHeight,
+                lineHeight: lineHeight
             )
 
             let coordinator = RenderCoordinator(textView: textView, palette: palette)

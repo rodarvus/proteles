@@ -118,12 +118,15 @@
 
         /// Live-tail split (Mudlet-style): a small bottom pane that always shows
         /// the most recent lines while the user scrolls back through history.
-        /// We keep the last ``tailLineCount`` rendered lines and mirror them
-        /// into ``tailTextView`` whenever new output arrives. The pane's
-        /// show/hide is owned by the view (``SplitOutputContainer``); here we
-        /// only keep its content current.
+        /// We retain the last ``tailRetained`` rendered lines and mirror them
+        /// into ``tailTextView`` whenever new output arrives. We deliberately
+        /// keep MORE lines than the pane shows at its default height so the user
+        /// can *drag the pane taller* (``SplitOutputContainer``) to read more
+        /// combat history without us re-plumbing the buffer — the pane height
+        /// clips how many of the retained lines are visible. The pane's
+        /// show/hide + size is owned by the view; here we only keep content current.
         private weak var tailTextView: NSTextView?
-        private var tailLineCount = 10
+        private var tailRetained = 50
         private var recentLines: Deque<NSAttributedString> = []
 
         /// FIFO of `(LineID, utf16Length)` for every line currently in
@@ -213,7 +216,8 @@
         /// `lineCount` lines of output. Call once, after construction.
         public func attachTail(textView: NSTextView, lineCount: Int) {
             tailTextView = textView
-            tailLineCount = max(1, lineCount)
+            // Retain enough lines to fill a dragged-taller pane (see ``tailRetained``).
+            tailRetained = max(50, lineCount)
             refreshTail()
         }
 
@@ -239,8 +243,8 @@
                 }
                 storage.endEditing()
             }
-            if recentLines.count > tailLineCount {
-                recentLines.removeFirst(recentLines.count - tailLineCount)
+            if recentLines.count > tailRetained {
+                recentLines.removeFirst(recentLines.count - tailRetained)
             }
             scrollToBottom(textView)
             refreshTail()
@@ -326,8 +330,8 @@
                         storage.append(attributed)
                         lineLengths.append((id: line.id, utf16Length: attributed.length))
                         recentLines.append(attributed)
-                        if recentLines.count > tailLineCount {
-                            recentLines.removeFirst(recentLines.count - tailLineCount)
+                        if recentLines.count > tailRetained {
+                            recentLines.removeFirst(recentLines.count - tailRetained)
                         }
                         didAppend = true
                         appendedCount += 1

@@ -25,15 +25,34 @@
         /// Translucent "jump to latest" affordance, shown with the tail; clicking
         /// it scrolls the history back to the bottom (which dismisses the split).
         private let jumpButton = NSButton()
+        /// Invisible grab strip over the divider — drag it to resize the tail
+        /// pane (read more combat history as a static window). Owns its own
+        /// resize cursor + drag tracking.
+        private let resizeHandle = TailResizeHandle()
+        /// The tail pane's height (the constant we mutate while dragging the
+        /// divider). Decoupled from the line count so the user can read back
+        /// further; ``RenderCoordinator`` retains enough lines to fill it.
+        private var tailHeightConstraint: NSLayoutConstraint!
+
+        /// One line's height, for clamping the drag to a sensible min/max.
+        private let lineHeight: CGFloat
+        /// Persisted dragged height, so the pane stays the size the user chose.
+        private static let heightDefaultsKey = "output.tailHeight"
 
         /// Reveal the tail once scrolled more than this many points above the
         /// bottom (a couple of points of slop so a pin-to-bottom doesn't flicker
         /// the pane on/off).
         private let splitThreshold: CGFloat = 8
 
-        init(scrollView: NSScrollView, tailScrollView: NSScrollView, tailHeight: CGFloat) {
+        init(
+            scrollView: NSScrollView,
+            tailScrollView: NSScrollView,
+            tailHeight: CGFloat,
+            lineHeight: CGFloat
+        ) {
             self.scrollView = scrollView
             self.tailScrollView = tailScrollView
+            self.lineHeight = max(1, lineHeight)
             super.init(frame: .zero)
 
             separator.boxType = .separator
@@ -41,8 +60,15 @@
             tailScrollView.isHidden = true
             separator.isHidden = true
             jumpButton.isHidden = true
+            resizeHandle.isHidden = true
+            resizeHandle.onDrag = { [weak self] event in self?.handleResizeDrag(event) }
 
-            for sub in [scrollView, tailScrollView, separator, jumpButton] {
+            // Restore the user's chosen height (falls back to the default).
+            let saved = UserDefaults.standard.double(forKey: Self.heightDefaultsKey)
+            let initialHeight = saved > 0 ? CGFloat(saved) : tailHeight
+            tailHeightConstraint = tailScrollView.heightAnchor.constraint(equalToConstant: initialHeight)
+
+            for sub in [scrollView, tailScrollView, separator, jumpButton, resizeHandle] {
                 sub.translatesAutoresizingMaskIntoConstraints = false
                 addSubview(sub)
             }
@@ -55,12 +81,18 @@
                 tailScrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
                 tailScrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
                 tailScrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
-                tailScrollView.heightAnchor.constraint(equalToConstant: tailHeight),
+                tailHeightConstraint,
 
                 separator.leadingAnchor.constraint(equalTo: leadingAnchor),
                 separator.trailingAnchor.constraint(equalTo: trailingAnchor),
                 separator.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor),
                 separator.heightAnchor.constraint(equalToConstant: 1),
+
+                // A wider invisible grab strip centred on the divider.
+                resizeHandle.leadingAnchor.constraint(equalTo: leadingAnchor),
+                resizeHandle.trailingAnchor.constraint(equalTo: trailingAnchor),
+                resizeHandle.centerYAnchor.constraint(equalTo: separator.centerYAnchor),
+                resizeHandle.heightAnchor.constraint(equalToConstant: 8),
 
                 // Bottom-right of the (non-scrolling) live-tail pane.
                 jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -148,10 +180,26 @@
             tailScrollView.isHidden = !show
             separator.isHidden = !show
             jumpButton.isHidden = !show
+            resizeHandle.isHidden = !show
             jumpButton.alphaValue = 0.3 // reset hover brightness when re-shown
             if show {
                 (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
             }
+        }
+
+        /// Resize the tail pane as the divider is dragged. The pane is pinned to
+        /// the bottom edge, so its height is the pointer's distance from the
+        /// bottom, clamped to [3 lines, 70% of the view] and persisted so the
+        /// chosen size survives relaunch. ``RenderCoordinator`` retains enough
+        /// recent lines to fill a taller pane.
+        private func handleResizeDrag(_ event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            let minHeight = lineHeight * 3 + 16
+            let maxHeight = max(minHeight, bounds.height * 0.7)
+            let proposed = min(max(point.y, minHeight), maxHeight)
+            tailHeightConstraint.constant = proposed
+            UserDefaults.standard.set(Double(proposed), forKey: Self.heightDefaultsKey)
+            (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
         }
 
         /// Pure decision: show the live tail only when the content is taller
@@ -170,6 +218,25 @@
 
         deinit {
             NotificationCenter.default.removeObserver(self)
+        }
+    }
+
+    /// A thin, invisible strip over the live-tail divider: shows a vertical
+    /// resize cursor and forwards drags to ``SplitOutputContainer`` (which
+    /// adjusts the pane height). Transparent, so the 1px separator shows through.
+    final class TailResizeHandle: NSView {
+        var onDrag: ((NSEvent) -> Void)?
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .resizeUpDown)
+        }
+
+        override func mouseDown(with _: NSEvent) {
+            // Accept the mouse-down so the subsequent drag tracks to this view.
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            onDrag?(event)
         }
     }
 
