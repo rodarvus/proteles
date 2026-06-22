@@ -143,10 +143,10 @@ struct SessionControllerScriptingTests {
         // The default-styled "c" contributes no run.
         #expect(line.runs.count == 2)
         #expect(line.runs[0].utf16Range == 0..<1)
-        #expect(line.runs[0].style.foreground == .named(.white))
+        #expect(line.runs[0].style.foreground == .rgb(red: 0xFF, green: 0xFF, blue: 0xFF))
         #expect(line.runs[1].utf16Range == 1..<3)
-        #expect(line.runs[1].style.foreground == .named(.red))
-        #expect(line.runs[1].style.background == .named(.blue))
+        #expect(line.runs[1].style.foreground == .rgb(red: 0xFF, green: 0x00, blue: 0x00))
+        #expect(line.runs[1].style.background == .rgb(red: 0x00, green: 0x00, blue: 0xFF))
     }
 
     @Test("ColourNote resolves #RRGGBB hex colours to RGB runs")
@@ -168,11 +168,12 @@ struct SessionControllerScriptingTests {
         #expect(line.runs.count == 1)
         #expect(line.runs[0].style.foreground == .rgb(red: 0xFF, green: 0xA5, blue: 0x00))
         #expect(line.runs[0].style.background == .rgb(red: 0x1E, green: 0x90, blue: 0xFF))
-        // The 8 ANSI names still map to theme-aware NamedColors, not RGB.
-        let ansi = SessionController.colourNoteLine([
+        // The 8 basic names are MUSHclient colour names too: "red" is bright
+        // #FF0000, not the theme's normal/dim ANSI red.
+        let basic = SessionController.colourNoteLine([
             NoteSegment(text: "x", foreground: "red", background: nil)
         ])
-        #expect(ansi.runs[0].style.foreground == .named(.red))
+        #expect(basic.runs[0].style.foreground == .rgb(red: 0xFF, green: 0x00, blue: 0x00))
         // A truly unknown name stays unstyled (no run).
         let unknown = SessionController.colourNoteLine([
             NoteSegment(text: "x", foreground: "notacolour", background: nil)

@@ -142,6 +142,13 @@ extension LuaRuntime {
     /// (caught by the running chunk's pcall).
     nonisolated static let moduleLoaderBootstrap = """
     local loaded = {}
+    local function caller_env(level)
+      for frame = level + 1, level + 6 do
+        local ok, env = pcall(getfenv, frame)
+        if ok and type(env) == "table" and env ~= _G then return env end
+      end
+      return _G
+    end
     -- Honor `package.path` (MUSHclient/Lua compat): expand "?" in each
     -- ";"-separated template with the module's path and return the first source
     -- that exists, resolved through the sandboxed dofile-mode reader (so it can
@@ -164,7 +171,7 @@ extension LuaRuntime {
       if cached ~= nil then return cached end
       -- Per-plugin cache for plugin-local files, stored ON the caller's env, so
       -- each plugin gets its own copy and a reload (fresh env) re-runs it.
-      local env = getfenv(2)
+      local env = caller_env(2)
       local bucket = rawget(env, "__proteles_required")
       if bucket then
         local hit = bucket[name]
@@ -189,7 +196,7 @@ extension LuaRuntime {
       -- as the vararg, like real `require`, for modules using `module(...)`.
       if bundled then
         local result = chunk(name)
-        if result == nil then result = true end
+        if result == nil then result = package.loaded[name] or true end
         loaded[name] = result
         return result
       end
@@ -202,7 +209,10 @@ extension LuaRuntime {
       if bucket == nil then bucket = {}; rawset(env, "__proteles_required", bucket) end
       setfenv(chunk, env)
       local result = chunk(name)
-      if result == nil then result = true end
+      if result == nil then
+        local package_bucket = rawget(env, "__proteles_package_loaded")
+        result = (package_bucket and package_bucket[name]) or true
+      end
       bucket[name] = result
       return result
     end
@@ -217,7 +227,7 @@ extension LuaRuntime {
       -- top-level `OnPluginSend` into `_G`, where every *other* plugin that
       -- lacks its own `OnPluginSend` inherits it via `__index` and re-runs it —
       -- so each dinv bypass send was transmitted once per such plugin (doubling).
-      setfenv(chunk, getfenv(2))
+      setfenv(chunk, caller_env(2))
       return chunk()
     end
 
@@ -228,7 +238,7 @@ extension LuaRuntime {
       if type(text) ~= "string" then return nil, "loadstring expects a string" end
       local chunk = proteles.__compile(text, chunkname or "loadstring")
       if chunk == nil then return nil, "compile error" end
-      setfenv(chunk, getfenv(2))
+      setfenv(chunk, caller_env(2))
       return chunk
     end
     load = loadstring

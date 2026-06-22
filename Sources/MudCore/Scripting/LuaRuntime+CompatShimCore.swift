@@ -57,11 +57,30 @@ extension LuaRuntime {
       setmetatable(m, { __index = _G })
     end
     function module(name, ...)
-      local m = package.loaded[name]
-      if m == nil then m = {}; package.loaded[name] = m end
+      local caller_env = getfenv(2)
+      local module_bucket = package.loaded
+      if caller_env ~= _G then
+        module_bucket = rawget(caller_env, "__proteles_package_loaded")
+        if module_bucket == nil then
+          module_bucket = {}
+          rawset(caller_env, "__proteles_package_loaded", module_bucket)
+        end
+      end
+      local m = module_bucket[name]
+      if m == nil then
+        m = {}
+        if module_bucket == package.loaded then package.loaded[name] = m end
+      end
+      module_bucket[name] = m
       m._NAME = name; m._M = m
-      if name and not tostring(name):find("%.") then _G[name] = m end
-      for _, modifier in ipairs({ ... }) do modifier(m) end
+      if name and not tostring(name):find("%.") then rawset(caller_env, tostring(name), m) end
+      for _, modifier in ipairs({ ... }) do
+        if modifier == package.seeall then
+          setmetatable(m, { __index = caller_env })
+        else
+          modifier(m)
+        end
+      end
       setfenv(2, m)
     end
 

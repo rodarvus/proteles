@@ -78,6 +78,92 @@ struct PluginRequireModuleTests {
         #expect(effects == [.send("hi")])
     }
 
+    @Test("a require'd utility module can read a plugin global through _G")
+    func moduleSeesPluginGlobalsThroughUnderscoreG() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try write(
+            """
+            function utility_tag()
+              if _G.plugin_short_name and _G.plugin_short_name ~= "" then
+                return _G.plugin_short_name
+              end
+              return GetPluginInfo(GetPluginID(), 1) or "plugin"
+            end
+            """,
+            "utility.lua",
+            in: dir
+        )
+
+        let lua = try LuaRuntime()
+        await lua.setModuleSearchPaths([dir.path])
+        await lua.createPluginEnvironment("p")
+        await lua.setPluginContext(PluginContext(pluginID: "p", pluginName: "Plugin Name"))
+        _ = await lua.loadPluginScript(#"plugin_short_name = "PX"; require("utility")"#, pluginID: "p")
+        let effects = await lua.runPluginScript(#"proteles.send(utility_tag())"#, pluginID: "p")
+        #expect(effects == [.send("PX")])
+    }
+
+    @Test("pcall(require) keeps a plugin-local utility in the plugin env")
+    func pcallRequireKeepsPluginEnvironment() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try write(
+            """
+            local U = {}
+            function U.tag()
+              if _G.plugin_short_name and _G.plugin_short_name ~= "" then
+                return _G.plugin_short_name
+              end
+              return GetPluginInfo(GetPluginID(), 1) or "plugin"
+            end
+            return U
+            """,
+            "utility.lua",
+            in: dir
+        )
+
+        let lua = try LuaRuntime()
+        try await lua.loadCompatShim()
+        await lua.setModuleSearchPaths([dir.path])
+        await lua.createPluginEnvironment("p")
+        await lua.setPluginContext(PluginContext(pluginID: "p", pluginName: "Plugin Name"))
+        _ = await lua.loadPluginScript(
+            #"plugin_short_name = "PX"; local ok, util = pcall(require, "utility"); utility = util"#,
+            pluginID: "p"
+        )
+        let effects = await lua.runPluginScript(#"proteles.send(utility.tag())"#, pluginID: "p")
+        #expect(effects == [.send("PX")])
+    }
+
+    @Test("a module(..., package.seeall) utility can read plugin globals through _G")
+    func seeallModuleSeesPluginGlobalsThroughUnderscoreG() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try write(
+            """
+            module("utility", package.seeall)
+            function tag()
+              if _G.plugin_short_name and _G.plugin_short_name ~= "" then
+                return _G.plugin_short_name
+              end
+              return GetPluginInfo(GetPluginID(), 1) or "plugin"
+            end
+            """,
+            "utility.lua",
+            in: dir
+        )
+
+        let lua = try LuaRuntime()
+        try await lua.loadCompatShim()
+        await lua.setModuleSearchPaths([dir.path])
+        await lua.createPluginEnvironment("p")
+        await lua.setPluginContext(PluginContext(pluginID: "p", pluginName: "Plugin Name"))
+        _ = await lua.loadPluginScript(#"plugin_short_name = "PX"; require("utility")"#, pluginID: "p")
+        let effects = await lua.runPluginScript(#"proteles.send(utility.tag())"#, pluginID: "p")
+        #expect(effects == [.send("PX")])
+    }
+
     @Test("two of a plugin's own files share globals through the plugin env")
     func pluginFilesShareGlobals() async throws {
         let dir = try tempDir()
