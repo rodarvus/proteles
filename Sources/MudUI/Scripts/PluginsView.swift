@@ -54,6 +54,10 @@ public struct PluginsView: View {
     /// A plugin staged for adding (files chosen / download extracted), paired
     /// with its analysis. Drives the report sheet. `nil` when none in progress.
     @State private var pendingAdd: PendingAdd?
+    /// Remaining plugin groups when several distinct plugins were selected at
+    /// once — each is staged through the confirm sheet in turn (see
+    /// ``advanceQueue()``). Empty for the common single-plugin add.
+    @State private var pendingQueue: [[URL]] = []
     @State private var isAdding = false
     @State private var urlPromptShown = false
     @State private var urlText = ""
@@ -274,18 +278,61 @@ public struct PluginsView: View {
     private func beginAddFromMac() {
         #if os(macOS)
             guard let sources = chooseFiles(
-                message: "Choose a plugin — its .xml, the folder that contains it, "
-                    + "or all of its files.",
+                message: "Choose one or more plugins — each plugin's .xml, the folder "
+                    + "that contains it, or all of its files.",
                 prompt: "Add"
             ), !sources.isEmpty else { return }
-            stage(
-                sources: sources,
-                displayName: sources.first?.lastPathComponent ?? "Plugin",
-                origin: nil,
-                tempDir: nil
-            )
+            // A selection can be several *distinct* plugins (install each) or one
+            // plugin's loose files. Stage the first; the rest queue behind it.
+            let groups = pluginGroups(from: sources)
+            guard let first = groups.first else { return }
+            pendingQueue = Array(groups.dropFirst())
+            stageFileGroup(first)
         #endif
     }
+
+    #if os(macOS)
+        /// Split a multi-selection into distinct plugins. Each chosen *folder* is
+        /// its own plugin; among loose files, two-or-more `.xml` files mean the
+        /// user picked several separate plugins (install each), while a single
+        /// `.xml` plus any loose sidecar files is one plugin — preserving the
+        /// "all of its files" case. (A mix of several `.xml`s with loose `.lua`
+        /// sidecars is inherently ambiguous, so loose non-xml files are dropped
+        /// in that case; import such a plugin on its own or as a folder.)
+        private func pluginGroups(from sources: [URL]) -> [[URL]] {
+            let fileManager = FileManager.default
+            func isDirectory(_ url: URL) -> Bool {
+                var isDir: ObjCBool = false
+                return fileManager.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+            }
+            let directories = sources.filter(isDirectory)
+            let files = sources.filter { !isDirectory($0) }
+            let xmls = files.filter { $0.pathExtension.lowercased() == "xml" }
+            var groups: [[URL]] = directories.map { [$0] }
+            if xmls.count >= 2 {
+                groups += xmls.map { [$0] }
+            } else if !files.isEmpty {
+                groups.append(files)
+            }
+            return groups
+        }
+
+        /// Stage one plugin group (a folder, or an `.xml` + its sidecars) into the
+        /// confirm sheet, naming it after its `.xml` (or folder).
+        private func stageFileGroup(_ group: [URL]) {
+            let name = group.first { $0.pathExtension.lowercased() == "xml" }?.lastPathComponent
+                ?? group.first?.lastPathComponent ?? "Plugin"
+            stage(sources: group, displayName: name, origin: nil, tempDir: nil)
+        }
+
+        /// Stage the next queued plugin into the sheet; `false` if none remain.
+        @discardableResult
+        private func advanceQueue() -> Bool {
+            guard !pendingQueue.isEmpty else { return false }
+            stageFileGroup(pendingQueue.removeFirst())
+            return true
+        }
+    #endif
 
     private func submitURL() {
         guard let url = URL(string: urlText.trimmingCharacters(in: .whitespaces)) else { return }
@@ -324,12 +371,18 @@ public struct PluginsView: View {
             await model.add(sources: pending.sources, origin: pending.origin)
             isAdding = false
             if let temp = pending.tempDir { try? FileManager.default.removeItem(at: temp) }
+            // Advancing reassigns `pendingAdd` to the next queued plugin (the
+            // sheet stays up, content swaps); only clear it when the queue's dry.
+            #if os(macOS)
+                if advanceQueue() { return }
+            #endif
             pendingAdd = nil
         }
     }
 
     private func cancelAdd(_ pending: PendingAdd) {
         if let temp = pending.tempDir { try? FileManager.default.removeItem(at: temp) }
+        pendingQueue.removeAll() // cancelling aborts the rest of a batch
         pendingAdd = nil
     }
 
