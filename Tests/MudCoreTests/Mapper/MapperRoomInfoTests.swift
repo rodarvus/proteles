@@ -125,4 +125,86 @@ struct MapperRoomInfoTests {
             == ["Ignore exits mismatch flag set on room 1."])
         #expect(await mapper.graph.rooms["1"]?.ignoreExitsMismatch == true)
     }
+
+    // MARK: - exit carry-forward on revisit (hidden cardinals + custom)
+
+    /// A hidden compass exit (a secret `down` GMCP never lists) must survive a
+    /// revisit whose `room.info` omits it — the reference's `save_room_exits`
+    /// only upserts and never prunes. Without the carry-forward, `saveExits`
+    /// delete-then-inserts the GMCP-only set and the hidden `d` is lost,
+    /// stranding whatever it reaches. Fails before the `mergedExits` fix.
+    @Test("hidden cardinal exit survives a revisit that omits it (in-memory + persisted)")
+    func hiddenCardinalCarriedForward() async throws {
+        let mapper = try await makeMapper()
+        // Teach a hidden d→3 from room 1 (room 3's GMCP never advertises the up link's twin).
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":3,"name":"Cellar","zone":"aylor","exits":{"u":1}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":2,"d":3}}"#
+        )
+        #expect(await mapper.graph.rooms["1"]?.exits["d"]?.to == "3")
+
+        // Revisit room 1; GMCP omits the hidden `d` (it isn't an advertised exit).
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":2}}"#
+        )
+        #expect(await mapper.graph.rooms["1"]?.exits["d"]?.to == "3")
+
+        // And it persisted (survives a reload from the store, not just in memory).
+        try await mapper.reload()
+        #expect(await mapper.graph.rooms["1"]?.exits["d"]?.to == "3")
+    }
+
+    /// The route to a room reachable only via a hidden exit must still exist
+    /// after that exit's source room is revisited — the Zangar-island case.
+    @Test("pathfinder still routes through a hidden exit after a revisit")
+    func hiddenExitStaysReachableAfterRevisit() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":3,"name":"Cellar","zone":"aylor","exits":{"u":1}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":2,"d":3}}"#
+        )
+        // Revisit room 1 without the hidden `d` exit.
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":2}}"#
+        )
+        let route = await Pathfinder(graph: mapper.graph).path(from: "1", to: "3")
+        #expect(route == [PathStep(dir: "d", uid: "3")])
+    }
+
+    /// GMCP still wins for a direction it *does* report: a changed destination
+    /// replaces the old one (no stale duplicate, no count growth).
+    @Test("GMCP replaces a changed destination for a reported direction")
+    func gmcpReplacesChangedDestination() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":9}}"#
+        )
+        #expect(await mapper.graph.rooms["1"]?.exits["e"]?.to == "9")
+        #expect(await mapper.graph.rooms["1"]?.exits.count == 1)
+    }
+
+    /// Regression guard: custom-command exits were already carried forward; the
+    /// hidden-cardinal fix must not change that.
+    @Test("custom-command exit survives a revisit (regression)")
+    func customExitCarriedForward() async throws {
+        let mapper = try await makeMapper()
+        _ = await mapper.handleCommand("mapper fullcexit {enter gate} 1 2 0")
+        #expect(await mapper.graph.rooms["1"]?.exits["enter gate"]?.to == "2")
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Square","zone":"aylor","terrain":"city","exits":{"e":2}}"#
+        )
+        #expect(await mapper.graph.rooms["1"]?.exits["enter gate"]?.to == "2")
+    }
 }

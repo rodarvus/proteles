@@ -67,6 +67,20 @@ public actor Mapper {
     /// consumed by the matching `… confirm`.
     var pendingConfirm: String?
 
+    /// The app's native modal-dialog hook, shared with the Lua `utils.*` path
+    /// (``ScriptDialogProvider``). The mapper uses it for the same prompts the
+    /// reference plugin pops via `utils.inputbox` — currently the portal
+    /// level-lock prompt (`mapper portal <cmd>`). `nil` in headless/test
+    /// contexts, where prompts fall back to a safe default (level 0 = no lock).
+    /// Called synchronously: the modal runs on the main thread while this
+    /// actor's task waits, exactly as the Lua dialog path does.
+    var dialogProvider: ScriptDialogProvider?
+
+    /// Install (or clear) the native dialog provider — see ``dialogProvider``.
+    public func setDialogProvider(_ provider: ScriptDialogProvider?) {
+        dialogProvider = provider
+    }
+
     /// The designated bounce portal / recall use-commands (reference
     /// `bounce_portal`/`bounce_recall`): the portal used to bounce out of
     /// norecall/noportal rooms, set by `mapper bounceportal`/`bouncerecall <#>`.
@@ -342,11 +356,17 @@ public actor Mapper {
     /// Build a room's exit set from a GMCP `room.info`. Compass exits come from
     /// GMCP (preserving per-exit metadata — level/weight/door — when a dir's
     /// destination is unchanged, matching the original's lock preservation).
-    /// Existing custom (non-compass) exits are CARRIED FORWARD: GMCP never
-    /// reports them, and `saveExits` delete-then-inserts, so without this a
-    /// revisit would wipe every player-added `open …`/`say …`/`enter …` exit.
-    /// The reference mapper's `save_room_exits` likewise only upserts GMCP dirs
-    /// and never deletes custom exits (aard_GMCP_mapper.xml).
+    /// Every previously-known exit GMCP DIDN'T report this visit is CARRIED
+    /// FORWARD — custom commands (`open …`/`say …`/`enter …`) AND **hidden compass
+    /// exits** (a secret `down` the room never lists in its GMCP `exits`). GMCP
+    /// still wins for any dir it does report: it adds new exits and replaces a
+    /// changed destination — it just never *deletes*. This matches the reference's
+    /// `save_room_exits`, which only upserts GMCP dirs and never deletes ANY exit
+    /// on a room update (aard_GMCP_mapper.xml); pruning happens solely via explicit
+    /// `mapper delete`/`purge`. Without carrying hidden cardinals forward,
+    /// `saveExits`'s delete-then-insert wipes them on the next visit (GMCP omits
+    /// the hidden dir), silently severing whole areas reached only through such an
+    /// exit — e.g. an underwater zone whose sole entrance is a hidden `down`.
     private static func mergedExits(gmcp: [String: Int]?, existing: Room?) -> [String: Exit] {
         var exits: [String: Exit] = [:]
         for (dir, dest) in gmcp ?? [:] {
@@ -358,8 +378,7 @@ public actor Mapper {
             }
             exits[dir] = exit
         }
-        for (dir, exit) in existing?.exits ?? [:] {
-            guard !RichExits.isCardinalDirection(dir), exits[dir] == nil else { continue }
+        for (dir, exit) in existing?.exits ?? [:] where exits[dir] == nil {
             exits[dir] = exit
         }
         return exits
