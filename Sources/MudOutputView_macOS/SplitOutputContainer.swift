@@ -21,7 +21,7 @@
     final class SplitOutputContainer: NSView {
         let scrollView: NSScrollView
         let tailScrollView: NSScrollView
-        private let separator = NSBox()
+        private let separator = TailDividerView()
         /// Translucent "jump to latest" affordance, shown with the tail; clicking
         /// it scrolls the history back to the bottom (which dismisses the split).
         private let jumpButton = NSButton()
@@ -55,13 +55,15 @@
             self.lineHeight = max(1, lineHeight)
             super.init(frame: .zero)
 
-            separator.boxType = .separator
             configureJumpButton()
             tailScrollView.isHidden = true
             separator.isHidden = true
             jumpButton.isHidden = true
             resizeHandle.isHidden = true
             resizeHandle.onDrag = { [weak self] event in self?.handleResizeDrag(event) }
+            resizeHandle.onActiveChanged = { [weak separator] active in
+                separator?.isActive = active
+            }
 
             // Restore the user's chosen height (falls back to the default).
             let saved = UserDefaults.standard.double(forKey: Self.heightDefaultsKey)
@@ -86,13 +88,13 @@
                 separator.leadingAnchor.constraint(equalTo: leadingAnchor),
                 separator.trailingAnchor.constraint(equalTo: trailingAnchor),
                 separator.bottomAnchor.constraint(equalTo: tailScrollView.topAnchor),
-                separator.heightAnchor.constraint(equalToConstant: 1),
+                separator.heightAnchor.constraint(equalToConstant: 10),
 
-                // A wider invisible grab strip centred on the divider.
+                // A wider invisible grab strip centred on the visible divider.
                 resizeHandle.leadingAnchor.constraint(equalTo: leadingAnchor),
                 resizeHandle.trailingAnchor.constraint(equalTo: trailingAnchor),
                 resizeHandle.centerYAnchor.constraint(equalTo: separator.centerYAnchor),
-                resizeHandle.heightAnchor.constraint(equalToConstant: 8),
+                resizeHandle.heightAnchor.constraint(equalToConstant: 12),
 
                 // Bottom-right of the (non-scrolling) live-tail pane.
                 jumpButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -221,22 +223,92 @@
         }
     }
 
+    /// Visible split marker for the live-tail pane. A plain `NSBox.separator`
+    /// was effectively invisible on the black MUD output; this draws a subtle
+    /// full-width rule plus a centered grab pill, brightening when interactive.
+    final class TailDividerView: NSView {
+        var isActive = false {
+            didSet { needsDisplay = true }
+        }
+
+        override var isFlipped: Bool {
+            true
+        }
+
+        override func draw(_ dirtyRect: NSRect) {
+            super.draw(dirtyRect)
+
+            let background = NSColor.black.withAlphaComponent(isActive ? 0.42 : 0.28)
+            background.setFill()
+            bounds.fill()
+
+            let ruleColor = isActive
+                ? NSColor.controlAccentColor.withAlphaComponent(0.85)
+                : NSColor.white.withAlphaComponent(0.32)
+            ruleColor.setFill()
+            NSRect(x: 0, y: bounds.maxY - 2, width: bounds.width, height: 2).fill()
+
+            let gripWidth = min(CGFloat(64), max(CGFloat(36), bounds.width * 0.08))
+            let grip = NSRect(
+                x: (bounds.width - gripWidth) / 2,
+                y: 3,
+                width: gripWidth,
+                height: 4
+            )
+            let gripColor = isActive
+                ? NSColor.controlAccentColor.withAlphaComponent(0.95)
+                : NSColor.white.withAlphaComponent(0.45)
+            gripColor.setFill()
+            NSBezierPath(roundedRect: grip, xRadius: 2, yRadius: 2).fill()
+        }
+    }
+
     /// A thin, invisible strip over the live-tail divider: shows a vertical
     /// resize cursor and forwards drags to ``SplitOutputContainer`` (which
-    /// adjusts the pane height). Transparent, so the 1px separator shows through.
+    /// adjusts the pane height). The visible divider underneath owns the chrome.
     final class TailResizeHandle: NSView {
         var onDrag: ((NSEvent) -> Void)?
+        var onActiveChanged: ((Bool) -> Void)?
+
+        private var trackingArea: NSTrackingArea?
 
         override func resetCursorRects() {
             addCursorRect(bounds, cursor: .resizeUpDown)
         }
 
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea {
+                removeTrackingArea(trackingArea)
+            }
+            let trackingArea = NSTrackingArea(
+                rect: bounds,
+                options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
+                owner: self
+            )
+            self.trackingArea = trackingArea
+            addTrackingArea(trackingArea)
+        }
+
+        override func mouseEntered(with _: NSEvent) {
+            onActiveChanged?(true)
+        }
+
+        override func mouseExited(with _: NSEvent) {
+            onActiveChanged?(false)
+        }
+
         override func mouseDown(with _: NSEvent) {
             // Accept the mouse-down so the subsequent drag tracks to this view.
+            onActiveChanged?(true)
         }
 
         override func mouseDragged(with event: NSEvent) {
             onDrag?(event)
+        }
+
+        override func mouseUp(with _: NSEvent) {
+            onActiveChanged?(false)
         }
     }
 

@@ -37,6 +37,7 @@ public struct ChatView: View {
             Divider()
             content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { await model.start() }
     }
 
@@ -111,6 +112,7 @@ public struct ChatView: View {
 
     private var chatList: some View {
         chatLog
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(palette.defaultBackground).opacity(fillOpacity))
     }
 

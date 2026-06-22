@@ -21,7 +21,7 @@
                 timestampSeconds: false
             )
 
-            #expect(string.string == "first\nsecond\n")
+            #expect(string.string == "first\nsecond")
         }
 
         @Test("Timestamp prefix is optional")
@@ -39,8 +39,8 @@
                 timestampSeconds: true
             )
 
-            #expect(withTimestamp.string.hasSuffix(" market line\n"))
-            #expect(withoutTimestamp.string == "market line\n")
+            #expect(withTimestamp.string.hasSuffix(" market line"))
+            #expect(withoutTimestamp.string == "market line")
         }
 
         @Test("URL links survive the AppKit renderer")

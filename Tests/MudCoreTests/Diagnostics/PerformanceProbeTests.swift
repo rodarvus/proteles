@@ -77,6 +77,57 @@ struct PerformanceProbeTests {
         #expect(note.contains("session.lines.process 111ms events 446"))
     }
 
+    @Test("stale stall note includes recent below-threshold phase pressure")
+    func staleStallIncludesRecentPressure() {
+        let probe = PerformanceProbe()
+        let login = Date(timeIntervalSince1970: 2200)
+        probe.reset(now: login)
+        probe.setMode(.full)
+        probe.stallAttributionWindow = 5
+        probe.recentPressureWindow = 10
+        probe.markInGame(at: login)
+        probe.recordPhase(
+            "session.gmcp.dispatch",
+            duration: .milliseconds(140),
+            events: 8,
+            thresholdMS: 100,
+            at: login.addingTimeInterval(1)
+        )
+        probe.recordPhase(
+            "session.lines.process",
+            duration: .milliseconds(28),
+            events: 40,
+            thresholdMS: 100,
+            at: login.addingTimeInterval(129)
+        )
+        probe.recordPhase(
+            "session.lines.script-display",
+            duration: .milliseconds(24),
+            events: 1,
+            thresholdMS: 100,
+            at: login.addingTimeInterval(130)
+        )
+
+        let note = probe.stallNote(blockedMS: 210, at: login.addingTimeInterval(132))
+        #expect(note.contains("last perf phase: stale 131.0s ago"))
+        #expect(note.contains("recent perf: last 10s phases 2 slow 0 events 41"))
+        #expect(note.contains("max session.lines.process 28ms"))
+        #expect(note.contains("session.lines.process x1 max 28ms"))
+        #expect(note.contains("session.lines.script-display x1 max 24ms"))
+    }
+
+    @Test("stall note reports no recent pressure when attribution was quiet")
+    func stallWithoutRecentPressure() {
+        let probe = PerformanceProbe()
+        let now = Date(timeIntervalSince1970: 2300)
+        probe.reset(now: now)
+        probe.setMode(.full)
+
+        let note = probe.stallNote(blockedMS: 90, at: now)
+        #expect(note.contains("last perf phase: none"))
+        #expect(note.contains("recent perf: none in last 10s"))
+    }
+
     @Test("classifies slow phases outside startup as live play")
     func classifiesLivePlay() {
         let probe = PerformanceProbe()

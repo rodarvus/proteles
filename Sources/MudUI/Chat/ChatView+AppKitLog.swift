@@ -227,7 +227,10 @@
             timestampSeconds: Bool
         ) -> NSAttributedString {
             let result = NSMutableAttributedString()
-            for line in lines {
+            for (index, line) in lines.enumerated() {
+                if index > 0 {
+                    result.append(NSAttributedString(string: "\n"))
+                }
                 result.append(build(
                     line,
                     showTimestamps: showTimestamps,
@@ -243,7 +246,7 @@
             timestampSeconds: Bool
         ) -> NSAttributedString {
             let prefix = showTimestamps ? "\(timestamp(chatLine.timestamp, seconds: timestampSeconds)) " : ""
-            let text = prefix + chatLine.line.text + "\n"
+            let text = prefix + chatLine.line.text
             let result = NSMutableAttributedString(string: text)
             let fullRange = NSRange(location: 0, length: (text as NSString).length)
             result.addAttribute(.font, value: font, range: fullRange)

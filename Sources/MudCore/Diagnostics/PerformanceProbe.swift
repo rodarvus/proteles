@@ -33,11 +33,13 @@ public final class PerformanceProbe: @unchecked Sendable {
 
     public var startupWindow: TimeInterval = 120
     public var stallAttributionWindow: TimeInterval = 5
+    public var recentPressureWindow: TimeInterval = 10
 
     private let lock = NSLock()
     private var mode: Mode = .stallOnly
     private var inGameAt: Date?
     private var lastSnapshot: Snapshot?
+    private var recentSamples: [PhaseSample] = []
     private var pendingNotes: [String] = []
     private var summaryStartedAt = Date()
     private var measuredPhases = 0
@@ -52,6 +54,7 @@ public final class PerformanceProbe: @unchecked Sendable {
             self.mode = mode
             if mode != .full {
                 lastSnapshot = nil
+                recentSamples.removeAll()
                 pendingNotes.removeAll()
                 measuredPhases = 0
                 slowPhases = 0
@@ -73,6 +76,7 @@ public final class PerformanceProbe: @unchecked Sendable {
         lock.withLock {
             inGameAt = nil
             lastSnapshot = nil
+            recentSamples.removeAll()
             pendingNotes.removeAll()
             summaryStartedAt = now
             measuredPhases = 0
@@ -134,6 +138,14 @@ public final class PerformanceProbe: @unchecked Sendable {
                 maxDurationMS = durationMS
                 maxPhase = phase
             }
+            recentSamples.append(PhaseSample(
+                phase: phase,
+                durationMS: durationMS,
+                events: events,
+                timestamp: timestamp,
+                isSlow: durationMS >= thresholdMS
+            ))
+            pruneRecentSamplesLocked(now: timestamp)
             guard durationMS >= thresholdMS else { return }
             slowPhases += 1
             let snapshot = makeSnapshotLocked(
@@ -170,15 +182,17 @@ public final class PerformanceProbe: @unchecked Sendable {
         lock.withLock {
             let prefix = "UI stall: main thread blocked ~\(blockedMS)ms"
             let login = formatLoginTimingLocked(timestamp)
+            let recent = formatRecentPressureIfRecordingLocked(at: timestamp)
             guard let lastSnapshot else {
-                return "\(prefix); \(login); last perf phase: none"
+                return "\(prefix); \(login); last perf phase: none\(recent)"
             }
             let age = timestamp.timeIntervalSince(lastSnapshot.timestamp)
             guard age <= stallAttributionWindow else {
                 return "\(prefix); \(login); last perf phase: stale "
                     + "\(String(format: "%.1fs", age)) ago \(format(lastSnapshot))"
+                    + recent
             }
-            return "\(prefix); \(login); last perf phase: \(format(lastSnapshot))"
+            return "\(prefix); \(login); last perf phase: \(format(lastSnapshot))\(recent)"
         }
     }
 
@@ -255,6 +269,56 @@ public final class PerformanceProbe: @unchecked Sendable {
             + "\(snapshot.isStartupWindow ? "startup" : "live")"
     }
 
+    private func formatRecentPressureIfRecordingLocked(at timestamp: Date) -> String {
+        guard mode == .full else { return "" }
+        pruneRecentSamplesLocked(now: timestamp)
+        let samples = recentSamples.filter {
+            timestamp.timeIntervalSince($0.timestamp) <= recentPressureWindow
+        }
+        let window = String(format: "%.0fs", recentPressureWindow)
+        guard !samples.isEmpty else {
+            return "; recent perf: none in last \(window)"
+        }
+        let slowCount = samples.filter(\.isSlow).count
+        let eventCount = samples.reduce(0) { $0 + $1.events }
+        let maxSample = samples.max { lhs, rhs in lhs.durationMS < rhs.durationMS }
+        let maxPart = maxSample.map { "\($0.phase) \($0.durationMS)ms" } ?? "none"
+        return "; recent perf: last \(window) phases \(samples.count) "
+            + "slow \(slowCount) events \(eventCount) max \(maxPart) "
+            + "top \(formatTopPhases(samples))"
+    }
+
+    private func formatTopPhases(_ samples: [PhaseSample]) -> String {
+        var groups: [String: (count: Int, maxMS: Int)] = [:]
+        for sample in samples {
+            let current = groups[sample.phase] ?? (count: 0, maxMS: 0)
+            groups[sample.phase] = (
+                count: current.count + 1,
+                maxMS: max(current.maxMS, sample.durationMS)
+            )
+        }
+        return groups
+            .sorted {
+                if $0.value.count != $1.value.count {
+                    return $0.value.count > $1.value.count
+                }
+                if $0.value.maxMS != $1.value.maxMS {
+                    return $0.value.maxMS > $1.value.maxMS
+                }
+                return $0.key < $1.key
+            }
+            .prefix(3)
+            .map { "\($0.key) x\($0.value.count) max \($0.value.maxMS)ms" }
+            .joined(separator: ", ")
+    }
+
+    private func pruneRecentSamplesLocked(now: Date) {
+        let keepWindow = max(recentPressureWindow, stallAttributionWindow) + 1
+        recentSamples.removeAll {
+            now.timeIntervalSince($0.timestamp) > keepWindow
+        }
+    }
+
     private func formatLoginTimingLocked(_ timestamp: Date) -> String {
         formatLoginTiming(inGameAt.map { timestamp.timeIntervalSince($0) })
     }
@@ -266,4 +330,12 @@ public final class PerformanceProbe: @unchecked Sendable {
         }
         return "login+\(String(format: "%.1fs", elapsed))"
     }
+}
+
+private struct PhaseSample: Equatable {
+    let phase: String
+    let durationMS: Int
+    let events: Int
+    let timestamp: Date
+    let isSlow: Bool
 }
