@@ -223,6 +223,66 @@ struct ShimCompatAdditionsTests {
         ])
     }
 
+    @Test("rex shim: named + numbered captures, no-match, invalid-pattern (D2)")
+    func rexShim() async throws {
+        let lua = try await shimmed()
+        // [0-9]/[A-Za-z] avoid backslash-escaping noise; named captures use PCRE
+        // (?P<>) which PatternMatcher bridges to ICU.
+        let effects = try await lua.run("""
+        local rex = require "rex"
+        local re = rex.new("Level (?P<level>[0-9]+), tier (?P<tier>[0-9]+)")
+        local s = re:match("Level 60, tier 6 here")
+        local _, _, t = re:match("Level 60, tier 6 here")
+        proteles.echo("matched:" .. tostring(s ~= nil))
+        proteles.echo("named:" .. tostring(t.level) .. "/" .. tostring(t.tier))
+        local _, _, t2 = rex.new("revenge on ([A-Za-z]+) for"):match("revenge on Goblin for 15")
+        proteles.echo("g1:" .. tostring(t2[1]))
+        proteles.echo("nomatch:" .. tostring(re:match("nope") == nil))
+        proteles.echo("invalid:" .. tostring(pcall(rex.new, "(")))
+        """)
+        #expect(effects.contains(.echo("matched:true")))
+        #expect(effects.contains(.echo("named:60/6"))) // PCRE named captures
+        #expect(effects.contains(.echo("g1:Goblin"))) // numbered capture (1-based)
+        #expect(effects.contains(.echo("nomatch:true")))
+        #expect(effects.contains(.echo("invalid:false"))) // bad pattern → rex.new raises
+    }
+
+    @Test("OpenBrowser: web schemes emit an effect with plugin identity; others rejected (D8)")
+    func openBrowser() async throws {
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.ob" name="OB Plugin"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          proteles.send("http:" .. tostring(OpenBrowser("http://x.com") == error_code.eOK))
+          proteles.send("https:" .. tostring(OpenBrowser("https://aardwolf.com/x") == error_code.eOK))
+          proteles.send("mail:" .. tostring(OpenBrowser("mailto:a@b.com") == error_code.eOK))
+          proteles.send("file:" .. tostring(OpenBrowser("file:///etc/passwd") == error_code.eBadParameter))
+          proteles.send("js:" .. tostring(OpenBrowser("javascript:alert(1)") == error_code.eBadParameter))
+        end
+        ]]></script></muclient>
+        """)
+        let effects = try await engine.loadPlugin(plugin)
+        // Return codes: web schemes eOK, others eBadParameter.
+        for tag in ["http:true", "https:true", "mail:true", "file:true", "js:true"] {
+            #expect(effects.contains(.send(tag)))
+        }
+        // Web schemes carry the calling plugin's id + name for the app's prompt.
+        #expect(effects.contains(.openBrowser(
+            url: "https://aardwolf.com/x", pluginID: "com.ob", pluginName: "OB Plugin"
+        )))
+        #expect(effects.contains(.openBrowser(
+            url: "mailto:a@b.com", pluginID: "com.ob", pluginName: "OB Plugin"
+        )))
+        // Rejected schemes emit NO effect (can't launch arbitrary handlers).
+        #expect(!effects.contains { effect in
+            if case .openBrowser(let url, _, _) = effect {
+                return url.hasPrefix("file:") || url.hasPrefix("javascript:")
+            }
+            return false
+        })
+    }
+
     @Test("DeleteAlias removes an alias; NoteStyle/EnableAliasGroup are present")
     func aliasDeleteAndGroupGlobals() async throws {
         let lua = try await shimmed()

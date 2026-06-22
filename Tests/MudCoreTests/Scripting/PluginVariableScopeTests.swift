@@ -130,6 +130,44 @@ struct PluginVariableScopeTests {
         #expect(effects.contains(.send("mw:table:table")))
     }
 
+    @Test("group-delete removes the plugin's grouped triggers + aliases (D4)")
+    func groupDelete() async throws {
+        // Drives the same idiom as the Aard plugins: arm a grouped (addxml) gag
+        // trigger + a grouped runtime alias, then DeleteTriggerGroup/
+        // DeleteAliasGroup via the consumed alias path. Also pins that addxml now
+        // honours `group`. Control aliases are fired via expandInput so their
+        // effects are applied to the engine.
+        let engine = try ScriptEngine()
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.gd" name="GD"/>
+        <aliases>
+          <alias match="^gd arm$" enabled="y" regexp="y" send_to="12"><send>gd_arm()</send></alias>
+          <alias match="^gd dt$" enabled="y" regexp="y" send_to="12"><send>gd_dt()</send></alias>
+          <alias match="^gd da$" enabled="y" regexp="y" send_to="12"><send>gd_da()</send></alias>
+        </aliases>
+        <script><![CDATA[
+        require "addxml"
+        function af() proteles.send("alias-fired") end
+        function gd_dt() DeleteTriggerGroup("gg") end
+        function gd_da() DeleteAliasGroup("gg") end
+        function gd_arm()
+          addxml.trigger { match = "TLINE", regexp = false, omit_from_output = true,
+            enabled = true, group = "gg" }
+          AddAlias("ga1", "^aax$", "", alias_flag.Enabled + alias_flag.RegularExpression, "af")
+          SetAliasOption("ga1", "group", "gg")
+        end
+        ]]></script></muclient>
+        """)
+        _ = try await engine.loadPlugin(plugin)
+        _ = await engine.expandInput("gd arm")
+        #expect(await engine.process(line: "TLINE").gag) // grouped gag trigger active
+        #expect(await engine.expandInput("aax").contains(.send("alias-fired"))) // grouped alias active
+        _ = await engine.expandInput("gd dt")
+        #expect(await !engine.process(line: "TLINE").gag) // trigger group deleted
+        _ = await engine.expandInput("gd da")
+        #expect(await !engine.expandInput("aax").contains(.send("alias-fired"))) // alias group deleted
+    }
+
     @Test("DeleteTemporaryTriggers only removes the calling plugin's own triggers")
     func deleteTemporaryTriggersScopedPerPlugin() async throws {
         // Plugin A arms a TEMPORARY gag trigger; plugin B then calls

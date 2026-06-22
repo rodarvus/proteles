@@ -115,6 +115,10 @@ public actor SessionController {
     /// to the live bar + persists.
     public nonisolated let buttonCommands: AsyncStream<ButtonCommand>
     nonisolated let buttonCommandsContinuation: AsyncStream<ButtonCommand>.Continuation
+    /// Plugin `OpenBrowser(url)` requests — the app confirms (per plugin) before
+    /// opening, since a plugin opening a browser is outward-facing.
+    public nonisolated let openBrowserRequests: AsyncStream<OpenBrowserRequest>
+    nonisolated let openBrowserRequestsContinuation: AsyncStream<OpenBrowserRequest>.Continuation
     /// Sound cues (#10) — `.playSound` effects from the Soundpack plugin, the
     /// compat shim, and the S&D host; the app's cue player subscribes + plays.
     public nonisolated let soundCues: AsyncStream<SoundCue>
@@ -461,6 +465,8 @@ public actor SessionController {
             AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (buttonCommands, buttonCommandsContinuation) =
             AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
+        (openBrowserRequests, openBrowserRequestsContinuation) =
+            AsyncStream<OpenBrowserRequest>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (soundCues, soundCuesContinuation) =
             AsyncStream<SoundCue>.makeStream(bufferingPolicy: .bufferingNewest(16))
         (speechRequests, speechRequestsContinuation) =

@@ -35,6 +35,9 @@ extension LuaRuntime {
     -- answer infotype 13 ("seconds to go") — plugins drive countdown displays off
     -- it (e.g. Aard_Affects' affect timers). Set on every (re-)arm.
     __protelesTimerDeadline = __protelesTimerDeadline or {}
+    -- Group each shim timer belongs to (set via SetTimerOption("group",…)), so
+    -- DeleteTimerGroup can clear the caller's own timers in a group.
+    __protelesTimerGroup = __protelesTimerGroup or {}
     -- Full teardown of a shim timer's tracking (shared by DeleteTimer and the
     -- one-shot fire body — a one-shot must stop "existing" once it fires, like
     -- MUSHclient, so the common `if IsTimer(x) ~= eOK then AddTimer(...)` re-arm
@@ -42,6 +45,7 @@ extension LuaRuntime {
     function __protelesClearTimer(key)
       __timerNames[key] = nil; __protelesTimerLive[key] = nil; __protelesTimerSpec[key] = nil
       __timerTemporary[key] = nil; __protelesTimerOwner[key] = nil; __protelesTimerDeadline[key] = nil
+      __protelesTimerGroup[key] = nil
     end
     -- Re-arm a recurring timer one interval after it fires. Runs in _G (the host
     -- only needs to re-schedule, not touch the plugin env), but is *called from*
@@ -160,6 +164,12 @@ extension LuaRuntime {
     -- wipe would delete other plugins' temporary triggers). Same rationale as
     -- __protelesTimerOwner.
     __triggerOwner = __triggerOwner or {}
+    -- Group each trigger/alias belongs to (set via Set*Option("group",…) /
+    -- addxml / ImportXML), so DeleteTriggerGroup/DeleteAliasGroup can clear the
+    -- caller's own members of a group. __aliasOwner mirrors __triggerOwner.
+    __triggerGroup = __triggerGroup or {}
+    __aliasGroup = __aliasGroup or {}
+    __aliasOwner = __aliasOwner or {}
     local function __trackTriggerTemporary(key, flags)
       __triggerTemporary[key] = ((math.floor(flags / trigger_flag.Temporary) % 2) >= 1) or nil
       __triggerOwner[key] = GetPluginID()
@@ -185,6 +195,7 @@ extension LuaRuntime {
       proteles.removeTrigger(key); __triggerNames[key] = nil
       __triggerTemporary[key] = nil
       __triggerOwner[key] = nil
+      __triggerGroup[key] = nil
       return error_code.eOK
     end
     -- DeleteAlias: the alias counterpart to DeleteTrigger (many plugins clear
@@ -192,13 +203,17 @@ extension LuaRuntime {
     function DeleteAlias(name)
       local key = tostring(name)
       proteles.removeAlias(key); __aliasNames[key] = nil
+      __aliasGroup[key] = nil
+      __aliasOwner[key] = nil
       return error_code.eOK
     end
     -- AddAlias/EnableAlias: register/toggle a runtime alias on the host's alias
     -- engine (owner-scoped, like AddTriggerEx). `script` is the handler name.
     function AddAlias(name, match, response, flags, script)
-      proteles.addAlias(tostring(name), tostring(match), tonumber(flags) or 0, script or "")
-      __aliasNames[tostring(name)] = true
+      local key = tostring(name)
+      proteles.addAlias(key, tostring(match), tonumber(flags) or 0, script or "")
+      __aliasNames[key] = true
+      __aliasOwner[key] = GetPluginID()
       return error_code.eOK
     end
     function EnableAlias(name, flag)
@@ -237,6 +252,7 @@ extension LuaRuntime {
         local on = not (value == false or value == nil or value == 0 or value == "0" or value == "false")
         proteles.enableTrigger(key, on)
       elseif option == "group" then
+        __triggerGroup[key] = tostring(value) -- for DeleteTriggerGroup
         proteles.setTriggerGroup(key, tostring(value))
       else
         proteles.setTriggerOption(key, tostring(option), tostring(value))
@@ -260,6 +276,8 @@ extension LuaRuntime {
         else
           __protelesTimerLive[key] = false
         end
+      elseif option == "group" then
+        __protelesTimerGroup[key] = tostring(value) -- for DeleteTimerGroup
       end
       return error_code.eOK
     end
@@ -275,6 +293,7 @@ extension LuaRuntime {
           __triggerNames[key] = nil
           __triggerTemporary[key] = nil
           __triggerOwner[key] = nil
+          __triggerGroup[key] = nil
           n = n + 1
         end
       end
@@ -284,11 +303,43 @@ extension LuaRuntime {
       local me, n = GetPluginID(), 0
       for key in pairs(__timerTemporary) do
         if __protelesTimerOwner[key] == me then
-          __timerNames[key] = nil; __protelesTimerLive[key] = nil; __protelesTimerSpec[key] = nil
-          __timerTemporary[key] = nil; __protelesTimerOwner[key] = nil
+          __protelesClearTimer(key)
           n = n + 1
         end
       end
+      return n
+    end
+    -- Group delete (MUSHclient DeleteTriggerGroup/DeleteAliasGroup/
+    -- DeleteTimerGroup): remove every trigger/alias/timer in the named group that
+    -- THIS plugin owns (the tracking tables are shared across plugins), via the
+    -- per-name delete (which cleans both the host engine and the shim shadow).
+    -- Returns the count. The delete-group-then-rebuild idiom relies on this.
+    function DeleteTriggerGroup(group)
+      local me, g, n = GetPluginID(), tostring(group), 0
+      -- collect first (DeleteTrigger mutates __triggerGroup mid-iteration)
+      local names = {}
+      for key, grp in pairs(__triggerGroup) do
+        if grp == g and __triggerOwner[key] == me then names[#names + 1] = key end
+      end
+      for _, key in ipairs(names) do DeleteTrigger(key); n = n + 1 end
+      return n
+    end
+    function DeleteAliasGroup(group)
+      local me, g, n = GetPluginID(), tostring(group), 0
+      local names = {}
+      for key, grp in pairs(__aliasGroup) do
+        if grp == g and __aliasOwner[key] == me then names[#names + 1] = key end
+      end
+      for _, key in ipairs(names) do DeleteAlias(key); n = n + 1 end
+      return n
+    end
+    function DeleteTimerGroup(group)
+      local me, g, n = GetPluginID(), tostring(group), 0
+      local names = {}
+      for key, grp in pairs(__protelesTimerGroup) do
+        if grp == g and __protelesTimerOwner[key] == me then names[#names + 1] = key end
+      end
+      for _, key in ipairs(names) do __protelesClearTimer(key); n = n + 1 end
       return n
     end
     -- Trigger/alias introspection (MUSHclient GetTriggerInfo/GetAliasInfo +
@@ -394,6 +445,7 @@ extension LuaRuntime {
         local on = not (value == false or value == nil or value == 0 or value == "0" or value == "false")
         proteles.enableAlias(key, on)
       else
+        if option == "group" then __aliasGroup[key] = tostring(value) end -- for DeleteAliasGroup
         proteles.setAliasOption(key, tostring(option), tostring(value))
       end
       return error_code.eOK
@@ -510,6 +562,19 @@ extension LuaRuntime {
     -- MUSHclient. We don't carry per-note style state generically, so accept +
     -- ignore (a no-op) so style-setting plugins run; the text still prints.
     function NoteStyle(style) return error_code.eOK end
+    -- OpenBrowser(url): open a URL in the user's browser. MUSHclient hands the
+    -- string straight to ShellExecute; here we (1) restrict to web schemes
+    -- (http/https/mailto) so a plugin can't launch arbitrary handlers, and (2)
+    -- hand the app the calling plugin's id+name so it can gate the open behind a
+    -- per-plugin confirmation. Returns eBadParameter for an unsupported scheme.
+    function OpenBrowser(url)
+      url = tostring(url)
+      if not (url:match("^[hH][tT][tT][pP][sS]?://") or url:match("^[mM][aA][iI][lL][tT][oO]:")) then
+        return error_code.eBadParameter
+      end
+      proteles.openBrowser(url, GetPluginID(), GetPluginInfo(GetPluginID(), 1) or "")
+      return error_code.eOK
+    end
     -- ResetTimers(): re-arm the CALLING plugin's shim timers (the plural form
     -- some plugins call). Scoped by owner — the spec tables are shared across all
     -- plugins, so resetting every entry would steal other plugins' timers into

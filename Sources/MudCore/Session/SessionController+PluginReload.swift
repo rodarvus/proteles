@@ -10,6 +10,7 @@ extension SessionController {
     /// the primary switch stays under the cyclomatic-complexity limit.
     func applyInboundControlEffect(_ effect: ScriptEffect) async {
         if await applyPluginControlEffect(effect) { return }
+        if applyOutwardPluginEffect(effect) { return }
         switch effect {
         case .callSearchAndDestroy(let function, let args):
             // A shim plugin's CallPlugin(<S&D id>, fn, …) → the native host.
@@ -34,12 +35,6 @@ extension SessionController {
             // Bridge `CallPlugin(<chat-capture>, "storeFromOutside", …)` to native
             // chat (rsocial/hadar_spellup); `text` may carry Aardwolf @-codes.
             await chatStore.append(channel: channel.isEmpty ? "Capture" : channel, player: "", message: text)
-        case .notify(let title, let body):
-            // Script/plugin-raised notification (`Notify`/`proteles.notify`).
-            notifyFromScript(title: title, body: body)
-        case .button(let command):
-            // Script/plugin button-bar change (#15) → forwarded to the app.
-            buttonCommandsContinuation.yield(command)
         default:
             // Miniwindow scene/image updates (the miniwindow spike) — forwarded
             // to the UI stream; a no-op for any other effect.
@@ -48,6 +43,27 @@ extension SessionController {
             // walk-deferral queue on arrival (`.walkCompleted`); no-op otherwise.
             await applyWalkEffect(effect)
         }
+    }
+
+    /// Outward plugin effects forwarded straight to the app/native layers: a
+    /// user notification (`Notify`), an `OpenBrowser(url)` request (the app
+    /// confirms per plugin, then opens), and a button-bar change (#15). Split
+    /// into a Bool handler so ``applyInboundControlEffect`` stays within the
+    /// cyclomatic-complexity budget. Returns whether handled.
+    private func applyOutwardPluginEffect(_ effect: ScriptEffect) -> Bool {
+        switch effect {
+        case .notify(let title, let body):
+            notifyFromScript(title: title, body: body)
+        case .openBrowser(let url, let pluginID, let pluginName):
+            openBrowserRequestsContinuation.yield(
+                OpenBrowserRequest(url: url, pluginID: pluginID, pluginName: pluginName)
+            )
+        case .button(let command):
+            buttonCommandsContinuation.yield(command)
+        default:
+            return false
+        }
+        return true
     }
 
     /// Plugin/connection lifecycle effects (`ReloadPlugin`/`UnloadPlugin`/

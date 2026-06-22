@@ -80,8 +80,8 @@ extension LuaRuntime {
     /// (`addxml.trigger{ match=…, send=…, … }`). Booleans accept Lua `true`/`1`
     /// or MUSHclient `"y"`/`"n"`. `macro`/`save` degrade gracefully (macros are
     /// a separate feature; `save` needs object introspection we don't expose).
-    /// Note: the `group` attribute is accepted but not yet honoured for bulk
-    /// `DeleteTriggerGroup` (a separate shim gap).
+    /// The `group` attribute is honoured (routed through `Set*Option`), so bulk
+    /// `DeleteTriggerGroup`/`DeleteAliasGroup` can later clear the group.
     private static let addxmlSource = """
     addxml = {}
     local function truthy(v) return v == true or v == 1 or v == "y" or v == "yes" or v == "1" end
@@ -107,6 +107,7 @@ extension LuaRuntime {
       AddTriggerEx(name, t.match or "", t.send or "", triggerFlags(t),
         custom_colour.NoChange, "", "", t.script or "",
         tonumber(t.send_to) or sendto.world, tonumber(t.sequence) or 100)
+      if t.group and t.group ~= "" then SetTriggerOption(name, "group", t.group) end
       return name
     end
 
@@ -124,6 +125,7 @@ extension LuaRuntime {
       assert(type(t) == "table", "addxml.alias requires a table")
       local name = t.name or autoname("alias")
       AddAlias(name, t.match or "", t.send or "", aliasFlags(t), t.script or "")
+      if t.group and t.group ~= "" then SetAliasOption(name, "group", t.group) end
       return name
     end
 
@@ -138,6 +140,7 @@ extension LuaRuntime {
       local name = t.name or autoname("timer")
       AddTimer(name, tonumber(t.hour) or 0, tonumber(t.minute) or 0, tonumber(t.second) or 0,
         t.send or "", timerFlags(t), t.script or "")
+      if t.group and t.group ~= "" then SetTimerOption(name, "group", t.group) end
       return name
     end
 

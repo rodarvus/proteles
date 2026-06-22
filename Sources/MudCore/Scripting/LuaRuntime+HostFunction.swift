@@ -41,6 +41,8 @@ extension LuaRuntime {
         // re-arms a timer's countdown (a deferred control effect).
         case triggerInfo, aliasInfo, timerInfo
         case triggerList, aliasList, timerList, pluginTriggerList
+        /// rex (PCRE) shim → ICU via PatternMatcher: compile-validate + match.
+        case regexValid, regexMatch
         // Option-name getters (GetTriggerOption/GetAliasOption/GetTimerOption)
         // and the plugin-scoped GetPluginTriggerInfo — all synchronous snapshot
         // queries alongside the *Info family.
@@ -61,6 +63,7 @@ extension LuaRuntime {
         case addTrigger, setTriggerGroup, enableAlias, removeTrigger, removeAlias, monotonic, addAlias
         case setTriggerOption
         case notify
+        case openBrowser
         case button
         case fileExists, makeDirectory, reloadPlugin
         case aardwolfTelnet

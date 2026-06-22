@@ -30,8 +30,15 @@ struct PatternMatcher {
 
     /// First match of the pattern in `line`, or `nil`.
     func match(_ line: String) -> TriggerMatch? {
+        match(line, fromUTF16: 0)
+    }
+
+    /// First match starting at UTF-16 offset `start` (for `rex:gmatch`
+    /// iteration), or `nil`.
+    func match(_ line: String, fromUTF16 start: Int) -> TriggerMatch? {
         let text = line as NSString
-        let range = NSRange(location: 0, length: text.length)
+        guard start >= 0, start <= text.length else { return nil }
+        let range = NSRange(location: start, length: text.length - start)
         guard let result = regex.firstMatch(in: line, options: [], range: range) else {
             return nil
         }

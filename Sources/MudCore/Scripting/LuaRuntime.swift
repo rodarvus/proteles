@@ -140,6 +140,10 @@ public actor LuaRuntime {
     /// loaded chunks (plugins + require'd modules).
     nonisolated(unsafe) var chunkSources: [String: String] = [:]
 
+    /// Compiled `rex` patterns (PCRE→ICU), keyed by pattern string, so a plugin's
+    /// `rex.new(…)` + repeated `:match`/`:gmatch` don't recompile each call.
+    nonisolated(unsafe) var regexCache: [String: PatternMatcher] = [:]
+
     /// Ambient `proteles.info`/`pluginID` (≈ `GetInfo`/`GetPluginID`), bound to the
     /// *executing* plugin per run via ``pluginContexts`` (see PluginEnvironments).
     nonisolated(unsafe) var pluginContext = PluginContext.default
@@ -429,10 +433,13 @@ public actor LuaRuntime {
         setHostFunction("setTriggerGroup", .setTriggerGroup)
         setHostFunction("setTriggerOption", .setTriggerOption)
         setHostFunction("notify", .notify)
+        setHostFunction("openBrowser", .openBrowser)
         setHostFunction("button", .button)
         setHostFunction("removeTrigger", .removeTrigger)
         setHostFunction("removeAlias", .removeAlias)
         setHostFunction("enableAlias", .enableAlias)
+        setHostFunction("regexValid", .regexValid)
+        setHostFunction("regexMatch", .regexMatch)
         setHostFunction("triggerInfo", .triggerInfo)
         setHostFunction("aliasInfo", .aliasInfo)
         setHostFunction("timerInfo", .timerInfo)
@@ -477,54 +484,10 @@ public actor LuaRuntime {
         lua_setfield(state, -2, name)
     }
 
-    /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*` function
-    /// is called from Lua; records the effect. `nonisolated` since it runs inside
-    /// `lua_pcall` on the executor (reaching `effects` via `nonisolated(unsafe)`).
-    nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
-        guard let function = HostFunction(rawValue: id) else { return [] }
-        switch function {
-        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
-             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
-             .removeAlias,
-             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
-             .sndCall, .playSound, .speak, .simulate, .resetTimer,
-             .setAliasOption, .stopEvaluatingTriggers, .trace,
-             .unloadPlugin, .connect:
-            recordEffect(function, arguments)
-            return []
-        case .call:
-            guard let function = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
-            return invokeFunction(function.ref, payload: Array(arguments.dropFirst()))
-        case .getVar, .setVar, .deleteVar, .getPluginVar, .varList:
-            return accessVariable(function, arguments)
-        case .compileChunk:
-            return compileChunk(arguments)
-        case .moduleSource:
-            return moduleSourceValue(arguments)
-        case .jsonDecode, .jsonEncode:
-            return jsonValue(function, arguments)
-        case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
-             .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
-             .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
-             .adjustColour, .createGUID, .uniqueID,
-             .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
-             .triggerInfo, .aliasInfo, .timerInfo,
-             .triggerList, .aliasList, .timerList, .pluginTriggerList,
-             .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo,
-             .pluginList, .pluginSupports, .outputFontName:
-            return queryValue(function, arguments)
-        default:
-            // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
-            // event-bus/RPC registration functions both land here.
-            return miniWindowOrRegister(function, arguments)
-        }
-    }
-
     /// Scoped variable get/set/delete. `getVar` returns the stored string (or
     /// `nil` when unset, matching MUSHclient `GetVariable`); `setVar`/
     /// `deleteVar` mutate the current scope and mark it dirty.
-    private nonisolated func accessVariable(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+    nonisolated func accessVariable(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         let name = Self.argString(arguments, 0)
         switch function {
         case .getVar:

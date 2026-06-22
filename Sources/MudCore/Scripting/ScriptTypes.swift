@@ -1,5 +1,18 @@
 import Foundation
 
+/// A plugin's `OpenBrowser(url)` request, surfaced to the app so it can confirm
+/// (per plugin) before opening. The shim has already validated the URL scheme.
+public struct OpenBrowserRequest: Sendable, Equatable {
+    public let url: String
+    public let pluginID: String
+    public let pluginName: String
+    public init(url: String, pluginID: String, pluginName: String) {
+        self.url = url
+        self.pluginID = pluginID
+        self.pluginName = pluginName
+    }
+}
+
 /// A value crossing the Lua ↔ Swift boundary. The minimal set the host
 /// API needs today (scalars); tables follow when the event bus / RPC land.
 public enum LuaValue: Sendable, Equatable {
@@ -112,6 +125,11 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `proteles.notify`). Surfaced via the macOS notification layer, gated by
     /// the user's master notifications enable. The phase-2 extensibility hook.
     case notify(title: String, body: String)
+    /// A plugin's `OpenBrowser(url)` request. Carries the calling plugin's id +
+    /// name so the app can gate the open behind a per-plugin confirmation (a
+    /// plugin opening a browser is outward-facing). The shim validates the scheme
+    /// (http/https/mailto) before emitting; the app prompts then `NSWorkspace`-opens.
+    case openBrowser(url: String, pluginID: String, pluginName: String)
     /// A script/plugin change to the command-button bar (`Button.*` / #15). The
     /// session forwards it to the app, which applies it to the live bar.
     case button(ButtonCommand)

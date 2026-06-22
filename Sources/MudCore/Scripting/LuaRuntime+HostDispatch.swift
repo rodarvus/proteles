@@ -10,25 +10,81 @@ extension LuaRuntime {
         Self.popMessage(state)
     }
 
+    /// Invoked synchronously by ``luaHostDispatch`` when a `proteles.*` function
+    /// is called from Lua; records the effect. `nonisolated` since it runs inside
+    /// `lua_pcall` on the executor (reaching `effects` via `nonisolated(unsafe)`).
+    nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
+        guard let function = HostFunction(rawValue: id) else { return [] }
+        switch function {
+        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
+             .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
+             .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
+             .removeAlias,
+             .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
+             .openBrowser,
+             .sndCall, .playSound, .speak, .simulate, .resetTimer,
+             .setAliasOption, .stopEvaluatingTriggers, .trace,
+             .unloadPlugin, .connect:
+            recordEffect(function, arguments)
+            return []
+        case .call:
+            guard let function = exportedFunctions[Self.argString(arguments, 0)] else { return [] }
+            return invokeFunction(function.ref, payload: Array(arguments.dropFirst()))
+        case .getVar, .setVar, .deleteVar, .getPluginVar, .varList:
+            return accessVariable(function, arguments)
+        case .compileChunk:
+            return compileChunk(arguments)
+        case .moduleSource:
+            return moduleSourceValue(arguments)
+        case .jsonDecode, .jsonEncode:
+            return jsonValue(function, arguments)
+        case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
+             .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
+             .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
+             .adjustColour, .createGUID, .uniqueID,
+             .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
+             .triggerInfo, .aliasInfo, .timerInfo,
+             .triggerList, .aliasList, .timerList, .pluginTriggerList,
+             .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo,
+             .pluginList, .pluginSupports, .outputFontName,
+             .regexValid, .regexMatch:
+            return queryValue(function, arguments)
+        default:
+            // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
+            // event-bus/RPC registration functions both land here.
+            return miniWindowOrRegister(function, arguments)
+        }
+    }
+
     /// Read-only `proteles.*` queries that return a value (rather than
     /// recording an effect): `info`, `pluginID`, `isConnected`.
     nonisolated func queryValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
         case .info: [infoValue(arguments)]
-        case .pluginID: [.string(pluginContext.pluginID)]
-        case .isConnected: [.boolean(connected)]
+        case .pluginID, .isConnected: scalarQuery(function)
         case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .colourNameToRGB, .rgbColourToName, .adjustColour: colourValue(function, arguments)
         case .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines:
             bufferValue(function, arguments)
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
+        case .regexValid, .regexMatch: regexValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
              .createGUID, .uniqueID, .pluginList, .pluginSupports, .outputFontName:
             miscValue(function, arguments)
         // Trigger/alias/timer introspection (LuaRuntime+AutomationInfo.swift) —
         // routed via the default so this switch gains no new branch.
         default: automationValue(function, arguments)
+        }
+    }
+
+    /// Trivial scalar queries (plugin id, connection state), merged into a single
+    /// ``queryValue`` branch so it stays within the cyclomatic-complexity budget.
+    nonisolated func scalarQuery(_ function: HostFunction) -> [LuaValue] {
+        switch function {
+        case .pluginID: [.string(pluginContext.pluginID)]
+        case .isConnected: [.boolean(connected)]
+        default: []
         }
     }
 
@@ -272,6 +328,12 @@ extension LuaRuntime {
             effects.append(.notify(
                 title: Self.argString(arguments, 0),
                 body: Self.argString(arguments, 1)
+            ))
+        case .openBrowser:
+            effects.append(.openBrowser(
+                url: Self.argString(arguments, 0),
+                pluginID: Self.argString(arguments, 1),
+                pluginName: Self.argString(arguments, 2)
             ))
         case .speak:
             // proteles.speak(text[, interrupt]) — plugin TTS (#9, the

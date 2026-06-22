@@ -60,11 +60,16 @@ public struct PluginImportReport: Sendable, Equatable {
 /// clean, exactly as it would run.
 public enum PluginImporter {
     /// Helper libraries Proteles bundles for `require`/`dofile` (the single
-    /// source of truth is the shim's registration — kept in sync here). `wait`,
-    /// `check`, `async`, and the dependency-nag stubs are registered separately.
+    /// source of truth is the shim's registration — kept in sync here). Beyond
+    /// `standardHelpers`, `loadCompatShim` registers these via `registerModule`:
+    /// `wait`/`check`/`string_split`/`async`, the dependency-nag stubs
+    /// (`checkplugin`/`aard_requirements`), and `rex` (the PCRE shim, D2).
     private static var bundledLibraries: Set<String> {
         Set(LuaRuntime.standardHelpers.keys)
-            .union(["wait", "check", "async", "checkplugin", "aard_requirements"])
+            .union([
+                "wait", "check", "async", "string_split",
+                "checkplugin", "aard_requirements", "rex"
+            ])
     }
 
     /// Lua 5.1 standard libraries. `require "string"` / `"math"` resolve to the

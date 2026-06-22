@@ -296,6 +296,13 @@ struct ContentView: View {
                 await scripts.applyButtonCommand(command)
             }
         }
+        .task {
+            // Plugin OpenBrowser(url): confirm per plugin (remembering "Always"),
+            // then open in the user's browser. The shim already vetted the scheme.
+            for await request in session.openBrowserRequests {
+                Self.handleOpenBrowser(request)
+            }
+        }
         .task(id: themeID) {
             // Flip the whole app's chrome (panels, materials, gauges) to
             // match the theme's light/dark appearance.

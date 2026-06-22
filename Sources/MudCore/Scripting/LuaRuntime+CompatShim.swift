@@ -24,6 +24,7 @@ public extension LuaRuntime {
         _ = try run(Self.utilsShimSource)
         _ = try run(Self.ioShimSource)
         _ = try run(Self.miniWindowShimSource)
+        _ = try run(Self.databaseShimSource)
         registerModules(Self.standardHelpers)
         // Nick Gammon's `wait` coroutine helper (and its `check` dependency),
         // bundled (see MUSHHelperAssets), so third-party plugins that
@@ -50,6 +51,9 @@ public extension LuaRuntime {
         // `OnPluginListChanged`) load clean instead of erroring on a missing file.
         registerModule("checkplugin", source: Self.checkpluginStubSource)
         registerModule("aard_requirements", source: "-- Proteles no-op: see checkplugin stub.")
+        // `rex` (lrexlib/PCRE) over Proteles' ICU regex (PatternMatcher), which
+        // already bridges PCRE named captures. See LuaRuntime+CompatRegex.
+        registerModule("rex", source: Self.rexModuleSource)
     }
 
     // `asyncModuleSource` (the clean-room `async` HTTP module) lives in
