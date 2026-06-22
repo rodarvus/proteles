@@ -1,7 +1,19 @@
 # Generic MUSHclient Miniwindow Support — Feasibility & Level of Effort
 
-> **Status:** investigation / comparison artifact. Not scheduled, not a 1.0 goal.
-> Produced on branch `experiment/miniwindow-support`, in parallel with
+> **Status (updated):** **SHIPPED.** The generic miniwindow API described below
+> was subsequently built and merged — it is no longer an open feasibility
+> question. Arbitrary third-party shim plugins that call `WindowCreate`/
+> `WindowRectOp`/`WindowText`/hotspots/images render and are interactive through
+> the generic runtime: the shim loads `miniWindowShimSource`
+> (`LuaRuntime+CompatShim.swift`), host drawing lives in `LuaRuntime+MiniWindow*
+> .swift`, and the UI mounts `MiniWindowOverlay`
+> (`apps/ProtelesApp_macOS/Sources/ContentView.swift`). The exotic tail
+> (blend/filter/transform image ops, window-enumeration queries, `WindowMenu`)
+> remains stubbed, filled in per-plugin on demand. The sections below are the
+> original feasibility analysis, kept for the design rationale.
+>
+> *(Original status:)* investigation / comparison artifact. Not scheduled, not a
+> 1.0 goal. Produced on branch `experiment/miniwindow-support`, in parallel with
 > `experiment/consider-miniwindow` (a native single-purpose window spike), to weigh
 > a **generic miniwindow API** against the established **per-feature native panel**
 > strategy.

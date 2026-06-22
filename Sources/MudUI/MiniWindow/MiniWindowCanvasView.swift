@@ -161,7 +161,13 @@ struct MiniWindowCanvasView: View {
     ) {
         switch action {
         case 1: // frame
-            if let stroke = color(colour1) { context.stroke(Path(rect), with: .color(stroke), lineWidth: 1) }
+            // MUSHclient's FrameRect draws the 1px border INSIDE the rect (right/
+            // bottom edges exclusive → border at right-1 / bottom-1). A stroke
+            // centred on the path edge straddles the canvas boundary and clips the
+            // right + bottom lines; inset by 0.5px so the whole border sits inside.
+            if let stroke = color(colour1) {
+                context.stroke(Path(rect.insetBy(dx: 0.5, dy: 0.5)), with: .color(stroke), lineWidth: 1)
+            }
         case 3: // invert — approximate with a translucent overlay
             context.fill(Path(rect), with: .color(.white.opacity(0.5)))
         case 4, 5: // 3-D rect / draw-edge — approximate: fill colour1, edge colour2
