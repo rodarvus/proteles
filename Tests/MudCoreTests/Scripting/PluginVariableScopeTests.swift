@@ -48,14 +48,14 @@ struct PluginVariableScopeTests {
         // Regression: a global the plugin sets in its <script> must be visible as
         // `_G.x` (MUSHclient gives each plugin its own global namespace). Without
         // `env._G = env`, `_G.plugin_short_name` resolved against the shared real
-        // globals and came back nil — so Zhalut's caster fell back to the full
-        // plugin name instead of "XC".
+        // globals and came back nil — so a plugin reading its own short-name
+        // global got nil and fell back to its full plugin name.
         let engine = try ScriptEngine()
         let plugin = try MUSHclientPluginLoader.parse(xml: """
         <muclient>
         <plugin id="com.gtest" name="Global_Test"/>
         <script><![CDATA[
-        plugin_short_name = "XC"
+        plugin_short_name = "PX"
         function OnPluginInstall()
           proteles.send("tag:" .. tostring(_G.plugin_short_name))
           proteles.send("shimfn:" .. type(_G.GetPluginID))
@@ -64,7 +64,7 @@ struct PluginVariableScopeTests {
         </muclient>
         """)
         let effects = try await engine.loadPlugin(plugin)
-        #expect(effects.contains(.send("tag:XC"))) // plugin global via _G
+        #expect(effects.contains(.send("tag:PX"))) // plugin global via _G
         #expect(effects.contains(.send("shimfn:function"))) // inherited shim global via _G
     }
 
