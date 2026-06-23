@@ -44,7 +44,8 @@ extension LuaRuntime {
             "windowDrawImage",
             .windowDrawImage
         ),
-        ("windowImageInfo", .windowImageInfo), ("windowCircleOp", .windowCircleOp),
+        ("windowImageInfo", .windowImageInfo), ("windowImageFromWindow", .windowImageFromWindow),
+        ("windowCircleOp", .windowCircleOp),
         ("windowGradient", .windowGradient), ("windowPolygon", .windowPolygon), ("windowArc", .windowArc),
         ("windowBezier", .windowBezier)
     ]
@@ -59,8 +60,8 @@ extension LuaRuntime {
              .windowFontList, .windowImageList, .windowHotspotList, .windowAddHotspot, .windowDeleteHotspot,
              .windowDeleteAllHotspots, .windowMoveHotspot, .windowHotspotInfo, .windowDragHandler,
              .windowScrollwheelHandler, .windowMenu, .windowLoadImage, .windowDrawImage,
-             .windowImageInfo, .windowCircleOp, .windowGradient, .windowPolygon, .windowArc,
-             .windowBezier:
+             .windowImageInfo, .windowImageFromWindow, .windowCircleOp, .windowGradient,
+             .windowPolygon, .windowArc, .windowBezier:
             return miniWindowCall(function, arguments)
         default:
             registerOrRaise(function, arguments)

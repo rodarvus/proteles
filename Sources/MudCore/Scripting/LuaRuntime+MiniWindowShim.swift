@@ -132,7 +132,7 @@ extension LuaRuntime {
     function WindowFilter(...) return eOK end
     function WindowMergeImageAlpha(...) return eOK end
     function WindowTransformImage(...) return eOK end
-    function WindowImageFromWindow(...) return eOK end
+    function WindowImageFromWindow(...) return proteles.windowImageFromWindow(...) end
     function WindowImageOp(...) return eOK end
     function WindowGetImageAlpha(...) return eOK end
     function WindowCreateImage(...) return eOK end

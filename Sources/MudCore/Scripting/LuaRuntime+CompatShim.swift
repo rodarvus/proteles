@@ -119,6 +119,7 @@ public extension LuaRuntime {
       eNoSuchPlugin = 30034,
       eNoSuchRoutine = 30036,
       eBadParameter = 30046,
+      eNoSuchWindow = 30073,
     }
     error_desc = error_desc or {}
 

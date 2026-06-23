@@ -34,6 +34,7 @@ extension LuaRuntime {
         case .windowLoadImage: loadMiniWindowImage(name, arguments)
         case .windowDrawImage: appendImageDraw(name, arguments)
         case .windowImageInfo: return [miniWindowImageInfoValue(name, arguments)]
+        case .windowImageFromWindow: return [captureMiniWindowImage(name, arguments)]
         case .windowCircleOp: appendCircleOp(name, arguments)
         case .windowGradient: appendGradient(name, arguments)
         case .windowPolygon: appendPolygon(name, arguments)
@@ -184,6 +185,27 @@ extension LuaRuntime {
             scene.images[imageID] = metadata
         }
         effects.append(.loadMiniWindowImage(pluginID: pluginContext.pluginID, imageID: imageID, data: data))
+    }
+
+    /// `WindowImageFromWindow(dest, imageID, source)` — MUSHclient captures a
+    /// miniwindow bitmap into an image. Proteles records the captured image's
+    /// metadata so package layout code can query/list it; full raster replay is
+    /// still a renderer-side compatibility gap.
+    private nonisolated func captureMiniWindowImage(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
+        let imageID = Self.argString(arguments, 1)
+        let sourceName = Self.argString(arguments, 2)
+        guard miniWindows[name] != nil, let source = miniWindows[sourceName] else {
+            return .number(30073)
+        }
+        guard !imageID.isEmpty else { return .number(0) }
+        updateMiniWindow(name) { scene in
+            scene.images[imageID] = MiniWindowImageInfo(
+                id: imageID,
+                width: source.width,
+                height: source.height
+            )
+        }
+        return .number(0)
     }
 
     private nonisolated func miniWindowImageInfoValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {

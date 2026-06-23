@@ -90,6 +90,30 @@ struct MiniWindowShimTests {
         #expect(echoes == ["background:66051", "set:0", "pixel:1122867", "unknown:-2"])
     }
 
+    @Test("WindowImageFromWindow registers captured image metadata")
+    func windowImageFromWindowRegistersMetadata() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("source", 0, 0, 37, 19, 0, 0, 0)
+        WindowCreate("dest", 0, 0, 5, 5, 0, 0, 0)
+        proteles.echo("capture:" .. tostring(WindowImageFromWindow("dest", "snap", "source")))
+        local images = WindowImageList("dest")
+        proteles.echo("list:" .. tostring(images and images[1]))
+        proteles.echo("size:" .. tostring(WindowImageInfo("dest", "snap", 2)) .. "x" ..
+          tostring(WindowImageInfo("dest", "snap", 3)))
+        proteles.echo("missing:" .. tostring(WindowImageFromWindow("dest", "bad", "missing")))
+        proteles.echo("constant:" .. tostring(error_code.eNoSuchWindow))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "capture:0",
+            "list:snap",
+            "size:37x19",
+            "missing:30073",
+            "constant:30073"
+        ])
+    }
+
     @Test("WindowHotspotInfo reports callbacks and drag metadata")
     func windowHotspotInfoCallbacksAndDragMetadata() async throws {
         let lua = try await shimmed()
