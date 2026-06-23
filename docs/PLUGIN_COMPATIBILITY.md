@@ -87,9 +87,10 @@ info/damage/equipment windows, GQ/NPC panels, a themed clock, and similar — ar
 partially covered. Plugins using the *basic* window API draw natively, common
 window/font/image/hotspot query calls are implemented for themed-library
 layouts, and the offscreen theme-image path can export loaded/captured image
-draws with opacity blends, common filters, raw memory images, generated simple
-image fills, alpha-mask merges, and simple scale transforms. Complex affine
-transforms and the long-tail image operations are still partial/stubbed.
+draws with opacity blends, common filters, raw memory images, generated
+rectangle/ellipse/round-rectangle image fills, alpha-mask merges, and affine
+scale/flip/shear/rotation transforms. Synchronous right-click `WindowMenu`
+selection and the long-tail image operations are still partial/stubbed.
 
 ### Plugins on authors' own shared frameworks
 The "Epic" plugin family (Tallimos) and Winkle's GUI plugins build on shared
@@ -162,7 +163,7 @@ replaced by native panels.
 | notepad APIs | 🟡 | `AppendToNotepad`/`ReplaceNotepad`/`GetNotepad*`/list/save/read-only calls are an in-memory text store, not separate windows |
 | selection APIs | 🟡 | `GetSelection*` reports MUSHclient's no-selection value (`0`); `SetSelection` is accepted as a no-op |
 | display/window control calls | 🟡 | `TextRectangle` records queryable geometry; `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `SetBackgroundImage`, `PickColour`, `NoteHr`, and shell/window probe calls are safe stubs/defaults |
-| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, including MUSHclient's `WindowInfo`, `WindowFontInfo`, `WindowHotspotInfo`, z-order metadata, `WindowSetPixel`/`WindowGetPixel` readback for explicit pixels, `WindowImageFromWindow` captured-image metadata, raw `WindowLoadImageMemory` data, generated `WindowImageOp` fill images, and `WindowWrite` PNG/BMP snapshots for backgrounds, explicit pixels, loaded/captured image draws, alpha masks, opacity blends, simple scale transforms, and common brightness/contrast/gamma filters; complex transforms and long-tail image operations remain stubbed/partial (see Known gaps) |
+| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, including MUSHclient's `WindowInfo`, `WindowFontInfo`, `WindowHotspotInfo`, z-order metadata, `WindowSetPixel`/`WindowGetPixel` readback for explicit pixels, scrollwheel callbacks, `WindowImageFromWindow` captured-image metadata, raw `WindowLoadImageMemory` data, `WindowCreateImage`, generated `WindowImageOp` rectangle/ellipse/round-rectangle images, `WindowGetImageAlpha` mask extraction, and `WindowWrite` PNG/BMP snapshots for backgrounds, explicit pixels, loaded/captured image draws, alpha masks, opacity blends, affine transforms, and common brightness/contrast/gamma filters; synchronous `WindowMenu` selection and long-tail image operations remain stubbed/partial (see Known gaps) |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 | raw `socket` / `ssl` TLS | ❌ | not exposed to plugins (sandboxing) |
 

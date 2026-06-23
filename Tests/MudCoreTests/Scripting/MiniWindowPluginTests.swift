@@ -98,40 +98,8 @@ struct MiniWindowPluginTests {
 
     @Test("miniwindow list/info/image queries reflect retained scene state")
     func listAndImageQueries() async throws {
-        let png1x1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" +
-            "AAAADUlEQVR42mP8z8BQDwAFgwJ/lD0RTwAAAABJRU5ErkJggg=="
-        let xml = """
-        <muclient><plugin id="dddddddddddddddddddddddd" name="MWLists"/>
-        <script><![CDATA[
-        function OnPluginInstall()
-          WindowCreate("w", 10, 20, 120, 40, miniwin.pos_top_left, 0, 0x101010)
-          WindowFont("w", "f", "Menlo", 11)
-          WindowLoadImageMemory("w", "img", "\(png1x1)")
-          WindowAddHotspot("w", "h", 0, 0, 120, 40, "", "", "onDown", "", "", "tip", miniwin.cursor_hand, 0)
-          local windows = WindowList()
-          local fonts = WindowFontList("w")
-          local images = WindowImageList("w")
-          local hotspots = WindowHotspotList("w")
-          Send("window=" .. tostring(windows[1]))
-          Send("font=" .. tostring(fonts[1]))
-          Send("image=" .. tostring(images[1]))
-          Send("hotspot=" .. tostring(hotspots[1]))
-          Send("bounds=" .. tostring(WindowInfo("w", 10)) .. "," .. tostring(WindowInfo("w", 11)) .. "," ..
-            tostring(WindowInfo("w", 12)) .. "," .. tostring(WindowInfo("w", 13)))
-          Send("owner=" .. tostring(WindowInfo("w", 23)))
-          Send("imgsize=" .. tostring(WindowImageInfo("w", "img", 2)) .. "x" ..
-            tostring(WindowImageInfo("w", "img", 3)))
-        end
-        function onDown(flags, id)
-          Send("pointer=" .. tostring(WindowInfo("w", 14)) .. "," .. tostring(WindowInfo("w", 15)) .. "," ..
-            tostring(WindowInfo("w", 17)) .. "," .. tostring(WindowInfo("w", 18)) .. "," ..
-            tostring(WindowInfo("w", 19)) .. "," .. tostring(WindowInfo("w", 20)))
-        end
-        ]]></script>
-        </muclient>
-        """
         let engine = try ScriptEngine()
-        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        let plugin = try MUSHclientPluginLoader.parse(xml: Self.listAndImageXML)
         let installEffects = await engine.loadPlugin(plugin)
         #expect(installEffects.contains(.send("window=w")))
         #expect(installEffects.contains(.send("font=f")))
@@ -158,5 +126,64 @@ struct MiniWindowPluginTests {
             event: event
         )
         #expect(callbackEffects.contains(.send("pointer=7,8,7,8,h,h")))
+
+        let scrollEvent = MiniWindowEvent(
+            windowName: "w",
+            pluginID: "dddddddddddddddddddddddd",
+            hotspotID: "h",
+            kind: .scrollwheel,
+            callback: "onWheel",
+            flags: 0x100 | (120 << 16),
+            x: 9,
+            y: 10
+        )
+        let scrollEffects = await engine.callPluginFunction(
+            "dddddddddddddddddddddddd",
+            "onWheel",
+            [.number(Double(scrollEvent.flags)), .string("h")],
+            event: scrollEvent
+        )
+        #expect(scrollEffects.contains(.send("wheel=true,120,7,8,9,10,h,h")))
     }
+
+    private static let listAndImageXML = """
+    <muclient><plugin id="dddddddddddddddddddddddd" name="MWLists"/>
+    <script><![CDATA[
+    function OnPluginInstall()
+      WindowCreate("w", 10, 20, 120, 40, miniwin.pos_top_left, 0, 0x101010)
+      WindowFont("w", "f", "Menlo", 11)
+      local png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" ..
+        "AAAADUlEQVR42mP8z8BQDwAFgwJ/lD0RTwAAAABJRU5ErkJggg=="
+      WindowLoadImageMemory("w", "img", png)
+      WindowAddHotspot("w", "h", 0, 0, 120, 40, "", "", "onDown", "", "", "tip", miniwin.cursor_hand, 0)
+      WindowScrollwheelHandler("w", "h", "onWheel")
+      local windows = WindowList()
+      local fonts = WindowFontList("w")
+      local images = WindowImageList("w")
+      local hotspots = WindowHotspotList("w")
+      Send("window=" .. tostring(windows[1]))
+      Send("font=" .. tostring(fonts[1]))
+      Send("image=" .. tostring(images[1]))
+      Send("hotspot=" .. tostring(hotspots[1]))
+      Send("bounds=" .. tostring(WindowInfo("w", 10)) .. "," .. tostring(WindowInfo("w", 11)) .. "," ..
+        tostring(WindowInfo("w", 12)) .. "," .. tostring(WindowInfo("w", 13)))
+      Send("owner=" .. tostring(WindowInfo("w", 23)))
+      Send("imgsize=" .. tostring(WindowImageInfo("w", "img", 2)) .. "x" ..
+        tostring(WindowImageInfo("w", "img", 3)))
+    end
+    function onDown(flags, id)
+      Send("pointer=" .. tostring(WindowInfo("w", 14)) .. "," .. tostring(WindowInfo("w", 15)) .. "," ..
+        tostring(WindowInfo("w", 17)) .. "," .. tostring(WindowInfo("w", 18)) .. "," ..
+        tostring(WindowInfo("w", 19)) .. "," .. tostring(WindowInfo("w", 20)))
+    end
+    function onWheel(flags, id)
+      Send("wheel=" .. tostring(bit.band(flags, miniwin.wheel_scroll_back) ~= 0) .. "," ..
+        tostring(bit.rshift(flags, 16)) .. "," .. tostring(WindowInfo("w", 14)) .. "," ..
+        tostring(WindowInfo("w", 15)) .. "," .. tostring(WindowInfo("w", 17)) .. "," ..
+        tostring(WindowInfo("w", 18)) .. "," .. tostring(WindowInfo("w", 19)) .. "," ..
+        tostring(WindowInfo("w", 20)))
+    end
+    ]]></script>
+    </muclient>
+    """
 }

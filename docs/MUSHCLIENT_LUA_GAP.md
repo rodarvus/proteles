@@ -50,10 +50,10 @@ remaining compatibility story is qualitative:
 - Note output supports named colours, hex colours, ANSI-SGR, and MUSHclient's
   active `NoteStyle` mask for bold/underline/italic/reverse/strikethrough.
 - Basic miniwindows draw natively; `WindowWrite` snapshots replay loaded/captured
-  images, raw memory images, generated simple fill images, alpha-mask merges,
-  opacity blends, simple scale transforms, and common brightness/contrast/gamma
-  filters. Complex affine transforms and the long-tail image operations remain
-  partial/stubbed.
+  images, raw memory images, generated rectangle/ellipse/round-rectangle images,
+  alpha-mask merges, opacity blends, affine transforms, and common
+  brightness/contrast/gamma filters. Synchronous `WindowMenu` selection and the
+  long-tail image operations remain partial/stubbed.
 - MUSHclient notepad APIs are an in-memory text store, not separate windows.
 - Output selection APIs report "no selection" until the native output selection
   is bridged into Lua.
@@ -144,11 +144,11 @@ Mostly tied to MUSHclient's miniwindow drawing, which Proteles replaces with
 native panels. The high-breadth display-control calls are now present as safe
 stubs. Basic miniwindows draw natively, and `WindowWrite` can export PNG/BMP
 snapshots that include backgrounds, explicit pixels, loaded/captured/raw-memory
-image draws, generated simple fill images, alpha masks, opacity blends, simple
-scale transforms, and the common brightness/contrast/gamma filter path used by
-themed miniwindow image generation. Complex affine transforms and the long-tail
-miniwindow image operations remain partial and should only be deepened when a
-real plugin needs them.
+image draws, generated rectangle/ellipse/round-rectangle images, alpha masks,
+opacity blends, affine transforms, and the common brightness/contrast/gamma
+filter path used by themed miniwindow image generation. Synchronous
+`WindowMenu` selection and the long-tail miniwindow image operations remain
+partial and should only be deepened when a real plugin needs them.
 
 ## Tier 4 — low value (rarely needed by Aardwolf plugins)
 

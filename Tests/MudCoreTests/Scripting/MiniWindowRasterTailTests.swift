@@ -65,6 +65,63 @@ struct MiniWindowRasterTailTests {
         #expect(pixels.colour(atX: 2, y: 1) == .init(red: 255, green: 0, blue: 0))
     }
 
+    @Test("WindowCreateImage creates an 8x8 drawable alpha-style image")
+    func windowCreateImageCreatesDrawableImage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("create-image.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 9, 8, 0, 0, 0x000000)
+        proteles.echo("create:" .. tostring(WindowCreateImage(
+          "w", "bits", 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01
+        )))
+        proteles.echo("size:" .. tostring(WindowImageInfo("w", "bits", 2)) .. "x" ..
+          tostring(WindowImageInfo("w", "bits", 3)))
+        WindowDrawImage("w", "bits", 1, 0, 0, 0, miniwin.image_copy)
+        proteles.echo("write:" .. tostring(WindowWrite("w", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["create:0", "size:8x8", "write:0"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 1, y: 0) == .init(red: 255, green: 255, blue: 255))
+        #expect(pixels.colour(atX: 8, y: 7) == .init(red: 255, green: 255, blue: 255))
+        #expect(pixels.colour(atX: 2, y: 0) == .init(red: 0, green: 0, blue: 0))
+    }
+
+    @Test("WindowImageOp creates ellipse and rounded-rectangle generated images")
+    func windowImageOpCreatesShapedImages() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("image-op-shapes.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 8, 4, 0, 0, 0x000000)
+        WindowImageOp("w", miniwin.image_fill_ellipse, 0, 0, 4, 4, 0, 0, 0, 0x0000ff, "ellipse", 0, 0)
+        WindowImageOp(
+          "w", miniwin.image_fill_round_fill_rectangle, 0, 0, 4, 4, 0, 0, 0, 0x00ff00, "round", 4, 4
+        )
+        WindowDrawImage("w", "ellipse", 0, 0, 0, 0, miniwin.image_copy)
+        WindowDrawImage("w", "round", 4, 0, 0, 0, miniwin.image_copy)
+        proteles.echo("write:" .. tostring(WindowWrite("w", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["write:0"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 0, y: 0) == .init(red: 0, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 2, y: 2) == .init(red: 255, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 4, y: 0) == .init(red: 0, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 5, y: 2) == .init(red: 0, green: 255, blue: 0))
+    }
+
     @Test("WindowMergeImageAlpha uses a captured mask during export")
     func windowMergeImageAlphaUsesCapturedMask() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -91,6 +148,33 @@ struct MiniWindowRasterTailTests {
         #expect(pixels.colour(atX: 1, y: 0) == .init(red: 0, green: 0, blue: 0))
     }
 
+    @Test("WindowGetImageAlpha paints alpha as a capturable mask")
+    func windowGetImageAlphaPaintsCapturableMask() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("get-alpha.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 2, 1, 0, 0, 0x000000)
+        WindowCreateImage("w", "alpha", 0x80, 0, 0, 0, 0, 0, 0, 0)
+        proteles.echo("alpha:" .. tostring(WindowGetImageAlpha("w", "alpha", 0, 0, 2, 1, 0, 0)))
+        WindowImageFromWindow("w", "mask", "w")
+        WindowImageOp("w", miniwin.image_fill_rectangle, 0, 0, 2, 1, 0, 0, 0, 0x0000ff, "red", 0, 0)
+        WindowRectOp("w", miniwin.rect_fill, 0, 0, 0, 0, 0)
+        WindowMergeImageAlpha("w", "red", "mask", 0, 0, 2, 1, miniwin.merge_straight, 1, 0, 0, 0, 0)
+        proteles.echo("write:" .. tostring(WindowWrite("w", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["alpha:0", "write:0"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 0, y: 0) == .init(red: 255, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 1, y: 0) == .init(red: 0, green: 0, blue: 0))
+    }
+
     @Test("WindowTransformImage replays simple scale transforms in exported images")
     func windowTransformImageSimpleScaleExports() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -112,6 +196,32 @@ struct MiniWindowRasterTailTests {
         let pixels = try Self.pngPixels(output)
         #expect(pixels.colour(atX: 1, y: 1) == .init(red: 255, green: 0, blue: 0))
         #expect(pixels.colour(atX: 2, y: 2) == .init(red: 255, green: 0, blue: 0))
+    }
+
+    @Test("WindowTransformImage replays affine shear transforms in exported images")
+    func windowTransformImageAffineShearExports() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("transform-shear.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("source", 0, 0, 2, 1, 0, 0, 0x000000)
+        WindowSetPixel("source", 0, 0, 0x0000ff)
+        WindowSetPixel("source", 1, 0, 0x00ff00)
+        WindowCreate("w", 0, 0, 4, 4, 0, 0, 0x000000)
+        WindowImageFromWindow("w", "src", "source")
+        WindowTransformImage("w", "src", 1, 0, miniwin.image_copy, 1, 0, 1, 1)
+        proteles.echo("write:" .. tostring(WindowWrite("w", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["write:0"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 1, y: 0) == .init(red: 255, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 2, y: 1) == .init(red: 0, green: 255, blue: 0))
     }
 
     private static func luaString(_ value: String) -> String {

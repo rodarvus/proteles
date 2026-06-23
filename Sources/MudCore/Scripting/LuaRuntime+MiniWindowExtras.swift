@@ -32,11 +32,27 @@ extension LuaRuntime {
     private nonisolated func miniWindowImageOrShapeCall(
         _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
     ) -> [LuaValue] {
+        if let result = miniWindowGeneratedImageCall(function, name, arguments) {
+            return result
+        }
         if let result = miniWindowImageCall(function, name, arguments) {
             return result
         }
         miniWindowShapeCall(function, name, arguments)
         return []
+    }
+
+    private nonisolated func miniWindowGeneratedImageCall(
+        _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
+    ) -> [LuaValue]? {
+        switch function {
+        case .windowCreateImage:
+            [createMiniWindowImage(name, arguments)]
+        case .windowGetImageAlpha:
+            [copyMiniWindowImageAlphaToWindow(name, arguments)]
+        default:
+            nil
+        }
     }
 
     private nonisolated func miniWindowImageCall(
@@ -322,14 +338,18 @@ extension LuaRuntime {
         let imageID = Self.argString(arguments, 10)
         let width = max(0, Int(Self.argDouble(arguments, 4)) - Int(Self.argDouble(arguments, 2)))
         let height = max(0, Int(Self.argDouble(arguments, 5)) - Int(Self.argDouble(arguments, 3)))
-        guard
-            !imageID.isEmpty,
-            let data = Self.generatedImageData(
-                width: width,
-                height: height,
-                action: Int(Self.argDouble(arguments, 1)),
-                colour: Int(Self.argDouble(arguments, 9))
-            )
+        guard !imageID.isEmpty,
+              let data = Self.generatedShapeImageData(.init(
+                  width: width,
+                  height: height,
+                  action: Int(Self.argDouble(arguments, 1)),
+                  penColour: Int(Self.argDouble(arguments, 6)),
+                  penStyle: Int(Self.argDouble(arguments, 7)),
+                  penWidth: Int(Self.argDouble(arguments, 8)),
+                  brushColour: Int(Self.argDouble(arguments, 9)),
+                  ellipseWidth: Int(Self.argDouble(arguments, 11)),
+                  ellipseHeight: Int(Self.argDouble(arguments, 12))
+              ))
         else { return }
         miniWindowImageData[name, default: [:]][imageID] = data
         updateMiniWindow(name) { scene in
@@ -342,69 +362,6 @@ extension LuaRuntime {
         guard let data = argData(arguments, index), !data.isEmpty else { return nil }
         if let decoded = Data(base64Encoded: data) { return decoded }
         return data
-    }
-
-    private nonisolated static func generatedImageData(
-        width: Int,
-        height: Int,
-        action: Int,
-        colour: Int
-    ) -> Data? {
-        guard width > 0, height > 0 else { return nil }
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        let red = UInt8(clamping: colour & 0xFF)
-        let green = UInt8(clamping: (colour >> 8) & 0xFF)
-        let blue = UInt8(clamping: (colour >> 16) & 0xFF)
-        for y in 0..<height {
-            for x in 0..<width where Self.generatedImageContains(
-                x: x,
-                y: y,
-                width: width,
-                height: height,
-                action: action
-            ) {
-                let offset = (y * width + x) * 4
-                bytes[offset] = red
-                bytes[offset + 1] = green
-                bytes[offset + 2] = blue
-                bytes[offset + 3] = 255
-            }
-        }
-        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
-              let image = CGImage(
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bitsPerPixel: 32,
-                  bytesPerRow: width * 4,
-                  space: CGColorSpaceCreateDeviceRGB(),
-                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                  provider: provider,
-                  decode: nil,
-                  shouldInterpolate: false,
-                  intent: .defaultIntent
-              )
-        else { return nil }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
-        else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
-    }
-
-    private nonisolated static func generatedImageContains(
-        x: Int,
-        y: Int,
-        width: Int,
-        height: Int,
-        action: Int
-    ) -> Bool {
-        guard action == 1 else { return true }
-        let nx = (Double(x) + 0.5 - Double(width) / 2) / max(1, Double(width) / 2)
-        let ny = (Double(y) + 0.5 - Double(height) / 2) / max(1, Double(height) / 2)
-        return nx * nx + ny * ny <= 1
     }
 
     // MARK: - Phase 4: shapes

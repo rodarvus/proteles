@@ -87,6 +87,7 @@ extension LuaRuntime {
         case windowDragHandler, windowScrollwheelHandler, windowMenu
         case windowLoadImage, windowDrawImage, windowImageInfo, windowImageFromWindow, windowWrite,
              windowFilter, windowMergeImageAlpha, windowTransformImage, windowImageOp
+        case windowCreateImage, windowGetImageAlpha
         case windowCircleOp, windowGradient, windowPolygon, windowArc, windowBezier
     }
 }
