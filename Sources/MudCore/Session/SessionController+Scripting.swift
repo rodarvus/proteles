@@ -162,22 +162,42 @@ public extension SessionController {
         if await applyStoreEffect(effect) { return }
         if applySpeechEffect(effect) { return }
         if await applyAudioEffect(effect) { return }
+        if await applyPluginControlEffect(effect) { return }
+        if await applyOutputControlEffect(effect) { return }
         switch effect {
         case .setAutomationsSuspended(let suspended):
             await scriptEngine?.setSuspended(suspended)
-        case .persistPluginState(let id):
-            await persistNativePluginState(id: id)
         case .aardwolfTelnet(let option, let on):
             try? await sendRaw(Self.aardwolfTelnetBytes(option: option, on: on))
         case .mapperCall(let function, let args):
             await applyMapperCall(function: function, args: args)
-        case .publishModel(let json):
-            publishedModelsContinuation.yield(json)
         case .httpRequest(let request):
             performHTTPRequest(request)
         default:
             await applyInboundControlEffect(effect)
         }
+    }
+
+    private func applyOutputControlEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .publishModel(let json):
+            publishedModelsContinuation.yield(json)
+        case .deleteOutputLines(let count):
+            await scrollbackStore.removeLast(count)
+        default:
+            return false
+        }
+        return true
+    }
+
+    private func applyPluginControlEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .persistPluginState(let id):
+            await persistNativePluginState(id: id)
+        default:
+            return false
+        }
+        return true
     }
 
     /// The audio effects (sound cues + chat review — the review needs the

@@ -7,10 +7,11 @@
 > the generic runtime: the shim loads `miniWindowShimSource`
 > (`LuaRuntime+CompatShim.swift`), host drawing lives in `LuaRuntime+MiniWindow*
 > .swift`, and the UI mounts `MiniWindowOverlay`
-> (`apps/ProtelesApp_macOS/Sources/ContentView.swift`). The exotic tail
-> (blend/filter/transform image ops, window-enumeration queries, `WindowMenu`)
-> remains stubbed, filled in per-plugin on demand. The sections below are the
-> original feasibility analysis, kept for the design rationale.
+> (`apps/ProtelesApp_macOS/Sources/ContentView.swift`). The themed-window tail
+> now covers common blend/filter/transform image ops, window-enumeration
+> queries, and synchronous `WindowMenu`; only long-tail GDI/image operations
+> remain partial. The sections below are the original feasibility analysis,
+> kept for the design rationale.
 >
 > *(Original status:)* investigation / comparison artifact. Not scheduled, not a
 > 1.0 goal. Produced on branch `experiment/miniwindow-support`, in parallel with

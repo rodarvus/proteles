@@ -139,6 +139,10 @@ public actor LuaRuntime {
     /// ``setClipboardProvider(_:)``.
     nonisolated(unsafe) var clipboardProvider: ClipboardProvider?
 
+    /// App hook that displays a synchronous miniwindow menu (`WindowMenu`).
+    /// Nil means "cancelled" / empty string, matching MUSHclient.
+    nonisolated(unsafe) var miniWindowMenuProvider: MiniWindowMenuProvider?
+
     /// App hook that registers a plugin's `Accelerator`/`AcceleratorTo` keybind
     /// into the live MacroEngine (nil = accelerators are inert). Set by
     /// ``setAcceleratorRegistrar(_:)``.
@@ -243,6 +247,7 @@ public actor LuaRuntime {
     nonisolated(unsafe) var transientRefs: [Int32] = []
     /// Directory `sqlite3.open`/file helpers may touch; `nil` = closed.
     nonisolated(unsafe) var sqliteDirectory: String?
+    nonisolated(unsafe) var currentDirectory: String?
 
     /// Mapper-DB merge state (D-111); set via `setMapperOverlay`, consumed by
     /// `mapperMergeSQL` (full rationale there). Both nil ⇒ no merge.
@@ -435,6 +440,11 @@ public actor LuaRuntime {
         setHostFunction("lineInfo", .lineInfo)
         setHostFunction("styleInfo", .styleInfo)
         setHostFunction("recentLines", .recentLines)
+        setHostFunction("deleteLines", .deleteLines)
+        setHostFunction("setCommandInput", .setCommandInput)
+        setHostFunction("pasteCommandInput", .pasteCommandInput)
+        setHostFunction("setCommandSelection", .setCommandSelection)
+        setHostFunction("getDeviceCaps", .getDeviceCaps)
         setHostFunction("isPluginInstalled", .isPluginInstalled)
         setHostFunction("sndCall", .sndCall)
         setHostFunction("sqliteAllowed", .sqliteAllowed)
@@ -481,12 +491,14 @@ public actor LuaRuntime {
         setHostFunction("pluginSupports", .pluginSupports)
         setHostFunction("pluginInfo", .pluginInfo)
         setHostFunction("unloadPlugin", .unloadPlugin)
+        setHostFunction("enablePlugin", .enablePlugin)
         setHostFunction("connect", .connect)
         setHostFunction("outputFontName", .outputFontName)
         setHostFunction("resetTimer", .resetTimer)
         setHostFunction("monotonic", .monotonic)
         setHostFunction("fileExists", .fileExists)
         setHostFunction("makeDirectory", .makeDirectory)
+        setHostFunction("changeDirectory", .changeDirectory)
         setHostFunction("reloadPlugin", .reloadPlugin)
         setHostFunction("clipboardGet", .clipboardGet)
         setHostFunction("clipboardSet", .clipboardSet)

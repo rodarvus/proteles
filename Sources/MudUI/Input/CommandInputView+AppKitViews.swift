@@ -14,6 +14,7 @@ import SwiftUI
             context.coordinator.ghostHintEnabled = ghostHint
             context.coordinator.autoRepeatLastCommand = autoRepeatLastCommand
             context.coordinator.onHeightChange = onHeightChange
+            context.coordinator.bindCommandInputEdits(commandInputEdits)
             if let textView = context.coordinator.textView {
                 textView.onMacroKey = onMacroKey
                 textView.spellChecking = spellChecking
@@ -133,6 +134,24 @@ import SwiftUI
             )
             textView.textContainer?.lineBreakMode = .byWordWrapping
             textView.applyTextEditingPolicy()
+        }
+    }
+
+    extension CommandField.Coordinator {
+        func bindCommandInputEdits(_ stream: AsyncStream<CommandInputEdit>?) {
+            guard commandInputTask == nil, let stream else { return }
+            commandInputTask = Task { @MainActor [weak self] in
+                for await edit in stream {
+                    switch edit.kind {
+                    case .set:
+                        self?.replaceInput(edit.text)
+                    case .paste:
+                        self?.pasteInput(edit.text)
+                    case .select:
+                        self?.selectInput(startColumn: edit.startColumn, endColumn: edit.endColumn)
+                    }
+                }
+            }
         }
     }
 #endif

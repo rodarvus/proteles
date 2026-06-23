@@ -13,6 +13,113 @@ public struct OpenBrowserRequest: Sendable, Equatable {
     }
 }
 
+/// A synchronous `WindowMenu` selection request from a miniwindow plugin.
+/// MUSHclient encodes menus as a compact pipe-separated string; Proteles parses
+/// that once in MudCore so headless tests and the macOS presenter share the same
+/// semantics.
+public struct MiniWindowMenuRequest: Sendable, Equatable {
+    public enum HorizontalAlignment: String, Sendable {
+        case left, center, right
+    }
+
+    public enum VerticalAlignment: String, Sendable {
+        case top, center, bottom
+    }
+
+    public let pluginID: String
+    public let windowName: String
+    public let left: Int
+    public let top: Int
+    public let rawItems: String
+    public let returnNumber: Bool
+    public let horizontalAlignment: HorizontalAlignment
+    public let verticalAlignment: VerticalAlignment
+    public let items: [MiniWindowMenuItem]
+
+    public init(
+        pluginID: String,
+        windowName: String,
+        left: Int,
+        top: Int,
+        rawItems: String,
+        returnNumber: Bool,
+        horizontalAlignment: HorizontalAlignment,
+        verticalAlignment: VerticalAlignment,
+        items: [MiniWindowMenuItem]
+    ) {
+        self.pluginID = pluginID
+        self.windowName = windowName
+        self.left = left
+        self.top = top
+        self.rawItems = rawItems
+        self.returnNumber = returnNumber
+        self.horizontalAlignment = horizontalAlignment
+        self.verticalAlignment = verticalAlignment
+        self.items = items
+    }
+}
+
+/// One parsed `WindowMenu` item. `selectionIndex` is the 1-based ordinal among
+/// enabled selectable items, matching MUSHclient's numeric-return mode.
+public struct MiniWindowMenuItem: Sendable, Equatable {
+    public let title: String
+    public let selectionIndex: Int?
+    public let checked: Bool
+    public let disabled: Bool
+    public let children: [MiniWindowMenuItem]
+
+    public init(
+        title: String,
+        selectionIndex: Int? = nil,
+        checked: Bool = false,
+        disabled: Bool = false,
+        children: [MiniWindowMenuItem] = []
+    ) {
+        self.title = title
+        self.selectionIndex = selectionIndex
+        self.checked = checked
+        self.disabled = disabled
+        self.children = children
+    }
+
+    public var isSeparator: Bool {
+        title.isEmpty && selectionIndex == nil && children.isEmpty
+    }
+}
+
+public struct MiniWindowMenuSelection: Sendable, Equatable {
+    public let title: String
+    public let index: Int
+
+    public init(title: String, index: Int) {
+        self.title = title
+        self.index = index
+    }
+}
+
+public typealias MiniWindowMenuProvider = @Sendable (MiniWindowMenuRequest) -> MiniWindowMenuSelection?
+
+/// A plugin request to edit the live command input field.
+public struct CommandInputEdit: Sendable, Equatable {
+    public enum Kind: Sendable {
+        case set
+        case paste
+        case select
+    }
+
+    public let kind: Kind
+    public let text: String
+    public let startColumn: Int
+    public let endColumn: Int
+
+    public init(kind: Kind, text: String, startColumn: Int = 0, endColumn: Int = 0) {
+        self.kind = kind
+        self.text = text
+        self.startColumn = startColumn
+        self.endColumn = endColumn
+    }
+}
+
 /// A value crossing the Lua ↔ Swift boundary. The minimal set the host
 /// API needs today (scalars); tables follow when the event bus / RPC land.
 public enum LuaValue: Sendable, Equatable {
@@ -125,8 +232,7 @@ public enum ScriptEffect: Sendable, Equatable {
     /// `mapper goto` must wait for ARRIVAL, the ordering MUSHclient got for free
     /// from Aardwolf's server-side `run` queue). Carries the destination uid for
     /// the transcript. Keyed purely on arriving at the target, so it's route-shape
-    /// agnostic — though recall-routed gotos still mis-hold (issue #78: arrival
-    /// off the stale recall destination isn't matched, so this never fires).
+    /// agnostic.
     case walkCompleted(uid: String)
     /// Print plain text to the scrollback.
     case echo(String)
@@ -171,6 +277,12 @@ public enum ScriptEffect: Sendable, Equatable {
     case removeTrigger(String)
     /// Remove a runtime-registered alias by name (MUSHclient `DeleteAlias`).
     case removeAlias(String)
+    /// Delete the last displayed output lines (`DeleteLines`). The runtime's
+    /// synchronous output mirror is updated before this effect is emitted; the
+    /// session applies the same tail trim to the visible scrollback.
+    case deleteOutputLines(count: Int)
+    /// Set or paste into the live command field (`SetCommand`/`PasteCommand`).
+    case commandInput(CommandInputEdit)
     /// Re-inject text as if it had arrived from the MUD (MUSHclient's
     /// `Simulate`): the host feeds each line back through the inbound pipeline
     /// so triggers (user + S&D) see it and it displays. S&D uses this for its
@@ -190,6 +302,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// idempotent — an unknown/native id is a no-op. Self-unload is rejected in
     /// the shim before this is emitted.
     case unloadPlugin(id: String)
+    /// Fire `OnPluginEnable` for an already-loaded shim plugin
+    /// (`EnablePlugin(id, true)`).
+    case enablePlugin(id: String)
     /// Open the connection if it's closed (MUSHclient `Connect`). The host
     /// re-establishes to the last endpoint; a no-op when already connected (the
     /// shim returns `eWorldOpen` without emitting this) or when there's no prior

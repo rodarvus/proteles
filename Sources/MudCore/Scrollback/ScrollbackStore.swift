@@ -12,6 +12,10 @@ public enum ScrollbackEvent: Sendable, Equatable {
     /// hit its `maxLines` budget. Delivered in eviction order (FIFO with
     /// the original append order).
     case evicted(LineID)
+    /// The newest resident lines were deleted by a scripting API such as
+    /// MUSHclient `DeleteLines`. Delivered newest-last in the same order the
+    /// lines appeared in the buffer.
+    case removedTail([LineID])
 }
 
 /// Append-only line buffer with bounded in-memory capacity and a
@@ -140,6 +144,24 @@ public actor ScrollbackStore {
     /// Lines that have been evicted are silently absent.
     public func snapshot(in range: ClosedRange<LineID>) -> [Line] {
         lines.filter { range.contains($0.id) }
+    }
+
+    /// Delete up to `count` newest resident lines, used by MUSHclient
+    /// `DeleteLines`. Returns the IDs removed in display order.
+    @discardableResult
+    public func removeLast(_ count: Int) -> [LineID] {
+        guard count > 0, !lines.isEmpty else { return [] }
+        let removeCount = Swift.min(count, lines.count)
+        var removed: [LineID] = []
+        removed.reserveCapacity(removeCount)
+        for _ in 0..<removeCount {
+            removed.append(lines.removeLast().id)
+        }
+        removed.reverse()
+        for continuation in eventSubscribers.values {
+            continuation.yield(.removedTail(removed))
+        }
+        return removed
     }
 
     /// Subscribe to newly-appended lines. The returned stream replays

@@ -111,6 +111,58 @@ struct PluginReloadTests {
         ])
     }
 
+    @Test("Unload falls back to OnPluginClose when no disable callback exists")
+    func unloadFiresCloseFallback() async throws {
+        let parsed = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.test.close" name="Close Test"/>
+        <script><![CDATA[
+        function OnPluginClose() Send("close:" .. GetPluginID()) end
+        ]]></script></muclient>
+        """)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+
+        #expect(await engine.unloadPlugin("com.test.close") == [
+            .send("close:com.test.close")
+        ])
+    }
+
+    @Test("EnablePlugin(true) fires OnPluginEnable on a loaded shim plugin")
+    func enablePluginFiresEnableCallback() async throws {
+        let parsed = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.test.enable" name="Enable Test"/>
+        <script><![CDATA[
+        function OnPluginEnable() Send("enable:" .. GetPluginID()) end
+        ]]></script></muclient>
+        """)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+
+        #expect(await engine.enablePlugin("com.test.enable") == [
+            .send("enable:com.test.enable")
+        ])
+    }
+
+    @Test("Disconnect fires save, disconnect, and close lifecycle callbacks")
+    func disconnectFiresCloseCallback() async throws {
+        let parsed = try MUSHclientPluginLoader.parse(xml: """
+        <muclient><plugin id="com.test.disconnect" name="Disconnect Test"/>
+        <script><![CDATA[
+        function OnPluginSaveState() Send("save") end
+        function OnPluginDisconnect() Send("disconnect") end
+        function OnPluginClose() Send("close") end
+        ]]></script></muclient>
+        """)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+
+        #expect(await engine.disconnectPlugins() == [
+            .send("save"),
+            .send("disconnect"),
+            .send("close")
+        ])
+    }
+
     @Test("Plugin list changed fires once across the settled loaded plugin list")
     func pluginListChangedBroadcastsToLoadedPlugins() async throws {
         let first = try MUSHclientPluginLoader.parse(xml: lifecyclePlugin)

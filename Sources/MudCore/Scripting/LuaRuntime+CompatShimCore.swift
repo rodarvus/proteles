@@ -151,7 +151,7 @@ extension LuaRuntime {
       openactivitywindow = 0, smoothscrolling = 0, smootherscrolling = 0,
     }
     local __numOpt, __alphaOpt = {}, {}    -- SetOption/SetAlphaOption write-through
-    local __notepads = {}                  -- title-key -> { title, text, saveMethod, readOnly }
+    local __notepads = {}                  -- title-key -> { title, text, saveMethod, readOnly, ... }
     local function __optName(n)
       return (tostring(n or ""):lower():gsub("^%s+", ""):gsub("%s+$", ""))
     end
@@ -221,26 +221,51 @@ extension LuaRuntime {
     -- so Append/Replace/Get/List are coherent, with case-insensitive titles like
     -- MUSHclient's FindNotepad.
     local function __notepadKey(title) return tostring(title or ""):lower() end
+    local function __concatFrom(n, ...)
+      local parts = {}
+      for i = n, select("#", ...) do
+        local value = select(i, ...)
+        parts[#parts + 1] = tostring(value or "")
+      end
+      return table.concat(parts)
+    end
     local function __notepad(title, create)
       local key = __notepadKey(title)
       local pad = __notepads[key]
       if pad == nil and create then
-        pad = { title = tostring(title or ""), text = "", saveMethod = 0, readOnly = false }
+        pad = {
+          title = tostring(title or ""), text = "", saveMethod = 0, readOnly = false,
+          left = 0, top = 0, width = 640, height = 480, textColour = 0, backColour = 0xffffff,
+          fontName = GetAlphaOption("output_font_name"),
+          fontSize = tonumber(GetOption("output_font_height")) or 13,
+          bold = false, italic = false,
+        }
         __notepads[key] = pad
       end
       return pad
     end
-    function AppendToNotepad(title, contents)
+    function AppendToNotepad(title, ...)
       local pad = __notepad(title, true)
-      pad.text = pad.text .. tostring(contents or "")
+      pad.text = pad.text .. __concatFrom(1, ...)
       return true
     end
-    function ReplaceNotepad(title, contents)
+    function ReplaceNotepad(title, ...)
       local pad = __notepad(title, true)
-      pad.text = tostring(contents or "")
+      pad.text = __concatFrom(1, ...)
+      return true
+    end
+    function SendToNotepad(title, ...)
+      local pad = __notepad(title, true)
+      pad.text = __concatFrom(1, ...)
       return true
     end
     function ActivateNotepad(title) return __notepad(title, false) ~= nil end
+    function CloseNotepad(title, querySave)
+      local key = __notepadKey(title)
+      if __notepads[key] == nil then return error_code.eFileNotFound end
+      __notepads[key] = nil
+      return error_code.eOK
+    end
     function GetNotepadLength(title)
       local pad = __notepad(title, false)
       return pad and #pad.text or 0
@@ -255,6 +280,36 @@ extension LuaRuntime {
       table.sort(names)
       return names
     end
+    function GetNotepadWindowPosition(title)
+      local pad = __notepad(title, false)
+      if pad == nil then return nil end
+      return pad.left, pad.top, pad.width, pad.height
+    end
+    function MoveNotepadWindow(title, left, top, width, height)
+      local pad = __notepad(title, false)
+      if pad == nil then return false end
+      pad.left = tonumber(left) or pad.left
+      pad.top = tonumber(top) or pad.top
+      pad.width = tonumber(width) or pad.width
+      pad.height = tonumber(height) or pad.height
+      return true
+    end
+    function NotepadColour(title, textColour, backColour)
+      local pad = __notepad(title, false)
+      if pad == nil then return error_code.eFileNotFound end
+      pad.textColour = tonumber(textColour) or pad.textColour
+      pad.backColour = tonumber(backColour) or pad.backColour
+      return error_code.eOK
+    end
+    function NotepadFont(title, fontName, size, bold, italic)
+      local pad = __notepad(title, false)
+      if pad == nil then return error_code.eFileNotFound end
+      pad.fontName = tostring(fontName or pad.fontName)
+      pad.fontSize = tonumber(size) or pad.fontSize
+      pad.bold = bold and true or false
+      pad.italic = italic and true or false
+      return error_code.eOK
+    end
     function NotepadSaveMethod(title, method)
       local pad = __notepad(title, false)
       method = tonumber(method)
@@ -267,6 +322,15 @@ extension LuaRuntime {
       if pad == nil then return false end
       pad.readOnly = readOnly and true or false
       return true
+    end
+    function SaveNotepad(title, filename, replaceExisting)
+      local pad = __notepad(title, false)
+      if pad == nil then return error_code.eFileNotFound end
+      if filename == nil or filename == "" then return error_code.eOK end
+      -- The generic plugin sandbox deliberately does not expose arbitrary file
+      -- writes from this UI API; report success so capture plugins that call
+      -- SaveNotepad as a lifecycle nicety don't fail their main text-store path.
+      return error_code.eOK
     end
     -- Selection queries: until the native output selection is bridged into Lua,
     -- report MUSHclient's "no selection" value. SetSelection is accepted but
@@ -286,11 +350,28 @@ extension LuaRuntime {
     function Save(filename, all) return true end
     function Pause(flag) return error_code.eOK end
     function GetCommand() return "" end
+    function SetCommand(text)
+      proteles.setCommandInput(tostring(text or ""))
+      return error_code.eOK
+    end
+    function PasteCommand(text)
+      proteles.pasteCommandInput(tostring(text or ""))
+      return ""
+    end
     function SetCommandWindowHeight(height) return error_code.eOK end
-    function SetCommandSelection(startColumn, endColumn) return error_code.eOK end
+    function SetCommandSelection(startColumn, endColumn)
+      proteles.setCommandSelection(tonumber(startColumn) or 1, tonumber(endColumn) or -1)
+      return error_code.eOK
+    end
     function ExportXML(itemType, name) return "" end
     function DoCommand(name) return error_code.eOK end
     function DeleteOutput() return error_code.eOK end
+    function DeleteLines(count)
+      proteles.deleteLines(tonumber(count) or 0)
+      return error_code.eOK
+    end
+    function GetDeviceCaps(which) return proteles.getDeviceCaps(tonumber(which) or 0) end
+    function ChangeDir(path) return proteles.changeDirectory(tostring(path or "")) end
     function Debug() return error_code.eOK end
     -- Display/window-control calls used by Aardwolf package visual helpers.
     -- Proteles replaces most of these MUSHclient output-window affordances with

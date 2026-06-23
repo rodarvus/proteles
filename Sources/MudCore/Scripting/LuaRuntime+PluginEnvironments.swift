@@ -89,6 +89,7 @@ public extension LuaRuntime {
         _ arguments: [LuaValue] = []
     ) -> [ScriptEffect] {
         effects.removeAll(keepingCapacity: true)
+        guard hasPluginCallback(pluginID, name) else { return effects }
         beginMiniWindowPass() // lifecycle/hotspot callbacks commonly draw
         // Bind the variable scope AND ambient context (GetPluginID/GetInfo(60)/…)
         // to THIS plugin for the duration of the call, then restore. Both are
@@ -123,6 +124,18 @@ public extension LuaRuntime {
         }
         flushMiniWindows()
         return effects
+    }
+
+    /// Fast preflight for fan-out callbacks. Mirrors `callPluginCallback`'s
+    /// lookup, including the environment's `__index` fallback, but does not
+    /// begin a draw pass, mutate effect storage, or run any Lua code.
+    func hasPluginCallback(_ pluginID: String, _ name: String) -> Bool {
+        guard let envRef = pluginEnvs[pluginID] else { return false }
+        lua_rawgeti(state, LUA_REGISTRYINDEX, envRef) // [env]
+        lua_getfield(state, -1, name) // [env, value]
+        let found = lua_type(state, -1) == LUA_TFUNCTION
+        clua_pop(state, 2)
+        return found
     }
 
     /// Call a plugin's `OnPluginSend(text)` and capture its return. MUSHclient

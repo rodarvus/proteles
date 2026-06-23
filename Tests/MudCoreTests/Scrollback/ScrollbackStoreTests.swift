@@ -180,12 +180,14 @@ struct ScrollbackStoreEventsTests {
     private enum Kind: Equatable {
         case append(LineID)
         case evict(LineID)
+        case removedTail([LineID])
     }
 
     private static func kind(_ event: ScrollbackEvent) -> Kind {
         switch event {
         case .appended(let line): .append(line.id)
         case .evicted(let id): .evict(id)
+        case .removedTail(let ids): .removedTail(ids)
         }
     }
 
@@ -236,6 +238,32 @@ struct ScrollbackStoreEventsTests {
             .append(LineID(4)),
             .evict(LineID(2))
         ])
+    }
+
+    @Test("removeLast deletes newest resident lines and emits a tail event")
+    func removeLastEmitsTailEvent() async {
+        let store = ScrollbackStore()
+        let stream = await store.events()
+
+        Task {
+            for index in 0..<3 {
+                await store.append(text: "\(index)")
+            }
+            await store.removeLast(2)
+        }
+
+        var kinds: [Kind] = []
+        for await event in stream {
+            kinds.append(Self.kind(event))
+            if kinds.count == 4 { break }
+        }
+        #expect(kinds == [
+            .append(LineID(0)),
+            .append(LineID(1)),
+            .append(LineID(2)),
+            .removedTail([LineID(1), LineID(2)])
+        ])
+        #expect(await store.snapshot().map(\.id) == [LineID(0)])
     }
 
     @Test("subscribe() (Line-only) coexists with events() and gets the same appends")

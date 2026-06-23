@@ -35,6 +35,7 @@ extension LuaRuntime {
         case colourNameToRGB, rgbColourToName, adjustColour
         case createGUID, uniqueID
         case lineCount, linesInBuffer, lineInfo, styleInfo, recentLines
+        case deleteLines, setCommandInput, pasteCommandInput, setCommandSelection, getDeviceCaps
         // Trigger/alias/timer introspection (see LuaRuntime+AutomationInfo.swift).
         // The *Info calls are synchronous queries returning a field value; the
         // *List calls return a Lua array via the registry-ref bridge; resetTimer
@@ -53,7 +54,7 @@ extension LuaRuntime {
         case setAliasOption, stopEvaluatingTriggers, trace
         /// Plugin management: pluginList/pluginSupports are synchronous queries
         /// over the loaded-plugin set; unloadPlugin/connect are control effects.
-        case pluginList, pluginSupports, pluginInfo, unloadPlugin, connect
+        case pluginList, pluginSupports, pluginInfo, unloadPlugin, enablePlugin, connect
         /// The configured output font name (GetAlphaOption("output_font_name")).
         case outputFontName
         case sqliteAllowed
@@ -65,7 +66,7 @@ extension LuaRuntime {
         case notify
         case openBrowser
         case button
-        case fileExists, makeDirectory, reloadPlugin
+        case fileExists, makeDirectory, reloadPlugin, changeDirectory
         case aardwolfTelnet
         case readFile, writeFile
         case dialog, accelerator, http

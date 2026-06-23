@@ -375,6 +375,8 @@ struct ProtelesApp: App {
             await scriptEngine.setDialogProvider(makeScriptDialogProvider())
             // Native NSPasteboard for plugin GetClipboard/SetClipboard.
             await scriptEngine.setClipboardProvider(makeClipboardProvider())
+            // Native synchronous popup for miniwindow WindowMenu.
+            await scriptEngine.setMiniWindowMenuProvider(MiniWindowMenuProviderFactory.make())
         }
     }
 

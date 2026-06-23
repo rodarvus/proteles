@@ -87,6 +87,51 @@ struct SessionControllerPluginTests {
         }
     }
 
+    @Test("SaveState variable survives an immediate ReloadPlugin")
+    func saveStatePersistsBeforeReload() async throws {
+        let pluginsDir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: pluginsDir) }
+        let xml = """
+        <muclient>
+        <plugin id="com.test.save-reload" name="Save Reload" save_state="y"/>
+        <aliases>
+          <alias match="^save-reload$" enabled="y" regexp="y" send_to="12">
+            <send>
+              SaveState()
+              ReloadPlugin(GetPluginID())
+            </send>
+          </alias>
+        </aliases>
+        <script><![CDATA[
+        function OnPluginSaveState()
+          SetVariable("saved_marker", "yes")
+        end
+        ]]></script>
+        </muclient>
+        """
+        try xml.write(
+            to: pluginsDir.appendingPathComponent("save-reload.xml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let variableURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("proteles-vars-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: variableURL) }
+
+        let engine = try ScriptEngine()
+        let controller = SessionController(scriptEngine: engine)
+        await controller.attachVariableStore(VariableStore(url: variableURL))
+        await controller.loadPlugins(directories: [pluginsDir], character: "test")
+
+        try await controller.dispatchCommand("save-reload")
+
+        let snapshot = await engine.variablesSnapshot()
+        #expect(snapshot["com.test.save-reload"]?["saved_marker"] == "yes")
+        let store = VariableStore(url: variableURL)
+        try await store.load()
+        #expect(await store.scopes["com.test.save-reload"]?["saved_marker"] == "yes")
+    }
+
     @Test("loadPlugins is a no-op for an empty / missing directory")
     func emptyDirectoryNoOp() async throws {
         let directory = try temporaryDirectory()

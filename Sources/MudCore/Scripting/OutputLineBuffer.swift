@@ -41,8 +41,8 @@ public struct BufferedLine: Sendable, Equatable {
 /// **byte** counts, as in MUSHclient.
 public struct OutputLineBuffer: Sendable {
     public private(set) var lines: Deque<BufferedLine> = []
-    /// Running count of all lines pushed since connect — `GetLineCount`. Never
-    /// decremented (we don't implement `DeleteLines`).
+    /// Running count of all lines pushed since connect — `GetLineCount`.
+    /// `DeleteLines` decrements this just like MUSHclient's output buffer.
     public private(set) var totalReceived = 0
     /// When the session connected, for the elapsed-time infotype.
     public var connectedAt: Date?
@@ -58,6 +58,15 @@ public struct OutputLineBuffer: Sendable {
         if lines.count > maxLines {
             lines.removeFirst(lines.count - maxLines)
         }
+    }
+
+    public mutating func deleteLast(_ count: Int) {
+        guard count > 0 else { return }
+        let resident = min(count, lines.count)
+        if resident > 0 {
+            lines.removeLast(resident)
+        }
+        totalReceived = max(0, totalReceived - count)
     }
 
     /// Clear on (re)connect and stamp the connect time for infotype 13.

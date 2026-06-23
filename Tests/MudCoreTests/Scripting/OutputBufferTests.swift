@@ -25,10 +25,25 @@ struct OutputLineBufferTests {
         for index in 1...5 {
             buffer.append(line(UInt64(index), "line \(index)"))
         }
-        #expect(buffer.lineCount == 5) // running total, never decremented
+        #expect(buffer.lineCount == 5) // running total until DeleteLines
         #expect(buffer.linesInBuffer == 3) // bounded
         #expect(buffer.lineInfo(1, 1) == .string("line 3")) // oldest two evicted
         #expect(buffer.lineInfo(3, 1) == .string("line 5"))
+    }
+
+    @Test("DeleteLines removes newest buffered lines and decrements line count")
+    func deleteLast() {
+        var buffer = OutputLineBuffer(maxLines: 5)
+        for index in 1...4 {
+            buffer.append(line(UInt64(index), "line \(index)"))
+        }
+        buffer.deleteLast(2)
+        #expect(buffer.lineCount == 2)
+        #expect(buffer.linesInBuffer == 2)
+        #expect(buffer.recentLines(10) == "line 1\nline 2")
+        buffer.deleteLast(99)
+        #expect(buffer.lineCount == 0)
+        #expect(buffer.linesInBuffer == 0)
     }
 
     @Test("out-of-range line / unknown infotype → nil")

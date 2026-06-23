@@ -43,6 +43,22 @@ struct PluginVariableScopeTests {
         #expect(snapshot["com.b"]?["flag"] == "com.b")
     }
 
+    @Test("SaveState() runs the calling plugin's OnPluginSaveState callback")
+    func explicitSaveStateUsesCallingPluginEnvironment() async throws {
+        let engine = try ScriptEngine()
+        _ = try await engine.loadPlugin(plugin(id: "com.test.explicit-save"))
+
+        let effects = await engine.runInPluginEnvironment(
+            "com.test.explicit-save",
+            """
+            SaveState()
+            proteles.send("saved:" .. tostring(GetVariable("flag")))
+            """
+        )
+
+        #expect(effects == [.send("saved:com.test.explicit-save")])
+    }
+
     @Test("a plugin-set global is readable via _G.x, and shim globals still resolve")
     func globalReadableViaUnderscoreG() async throws {
         // Regression: a global the plugin sets in its <script> must be visible as

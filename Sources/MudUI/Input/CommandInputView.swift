@@ -57,6 +57,7 @@ public struct CommandInputView: View {
     private let spellChecking: Bool
     private let ghostHint: Bool
     private let autoRepeatLastCommand: Bool
+    private let commandInputEdits: AsyncStream<CommandInputEdit>?
 
     /// - Parameters:
     ///   - onSubmit: called with the line when the user presses Enter.
@@ -77,7 +78,8 @@ public struct CommandInputView: View {
         vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
         spellChecking: Bool = false,
         ghostHint: Bool = true,
-        autoRepeatLastCommand: Bool = false
+        autoRepeatLastCommand: Bool = false,
+        commandInputEdits: AsyncStream<CommandInputEdit>? = nil
     ) {
         self.onSubmit = onSubmit
         self.onSubmitBatch = onSubmitBatch ?? { lines in lines.forEach(onSubmit) }
@@ -86,6 +88,7 @@ public struct CommandInputView: View {
         self.spellChecking = spellChecking
         self.ghostHint = ghostHint
         self.autoRepeatLastCommand = autoRepeatLastCommand
+        self.commandInputEdits = commandInputEdits
     }
 
     /// Live editor height (one line by default; grows as lines are added, up to
@@ -102,6 +105,7 @@ public struct CommandInputView: View {
             spellChecking: spellChecking,
             ghostHint: ghostHint,
             autoRepeatLastCommand: autoRepeatLastCommand,
+            commandInputEdits: commandInputEdits,
             onHeightChange: { fieldHeight = $0 }
         )
         .frame(height: fieldHeight)
@@ -127,6 +131,7 @@ public struct CommandInputView: View {
         let spellChecking: Bool
         let ghostHint: Bool
         let autoRepeatLastCommand: Bool
+        let commandInputEdits: AsyncStream<CommandInputEdit>?
         let onHeightChange: (CGFloat) -> Void
 
         /// The input grows to five visual rows; beyond that the text view scrolls.
@@ -155,6 +160,7 @@ public struct CommandInputView: View {
                 ghost: ghost
             )
             DispatchQueue.main.async { context.coordinator.updateHeight() }
+            context.coordinator.bindCommandInputEdits(commandInputEdits)
             return container
         }
 
@@ -182,9 +188,10 @@ public struct CommandInputView: View {
             var lineHeight: CGFloat = 20
             var maxVisualLines: CGFloat = 5
             private var lastReportedHeight: CGFloat = 0
-            private var programmaticEdit = false
+            var programmaticEdit = false
+            var commandInputTask: Task<Void, Never>?
 
-            private var history = CommandHistory()
+            var history = CommandHistory()
 
             /// Tab-completion cycle state: the full-line candidates for the
             /// current word (each = the text before the word + a completion),
@@ -202,6 +209,10 @@ public struct CommandInputView: View {
                 self.onSubmit = onSubmit
                 self.onSubmitBatch = onSubmitBatch
                 self.vocabulary = vocabulary
+            }
+
+            deinit {
+                commandInputTask?.cancel()
             }
 
             // MARK: - Typing
@@ -362,7 +373,7 @@ public struct CommandInputView: View {
             /// End any Tab cycle, leaving the field text as-is. Returns whether
             /// a cycle was active (so Esc can report it consumed the key).
             @discardableResult
-            private func endCycle() -> Bool {
+            func endCycle() -> Bool {
                 guard cycling else { return false }
                 cycling = false
                 candidates = []
@@ -414,7 +425,7 @@ public struct CommandInputView: View {
             /// Replace the field text and put the caret at the end. Programmatic
             /// edits don't fire `controlTextDidChange`, so this won't clobber
             /// cycle / navigation state.
-            private func setText(_ text: String, selectAll: Bool = false) {
+            func setText(_ text: String, selectAll: Bool = false) {
                 guard let textView else { return }
                 hideGhost() // every programmatic edit clears the hint
                 let end = (text as NSString).length
@@ -434,12 +445,6 @@ public struct CommandInputView: View {
                     self?.resetScrollIfAllContentFits()
                     self?.scrollCaretToVisible()
                 }
-            }
-
-            func replaceInput(_ text: String) {
-                endCycle()
-                history.resetNavigation()
-                setText(text)
             }
 
             // MARK: - Auto-grow height (#39)
@@ -487,12 +492,12 @@ public struct CommandInputView: View {
                 }
             }
 
-            private func scrollCaretToVisible() {
+            func scrollCaretToVisible() {
                 guard let textView else { return }
                 textView.scrollRangeToVisible(textView.selectedRange())
             }
 
-            private func resetScrollIfAllContentFits() {
+            func resetScrollIfAllContentFits() {
                 guard let scrollView else { return }
                 let contentHeight = measuredContentHeight()
                 guard contentHeight <= scrollView.contentView.bounds.height + 0.5 else { return }

@@ -157,9 +157,14 @@ extension ScriptEngine {
     /// may AddTimer/AddTriggerEx (dinv's init coroutine yields on wait.time → a
     /// resume timer); returning them raw drops it and the coroutine hangs.
     func fireCallbackOnAll(_ name: String, _ arguments: [LuaValue] = []) async -> [ScriptEffect] {
+        var callbackPluginIDs: [String] = []
+        for pluginID in loadedPluginIDs where await runtime.hasPluginCallback(pluginID, name) {
+            callbackPluginIDs.append(pluginID)
+        }
+        guard !callbackPluginIDs.isEmpty else { return [] }
         await syncAutomationSnapshot() // callbacks may read their own automation
         var effects: [ScriptEffect] = []
-        for pluginID in loadedPluginIDs {
+        for pluginID in callbackPluginIDs {
             let raw = await runtime.callPluginCallback(pluginID, name, arguments)
             effects.append(contentsOf: consumeRegistrations(raw, owner: pluginID))
         }
@@ -183,6 +188,15 @@ extension ScriptEngine {
         await consumeRegistrations(runtime.callPluginCallback(id, "OnPluginConnect"), owner: id)
     }
 
+    /// MUSHclient `EnablePlugin(id, true)`: fire the plugin's enable callback
+    /// if the shim plugin is already loaded. Proteles' Plugin Library still owns
+    /// adding/removing plugins; this covers helper code that toggles companions.
+    public func enablePlugin(_ id: String) async -> [ScriptEffect] {
+        guard loadedPluginIDs.contains(id) else { return [] }
+        await syncAutomationSnapshot()
+        return await consumeRegistrations(runtime.callPluginCallback(id, "OnPluginEnable"), owner: id)
+    }
+
     /// Deliver an inbound GMCP message to every plugin's
     /// `OnPluginTelnetSubnegotiation(201, "<package> <json>")` — MUSHclient fires
     /// this for the raw GMCP subnegotiation (telnet option 201). dinv's config
@@ -194,6 +208,18 @@ extension ScriptEngine {
         await fireCallbackOnAll("OnPluginTelnetSubnegotiation", [
             .number(201),
             .string("\(package) \(json)")
+        ])
+    }
+
+    /// MUSHclient's `OnPluginScreendraw(type, log, line)` fires after a line is
+    /// drawn to the output window. Proteles has no MUSHclient MDI output
+    /// window, but review-buffer/capture plugins use this callback as an output
+    /// observer, so fire it for displayed MUD lines after they enter scrollback.
+    public func fireOnPluginScreendraw(type: Int, log: Bool, line: String) async -> [ScriptEffect] {
+        await fireCallbackOnAll("OnPluginScreendraw", [
+            .number(Double(type)),
+            .boolean(log),
+            .string(line)
         ])
     }
 
@@ -218,7 +244,9 @@ extension ScriptEngine {
     public func unloadPlugin(_ id: String) async -> [ScriptEffect] {
         var effects: [ScriptEffect] = []
         if loadedPluginIDs.contains(id) {
-            let raw = await runtime.callPluginCallback(id, "OnPluginDisable")
+            let callback = await runtime.hasPluginCallback(id, "OnPluginDisable")
+                ? "OnPluginDisable" : "OnPluginClose"
+            let raw = await runtime.callPluginCallback(id, callback)
             effects.append(contentsOf: consumeRegistrations(
                 raw,
                 owner: id

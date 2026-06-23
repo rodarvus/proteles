@@ -25,18 +25,21 @@ extension Mapper {
         var effects: [ScriptEffect] = []
         // Release the next segment once we've arrived where the last-sent one
         // was heading (still en route, or no walk → nothing to release).
-        if let expect = walkExpect, currentRoomUID == expect {
-            walkIndex += 1
-            if walkIndex < walkSegments.count {
-                let segment = walkSegments[walkIndex]
-                let isFinal = walkIndex == walkSegments.count - 1
-                // Wait for this segment only if more follow; the last needs none.
-                walkExpect = isFinal ? nil : segment.expectUID
-                effects.append(contentsOf: segmentEffects(segment, isFinal: isFinal))
-            } else {
-                // The final segment already carried the `{end running}` marker
-                // (emitted with it, or by its wait-pacer); nothing more to send.
-                walkExpect = nil
+        if let expect = walkExpect, let current = currentRoomUID {
+            if current == expect {
+                walkIndex += 1
+                if walkIndex < walkSegments.count {
+                    let segment = walkSegments[walkIndex]
+                    let isFinal = walkIndex == walkSegments.count - 1
+                    // Wait for this segment only if more follow; the last needs none.
+                    walkSegmentOriginUID = current
+                    walkExpect = isFinal ? nil : segment.expectUID
+                    effects.append(contentsOf: segmentEffects(segment, isFinal: isFinal))
+                } else {
+                    // The final segment already carried the `{end running}` marker
+                    // (emitted with it, or by its wait-pacer); nothing more to send.
+                    walkExpect = nil
+                }
             }
         }
         // Independently of segment bookkeeping, signal completion the moment we
@@ -88,6 +91,7 @@ extension Mapper {
         walkSegments = []
         walkIndex = 0
         walkExpect = nil
+        walkSegmentOriginUID = nil
         walkFinalTarget = nil
     }
 }

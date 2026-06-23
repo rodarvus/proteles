@@ -65,4 +65,59 @@ struct MapperWalkTests {
             "follow-on walk not released after arrival"
         )
     }
+
+    @Test("non-room GMCP during a standalone segment does not cancel the next run")
+    func nonRoomGMCPDoesNotCancelSegmentedWalk() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-walk-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mapper = try Mapper(store: MapperStore(url: url))
+
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"z","name":"Z"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":40,"name":"Target","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":31,"name":"RunMid","zone":"z","exits":{"e":40}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":30,"name":"AfterUp","zone":"z","exits":{"n":31}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":14,"name":"PortalDest","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.handleCommand("mapper fullcexit {up} 14 30")
+        _ = await mapper.handleCommand("mapper fullportal {use test portal} {14}")
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+
+        let gotoCommands = await walkCommands(mapper.handleCommand("mapper goto 40"))
+        #expect(gotoCommands == ["use test portal"])
+
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":14,"name":"PortalDest","zone":"z","exits":{}}"#
+        )
+        #expect(await walkCommands(mapper.advanceWalk()) == ["up"])
+
+        _ = await mapper.ingest(package: "char.vitals", json: #"{"hp":1}"#)
+        #expect(await mapper.advanceWalk().isEmpty)
+        #expect(await mapper.isWalking == true)
+
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":30,"name":"AfterUp","zone":"z","exits":{"n":31}}"#
+        )
+        #expect(await walkCommands(mapper.advanceWalk()) == ["run ne"])
+    }
 }

@@ -308,13 +308,17 @@ extension SessionController {
         // After a room change, release the next segment of any pending speedwalk.
         // This is what makes a portal hop wait for its whoosh before the
         // follow-on `run` is sent (otherwise the run races the portal, walks from
-        // the wrong room, and aborts).
-        await measureSessionPhase(
-            "session.gmcp.mapper-effects",
-            events: packets.count,
-            thresholdMS: 50
-        ) {
-            await applyScriptEffects(mapper.advanceWalk())
+        // the wrong room, and aborts). Only `room.info` is an arrival signal; other
+        // GMCP packets often interleave while the player is still in the segment's
+        // origin room and must not advance or fail the walk.
+        if message.package.lowercased() == "room.info" {
+            await measureSessionPhase(
+                "session.gmcp.mapper-effects",
+                events: packets.count,
+                thresholdMS: 50
+            ) {
+                await applyScriptEffects(mapper.advanceWalk())
+            }
         }
     }
 

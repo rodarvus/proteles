@@ -20,8 +20,9 @@ foundation for the planned native Lua-Console "traceback context" feature
 (`docs/MUSHCLIENT_LUA_GAP.md`), `GetLineInfo`/`GetLineCount`/
 `GetLinesInBufferCount` are the Tier-2 buffer family.
 
-`DeleteLines` is **deferred** — it mutates the display buffer, is rarely used,
-and interacts with our TextKit render pipeline; out of scope for this phase.
+`DeleteLines` was deferred in the original traceback-context phase, but the
+shim-polish batch later implemented it: the runtime output-buffer mirror is
+trimmed synchronously and the visible scrollback receives a tail-removal event.
 
 ## Reference semantics (MUSHclient, verified)
 
@@ -76,8 +77,8 @@ pattern `GetInfo(280/281)` uses for live output geometry
 New `nonisolated(unsafe)` state on `LuaRuntime`:
 - `outputLineBuffer: Deque<BufferedLine>` — bounded ring of recent displayed
   lines. `BufferedLine` = `{ id, timestamp, text, runs, kind }`.
-- `totalLinesReceived: Int` — running counter (never decremented; no
-  `DeleteLines` this phase), backing `GetLineCount`.
+- `totalLinesReceived: Int` — running counter backing `GetLineCount`;
+  decremented when `DeleteLines` removes tail lines.
 - `connectedAt: Date` — set on connect, for infotype 13.
 
 **Capture point.** `SessionController.appendLineThroughScripts(_:)` already
@@ -125,5 +126,5 @@ slicing text by these numbers gets MUSHclient-faithful results.
 
 ## Out of scope (later phases)
 
-`DeleteLines` (buffer mutation); the native Lua-Console traceback *feature* that
-consumes this API (separate plan); Tier-2 group B (timer/alias introspection).
+The native Lua-Console traceback *feature* that consumes this API (separate
+plan); Tier-2 group B (timer/alias introspection).

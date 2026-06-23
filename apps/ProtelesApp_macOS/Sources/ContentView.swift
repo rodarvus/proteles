@@ -401,7 +401,8 @@ struct ContentView: View {
                 vocabulary: { makeCompletionVocabulary() },
                 spellChecking: commandSpellCheck,
                 ghostHint: inputGhostHint,
-                autoRepeatLastCommand: autoRepeatCommand
+                autoRepeatLastCommand: autoRepeatCommand,
+                commandInputEdits: session.commandInputEdits
             )
             .overlay(alignment: .trailing) {
                 if navigationMode {

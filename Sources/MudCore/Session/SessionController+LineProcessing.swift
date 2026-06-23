@@ -144,14 +144,21 @@ extension SessionController {
         await measureSessionPhase("session.lines.display", events: 1, thresholdMS: 50) {
             await recordDisplayed(line, kind: .mud)
         }
+        let screendrawEffects = await measureSessionPhase(
+            "session.lines.screendraw",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine?.fireOnPluginScreendraw(type: 0, log: true, line: line.text) ?? []
+        }
         PerformanceProbe.shared.measure("session.lines.notify", events: 1, thresholdMS: 50) {
             notifyForOutput(line.text)
         }
         PerformanceProbe.shared.measure("session.lines.speech", events: 1, thresholdMS: 50) {
             speakForOutput(line.text)
         }
-        await applyMeasuredEffects(effects)
-        return LineProcessingSummary(displayed: 1, effects: effects.count)
+        await applyMeasuredEffects(screendrawEffects + effects)
+        return LineProcessingSummary(displayed: 1, effects: screendrawEffects.count + effects.count)
     }
 
     private func finishGaggedLine(

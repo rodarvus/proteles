@@ -271,6 +271,19 @@
             }
         }
 
+        /// Remove newest rendered lines after a MUSHclient `DeleteLines` call.
+        /// Must be called inside the storage's `beginEditing` scope.
+        private func removeTail(_ ids: [LineID], from storage: NSTextStorage) {
+            guard !ids.isEmpty else { return }
+            for id in ids.reversed() {
+                guard let tail = lineLengths.last, tail.id == id else { continue }
+                let length = min(tail.utf16Length, storage.length)
+                storage.deleteCharacters(in: NSRange(location: storage.length - length, length: length))
+                lineLengths.removeLast()
+                if !recentLines.isEmpty { recentLines.removeLast() }
+            }
+        }
+
         /// Re-render the live-tail pane from the buffered recent lines. The
         /// lines already carry a trailing newline (so the main view stacks
         /// them); we strip the final one so the tail isn't padded by a blank
@@ -313,6 +326,7 @@
             let wallNow = Date()
             let stickToBottom = isScrolledToBottom(textView)
             var didAppend = false
+            var didRemoveTail = false
             var appendedCount = 0
             var maxArrivalLatency: TimeInterval = 0
 
@@ -352,6 +366,10 @@
                             "ScrollbackStore eviction order does not match coordinator FIFO"
                         )
                         evictionBacklog += 1
+
+                    case .removedTail(let ids):
+                        didRemoveTail = true
+                        removeTail(ids, from: storage)
                     }
                 }
 
@@ -363,7 +381,7 @@
             if stickToBottom {
                 scrollToBottom(textView)
             }
-            if didAppend { refreshTail() }
+            if didAppend || didRemoveTail { refreshTail() }
 
             finishFlush(
                 start: start,

@@ -59,7 +59,8 @@ extension LuaRuntime {
     /// Permit `sqlite3.open` for files under `directory` (the per-profile
     /// plugin-data dir). Passing `nil` re-closes file access.
     func setSQLiteDirectory(_ directory: String?) {
-        sqliteDirectory = directory
+        sqliteDirectory = directory.map(normalizedPath)
+        currentDirectory = sqliteDirectory
     }
 
     /// Register the mapper overlay merge (D-111) for direct readers in this
@@ -120,6 +121,11 @@ extension LuaRuntime {
         clipboardProvider = provider
     }
 
+    /// Install the app's synchronous miniwindow-menu provider.
+    func setMiniWindowMenuProvider(_ provider: MiniWindowMenuProvider?) {
+        miniWindowMenuProvider = provider
+    }
+
     /// Install the app's accelerator registrar (plugin `Accelerator`/
     /// `AcceleratorTo` → the live MacroEngine).
     func setAcceleratorRegistrar(_ registrar: (@Sendable (Macro) -> Void)?) {
@@ -132,6 +138,20 @@ extension LuaRuntime {
     nonisolated func fileExistsAllowed(_ path: String) -> Bool {
         guard sqliteAllows(path) else { return false }
         return FileManager.default.fileExists(atPath: normalizedPath(path))
+    }
+
+    /// `ChangeDir(path)` — keep a sandboxed current-directory anchor for shared
+    /// helper code that expects the call to succeed before doing relative work.
+    /// It never widens access beyond ``sqliteDirectory``.
+    nonisolated func changeDirectory(_ path: String) -> Bool {
+        let normalized = normalizedPath(path)
+        var isDirectory: ObjCBool = false
+        guard sqliteAllows(normalized),
+              FileManager.default.fileExists(atPath: normalized, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else { return false }
+        currentDirectory = normalized
+        return true
     }
 
     /// `proteles.makeDirectory(path)` — create `path` (and intermediates) when

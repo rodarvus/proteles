@@ -89,8 +89,22 @@ extension SessionController {
             + latestGMCPByPackage.keys.filter { !priority.contains($0) && $0 != "char.status" }.sorted()
         for package in ordered where package != "char.status" {
             guard let json = latestGMCPByPackage[package] else { continue }
-            await applyScriptEffects(scriptEngine.applyGMCP(package: package, json: json))
-            await applyScriptEffects(scriptEngine.deliverGMCPSubnegotiation(package: package, json: json))
+            let broadcastEffects = await measureSessionPhase(
+                "session.plugins.replay-gmcp.\(package).broadcast",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await scriptEngine.applyGMCP(package: package, json: json)
+            }
+            await applyScriptEffects(broadcastEffects)
+            let subnegEffects = await measureSessionPhase(
+                "session.plugins.replay-gmcp.\(package).subneg",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await scriptEngine.deliverGMCPSubnegotiation(package: package, json: json)
+            }
+            await applyScriptEffects(subnegEffects)
         }
     }
 
@@ -98,13 +112,31 @@ extension SessionController {
     /// leveldb, and the armed dinv. Each is guarded/idempotent on its own.
     private func loadDeferredInitialPlugins() async {
         if let character = pendingInitialPluginCharacter {
-            await activateMapperOverlay(character: character)
+            await measureSessionPhase(
+                "session.plugins.load-deferred.mapper-overlay",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await activateMapperOverlay(character: character)
+            }
         }
         if let character = pendingInitialPluginCharacter, !pendingInitialPluginDirectories.isEmpty {
-            await loadPlugins(directories: pendingInitialPluginDirectories, character: character)
+            await measureSessionPhase(
+                "session.plugins.load-deferred.library",
+                events: pendingInitialPluginDirectories.count,
+                thresholdMS: 50
+            ) {
+                await loadPlugins(directories: pendingInitialPluginDirectories, character: character)
+            }
         }
         if let levelDBDirectory = pendingLevelDBDirectory {
-            await loadBundledLevelDB(dataDirectory: levelDBDirectory)
+            await measureSessionPhase(
+                "session.plugins.load-deferred.leveldb",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await loadBundledLevelDB(dataDirectory: levelDBDirectory)
+            }
         }
         // NOTE: dinv is intentionally NOT loaded here. Its init is a fragile
         // one-shot — it runs `inv.init.atActive()` only on the *first* char.base

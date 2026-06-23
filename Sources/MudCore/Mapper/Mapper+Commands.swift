@@ -178,6 +178,7 @@ extension Mapper {
         let segments = Speedwalk.segments(path)
         walkSegments = segments
         walkIndex = 0
+        walkSegmentOriginUID = src
         walkExpect = segments.count > 1 ? segments.first?.expectUID : nil
         // Track the FINAL destination through to arrival (not just the next
         // segment), and announce that a walk was armed so the session can hold

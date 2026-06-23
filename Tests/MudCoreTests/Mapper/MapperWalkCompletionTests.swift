@@ -106,6 +106,43 @@ struct MapperWalkCompletionTests {
         }
     }
 
+    @Test("unexpected recall/home landing waits for the watchdog")
+    func wrongRecallLandingWaitsForWatchdog() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-walkdone-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mapper = try Mapper(store: MapperStore(url: url))
+
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"z","name":"Z"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":102,"name":"Target","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":100,"name":"Recall","zone":"z","exits":{"n":102}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":200,"name":"Wrong","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.handleCommand("mapper fullportal {recall} {100} 0")
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+
+        _ = await mapper.handleCommand("mapper goto 102")
+        let effects = await arrive(mapper, num: 200, exits: "")
+
+        #expect(effects.isEmpty)
+        #expect(await mapper.isWalking == true)
+    }
+
     @Test("being already at the target arms no walk (follow-up should run at once)")
     func alreadyThereNoWalk() async throws {
         let mapper = try await makeMapper()

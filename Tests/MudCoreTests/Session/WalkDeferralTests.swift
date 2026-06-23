@@ -110,4 +110,46 @@ struct WalkDeferralTests {
         // No walk armed → the follow-up went straight to the wire.
         #expect(conn.sentLines.contains("quest complete"))
     }
+
+    @Test("wrong recall landing keeps follow-up held until the watchdog")
+    func wrongRecallLandingKeepsFollowUpHeld() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("walkdefer-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mapper = try Mapper(store: MapperStore(url: url))
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"z","name":"Z"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":102,"name":"Target","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":100,"name":"Recall","zone":"z","exits":{"n":102}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":200,"name":"Wrong","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.handleCommand("mapper fullportal {recall} {100} 0")
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":1,"name":"Start","zone":"z","exits":{}}"#
+        )
+        let (controller, conn) = try await makeSession(mapper)
+        defer { Task { await controller.disconnect() } }
+
+        await controller.fire(.command("mapper goto 102\nquest complete"))
+        #expect(conn.sentLines.contains("recall"))
+        #expect(conn.sentLines.contains("run n") == false)
+        #expect(conn.sentLines.contains("quest complete") == false)
+
+        await arrive(controller, num: 200, exits: "")
+
+        #expect(conn.sentLines.contains("quest complete") == false)
+        #expect(conn.sentLines.contains("run n") == false)
+    }
 }

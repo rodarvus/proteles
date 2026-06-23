@@ -115,6 +115,10 @@ public actor SessionController {
     /// to the live bar + persists.
     public nonisolated let buttonCommands: AsyncStream<ButtonCommand>
     nonisolated let buttonCommandsContinuation: AsyncStream<ButtonCommand>.Continuation
+    /// Script/plugin edits to the live command input field (`SetCommand` /
+    /// `PasteCommand`).
+    public nonisolated let commandInputEdits: AsyncStream<CommandInputEdit>
+    nonisolated let commandInputEditsContinuation: AsyncStream<CommandInputEdit>.Continuation
     /// Plugin `OpenBrowser(url)` requests — the app confirms (per plugin) before
     /// opening, since a plugin opening a browser is outward-facing.
     public nonisolated let openBrowserRequests: AsyncStream<OpenBrowserRequest>
@@ -465,6 +469,8 @@ public actor SessionController {
             AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (buttonCommands, buttonCommandsContinuation) =
             AsyncStream<ButtonCommand>.makeStream(bufferingPolicy: .bufferingNewest(32))
+        (commandInputEdits, commandInputEditsContinuation) =
+            AsyncStream<CommandInputEdit>.makeStream(bufferingPolicy: .bufferingNewest(32))
         (openBrowserRequests, openBrowserRequestsContinuation) =
             AsyncStream<OpenBrowserRequest>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (soundCues, soundCuesContinuation) =
@@ -565,36 +571,5 @@ public actor SessionController {
 
         startProcessingLoop(on: conn)
         restartTimerLoop()
-    }
-
-    /// Send a user-typed command (aliases when a script engine is present, else
-    /// verbatim; `\r\n` appended). Tracks `quit` so the ensuing server close is
-    /// a clean logout, not a dropped link that would autoreconnect.
-    public func send(_ command: String) async throws {
-        // Typed input cuts stale speech (community canon, `tts enter` toggles)
-        // — including the bare "press Enter to shut it up" reflex.
-        interruptSpeechForTypedCommand()
-        // A bare Enter means nothing at the login prompts but restarts
-        // Aardwolf's name flow and strands autologin (the 2026-06-11 resume
-        // incident: stray empties dead-ended the login). Drop empties while
-        // autologin is mid-flight; the MOTD's "Press Return" comes after.
-        if autologin != nil, command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return
-        }
-        expectsCleanClose = Self.isLogoutQuit(command)
-        // Don't drop the resume breadcrumb here — Aardwolf can REFUSE a quit
-        // (combat, confirmation) and leave you connected. We only treat it as a
-        // clean end if the server actually closes soon after (see
-        // ``handleByteStreamEnded`` + ``cleanQuitWindow``). Record when the quit
-        // was sent; a non-quit command clears it (you're plainly still playing).
-        quitSentAt = expectsCleanClose ? .now : nil
-        // Echo typed input (dimmed) so it's visible — e.g. while writing a note.
-        // Suppressed when the server echoes (passwords) and for the bare
-        // prompt-refresh Enter; the transcript tap is gated the same way.
-        if !serverEcho, !command.isEmpty {
-            await recordDisplayed(Self.inputEchoLine(command), kind: .userInput)
-            logTranscript(.input, command)
-        }
-        try await dispatchCommand(command)
     }
 }

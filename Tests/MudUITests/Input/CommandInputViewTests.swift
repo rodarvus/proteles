@@ -91,6 +91,52 @@ struct CommandInputViewSmokeTests {
         }
 
         @MainActor
+        @Test("script command edits replace and paste complete text")
+        func scriptCommandEditsReplaceAndPasteCompleteText() async throws {
+            let stream = AsyncStream<CommandInputEdit>.makeStream()
+            let hosted = try HostedCommandInput(commandInputEdits: stream.stream)
+
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(50))
+            stream.continuation.yield(CommandInputEdit(kind: .set, text: "set-command-ok"))
+            stream.continuation.yield(CommandInputEdit(kind: .paste, text: " + paste-ok"))
+            for _ in 0..<10 where hosted.textView.string != "set-command-ok + paste-ok" {
+                await Task.yield()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+
+            #expect(hosted.textView.string == "set-command-ok + paste-ok")
+            #expect(hosted.textView.selectedRange() == NSRange(location: 25, length: 0))
+            stream.continuation.finish()
+        }
+
+        @MainActor
+        @Test("script command selection directs the next paste replacement")
+        func scriptCommandSelectionDirectsPasteReplacement() async throws {
+            let stream = AsyncStream<CommandInputEdit>.makeStream()
+            let hosted = try HostedCommandInput(commandInputEdits: stream.stream)
+
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(50))
+            stream.continuation.yield(CommandInputEdit(kind: .set, text: "alpha beta"))
+            stream.continuation.yield(CommandInputEdit(
+                kind: .select,
+                text: "",
+                startColumn: 7,
+                endColumn: -1
+            ))
+            stream.continuation.yield(CommandInputEdit(kind: .paste, text: "gamma"))
+            for _ in 0..<10 where hosted.textView.string != "alpha gamma" {
+                await Task.yield()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+
+            #expect(hosted.textView.string == "alpha gamma")
+            #expect(hosted.textView.selectedRange() == NSRange(location: 11, length: 0))
+            stream.continuation.finish()
+        }
+
+        @MainActor
         @Test("Tab completion cycles through the completion vocabulary")
         func tabCompletionCycles() throws {
             let hosted = try HostedCommandInput(
@@ -163,12 +209,14 @@ struct CommandInputViewSmokeTests {
         init(
             onSubmit: @escaping (String) -> Void = { _ in },
             onSubmitBatch: (([String]) -> Void)? = nil,
-            vocabulary: (@MainActor () -> CompletionVocabulary)? = nil
+            vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
+            commandInputEdits: AsyncStream<CommandInputEdit>? = nil
         ) throws {
             let root = AnyView(CommandInputView(
                 onSubmit: onSubmit,
                 onSubmitBatch: onSubmitBatch,
-                vocabulary: vocabulary
+                vocabulary: vocabulary,
+                commandInputEdits: commandInputEdits
             )
             .frame(width: 320, height: 80))
             host = NSHostingView(rootView: root)

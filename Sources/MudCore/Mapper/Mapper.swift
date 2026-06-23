@@ -37,7 +37,7 @@ public actor Mapper {
     var walkSegments: [Speedwalk.Segment] = []
     var walkIndex = 0
     var walkExpect: String?
-
+    var walkSegmentOriginUID: String?
     /// The route's FINAL destination (the `goto`/`walkto`/`resume`/`next`
     /// target), held until its `room.info` confirms ARRIVAL. Distinct from
     /// ``walkExpect``, which tracks only the next *segment* boundary and clears

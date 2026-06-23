@@ -338,47 +338,6 @@ struct ShimCompatAdditionsTests {
         ])
     }
 
-    @Test("notepad APIs provide an in-memory text store; selection reports none")
-    func notepadAndSelectionStubs() async throws {
-        let lua = try await shimmed()
-        let effects = try await lua.run("""
-        proteles.echo("missing-len:" .. tostring(GetNotepadLength("output")))
-        proteles.echo("append:" .. tostring(AppendToNotepad("Output", "abc")))
-        proteles.echo("append2:" .. tostring(AppendToNotepad("output", "def")))
-        proteles.echo("text:" .. GetNotepadText("OUTPUT"))
-        proteles.echo("len:" .. tostring(GetNotepadLength("output")))
-        proteles.echo("replace:" .. tostring(ReplaceNotepad("output", "xyz")))
-        proteles.echo("text2:" .. GetNotepadText("Output"))
-        proteles.echo("activate:" .. tostring(ActivateNotepad("OUTPUT")))
-        proteles.echo("save:" .. tostring(NotepadSaveMethod("output", 2)))
-        proteles.echo("savebad:" .. tostring(NotepadSaveMethod("output", 9)))
-        proteles.echo("readonly:" .. tostring(NotepadReadOnly("output", true)))
-        proteles.echo("list:" .. table.concat(GetNotepadList(), ","))
-        proteles.echo("sel:" .. table.concat({
-          GetSelectionStartLine(), GetSelectionEndLine(),
-          GetSelectionStartColumn(), GetSelectionEndColumn()
-        }, ","))
-        proteles.echo("setsel:" .. tostring(select("#", SetSelection(1, 1, 1, 1))))
-        """)
-        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
-        #expect(echoes == [
-            "missing-len:0",
-            "append:true",
-            "append2:true",
-            "text:abcdef",
-            "len:6",
-            "replace:true",
-            "text2:xyz",
-            "activate:true",
-            "save:true",
-            "savebad:false",
-            "readonly:true",
-            "list:Output",
-            "sel:0,0,0,0",
-            "setsel:0"
-        ])
-    }
-
     @Test("miscellaneous shell/window stubs are safe; SendPkt recognizes GMCP and Aardwolf telopts")
     func miscellaneousShellStubsAndSendPktProtocols() async throws {
         let lua = try await shimmed()
@@ -424,5 +383,63 @@ struct ShimCompatAdditionsTests {
         ])
         #expect(effects.contains(.sendGMCP("request prompt")))
         #expect(effects.contains(.aardwolfTelnet(option: 1, on: true)))
+    }
+
+    @Test("command/output helpers emit live command edits and delete output lines")
+    func commandAndOutputHelpers() async throws {
+        let lua = try await shimmed()
+        await lua.recordOutputLine(id: 0, timestamp: Date(), text: "first", runs: [], kind: .mud)
+        await lua.recordOutputLine(id: 1, timestamp: Date(), text: "second", runs: [], kind: .mud)
+        let effects = try await lua.run("""
+        proteles.echo("before:" .. GetLineCount() .. "/" .. GetLinesInBufferCount())
+        proteles.echo("delete:" .. tostring(DeleteLines(1) == error_code.eOK))
+        proteles.echo("after:" .. GetLineCount() .. "/" .. GetLinesInBufferCount())
+        proteles.echo("set:" .. tostring(SetCommand("look") == error_code.eOK))
+        proteles.echo("select:" .. tostring(SetCommandSelection(1, -1) == error_code.eOK))
+        proteles.echo("paste:" .. tostring(PasteCommand(" north")))
+        proteles.echo("dpi:" .. tostring(GetDeviceCaps(90)))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "before:2/2",
+            "delete:true",
+            "after:1/1",
+            "set:true",
+            "select:true",
+            "paste:",
+            "dpi:96"
+        ])
+        #expect(effects.contains(.deleteOutputLines(count: 1)))
+        #expect(effects.contains(.commandInput(CommandInputEdit(kind: .set, text: "look"))))
+        #expect(effects.contains(.commandInput(CommandInputEdit(
+            kind: .select,
+            text: "",
+            startColumn: 1,
+            endColumn: -1
+        ))))
+        #expect(effects.contains(.commandInput(CommandInputEdit(kind: .paste, text: " north"))))
+    }
+
+    @Test("ChangeDir succeeds only inside the sandbox root")
+    func changeDirSandboxed() async throws {
+        let lua = try await shimmed()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("changedir-\(UUID().uuidString)", isDirectory: true)
+        let child = dir.appendingPathComponent("child", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await lua.setSQLiteDirectory(dir.path)
+
+        let childPath = Self.luaString(child.path)
+        let effects = try await lua.run("""
+        proteles.echo("inside:" .. tostring(ChangeDir("\(childPath)")))
+        proteles.echo("outside:" .. tostring(ChangeDir("/")))
+        """)
+        #expect(effects == [.echo("inside:true"), .echo("outside:false")])
+    }
+
+    private static func luaString(_ text: String) -> String {
+        text.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }

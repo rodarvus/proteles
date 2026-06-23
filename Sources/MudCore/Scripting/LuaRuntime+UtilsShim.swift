@@ -162,9 +162,15 @@ extension LuaRuntime {
     }) do utils[name] = nilFn end
     function utils.getfontfamilies() return {} end
     function utils.getfontsize(...) return 0 end
-    function utils.appendtonotepad(...) return 0 end
-    function utils.sendtonotepad(...) return 0 end
-    function utils.activatenotepad(...) return 0 end
+    function utils.appendtonotepad(title, message, replace)
+      message = tostring(message == nil and "" or message):gsub("\n", "\r\n")
+      if replace then return ReplaceNotepad(title, message) end
+      return AppendToNotepad(title, message)
+    end
+    function utils.sendtonotepad(title, message)
+      return SendToNotepad(title, tostring(message == nil and "" or message):gsub("\n", "\r\n"))
+    end
+    function utils.activatenotepad(title) return ActivateNotepad(title) end
     function utils.sendtofront(...) return 0 end
     function utils.reload_global_prefs(...) return 0 end
 

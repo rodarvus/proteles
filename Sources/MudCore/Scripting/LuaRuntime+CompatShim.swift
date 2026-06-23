@@ -119,6 +119,7 @@ public extension LuaRuntime {
       eNoSuchPlugin = 30034,
       eNoSuchRoutine = 30036,
       eBadParameter = 30046,
+      eFileNotFound = 30051,
       eNoSuchWindow = 30073,
     }
     error_desc = error_desc or {}
@@ -354,7 +355,7 @@ public extension LuaRuntime {
     local function __pluginFlagOn(flag) return not (flag == false or flag == nil or flag == 0) end
     function EnablePlugin(id, flag)
       local key = tostring(id or GetPluginID())
-      if not __pluginFlagOn(flag) then proteles.unloadPlugin(key) end
+      if __pluginFlagOn(flag) then proteles.enablePlugin(key) else proteles.unloadPlugin(key) end
       return error_code.eOK
     end
     function DisablePlugin(id) return EnablePlugin(id, false) end
@@ -417,7 +418,10 @@ public extension LuaRuntime {
     -- through automatically, so this just runs the plugin's OnPluginSaveState (if
     -- any) — where it sets the variables to persist — and reports success.
     function SaveState()
-      if type(OnPluginSaveState) == "function" then pcall(OnPluginSaveState) end
+      local env = getfenv(2)
+      local callback = nil
+      if type(env) == "table" then callback = rawget(env, "OnPluginSaveState") end
+      if type(callback) == "function" then pcall(callback) end
       return error_code.eOK
     end
     -- Keyboard accelerators (MUSHclient Accelerator/AcceleratorTo) bridge to the

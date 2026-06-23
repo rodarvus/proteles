@@ -7,6 +7,12 @@ import Foundation
 /// compat shim. Split out of ``SessionController`` to stay within the file-length
 /// budget.
 public extension SessionController {
+    private struct LoadedPluginPath {
+        let id: String
+        let code: URL
+        let data: URL
+    }
+
     /// Load the plugins in the given directories (each a self-contained plugin
     /// dir, one `.xml` + its modules) into the live engine for character
     /// `profile`: set the module search path to the union of the directories (so
@@ -41,32 +47,77 @@ public extension SessionController {
 
         var paths: [String: (code: URL, data: URL)] = [:]
         for (directory, xml) in resolved {
-            guard let data = try? Data(contentsOf: xml),
-                  let plugin = try? MUSHclientPluginLoader.parse(data)
-            else { continue }
-            let dataDir = Self.pluginDataDirectory(for: directory, character: character)
-            let dataPath = Self.directoryPath(dataDir)
-            paths[plugin.id] = (code: directory, data: dataDir)
-            // `GetInfo(66)` (world dir) AND `GetInfo(85)` (state files dir) point
-            // at the plugin's own data dir, so a plugin that builds its DB/state
-            // path from either finds it there (e.g. a DB-backed plugin's state).
-            let context = PluginContext(
-                pluginID: plugin.id,
-                pluginName: plugin.name,
-                pluginDirectory: Self.directoryPath(directory),
-                worldDirectory: dataPath,
-                appDirectory: dataPath,
-                stateDirectory: dataPath
-            )
-            await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
-            await logPluginCensus(plugin, engine: scriptEngine)
+            if let path = await loadResolvedPlugin(
+                directory: directory,
+                xml: xml,
+                character: character,
+                engine: scriptEngine
+            ) {
+                paths[path.id] = (code: path.code, data: path.data)
+            }
         }
         loadedPluginPaths = paths
-        await applyScriptEffects(scriptEngine.pluginListChanged())
+        let listChangedEffects = await measureSessionPhase(
+            "session.plugins.load.list-changed",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.pluginListChanged()
+        }
+        await applyScriptEffects(listChangedEffects)
         // OnPluginInstall may have set variables; persist them.
         await persistVariablesIfDirty()
         // Plugins may have registered timers.
         restartTimerLoop()
+    }
+
+    private func loadResolvedPlugin(
+        directory: URL,
+        xml: URL,
+        character: String,
+        engine scriptEngine: ScriptEngine
+    ) async -> LoadedPluginPath? {
+        let data = PerformanceProbe.shared.measure(
+            "session.plugins.load.xml-read",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            try? Data(contentsOf: xml)
+        }
+        guard let data else { return nil }
+        let plugin = PerformanceProbe.shared.measure(
+            "session.plugins.load.xml-parse",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            try? MUSHclientPluginLoader.parse(data)
+        }
+        guard let plugin else { return nil }
+        let dataDir = Self.pluginDataDirectory(for: directory, character: character)
+        let context = PluginContext(
+            pluginID: plugin.id,
+            pluginName: plugin.name,
+            pluginDirectory: Self.directoryPath(directory),
+            worldDirectory: Self.directoryPath(dataDir),
+            appDirectory: Self.directoryPath(dataDir),
+            stateDirectory: Self.directoryPath(dataDir)
+        )
+        let effects = await measureSessionPhase(
+            "session.plugins.load.install",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await scriptEngine.loadPlugin(plugin, context: context)
+        }
+        await applyScriptEffects(effects)
+        await measureSessionPhase(
+            "session.plugins.load.census",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            await logPluginCensus(plugin, engine: scriptEngine)
+        }
+        return LoadedPluginPath(id: plugin.id, code: directory, data: dataDir)
     }
 
     /// Enable a single library plugin **hermetically** — load just it, leaving

@@ -47,7 +47,8 @@ extension SessionController {
 
     /// Outward plugin effects forwarded straight to the app/native layers: a
     /// user notification (`Notify`), an `OpenBrowser(url)` request (the app
-    /// confirms per plugin, then opens), and a button-bar change (#15). Split
+    /// confirms per plugin, then opens), a button-bar change (#15), and command
+    /// input edits. Split
     /// into a Bool handler so ``applyInboundControlEffect`` stays within the
     /// cyclomatic-complexity budget. Returns whether handled.
     private func applyOutwardPluginEffect(_ effect: ScriptEffect) -> Bool {
@@ -60,6 +61,8 @@ extension SessionController {
             )
         case .button(let command):
             buttonCommandsContinuation.yield(command)
+        case .commandInput(let edit):
+            commandInputEditsContinuation.yield(edit)
         default:
             return false
         }
@@ -73,6 +76,11 @@ extension SessionController {
         switch effect {
         case .reloadPlugin(let id):
             await reloadPlugin(id: id)
+        case .enablePlugin(let id):
+            if let scriptEngine {
+                await applyScriptEffects(scriptEngine.enablePlugin(id))
+                await rearmTimerLoopIfScriptScheduled()
+            }
         case .unloadPlugin(let id):
             // MUSHclient UnloadPlugin: drop the named shim plugin (idempotent —
             // a native/unknown id is a no-op). Apply any window-delete effects

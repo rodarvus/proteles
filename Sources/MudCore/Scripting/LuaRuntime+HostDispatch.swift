@@ -25,7 +25,8 @@ extension LuaRuntime {
              .openBrowser,
              .sndCall, .playSound, .speak, .simulate, .resetTimer,
              .setAliasOption, .stopEvaluatingTriggers, .trace,
-             .unloadPlugin, .connect:
+             .unloadPlugin, .enablePlugin, .connect, .deleteLines, .setCommandInput, .pasteCommandInput,
+             .setCommandSelection:
             recordEffect(function, arguments)
             return []
         case .call:
@@ -40,7 +41,7 @@ extension LuaRuntime {
         case .jsonDecode, .jsonEncode:
             return jsonValue(function, arguments)
         case .info, .pluginID, .isConnected, .sqliteAllowed, .mapperMergeSQL, .monotonic,
-             .fileExists, .makeDirectory, .readFile, .writeFile, .dialog, .clipboardGet,
+             .fileExists, .makeDirectory, .readFile, .writeFile, .changeDirectory, .dialog, .clipboardGet,
              .clipboardSet, .databaseDir, .isPluginInstalled, .colourNameToRGB, .rgbColourToName,
              .adjustColour, .createGUID, .uniqueID,
              .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines,
@@ -48,7 +49,7 @@ extension LuaRuntime {
              .triggerList, .aliasList, .timerList, .pluginTriggerList,
              .triggerOption, .aliasOption, .timerOption, .pluginTriggerInfo,
              .pluginList, .pluginSupports, .pluginInfo, .outputFontName,
-             .regexValid, .regexMatch:
+             .regexValid, .regexMatch, .getDeviceCaps:
             return queryValue(function, arguments)
         default:
             // Miniwindow `window*` calls (see LuaRuntime+MiniWindow) and the
@@ -63,7 +64,8 @@ extension LuaRuntime {
         switch function {
         case .info: [infoValue(arguments)]
         case .pluginID, .isConnected: scalarQuery(function)
-        case .fileExists, .makeDirectory, .readFile, .writeFile: fileValue(function, arguments)
+        case .fileExists, .makeDirectory, .readFile, .writeFile, .changeDirectory:
+            fileValue(function, arguments)
         case .dialog: [dialogValue(arguments)]
         case .colourNameToRGB, .rgbColourToName, .adjustColour: colourValue(function, arguments)
         case .lineCount, .linesInBuffer, .lineInfo, .styleInfo, .recentLines:
@@ -71,7 +73,8 @@ extension LuaRuntime {
         case .clipboardGet, .clipboardSet: clipboardValue(function, arguments)
         case .regexValid, .regexMatch: regexValue(function, arguments)
         case .sqliteAllowed, .mapperMergeSQL, .monotonic, .databaseDir, .isPluginInstalled,
-             .createGUID, .uniqueID, .pluginList, .pluginSupports, .pluginInfo, .outputFontName:
+             .createGUID, .uniqueID, .pluginList, .pluginSupports, .pluginInfo, .outputFontName,
+             .getDeviceCaps:
             miscValue(function, arguments)
         // Trigger/alias/timer introspection (LuaRuntime+AutomationInfo.swift) —
         // routed via the default so this switch gains no new branch.
@@ -93,23 +96,42 @@ extension LuaRuntime {
     /// its complexity budget. `isPluginInstalled` answers true for a loaded
     /// shim plugin or a natively-bridged id (mapper / S&D / GMCP / chat).
     nonisolated func miscValue(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
+        if let value = pluginMiscValue(function, arguments) { return value }
         switch function {
-        case .sqliteAllowed: [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
+        case .sqliteAllowed:
+            return [.boolean(sqliteAllows(Self.argString(arguments, 0)))]
         case .mapperMergeSQL:
-            { let merge = mapperMergeSQL(Self.argString(arguments, 0))
-                return [.string(merge.overlay), .string(merge.sql)] }()
-        case .monotonic: [.number(Self.monotonicSeconds())]
-        case .databaseDir: [.string(databasesDirectory)]
+            let merge = mapperMergeSQL(Self.argString(arguments, 0))
+            return [.string(merge.overlay), .string(merge.sql)]
+        case .monotonic:
+            return [.number(Self.monotonicSeconds())]
+        case .databaseDir:
+            return [.string(databasesDirectory)]
+        case .createGUID:
+            return [.string(ScriptIdentifiers.createGUID())]
+        case .uniqueID:
+            return [.string(ScriptIdentifiers.uniqueID())]
+        case .outputFontName:
+            return [.string(outputFontName)]
+        case .getDeviceCaps:
+            return [.number(Double(Self.deviceCaps(Int(Self.argDouble(arguments, 0)))))]
+        default:
+            return []
+        }
+    }
+
+    private nonisolated func pluginMiscValue(
+        _ function: HostFunction,
+        _ arguments: [LuaValue]
+    ) -> [LuaValue]? {
+        switch function {
         case .isPluginInstalled:
-            [.boolean({
-                let id = Self.argString(arguments, 0)
-                return pluginEnvs[id] != nil || bridgedPluginIDs.contains(id)
-            }())]
-        case .createGUID: [.string(ScriptIdentifiers.createGUID())]
-        case .uniqueID: [.string(ScriptIdentifiers.uniqueID())]
-        case .pluginList, .pluginSupports, .pluginInfo: pluginQueryValue(function, arguments)
-        case .outputFontName: [.string(outputFontName)]
-        default: []
+            let id = Self.argString(arguments, 0)
+            return [.boolean(pluginEnvs[id] != nil || bridgedPluginIDs.contains(id))]
+        case .pluginList, .pluginSupports, .pluginInfo:
+            return pluginQueryValue(function, arguments)
+        default:
+            return nil
         }
     }
 
@@ -167,6 +189,8 @@ extension LuaRuntime {
         case .readFile: [readFileContents(Self.argString(arguments, 0)).map { LuaValue.string($0) } ?? .nil]
         case .writeFile:
             [.boolean(writeFileAllowed(Self.argString(arguments, 0), Self.argString(arguments, 1)))]
+        case .changeDirectory:
+            [.boolean(changeDirectory(Self.argString(arguments, 0)))]
         default: []
         }
     }
@@ -393,6 +417,7 @@ extension LuaRuntime {
     private nonisolated func recordControlEffect(
         _ function: HostFunction, _ arguments: [LuaValue]
     ) -> Bool {
+        if recordCommandChromeEffect(function, arguments) { return true }
         switch function {
         case .setTriggerGroup:
             effects.append(.setTriggerGroup(
@@ -417,6 +442,8 @@ extension LuaRuntime {
             effects.append(.trace(Self.argString(arguments, 0)))
         case .unloadPlugin:
             effects.append(.unloadPlugin(id: Self.argString(arguments, 0)))
+        case .enablePlugin:
+            effects.append(.enablePlugin(id: Self.argString(arguments, 0)))
         case .connect:
             effects.append(.connect)
         default: return false
@@ -549,43 +576,5 @@ extension LuaRuntime {
             function: Self.argString(arguments, 0),
             args: arguments.dropFirst().map { $0.stringValue ?? "" }
         ))
-    }
-
-    /// Build `ColourNote` segments from its variadic `(fore, back, text)`
-    /// triples. An empty colour string means "default" → `nil`. Trailing
-    /// partial triples (missing text) are ignored, matching MUSHclient.
-    nonisolated static func noteSegments(_ arguments: [LuaValue]) -> [NoteSegment] {
-        var segments: [NoteSegment] = []
-        var index = 0
-        while index + 3 <= arguments.count {
-            let fore = nonEmpty(arguments[index].stringValue)
-            let back = nonEmpty(arguments[index + 1].stringValue)
-            let text = arguments[index + 2].stringValue ?? ""
-            segments.append(NoteSegment(text: text, foreground: fore, background: back))
-            index += 3
-        }
-        return segments
-    }
-
-    /// Internal shim call used by `NoteStyle`: `(fore, back, text, style)` tuples.
-    /// Kept separate from public `ColourNote` triples so valid multi-triple
-    /// output can never be misparsed as styled output.
-    nonisolated static func styledNoteSegments(_ arguments: [LuaValue]) -> [NoteSegment] {
-        var segments: [NoteSegment] = []
-        var index = 0
-        while index + 4 <= arguments.count {
-            let fore = nonEmpty(arguments[index].stringValue)
-            let back = nonEmpty(arguments[index + 1].stringValue)
-            let text = arguments[index + 2].stringValue ?? ""
-            let style = Int(arguments[index + 3].numberValue ?? 0)
-            segments.append(NoteSegment(text: text, foreground: fore, background: back, noteStyle: style))
-            index += 4
-        }
-        return segments
-    }
-
-    private nonisolated static func nonEmpty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
     }
 }

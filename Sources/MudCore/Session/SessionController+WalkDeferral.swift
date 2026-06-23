@@ -16,10 +16,10 @@ import Foundation
 /// changed), the REST of the same macro/stacked batch is held here and released
 /// on `.walkCompleted` — the mapper's arrival-at-final-destination signal. Scope
 /// is deliberately the same batch only; a command typed live mid-walk is a fresh
-/// dispatch and is NOT held. **Verified for plain speedwalk routes.** A
-/// recall-routed `goto` still mis-holds (issue #78) — arrival off the stale
-/// recall destination isn't matched, so `.walkCompleted` never fires and the
-/// stall watchdog (below) is what eventually releases the batch.
+/// dispatch and is NOT held. **Verified for plain speedwalk routes.** Wrong-room
+/// arrivals from recall/home/portal/custom-exit segments are left to the stall
+/// watchdog rather than failing immediately, because Aardwolf room programs can
+/// emit transient rooms during otherwise-valid custom exits.
 ///
 /// Two safety valves, per the agreed policy:
 ///   - **Supersede → drop.** A new `goto` while commands are held drops the old

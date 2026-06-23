@@ -319,11 +319,12 @@ public actor ScriptEngine {
         await fireCallbackOnAll("OnPluginConnect")
     }
 
-    /// Fire `OnPluginSaveState` then `OnPluginDisconnect` on every loaded
-    /// plugin (the host persists the variable snapshot separately).
+    /// Fire `OnPluginSaveState`, `OnPluginDisconnect`, then `OnPluginClose` on
+    /// every loaded plugin (the host persists the variable snapshot separately).
     public func disconnectPlugins() async -> [ScriptEffect] {
         var effects = await fireCallbackOnAll("OnPluginSaveState")
         await effects.append(contentsOf: fireCallbackOnAll("OnPluginDisconnect"))
+        await effects.append(contentsOf: fireCallbackOnAll("OnPluginClose"))
         return effects
     }
 

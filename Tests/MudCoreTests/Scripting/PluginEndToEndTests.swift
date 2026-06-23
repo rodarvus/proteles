@@ -98,6 +98,26 @@ struct PluginEndToEndTests {
         #expect(effects == [.echo("connected as true")])
     }
 
+    @Test("OnPluginScreendraw observes displayed output lines")
+    func screendrawLifecycle() async throws {
+        let plugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.test.screendraw" name="ScreenDraw"/>
+        <script><![CDATA[
+        function OnPluginScreendraw(t, log, line)
+          AppendToNotepad("output", t, ":", tostring(log), ":", line, "\\r\\n")
+          Note(GetNotepadText("output"))
+        end
+        ]]></script>
+        </muclient>
+        """)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(plugin)
+
+        let effects = await engine.fireOnPluginScreendraw(type: 0, log: true, line: "hello")
+        #expect(effects == [.echo("0:true:hello\r\n")])
+    }
+
     @Test("No broadcast is synthesised when no plugin is loaded")
     func noBroadcastWithoutPlugins() async throws {
         let engine = try ScriptEngine()

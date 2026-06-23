@@ -20,11 +20,33 @@ extension LuaRuntime {
         case .windowDragHandler: installMiniWindowDragHandler(name, arguments)
         case .windowScrollwheelHandler: installMiniWindowScrollHandler(name, arguments)
         case .windowHotspotInfo: return [miniWindowHotspotInfoValue(name, arguments)]
-        case .windowMenu: return [.nil] // no synchronous popup menu in the spike
+        case .windowMenu: return [miniWindowMenuValue(name, arguments)]
         case .windowWrite: return [writeMiniWindowImage(name, arguments)]
         default: return miniWindowImageOrShapeCall(function, name, arguments)
         }
         return []
+    }
+
+    /// `WindowMenu(name, left, top, items)` — synchronous popup selection.
+    /// With no macOS provider, behaves like a cancelled MUSHclient menu ("").
+    private nonisolated func miniWindowMenuValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
+        guard let scene = miniWindows[name], scene.visible else { return .string("") }
+        let left = Int(Self.argDouble(arguments, 1))
+        let top = Int(Self.argDouble(arguments, 2))
+        guard left >= 0, left <= scene.width, top >= 0, top <= scene.height else {
+            return .string("")
+        }
+        let rawItems = Self.argString(arguments, 3)
+        guard !rawItems.isEmpty else { return .string("") }
+        let request = MiniWindowMenuParser.parse(
+            pluginID: pluginContext.pluginID,
+            windowName: name,
+            left: left,
+            top: top,
+            items: rawItems
+        )
+        guard let selection = miniWindowMenuProvider?(request) else { return .string("") }
+        return .string(request.returnNumber ? "\(selection.index)" : selection.title)
     }
 
     /// Image (Phase 3) + shape (Phase 4) dispatch, split from
