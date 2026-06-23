@@ -1,3 +1,4 @@
+import Foundation
 @testable import MudCore
 import Testing
 
@@ -114,6 +115,47 @@ struct MiniWindowShimTests {
         ])
     }
 
+    @Test("WindowWrite exports a reloadable miniwindow image")
+    func windowWriteExportsReloadableImage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let png = directory.appendingPathComponent("snapshot.png")
+        let bmp = directory.appendingPathComponent("snapshot.bmp")
+        let outside = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let pngPath = Self.luaString(png.path)
+        let bmpPath = Self.luaString(bmp.path)
+        let outsidePath = Self.luaString(outside.path)
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 4, 3, 0, 0, 0x010203)
+        WindowSetPixel("w", 1, 1, 0x112233)
+        proteles.echo("png:" .. tostring(WindowWrite("w", "\(pngPath)")))
+        proteles.echo("bmp:" .. tostring(WindowWrite("w", "\(bmpPath)")))
+        proteles.echo("bad_ext:" .. tostring(WindowWrite("w", "\(pngPath).txt")))
+        proteles.echo("missing:" .. tostring(WindowWrite("missing", "\(pngPath)")))
+        proteles.echo("outside:" .. tostring(WindowWrite("w", "\(outsidePath)")))
+        WindowLoadImage("w", "saved", "\(pngPath)")
+        proteles.echo("size:" .. tostring(WindowImageInfo("w", "saved", 2)) .. "x" ..
+          tostring(WindowImageInfo("w", "saved", 3)))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "png:0",
+            "bmp:0",
+            "bad_ext:30046",
+            "missing:30073",
+            "outside:30013",
+            "size:4x3"
+        ])
+        #expect((try? Data(contentsOf: png))?.starts(with: [0x89, 0x50, 0x4E, 0x47]) == true)
+        #expect((try? Data(contentsOf: bmp))?.starts(with: [0x42, 0x4D]) == true)
+        #expect(!FileManager.default.fileExists(atPath: outside.path))
+    }
+
     @Test("WindowHotspotInfo reports callbacks and drag metadata")
     func windowHotspotInfoCallbacksAndDragMetadata() async throws {
         let lua = try await shimmed()
@@ -228,5 +270,11 @@ struct MiniWindowShimTests {
         #expect(scene?.hotspots.count == 1)
         #expect(scene?.hotspots.first?.mouseUp == "onClick")
         #expect(scene?.hotspots.first?.tooltip == "tip")
+    }
+
+    private static func luaString(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }

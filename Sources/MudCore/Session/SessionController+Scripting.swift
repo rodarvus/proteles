@@ -306,6 +306,14 @@ public extension SessionController {
     func attachWorldDataDirectory(_ path: String) async {
         worldDataDirectory = path
         await scriptEngine?.setSQLiteDirectory(path)
+        let suffixed = Self.directoryPath(URL(fileURLWithPath: path))
+        await scriptEngine?.setPluginContext(PluginContext(
+            pluginID: "_user",
+            pluginName: "User Scripts",
+            worldDirectory: suffixed,
+            appDirectory: suffixed,
+            stateDirectory: suffixed
+        ))
     }
 
     /// Attach the per-world live map. Call when a world loads; the GMCP

@@ -136,7 +136,7 @@ extension LuaRuntime {
     function WindowImageOp(...) return eOK end
     function WindowGetImageAlpha(...) return eOK end
     function WindowCreateImage(...) return eOK end
-    function WindowWrite(...) return eOK end
+    function WindowWrite(...) return proteles.windowWrite(...) end
     function WindowGetPixel(...) return proteles.windowGetPixel(...) end
     function WindowList() return proteles.windowList() end
     function WindowInfoList(...) return proteles.windowInfoList(...) end

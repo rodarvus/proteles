@@ -1,3 +1,4 @@
+import Foundation
 @testable import MudCore
 import Testing
 
@@ -67,6 +68,39 @@ struct LuaConsoleTests {
         let effects = await engine.evaluateConsole("   ")
         #expect(effects.count == 1)
         if case .note(_, let foreground, _) = effects.first { #expect(foreground == "yellow") }
+    }
+
+    @Test("user environment keeps live GetInfo paths for file-backed shim calls")
+    func userEnvironmentPathContext() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let engine = try ScriptEngine()
+        try await engine.loadCompatShim()
+        await engine.setSQLiteDirectory(directory.path)
+        await engine.setPluginContext(PluginContext(
+            pluginID: "_user",
+            pluginName: "User Scripts",
+            appDirectory: directory.path + "/"
+        ))
+
+        let effects = await engine.evaluateConsole("""
+        local base = GetInfo(66)
+        local path = base .. "console_window_write.png"
+        WindowCreate("console_write", 0, 0, 4, 3, 0, 0, 0x010203)
+        Note("write " .. tostring(WindowWrite("console_write", path)))
+        WindowLoadImage("console_write", "saved", path)
+        Note("size " .. tostring(WindowImageInfo("console_write", "saved", 2)) .. "x" ..
+          tostring(WindowImageInfo("console_write", "saved", 3)))
+        """)
+        let echoes = effects.compactMap { effect -> String? in
+            if case .echo(let text) = effect { text } else { nil }
+        }
+        #expect(echoes == ["write 0", "size 4x3"])
+        #expect(effects.contains { effect in
+            if case .loadMiniWindowImage("_user", "saved", _) = effect { true } else { false }
+        })
     }
 
     @Test("`/lua …` command parsing (case-insensitive, gated prefix)")

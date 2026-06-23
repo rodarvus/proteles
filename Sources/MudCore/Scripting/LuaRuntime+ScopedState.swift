@@ -20,6 +20,12 @@ public extension LuaRuntime {
         if !context.pluginID.isEmpty { pluginContexts[context.pluginID] = context }
     }
 
+    /// The context used for `/lua` and user-authored scripts. It can be enriched
+    /// by the live session once the per-world data directory is known.
+    nonisolated func userPluginContext() -> PluginContext {
+        pluginContexts["_user"] ?? .default
+    }
+
     /// Mirror S&D's shim-readable accessor values into the global
     /// `__snd_state` table, so the compat shim's `CallPlugin(<S&D id>,
     /// "target_as_json")` (and friends) can answer synchronously — the

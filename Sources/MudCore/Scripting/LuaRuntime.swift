@@ -297,13 +297,13 @@ public actor LuaRuntime {
         named: [String: String] = [:],
         styles: [ScriptStyleRun] = []
     ) throws -> [ScriptEffect] {
-        // User scripts use the default `_user` variable scope + ambient context;
-        // set + restore both so a prior plugin run's id can't divert user
+        // User scripts use the `_user` variable scope + ambient context; set +
+        // restore both so a prior plugin run's id can't divert user
         // Get/SetVariable into a plugin's bucket or report a plugin's identity.
         let previousScope = currentVariableScope
         let previousContext = pluginContext
         currentVariableScope = "_user"
-        pluginContext = .default
+        pluginContext = userPluginContext()
         defer { currentVariableScope = previousScope; pluginContext = previousContext }
         setMatchGlobals(captures, named)
         setStyleGlobal(styles)

@@ -85,7 +85,7 @@ extension LuaRuntime {
         case windowAddHotspot, windowDeleteHotspot, windowDeleteAllHotspots
         case windowMoveHotspot, windowHotspotInfo
         case windowDragHandler, windowScrollwheelHandler, windowMenu
-        case windowLoadImage, windowDrawImage, windowImageInfo, windowImageFromWindow
+        case windowLoadImage, windowDrawImage, windowImageInfo, windowImageFromWindow, windowWrite
         case windowCircleOp, windowGradient, windowPolygon, windowArc, windowBezier
     }
 }

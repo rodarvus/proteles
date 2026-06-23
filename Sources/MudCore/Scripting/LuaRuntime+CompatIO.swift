@@ -24,6 +24,18 @@ public extension LuaRuntime {
         return FileManager.default.contents(atPath: normalizedPath(path))
     }
 
+    /// Raw binary write, sandbox-gated like ``writeFileAllowed``. Miniwindow
+    /// `WindowWrite` uses this for PNG/BMP output.
+    nonisolated func writeFileDataAllowed(_ path: String, _ data: Data) -> Bool {
+        guard sqliteAllows(path) else { return false }
+        do {
+            try data.write(to: URL(fileURLWithPath: normalizedPath(path)), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// `proteles.writeFile(path, content)` → write atomically, returning success.
     /// nil/false if the path is outside the sandbox.
     nonisolated func writeFileAllowed(_ path: String, _ content: String) -> Bool {

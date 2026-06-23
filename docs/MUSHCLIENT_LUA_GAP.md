@@ -139,8 +139,10 @@ family is the main remaining cluster.
 
 Mostly tied to MUSHclient's miniwindow drawing, which Proteles replaces with
 native panels. The high-breadth display-control calls are now present as safe
-stubs, but advanced miniwindow image/filter/transform semantics remain partial
-and should only be deepened when a real plugin needs them.
+stubs, and `WindowWrite` can export simple PNG/BMP snapshots for miniwindow
+backgrounds plus explicit pixels. Advanced miniwindow image/filter/transform
+semantics remain partial and should only be deepened when a real plugin needs
+them.
 
 ## Tier 4 — low value (rarely needed by Aardwolf plugins)
 

@@ -32,7 +32,7 @@ extension LuaRuntime {
             if let context = pluginContexts[pluginID] { pluginContext = context }
         } else {
             currentVariableScope = "_user"
-            pluginContext = .default
+            pluginContext = userPluginContext()
         }
         defer { currentVariableScope = previousScope; pluginContext = previousContext }
 
