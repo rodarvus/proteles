@@ -73,6 +73,17 @@ public struct MiniWindowImageInfo: Sendable, Equatable {
     }
 }
 
+/// A single pixel coordinate explicitly written by `WindowSetPixel`.
+public struct MiniWindowPixel: Sendable, Equatable, Hashable {
+    public let x: Int
+    public let y: Int
+
+    public init(x: Int, y: Int) {
+        self.x = x
+        self.y = y
+    }
+}
+
 /// An interactive region (`WindowAddHotspot`). Each callback is a **Lua function
 /// name** (a global in the owning plugin's environment) the host invokes when
 /// the mouse interacts with the region — mirroring MUSHclient, where hotspot
@@ -204,6 +215,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
     public var zOrder: Int
     public var fonts: [String: MiniWindowFont]
     public var images: [String: MiniWindowImageInfo]
+    public var pixels: [MiniWindowPixel: Int]
     public var commands: [MiniWindowCommand]
     public var hotspots: [MiniWindowHotspot]
 
@@ -225,6 +237,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
         zOrder: Int = 0,
         fonts: [String: MiniWindowFont] = [:],
         images: [String: MiniWindowImageInfo] = [:],
+        pixels: [MiniWindowPixel: Int] = [:],
         commands: [MiniWindowCommand] = [],
         hotspots: [MiniWindowHotspot] = []
     ) {
@@ -241,6 +254,7 @@ public struct MiniWindowScene: Sendable, Equatable, Identifiable {
         self.zOrder = zOrder
         self.fonts = fonts
         self.images = images
+        self.pixels = pixels
         self.commands = commands
         self.hotspots = hotspots
     }

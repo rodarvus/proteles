@@ -79,7 +79,7 @@ extension LuaRuntime {
         // draw/lifecycle calls mutate the runtime's retained scene state; the
         // *Info/*Width calls are synchronous queries that return a value.
         case windowCreate, windowShow, windowDelete, windowResize, windowPosition, windowSetZOrder
-        case windowRectOp, windowText, windowLine, windowSetPixel, windowFont
+        case windowRectOp, windowText, windowLine, windowSetPixel, windowGetPixel, windowFont
         case windowTextWidth, windowInfo, windowFontInfo
         case windowList, windowInfoList, windowFontList, windowImageList, windowHotspotList
         case windowAddHotspot, windowDeleteHotspot, windowDeleteAllHotspots

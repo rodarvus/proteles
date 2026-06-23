@@ -83,7 +83,7 @@ extension LuaRuntime {
     function WindowRectOp(...) return proteles.windowRectOp(...) end
     function WindowCircleOp(...) return proteles.windowCircleOp(...) end
     function WindowLine(...) return proteles.windowLine(...) end
-    function WindowSetPixel(...) return proteles.windowSetPixel(...) end
+    function WindowSetPixel(...) proteles.windowSetPixel(...); return eOK end
     function WindowGradient(...) return proteles.windowGradient(...) end
     function WindowPolygon(...) return proteles.windowPolygon(...) end
     function WindowArc(...) return proteles.windowArc(...) end
@@ -137,7 +137,7 @@ extension LuaRuntime {
     function WindowGetImageAlpha(...) return eOK end
     function WindowCreateImage(...) return eOK end
     function WindowWrite(...) return eOK end
-    function WindowGetPixel(...) return -1 end
+    function WindowGetPixel(...) return proteles.windowGetPixel(...) end
     function WindowList() return proteles.windowList() end
     function WindowInfoList(...) return proteles.windowInfoList(...) end
     function WindowFontList(...) return proteles.windowFontList(...) end

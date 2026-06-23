@@ -32,7 +32,8 @@ extension LuaRuntime {
         ("windowResize", .windowResize), ("windowPosition", .windowPosition),
         ("windowSetZOrder", .windowSetZOrder), ("windowRectOp", .windowRectOp),
         ("windowText", .windowText), ("windowLine", .windowLine), ("windowSetPixel", .windowSetPixel),
-        ("windowFont", .windowFont), ("windowTextWidth", .windowTextWidth), ("windowInfo", .windowInfo),
+        ("windowGetPixel", .windowGetPixel), ("windowFont", .windowFont),
+        ("windowTextWidth", .windowTextWidth), ("windowInfo", .windowInfo),
         ("windowFontInfo", .windowFontInfo), ("windowList", .windowList), ("windowInfoList", .windowInfoList),
         ("windowFontList", .windowFontList), ("windowImageList", .windowImageList),
         ("windowHotspotList", .windowHotspotList), ("windowAddHotspot", .windowAddHotspot),
@@ -53,7 +54,7 @@ extension LuaRuntime {
     nonisolated func miniWindowOrRegister(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
         case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition, .windowSetZOrder,
-             .windowRectOp, .windowText, .windowLine, .windowSetPixel, .windowFont,
+             .windowRectOp, .windowText, .windowLine, .windowSetPixel, .windowGetPixel, .windowFont,
              .windowTextWidth, .windowInfo, .windowFontInfo, .windowList, .windowInfoList,
              .windowFontList, .windowImageList, .windowHotspotList, .windowAddHotspot, .windowDeleteHotspot,
              .windowDeleteAllHotspots, .windowMoveHotspot, .windowHotspotInfo, .windowDragHandler,
@@ -113,7 +114,7 @@ extension LuaRuntime {
             return []
         case .windowText:
             return [.number(appendText(name, arguments))]
-        case .windowTextWidth, .windowInfo, .windowFontInfo:
+        case .windowTextWidth, .windowInfo, .windowFontInfo, .windowGetPixel:
             return [miniWindowQuery(function, name, arguments)]
         case .windowList, .windowInfoList, .windowFontList, .windowImageList, .windowHotspotList:
             return [miniWindowListValue(function, name)]
@@ -150,6 +151,8 @@ extension LuaRuntime {
         _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
     ) -> LuaValue {
         switch function {
+        case .windowGetPixel:
+            miniWindowPixelValue(name, arguments)
         case .windowTextWidth:
             .number(measureMiniWindowText(
                 name, fontID: Self.argString(arguments, 1), text: Self.argString(arguments, 2)
@@ -277,11 +280,15 @@ extension LuaRuntime {
     }
 
     private nonisolated func appendSetPixel(_ name: String, _ arguments: [LuaValue]) {
-        appendMiniWindowCommand(name, .setPixel(
-            x: Int(Self.argDouble(arguments, 1)),
-            y: Int(Self.argDouble(arguments, 2)),
-            colour: Int(Self.argDouble(arguments, 3))
-        ))
+        guard miniWindows[name] != nil else { return }
+        beginMiniWindowFrame(name)
+        let x = Int(Self.argDouble(arguments, 1))
+        let y = Int(Self.argDouble(arguments, 2))
+        let colour = Int(Self.argDouble(arguments, 3))
+        updateMiniWindow(name) {
+            $0.commands.append(.setPixel(x: x, y: y, colour: colour))
+            $0.pixels[MiniWindowPixel(x: x, y: y)] = colour
+        }
     }
 
     /// `WindowText` — append the draw and return the drawn width in pixels (what
@@ -315,6 +322,19 @@ extension LuaRuntime {
         case 23: return .string(scene.pluginID)
         default: return .nil
         }
+    }
+
+    /// `WindowGetPixel` — MUSHclient returns `-2` when the named window does not
+    /// exist and the surface colour otherwise. Proteles tracks pixels explicitly
+    /// written with `WindowSetPixel`; untouched in-bounds pixels report the
+    /// current background colour.
+    private nonisolated func miniWindowPixelValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
+        guard let scene = miniWindows[name] else { return .number(-2) }
+        let x = Int(Self.argDouble(arguments, 1))
+        let y = Int(Self.argDouble(arguments, 2))
+        guard x >= 0, y >= 0, x < scene.width, y < scene.height else { return .number(-1) }
+        let pixel = MiniWindowPixel(x: x, y: y)
+        return .number(Double(scene.pixels[pixel] ?? scene.backgroundColour))
     }
 
     private nonisolated func miniWindowBaseInfoValue(_ scene: MiniWindowScene, _ info: Int) -> LuaValue? {
@@ -492,6 +512,7 @@ extension LuaRuntime {
         miniWindowFramePainted.insert(name)
         updateMiniWindow(name) {
             $0.commands.removeAll(keepingCapacity: true)
+            $0.pixels.removeAll(keepingCapacity: true)
             $0.hotspots.removeAll(keepingCapacity: true)
         }
     }

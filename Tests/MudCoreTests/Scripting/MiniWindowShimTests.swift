@@ -76,6 +76,20 @@ struct MiniWindowShimTests {
         #expect(echoes == ["before:0", "set:0", "after:12345"])
     }
 
+    @Test("WindowGetPixel returns pixels written by WindowSetPixel")
+    func windowGetPixelReturnsExplicitSetPixelColour() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 20, 20, 0, 0, 0x010203)
+        proteles.echo("background:" .. tostring(WindowGetPixel("w", 2, 3)))
+        proteles.echo("set:" .. tostring(WindowSetPixel("w", 2, 3, 0x112233)))
+        proteles.echo("pixel:" .. tostring(WindowGetPixel("w", 2, 3)))
+        proteles.echo("unknown:" .. tostring(WindowGetPixel("missing", 0, 0)))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["background:66051", "set:0", "pixel:1122867", "unknown:-2"])
+    }
+
     @Test("WindowHotspotInfo reports callbacks and drag metadata")
     func windowHotspotInfoCallbacksAndDragMetadata() async throws {
         let lua = try await shimmed()
