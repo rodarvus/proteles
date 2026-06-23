@@ -95,6 +95,7 @@ public struct MiniWindowHotspot: Sendable, Equatable {
     /// callback — installed onto an existing hotspot after it's added.
     public var dragMove: String
     public var dragRelease: String
+    public var dragFlags: Int
     public var scrollwheel: String
 
     public init(
@@ -113,6 +114,7 @@ public struct MiniWindowHotspot: Sendable, Equatable {
         flags: Int = 0,
         dragMove: String = "",
         dragRelease: String = "",
+        dragFlags: Int = 0,
         scrollwheel: String = ""
     ) {
         self.id = id
@@ -130,6 +132,7 @@ public struct MiniWindowHotspot: Sendable, Equatable {
         self.flags = flags
         self.dragMove = dragMove
         self.dragRelease = dragRelease
+        self.dragFlags = dragFlags
         self.scrollwheel = scrollwheel
     }
 }

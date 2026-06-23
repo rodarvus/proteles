@@ -372,21 +372,54 @@ extension LuaRuntime {
         return keys
     }
 
-    /// `WindowFontInfo(name, fontID, infoType)` — the metrics plugins read for
-    /// vertical layout: 1 height, 4 ascent, 5 descent, 6 internal leading.
-    /// Measured via CoreText on the resolved font.
+    /// `WindowFontInfo(name, fontID, infoType)` — MUSHclient-compatible font
+    /// metrics for layout helpers. Measured via CoreText on the resolved font.
     private nonisolated func miniWindowFontInfoValue(_ name: String, fontID: String, info: Int) -> LuaValue {
         guard let font = miniWindows[name]?.fonts[fontID] else { return .nil }
         let ctFont = Self.coreTextFont(font)
         let ascent = CTFontGetAscent(ctFont)
         let descent = CTFontGetDescent(ctFont)
         let leading = CTFontGetLeading(ctFont)
+        if let value = miniWindowFontMetricInfoValue(
+            info,
+            font: ctFont,
+            ascent: ascent,
+            descent: descent,
+            leading: leading
+        ) {
+            return value
+        }
+        if let value = miniWindowFontStyleInfoValue(info, font: font) { return value }
+        if info == 21 { return .string(font.name) }
+        return .nil
+    }
+
+    private nonisolated func miniWindowFontMetricInfoValue(
+        _ info: Int,
+        font: CTFont,
+        ascent: CGFloat,
+        descent: CGFloat,
+        leading: CGFloat
+    ) -> LuaValue? {
         switch info {
-        case 1: return .number(Double(ceil(ascent + descent + leading))) // height
-        case 4: return .number(Double(ceil(ascent)))
-        case 5: return .number(Double(ceil(descent)))
-        case 6: return .number(Double(ceil(leading)))
-        default: return .nil
+        case 1: .number(Double(ceil(ascent + descent + leading))) // height
+        case 2: .number(Double(ceil(ascent)))
+        case 3: .number(Double(ceil(descent)))
+        case 4: .number(0) // internal leading; CoreText has no direct equivalent
+        case 5: .number(Double(ceil(leading))) // external leading
+        case 6: .number(Self.measureText("n", font: font))
+        case 7: .number(Self.measureText("W", font: font))
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowFontStyleInfoValue(_ info: Int, font: MiniWindowFont) -> LuaValue? {
+        switch info {
+        case 8: .number(font.bold ? 700 : 400)
+        case 16: .number(font.italic ? 1 : 0)
+        case 17: .number(font.underline ? 1 : 0)
+        case 18: .number(font.strikeout ? 1 : 0)
+        default: nil
         }
     }
 
@@ -398,7 +431,11 @@ extension LuaRuntime {
         let font = miniWindows[name]?.fonts[fontID]
             ?? MiniWindowFont(id: fontID, name: "Menlo", size: 10)
         let ctFont = Self.coreTextFont(font)
-        let attributes = [kCTFontAttributeName: ctFont] as CFDictionary
+        return Self.measureText(text, font: ctFont)
+    }
+
+    private nonisolated static func measureText(_ text: String, font: CTFont) -> Double {
+        let attributes = [kCTFontAttributeName: font] as CFDictionary
         guard let attributed = CFAttributedStringCreate(nil, text as CFString, attributes) else { return 0 }
         let line = CTLineCreateWithAttributedString(attributed)
         return ceil(CTLineGetTypographicBounds(line, nil, nil, nil))

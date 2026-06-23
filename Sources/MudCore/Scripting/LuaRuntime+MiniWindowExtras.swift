@@ -94,6 +94,7 @@ extension LuaRuntime {
             guard let index = scene.hotspots.firstIndex(where: { $0.id == hotspotID }) else { return }
             scene.hotspots[index].dragMove = Self.argString(arguments, 2)
             scene.hotspots[index].dragRelease = Self.argString(arguments, 3)
+            scene.hotspots[index].dragFlags = Int(Self.argDouble(arguments, 4))
         }
     }
 
@@ -106,21 +107,58 @@ extension LuaRuntime {
         }
     }
 
-    /// `WindowHotspotInfo(name, hotspotID, infoType)` — rect (1=left…4=bottom),
-    /// tooltip (10), cursor (11), flags (12).
+    /// `WindowHotspotInfo(name, hotspotID, infoType)` — MUSHclient hotspot
+    /// metadata: rect, callback names, tooltip, cursor, flags, and drag state.
     private nonisolated func miniWindowHotspotInfoValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
         let hotspotID = Self.argString(arguments, 1)
         guard let hotspot = miniWindows[name]?.hotspots.first(where: { $0.id == hotspotID })
         else { return .nil }
-        switch Int(Self.argDouble(arguments, 2)) {
-        case 1: return .number(Double(hotspot.left))
-        case 2: return .number(Double(hotspot.top))
-        case 3: return .number(Double(hotspot.right))
-        case 4: return .number(Double(hotspot.bottom))
-        case 10: return .string(hotspot.tooltip)
-        case 11: return .number(Double(hotspot.cursor))
-        case 12: return .number(Double(hotspot.flags))
-        default: return .nil
+        let info = Int(Self.argDouble(arguments, 2))
+        if let value = miniWindowHotspotBoundsInfoValue(hotspot, info) { return value }
+        if let value = miniWindowHotspotCallbackInfoValue(hotspot, info) { return value }
+        if let value = miniWindowHotspotDragInfoValue(hotspot, info) { return value }
+        return .nil
+    }
+
+    private nonisolated func miniWindowHotspotBoundsInfoValue(
+        _ hotspot: MiniWindowHotspot,
+        _ info: Int
+    ) -> LuaValue? {
+        switch info {
+        case 1: .number(Double(hotspot.left))
+        case 2: .number(Double(hotspot.top))
+        case 3: .number(Double(hotspot.right))
+        case 4: .number(Double(hotspot.bottom))
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowHotspotCallbackInfoValue(
+        _ hotspot: MiniWindowHotspot,
+        _ info: Int
+    ) -> LuaValue? {
+        switch info {
+        case 5: .string(hotspot.mouseOver)
+        case 6: .string(hotspot.cancelMouseOver)
+        case 7: .string(hotspot.mouseDown)
+        case 8: .string(hotspot.cancelMouseDown)
+        case 9: .string(hotspot.mouseUp)
+        case 10: .string(hotspot.tooltip)
+        case 11: .number(Double(hotspot.cursor))
+        case 12: .number(Double(hotspot.flags))
+        default: nil
+        }
+    }
+
+    private nonisolated func miniWindowHotspotDragInfoValue(
+        _ hotspot: MiniWindowHotspot,
+        _ info: Int
+    ) -> LuaValue? {
+        switch info {
+        case 13: .string(hotspot.dragMove)
+        case 14: .string(hotspot.dragRelease)
+        case 15: .number(Double(hotspot.dragFlags))
+        default: nil
         }
     }
 

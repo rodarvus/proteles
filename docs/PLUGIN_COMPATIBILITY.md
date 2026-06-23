@@ -160,7 +160,7 @@ replaced by native panels.
 | notepad APIs | 🟡 | `AppendToNotepad`/`ReplaceNotepad`/`GetNotepad*`/list/save/read-only calls are an in-memory text store, not separate windows |
 | selection APIs | 🟡 | `GetSelection*` reports MUSHclient's no-selection value (`0`); `SetSelection` is accepted as a no-op |
 | display/window control calls | 🟡 | `TextRectangle` records queryable geometry; `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `SetBackgroundImage`, `PickColour`, `NoteHr`, and shell/window probe calls are safe stubs/defaults |
-| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, including MUSHclient's position/flags/background `WindowInfo` fields; advanced transform/filter/window-image calls remain stubbed (see Known gaps) |
+| `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, including MUSHclient's `WindowInfo`, `WindowFontInfo`, and `WindowHotspotInfo` metadata slots used by package helpers; advanced transform/filter/window-image calls remain stubbed (see Known gaps) |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 | raw `socket` / `ssl` TLS | ❌ | not exposed to plugins (sandboxing) |
 

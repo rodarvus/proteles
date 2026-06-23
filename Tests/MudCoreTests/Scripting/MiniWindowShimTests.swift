@@ -63,6 +63,67 @@ struct MiniWindowShimTests {
         ])
     }
 
+    @Test("WindowHotspotInfo reports callbacks and drag metadata")
+    func windowHotspotInfoCallbacksAndDragMetadata() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 100, 100, 0, 0, 0)
+        WindowAddHotspot(
+          "w", "h", 1, 2, 3, 4, "over", "cancelOver", "down",
+          "cancelDown", "up", "tip", 12, 34
+        )
+        WindowDragHandler("w", "h", "dragMove", "dragRelease", 56)
+        proteles.echo("hotspot:" .. table.concat({
+          WindowHotspotInfo("w", "h", 1), WindowHotspotInfo("w", "h", 2),
+          WindowHotspotInfo("w", "h", 3), WindowHotspotInfo("w", "h", 4),
+          WindowHotspotInfo("w", "h", 5), WindowHotspotInfo("w", "h", 6),
+          WindowHotspotInfo("w", "h", 7), WindowHotspotInfo("w", "h", 8),
+          WindowHotspotInfo("w", "h", 9), WindowHotspotInfo("w", "h", 10),
+          WindowHotspotInfo("w", "h", 11), WindowHotspotInfo("w", "h", 12),
+          WindowHotspotInfo("w", "h", 13), WindowHotspotInfo("w", "h", 14),
+          WindowHotspotInfo("w", "h", 15)
+        }, ","))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "hotspot:1,2,3,4,over,cancelOver,down,cancelDown,up,tip,12,34,dragMove,dragRelease,56"
+        ])
+    }
+
+    @Test("WindowFontInfo uses MUSHclient metric slots")
+    func windowFontInfoMUSHclientMetricSlots() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 100, 100, 0, 0, 0)
+        WindowFont("w", "f", "Menlo", 12, true, true, true, true)
+        proteles.echo("font:" .. table.concat({
+          WindowFontInfo("w", "f", 1), WindowFontInfo("w", "f", 2),
+          WindowFontInfo("w", "f", 3), WindowFontInfo("w", "f", 4),
+          WindowFontInfo("w", "f", 5), WindowFontInfo("w", "f", 6),
+          WindowFontInfo("w", "f", 7), WindowFontInfo("w", "f", 8),
+          WindowFontInfo("w", "f", 16), WindowFontInfo("w", "f", 17),
+          WindowFontInfo("w", "f", 18), WindowFontInfo("w", "f", 21)
+        }, ","))
+        """)
+        let line = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }.first
+        let parts = line?
+            .replacingOccurrences(of: "font:", with: "")
+            .split(separator: ",")
+            .map(String.init) ?? []
+        #expect(parts.count == 12)
+        #expect(Double(parts[0]) ?? 0 > 0)
+        #expect(Double(parts[1]) ?? 0 > 0)
+        #expect(Double(parts[2]) ?? 0 > 0)
+        #expect(parts[3] == "0")
+        #expect(Double(parts[5]) ?? 0 > 0)
+        #expect(Double(parts[6]) ?? 0 > 0)
+        #expect(parts[7] == "700")
+        #expect(parts[8] == "1")
+        #expect(parts[9] == "1")
+        #expect(parts[10] == "1")
+        #expect(parts[11] == "Menlo")
+    }
+
     @Test("WindowText returns the measured pixel width")
     func textWidthReturned() async throws {
         let lua = try await shimmed()
