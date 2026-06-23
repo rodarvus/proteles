@@ -51,6 +51,7 @@ public enum MacroKeyOutcome: Sendable, Equatable {
 /// hardware-keyboard story to support yet).
 public struct CommandInputView: View {
     private let onSubmit: (String) -> Void
+    private let onSubmitBatch: ([String]) -> Void
     private let onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> MacroKeyOutcome)?
     private let vocabulary: (@MainActor () -> CompletionVocabulary)?
     private let spellChecking: Bool
@@ -71,6 +72,7 @@ public struct CommandInputView: View {
     ///     mangle commands like `cast 'armor'`.
     public init(
         onSubmit: @escaping (String) -> Void,
+        onSubmitBatch: (([String]) -> Void)? = nil,
         onMacroKey: (@MainActor (KeyChord, _ inputIsEmpty: Bool) -> MacroKeyOutcome)? = nil,
         vocabulary: (@MainActor () -> CompletionVocabulary)? = nil,
         spellChecking: Bool = false,
@@ -78,6 +80,7 @@ public struct CommandInputView: View {
         autoRepeatLastCommand: Bool = false
     ) {
         self.onSubmit = onSubmit
+        self.onSubmitBatch = onSubmitBatch ?? { lines in lines.forEach(onSubmit) }
         self.onMacroKey = onMacroKey
         self.vocabulary = vocabulary
         self.spellChecking = spellChecking
@@ -93,6 +96,7 @@ public struct CommandInputView: View {
     public var body: some View {
         CommandField(
             onSubmit: onSubmit,
+            onSubmitBatch: onSubmitBatch,
             onMacroKey: onMacroKey,
             vocabulary: vocabulary,
             spellChecking: spellChecking,
@@ -117,6 +121,7 @@ public struct CommandInputView: View {
     /// macOS command field. See ``CommandInputView`` for behaviour.
     struct CommandField: NSViewRepresentable {
         let onSubmit: (String) -> Void
+        let onSubmitBatch: ([String]) -> Void
         let onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
         let vocabulary: (@MainActor () -> CompletionVocabulary)?
         let spellChecking: Bool
@@ -129,7 +134,7 @@ public struct CommandInputView: View {
         static let textInset = NSSize(width: 0, height: 2)
 
         func makeCoordinator() -> Coordinator {
-            Coordinator(onSubmit: onSubmit, vocabulary: vocabulary)
+            Coordinator(onSubmit: onSubmit, onSubmitBatch: onSubmitBatch, vocabulary: vocabulary)
         }
 
         /// A container holding the field plus a non-interactive grey "ghost" label
@@ -161,6 +166,7 @@ public struct CommandInputView: View {
         @MainActor
         final class Coordinator: NSObject, NSTextViewDelegate {
             var onSubmit: (String) -> Void
+            var onSubmitBatch: ([String]) -> Void
             var vocabulary: (@MainActor () -> CompletionVocabulary)?
             weak var container: NSView?
             weak var scrollView: NSScrollView?
@@ -190,9 +196,11 @@ public struct CommandInputView: View {
 
             init(
                 onSubmit: @escaping (String) -> Void,
+                onSubmitBatch: @escaping ([String]) -> Void,
                 vocabulary: (@MainActor () -> CompletionVocabulary)?
             ) {
                 self.onSubmit = onSubmit
+                self.onSubmitBatch = onSubmitBatch
                 self.vocabulary = vocabulary
             }
 
@@ -288,9 +296,8 @@ public struct CommandInputView: View {
                 // single line (incl. an empty one — MUDs use a bare Enter to
                 // refresh the prompt) sends exactly itself.
                 if text.contains("\n") {
-                    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                        onSubmit(String(line))
-                    }
+                    let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                    onSubmitBatch(lines)
                 } else {
                     onSubmit(text)
                 }
@@ -564,34 +571,5 @@ public struct CommandInputView: View {
 
     // `AutoFocusCommandTextView` (the always-focused NSTextView subclass) lives
     // in CommandInputView+AutoFocusTextField.swift to keep this file under budget.
-
-#else
-
-    /// Fallback command field for platforms without AppKit (no hardware
-    /// keyboard handling yet): a plain submit-and-clear text field. `onMacroKey`
-    /// is accepted for API parity but unused (no key monitor off macOS).
-    private struct CommandField: View {
-        let onSubmit: (String) -> Void
-        let onMacroKey: (@MainActor (KeyChord, Bool) -> MacroKeyOutcome)?
-        var vocabulary: (@MainActor () -> CompletionVocabulary)?
-        var spellChecking = false
-        var ghostHint = true
-        /// Accepted for API parity with the macOS field; the fallback is fixed-height.
-        var onHeightChange: (CGFloat) -> Void = { _ in }
-        @State private var command = ""
-        @FocusState private var focused: Bool
-
-        var body: some View {
-            TextField("Command", text: $command, prompt: Text("Send command…"))
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .focused($focused)
-                .onAppear { focused = true }
-                .onSubmit {
-                    onSubmit(command)
-                    command = ""
-                }
-        }
-    }
 
 #endif

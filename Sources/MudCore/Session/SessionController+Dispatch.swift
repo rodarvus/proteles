@@ -10,6 +10,14 @@ extension SessionController {
     /// by a plugin's `Execute` (re-parsed as if typed, so S&D's
     /// `Execute("mapper goto …")` reaches the native mapper).
     func dispatchCommand(_ command: String) async throws {
+        // Note/description editor mode (suspended automations): EVERY
+        // keystroke is editor text. This must happen before command stacking
+        // so literal semicolons survive, and before `/lua` so editor text never
+        // becomes local code by accident.
+        if let scriptEngine, await scriptEngine.automationsSuspended {
+            try await sendLine(command)
+            return
+        }
         // `/lua …` bypasses command stacking: Lua statements are `;`-separated
         // (and a `;` can sit inside a string literal), so splitting first would
         // chop the chunk. Treat the whole line after `/lua ` as one Lua chunk.
@@ -45,16 +53,6 @@ extension SessionController {
         // MUSHclient's `Execute` does ("empty line - just send it"). Else a
         // loaded catch-all alias (`match="*"`/`^(.*)$`) eats the empty string.
         if command.isEmpty {
-            try await sendLine(command)
-            return
-        }
-        // Note mode (suspended automations): EVERY keystroke is note text.
-        // The engine already passes input through verbatim, but the native
-        // mapper and the S&D host don't observe engine suspension — so their
-        // interception below would eat note lines (any line matching one of
-        // S&D's ~100 aliases vanished into the hunt engine instead of the
-        // note — the "can't write notes" live report). Send verbatim FIRST.
-        if let scriptEngine, await scriptEngine.automationsSuspended {
             try await sendLine(command)
             return
         }

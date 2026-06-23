@@ -60,6 +60,24 @@ struct CommandInputViewSmokeTests {
         }
 
         @MainActor
+        @Test("multi-line submit uses a single batch callback")
+        func multilineSubmitUsesBatchCallback() throws {
+            let submitted = SubmissionRecorder()
+            var batches: [[String]] = []
+            let hosted = try HostedCommandInput(
+                onSubmit: submitted.append,
+                onSubmitBatch: { batches.append($0) }
+            )
+
+            hosted.setText("first\nsecond\nthird")
+            hosted.textView.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+
+            #expect(submitted.values.isEmpty)
+            #expect(batches == [["first", "second", "third"]])
+            #expect(hosted.textView.string.isEmpty)
+        }
+
+        @MainActor
         @Test("insertNewlineIgnoringFieldEditor inserts a literal newline")
         func ignoringFieldEditorInsertsNewline() throws {
             let submitted = SubmissionRecorder()
@@ -144,10 +162,12 @@ struct CommandInputViewSmokeTests {
 
         init(
             onSubmit: @escaping (String) -> Void = { _ in },
+            onSubmitBatch: (([String]) -> Void)? = nil,
             vocabulary: (@MainActor () -> CompletionVocabulary)? = nil
         ) throws {
             let root = AnyView(CommandInputView(
                 onSubmit: onSubmit,
+                onSubmitBatch: onSubmitBatch,
                 vocabulary: vocabulary
             )
             .frame(width: 320, height: 80))

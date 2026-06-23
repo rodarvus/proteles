@@ -115,8 +115,13 @@ struct NativeModulesEndToEndTests {
         // S&D ate these before (the "can't write notes" live report).
         try await session.send("xset autonav")
         try await session.send("mapper goto the market")
+        try await session.send("priorities and consumables; leveldb for tracking")
         #expect(conn.sentLines.contains("xset autonav"), "S&D ate a note line: \(conn.sentLines)")
         #expect(conn.sentLines.contains("mapper goto the market"), "the mapper ate a note line")
+        #expect(
+            conn.sentLines.contains("priorities and consumables; leveldb for tracking"),
+            "command stacking split a semicolon inside note text: \(conn.sentLines)"
+        )
 
         // Resume: interception returns (the S&D alias answers locally again).
         conn.injectInbound([255, 250, 201] + Array(#"char.status { "state": 3 }"#.utf8) + [255, 240])

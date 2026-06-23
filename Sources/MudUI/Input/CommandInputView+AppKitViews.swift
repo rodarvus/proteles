@@ -9,6 +9,7 @@ import SwiftUI
         /// callbacks + re-apply the live text-editing policy (spell-check, etc.).
         func updateNSView(_: NSView, context: Context) {
             context.coordinator.onSubmit = onSubmit
+            context.coordinator.onSubmitBatch = onSubmitBatch
             context.coordinator.vocabulary = vocabulary
             context.coordinator.ghostHintEnabled = ghostHint
             context.coordinator.autoRepeatLastCommand = autoRepeatLastCommand

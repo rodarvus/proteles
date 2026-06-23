@@ -384,6 +384,7 @@ struct ContentView: View {
             }
             CommandInputView(
                 onSubmit: { command in Task { try? await session.send(command) } },
+                onSubmitBatch: sendBatch,
                 onMacroKey: { chord, inputIsEmpty in
                     // Layer precedence + transcript diagnostics live in
                     // MacroKeyDispatch (D-102: macro → keypad → button hotkey).
@@ -537,6 +538,15 @@ struct ContentView: View {
 }
 
 extension ContentView {
+    /// Send a pasted multi-line command buffer in order from one async task.
+    func sendBatch(_ commands: [String]) {
+        Task {
+            for command in commands {
+                try? await session.send(command)
+            }
+        }
+    }
+
     /// Tear `kind` out of the dock into its own window.
     func detach(_ kind: PanelKind) {
         layout.detach(kind)
