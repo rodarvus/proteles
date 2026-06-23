@@ -122,45 +122,119 @@ extension LuaRuntime {
         rows: inout [[MiniWindowRasterPixel]]
     ) {
         for command in commands {
-            switch command {
-            case .rect(let action, let left, let top, let right, let bottom, let colour, _):
-                let bounds = MiniWindowRasterBounds(left: left, top: top, right: right, bottom: bottom)
-                if action != 1 { fill(rect(bounds, rows), colour: colour, rows: &rows) }
-            case .setPixel(let x, let y, let colour):
-                setPixel(x, y, MiniWindowRasterPixel.bgr(colour), rows: &rows)
-            case .image(
-                let id,
-                let left,
-                let top,
-                let right,
-                let bottom,
-                let mode,
-                let opacity,
-                let sl,
-                let st,
-                let sr,
-                let sb
-            ):
-                drawImage(.init(
-                    imageID: id,
-                    windowName: windowName,
-                    target: .init(left: left, top: top, right: right, bottom: bottom),
-                    source: .init(left: sl, top: st, right: sr, bottom: sb),
-                    mode: mode,
-                    opacity: opacity
-                ), rows: &rows)
-            case .filter(let left, let top, let right, let bottom, let operation, let options):
-                let bounds = MiniWindowRasterBounds(left: left, top: top, right: right, bottom: bottom)
-                filter(
-                    rect(bounds, rows),
-                    operation: operation,
-                    options: options,
-                    rows: &rows
-                )
-            default:
-                break
-            }
+            replayMiniWindowCommand(command, windowName: windowName, rows: &rows)
         }
+    }
+
+    private nonisolated func replayMiniWindowCommand(
+        _ command: MiniWindowCommand,
+        windowName: String,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        switch command {
+        case .rect(let action, let left, let top, let right, let bottom, let colour, _):
+            let bounds = MiniWindowRasterBounds(left: left, top: top, right: right, bottom: bottom)
+            if action != 1 { fill(rect(bounds, rows), colour: colour, rows: &rows) }
+        case .setPixel(let x, let y, let colour):
+            setPixel(x, y, MiniWindowRasterPixel.bgr(colour), rows: &rows)
+        case .filter(let left, let top, let right, let bottom, let operation, let options):
+            let bounds = MiniWindowRasterBounds(left: left, top: top, right: right, bottom: bottom)
+            filter(rect(bounds, rows), operation: operation, options: options, rows: &rows)
+        default:
+            replayMiniWindowImageCommand(command, windowName: windowName, rows: &rows)
+        }
+    }
+
+    private nonisolated func replayMiniWindowImageCommand(
+        _ command: MiniWindowCommand,
+        windowName: String,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        switch command {
+        case .image:
+            replayPlainImageCommand(command, windowName: windowName, rows: &rows)
+        case .imageMask:
+            replayMaskedImageCommand(command, windowName: windowName, rows: &rows)
+        case .transformedImage(let id, let left, let top, let mode, let mxx, let mxy, let myx, let myy):
+            let draw = MiniWindowTransformDraw(
+                imageID: id,
+                windowName: windowName,
+                left: left,
+                top: top,
+                mode: mode,
+                mxx: mxx,
+                mxy: mxy,
+                myx: myx,
+                myy: myy
+            )
+            drawTransformedImage(draw, rows: &rows)
+        default:
+            break
+        }
+    }
+
+    private nonisolated func replayPlainImageCommand(
+        _ command: MiniWindowCommand,
+        windowName: String,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        guard case .image(
+            let imageID,
+            let left,
+            let top,
+            let right,
+            let bottom,
+            let mode,
+            let opacity,
+            let sl,
+            let st,
+            let sr,
+            let sb
+        ) = command else { return }
+        drawImage(
+            MiniWindowImageDraw(
+                imageID: imageID,
+                windowName: windowName,
+                target: .init(left: left, top: top, right: right, bottom: bottom),
+                source: .init(left: sl, top: st, right: sr, bottom: sb),
+                mode: mode,
+                opacity: opacity
+            ),
+            rows: &rows
+        )
+    }
+
+    private nonisolated func replayMaskedImageCommand(
+        _ command: MiniWindowCommand,
+        windowName: String,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        guard case .imageMask(
+            let imageID,
+            let maskID,
+            let left,
+            let top,
+            let right,
+            let bottom,
+            let mode,
+            let opacity,
+            let sl,
+            let st,
+            let sr,
+            let sb
+        ) = command else { return }
+        drawMaskedImage(
+            MiniWindowImageDraw(
+                imageID: imageID,
+                windowName: windowName,
+                target: .init(left: left, top: top, right: right, bottom: bottom),
+                source: .init(left: sl, top: st, right: sr, bottom: sb),
+                mode: mode,
+                opacity: opacity
+            ),
+            maskID: maskID,
+            rows: &rows
+        )
     }
 
     private nonisolated func drawImage(_ draw: MiniWindowImageDraw, rows: inout [[MiniWindowRasterPixel]]) {
@@ -187,6 +261,69 @@ extension LuaRuntime {
                 )
             }
         }
+    }
+
+    private nonisolated func drawMaskedImage(
+        _ draw: MiniWindowImageDraw,
+        maskID: String,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        guard
+            let data = miniWindowImageData[draw.windowName]?[draw.imageID],
+            let maskData = miniWindowImageData[draw.windowName]?[maskID],
+            let image = MiniWindowRasterImage(data: data),
+            let mask = MiniWindowRasterImage(data: maskData)
+        else { return }
+        let source = image.rect(draw.source)
+        let target = targetRect(draw.target, source: source, mode: 2, rows: rows)
+        guard source.width > 0, source.height > 0, target.width > 0, target.height > 0 else { return }
+        for y in 0..<target.height {
+            let sy = source.y + min(source.height - 1, y * source.height / target.height)
+            let my = min(mask.height - 1, y * mask.height / target.height)
+            for x in 0..<target.width {
+                let sx = source.x + min(source.width - 1, x * source.width / target.width)
+                let mx = min(mask.width - 1, x * mask.width / target.width)
+                let dx = target.x + x
+                let dy = target.y + y
+                guard dy >= 0, dy < rows.count, dx >= 0, dx < rows[dy].count else { continue }
+                let sourcePixel = image.pixel(x: sx, y: sy)
+                let maskPixel = mask.pixel(x: mx, y: my)
+                if draw.mode == 1, sourcePixel.matches(image.pixel(x: 0, y: 0)) { continue }
+                let maskOpacity = Double(maskPixel.alpha) / 255 * maskPixel.luminance
+                rows[dy][dx] = sourcePixel.composited(
+                    over: rows[dy][dx],
+                    mode: 1,
+                    opacity: draw.opacity * maskOpacity
+                )
+            }
+        }
+    }
+
+    private nonisolated func drawTransformedImage(
+        _ draw: MiniWindowTransformDraw,
+        rows: inout [[MiniWindowRasterPixel]]
+    ) {
+        guard
+            abs(draw.mxy) < 0.0001,
+            abs(draw.myx) < 0.0001,
+            let data = miniWindowImageData[draw.windowName]?[draw.imageID],
+            let image = MiniWindowRasterImage(data: data)
+        else { return }
+        let width = max(1, Int((Double(image.width) * abs(draw.mxx)).rounded()))
+        let height = max(1, Int((Double(image.height) * abs(draw.myy)).rounded()))
+        drawImage(.init(
+            imageID: draw.imageID,
+            windowName: draw.windowName,
+            target: .init(
+                left: draw.left,
+                top: draw.top,
+                right: draw.left + width,
+                bottom: draw.top + height
+            ),
+            source: .init(left: 0, top: 0, right: 0, bottom: 0),
+            mode: draw.mode == 0 ? 2 : draw.mode,
+            opacity: 1
+        ), rows: &rows)
     }
 
     private nonisolated func targetRect(
@@ -304,6 +441,18 @@ private struct MiniWindowImageDraw {
     var opacity: Double
 }
 
+private struct MiniWindowTransformDraw {
+    var imageID: String
+    var windowName: String
+    var left: Int
+    var top: Int
+    var mode: Int
+    var mxx: Double
+    var mxy: Double
+    var myx: Double
+    var myy: Double
+}
+
 private struct MiniWindowRasterImage {
     let width: Int
     let height: Int
@@ -368,6 +517,10 @@ private struct MiniWindowRasterPixel {
 
     func matches(_ other: Self) -> Bool {
         r == other.r && g == other.g && b == other.b
+    }
+
+    var luminance: Double {
+        (0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b)) / 255
     }
 
     func composited(over base: Self, mode: Int, opacity: Double) -> Self {

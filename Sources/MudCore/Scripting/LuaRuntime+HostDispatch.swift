@@ -293,6 +293,10 @@ extension LuaRuntime {
         index < arguments.count ? (arguments[index].stringValue ?? "") : ""
     }
 
+    static func argData(_ arguments: [LuaValue], _ index: Int) -> Data? {
+        index < arguments.count ? arguments[index].dataValue : nil
+    }
+
     static func argOptionalString(_ arguments: [LuaValue], _ index: Int) -> String? {
         index < arguments.count ? arguments[index].stringValue : nil
     }

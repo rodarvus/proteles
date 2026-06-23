@@ -5,10 +5,10 @@ import Foundation
 /// ``LuaRuntime/loadCompatShim()`` after the core shim. See
 /// `docs/plans/MINIWINDOW_FEASIBILITY.md` and `LuaRuntime+MiniWindow`.
 ///
-/// Functions that MUSHclient defines but the spike doesn't model yet (merge
-/// image alpha, affine transforms, image creation) are present as benign eOK
-/// stubs so a plugin that calls them loads and runs rather than erroring on a
-/// nil global — the Phase-5 "fidelity tail" of the plan.
+/// Functions that MUSHclient defines but the spike doesn't model yet in full
+/// GDI+ fidelity are present as benign partial implementations so a plugin that
+/// calls them loads and runs rather than erroring on a nil global — the Phase-5
+/// "fidelity tail" of the plan.
 extension LuaRuntime {
     nonisolated static let miniWindowShimSource = #"""
     local proteles = proteles
@@ -50,6 +50,7 @@ extension LuaRuntime {
       brush_waves_horizontal = 11, brush_waves_vertical = 12,
       -- image draw modes / merge modes
       image_copy = 1, image_stretch = 2, image_transparent_copy = 3,
+      image_fill_ellipse = 1, image_fill_rectangle = 2, image_fill_round_fill_rectangle = 3,
       merge_straight = 0, merge_transparent = 1,
       blend_normal = 1, blend_average = 2, blend_interpolate = 3, blend_dissolve = 4,
       blend_darken = 5, blend_multiply = 6, blend_colour_burn = 7, blend_linear_burn = 8,
@@ -148,10 +149,10 @@ extension LuaRuntime {
     -- Phase-5 tail (benign stubs so callers don't hit a nil global) ----------
     function WindowSetZOrder(name, z) proteles.windowSetZOrder(name, z); return eOK end
     function WindowFilter(...) proteles.windowFilter(...); return eOK end
-    function WindowMergeImageAlpha(...) return eOK end
-    function WindowTransformImage(...) return eOK end
+    function WindowMergeImageAlpha(...) proteles.windowMergeImageAlpha(...); return eOK end
+    function WindowTransformImage(...) proteles.windowTransformImage(...); return eOK end
     function WindowImageFromWindow(...) return proteles.windowImageFromWindow(...) end
-    function WindowImageOp(...) return eOK end
+    function WindowImageOp(...) proteles.windowImageOp(...); return eOK end
     function WindowGetImageAlpha(...) return eOK end
     function WindowCreateImage(...) return eOK end
     function WindowWrite(...) return proteles.windowWrite(...) end

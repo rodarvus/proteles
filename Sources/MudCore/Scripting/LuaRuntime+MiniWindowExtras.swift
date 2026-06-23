@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import ImageIO
 
@@ -50,6 +51,12 @@ extension LuaRuntime {
         case .windowImageFromWindow: return [captureMiniWindowImage(name, arguments)]
         case .windowFilter:
             appendFilter(name, arguments)
+        case .windowMergeImageAlpha:
+            appendImageMask(name, arguments)
+        case .windowTransformImage:
+            appendTransformedImage(name, arguments)
+        case .windowImageOp:
+            appendImageOp(name, arguments)
         default: return nil
         }
         return []
@@ -197,11 +204,10 @@ extension LuaRuntime {
     private nonisolated func loadMiniWindowImage(_ name: String, _ arguments: [LuaValue]) {
         let imageID = Self.argString(arguments, 1)
         guard !imageID.isEmpty else { return }
-        let source = Self.argString(arguments, 2)
         let isMemory = Self.argBool(arguments, 3)
         let data: Data? = isMemory
-            ? (Data(base64Encoded: source) ?? source.data(using: .utf8))
-            : readFileData(source)
+            ? Self.memoryImageData(arguments, 2)
+            : readFileData(Self.argString(arguments, 2))
         guard let data, !data.isEmpty else { return }
         let metadata = Self.imageMetadata(id: imageID, data: data)
         miniWindowImageData[name, default: [:]][imageID] = data
@@ -280,6 +286,125 @@ extension LuaRuntime {
             operation: Int(Self.argDouble(arguments, 5)),
             options: Self.argDouble(arguments, 6)
         ))
+    }
+
+    private nonisolated func appendImageMask(_ name: String, _ arguments: [LuaValue]) {
+        appendMiniWindowCommand(name, .imageMask(
+            imageID: Self.argString(arguments, 1),
+            maskID: Self.argString(arguments, 2),
+            left: Int(Self.argDouble(arguments, 3)),
+            top: Int(Self.argDouble(arguments, 4)),
+            right: Int(Self.argDouble(arguments, 5)),
+            bottom: Int(Self.argDouble(arguments, 6)),
+            mode: Int(Self.argDouble(arguments, 7)),
+            opacity: Self.clampedOpacity(Self.argDouble(arguments, 8)),
+            srcLeft: Int(Self.argDouble(arguments, 9)),
+            srcTop: Int(Self.argDouble(arguments, 10)),
+            srcRight: Int(Self.argDouble(arguments, 11)),
+            srcBottom: Int(Self.argDouble(arguments, 12))
+        ))
+    }
+
+    private nonisolated func appendTransformedImage(_ name: String, _ arguments: [LuaValue]) {
+        appendMiniWindowCommand(name, .transformedImage(
+            imageID: Self.argString(arguments, 1),
+            left: Int(Self.argDouble(arguments, 2)),
+            top: Int(Self.argDouble(arguments, 3)),
+            mode: Int(Self.argDouble(arguments, 4)),
+            mxx: Self.argDouble(arguments, 5),
+            mxy: Self.argDouble(arguments, 6),
+            myx: Self.argDouble(arguments, 7),
+            myy: Self.argDouble(arguments, 8)
+        ))
+    }
+
+    private nonisolated func appendImageOp(_ name: String, _ arguments: [LuaValue]) {
+        let imageID = Self.argString(arguments, 10)
+        let width = max(0, Int(Self.argDouble(arguments, 4)) - Int(Self.argDouble(arguments, 2)))
+        let height = max(0, Int(Self.argDouble(arguments, 5)) - Int(Self.argDouble(arguments, 3)))
+        guard
+            !imageID.isEmpty,
+            let data = Self.generatedImageData(
+                width: width,
+                height: height,
+                action: Int(Self.argDouble(arguments, 1)),
+                colour: Int(Self.argDouble(arguments, 9))
+            )
+        else { return }
+        miniWindowImageData[name, default: [:]][imageID] = data
+        updateMiniWindow(name) { scene in
+            scene.images[imageID] = MiniWindowImageInfo(id: imageID, width: width, height: height)
+        }
+        effects.append(.loadMiniWindowImage(pluginID: pluginContext.pluginID, imageID: imageID, data: data))
+    }
+
+    private nonisolated static func memoryImageData(_ arguments: [LuaValue], _ index: Int) -> Data? {
+        guard let data = argData(arguments, index), !data.isEmpty else { return nil }
+        if let decoded = Data(base64Encoded: data) { return decoded }
+        return data
+    }
+
+    private nonisolated static func generatedImageData(
+        width: Int,
+        height: Int,
+        action: Int,
+        colour: Int
+    ) -> Data? {
+        guard width > 0, height > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let red = UInt8(clamping: colour & 0xFF)
+        let green = UInt8(clamping: (colour >> 8) & 0xFF)
+        let blue = UInt8(clamping: (colour >> 16) & 0xFF)
+        for y in 0..<height {
+            for x in 0..<width where Self.generatedImageContains(
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                action: action
+            ) {
+                let offset = (y * width + x) * 4
+                bytes[offset] = red
+                bytes[offset + 1] = green
+                bytes[offset + 2] = blue
+                bytes[offset + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let image = CGImage(
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bitsPerPixel: 32,
+                  bytesPerRow: width * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  provider: provider,
+                  decode: nil,
+                  shouldInterpolate: false,
+                  intent: .defaultIntent
+              )
+        else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
+        else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
+    private nonisolated static func generatedImageContains(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        action: Int
+    ) -> Bool {
+        guard action == 1 else { return true }
+        let nx = (Double(x) + 0.5 - Double(width) / 2) / max(1, Double(width) / 2)
+        let ny = (Double(y) + 0.5 - Double(height) / 2) / max(1, Double(height) / 2)
+        return nx * nx + ny * ny <= 1
     }
 
     // MARK: - Phase 4: shapes

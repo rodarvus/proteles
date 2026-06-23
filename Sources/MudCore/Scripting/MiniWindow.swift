@@ -193,6 +193,27 @@ public enum MiniWindowCommand: Sendable, Equatable {
     )
     /// `WindowFilter(left, top, right, bottom, operation, options)`.
     case filter(left: Int, top: Int, right: Int, bottom: Int, operation: Int, options: Double)
+    /// `WindowMergeImageAlpha` — draw image pixels using another image's alpha as
+    /// a mask. Mode 0 = straight, 1 = transparent-copy.
+    case imageMask(
+        imageID: String, maskID: String, left: Int, top: Int, right: Int, bottom: Int,
+        mode: Int, opacity: Double, srcLeft: Int, srcTop: Int, srcRight: Int, srcBottom: Int
+    )
+    /// `WindowTransformImage` — affine image draw. The export path handles
+    /// translation/scaling faithfully and leaves rotation/shear as compatibility
+    /// no-ops until a real plugin needs full GDI+ transform parity.
+    case transformedImage(
+        imageID: String, left: Int, top: Int, mode: Int,
+        mxx: Double, mxy: Double, myx: Double, myy: Double
+    )
+    /// `WindowImageOp` — create simple generated image fills in the window's
+    /// retained image store. The raster export path currently covers fill
+    /// rectangle/ellipse/round-rectangle.
+    case imageOp(
+        action: Int, left: Int, top: Int, right: Int, bottom: Int,
+        penColour: Int, penStyle: Int, penWidth: Int,
+        brushColour: Int, imageID: String, ellipseWidth: Int, ellipseHeight: Int
+    )
 }
 
 /// A complete miniwindow: its geometry/placement/flags plus the retained scene

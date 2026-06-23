@@ -11,7 +11,7 @@ func luaReadValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
     case LUA_TNUMBER:
         .number(lua_tonumber(state, index))
     case LUA_TSTRING:
-        clua_tostring(state, index).map { .string(String(cString: $0)) } ?? .nil
+        luaReadStringValue(state, index)
     default:
         .nil
     }
@@ -25,8 +25,23 @@ func luaPushValue(_ state: OpaquePointer, _ value: LuaValue) {
     case .boolean(let flag): lua_pushboolean(state, flag ? 1 : 0)
     case .number(let number): lua_pushnumber(state, number)
     case .string(let text): lua_pushstring(state, text)
+    case .bytes(let data):
+        data.withUnsafeBytes { buffer in
+            let pointer = buffer.baseAddress?.assumingMemoryBound(to: CChar.self)
+            lua_pushlstring(state, pointer, data.count)
+        }
     case .functionRef(let ref): lua_rawgeti(state, LUA_REGISTRYINDEX, ref)
     }
+}
+
+private func luaReadStringValue(_ state: OpaquePointer, _ index: Int32) -> LuaValue {
+    var length = 0
+    guard let pointer = lua_tolstring(state, index, &length) else { return .nil }
+    let data = Data(bytes: pointer, count: length)
+    if let text = String(data: data, encoding: .utf8), !text.contains("\0") {
+        return .string(text)
+    }
+    return .bytes(data)
 }
 
 /// Single C entry point for every registered host function. Upvalue 1 is

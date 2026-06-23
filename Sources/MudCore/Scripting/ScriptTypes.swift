@@ -20,6 +20,7 @@ public enum LuaValue: Sendable, Equatable {
     case boolean(Bool)
     case number(Double)
     case string(String)
+    case bytes(Data)
     /// A reference to a Lua function held in the registry (`luaL_ref`), so
     /// Swift can store it (event handlers, exported callables) and invoke
     /// it later. Opaque handle — not meant to be inspected.
@@ -27,6 +28,14 @@ public enum LuaValue: Sendable, Equatable {
 
     public var stringValue: String? {
         if case .string(let value) = self { value } else { nil }
+    }
+
+    public var dataValue: Data? {
+        switch self {
+        case .bytes(let value): value
+        case .string(let value): value.data(using: .utf8)
+        default: nil
+        }
     }
 
     public var numberValue: Double? {
