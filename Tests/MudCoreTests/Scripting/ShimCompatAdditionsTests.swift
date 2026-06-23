@@ -302,4 +302,121 @@ struct ShimCompatAdditionsTests {
         #expect(effects.contains(.removeAlias("a1")))
         #expect(effects.contains(.enableGroup(name: "g", on: true)))
     }
+
+    @Test("visual package display-control calls are safe generic-shim stubs")
+    func displayControlStubs() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo("repaint:" .. tostring(select("#", Repaint())))
+        proteles.echo("redraw:" .. tostring(select("#", Redraw())))
+        proteles.echo("addfont:" .. tostring(AddFont("SomeFont.ttf") == error_code.eOK))
+        proteles.echo("setscroll:" .. tostring(SetScroll(-1, true) == error_code.eOK))
+        proteles.echo("setcursor:" .. tostring(SetCursor(0) == error_code.eOK))
+        proteles.echo("textrect:" .. tostring(TextRectangle(1, 2, 3, 4, 0, 0, 0, 0, 0) == error_code.eOK))
+        proteles.echo("background:" .. tostring(SetBackgroundImage("x.png", 0) == error_code.eOK))
+        proteles.echo("pick:" .. tostring(PickColour(255)))
+        proteles.echo("pickcancel:" .. tostring(PickColour(nil)))
+        NoteHr()
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "repaint:0",
+            "redraw:0",
+            "addfont:true",
+            "setscroll:true",
+            "setcursor:true",
+            "textrect:true",
+            "background:true",
+            "pick:255",
+            "pickcancel:-1",
+            String(repeating: "-", count: 80)
+        ])
+    }
+
+    @Test("notepad APIs provide an in-memory text store; selection reports none")
+    func notepadAndSelectionStubs() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        proteles.echo("missing-len:" .. tostring(GetNotepadLength("output")))
+        proteles.echo("append:" .. tostring(AppendToNotepad("Output", "abc")))
+        proteles.echo("append2:" .. tostring(AppendToNotepad("output", "def")))
+        proteles.echo("text:" .. GetNotepadText("OUTPUT"))
+        proteles.echo("len:" .. tostring(GetNotepadLength("output")))
+        proteles.echo("replace:" .. tostring(ReplaceNotepad("output", "xyz")))
+        proteles.echo("text2:" .. GetNotepadText("Output"))
+        proteles.echo("activate:" .. tostring(ActivateNotepad("OUTPUT")))
+        proteles.echo("save:" .. tostring(NotepadSaveMethod("output", 2)))
+        proteles.echo("savebad:" .. tostring(NotepadSaveMethod("output", 9)))
+        proteles.echo("readonly:" .. tostring(NotepadReadOnly("output", true)))
+        proteles.echo("list:" .. table.concat(GetNotepadList(), ","))
+        proteles.echo("sel:" .. table.concat({
+          GetSelectionStartLine(), GetSelectionEndLine(),
+          GetSelectionStartColumn(), GetSelectionEndColumn()
+        }, ","))
+        proteles.echo("setsel:" .. tostring(select("#", SetSelection(1, 1, 1, 1))))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "missing-len:0",
+            "append:true",
+            "append2:true",
+            "text:abcdef",
+            "len:6",
+            "replace:true",
+            "text2:xyz",
+            "activate:true",
+            "save:true",
+            "savebad:false",
+            "readonly:true",
+            "list:Output",
+            "sel:0,0,0,0",
+            "setsel:0"
+        ])
+    }
+
+    @Test("miscellaneous shell/window stubs are safe; SendPkt recognizes GMCP")
+    func miscellaneousShellStubsAndSendPktGMCP() async throws {
+        let lua = try await shimmed()
+        await lua.setOutputGeometry(width: 640, height: 480)
+        let effects = try await lua.run("""
+        proteles.echo("worldid:" .. GetWorldID())
+        proteles.echo("getworld:" .. tostring(GetWorld("Aardwolf") == nil))
+        proteles.echo("open:" .. tostring(Open("Aardwolf.mcl")))
+        proteles.echo("activate:" .. tostring(Activate()))
+        proteles.echo("save:" .. tostring(Save("", true)))
+        proteles.echo("pause:" .. tostring(Pause(false) == error_code.eOK))
+        proteles.echo("command:" .. GetCommand())
+        proteles.echo("cmdheight:" .. tostring(SetCommandWindowHeight(10) == error_code.eOK))
+        proteles.echo("cmdselection:" .. tostring(SetCommandSelection(1, -1) == error_code.eOK))
+        proteles.echo("export:" .. ExportXML(1, "x"))
+        proteles.echo("docommand:" .. tostring(DoCommand("copy") == error_code.eOK))
+        proteles.echo("deleteoutput:" .. tostring(DeleteOutput() == error_code.eOK))
+        proteles.echo("debug:" .. tostring(Debug() == error_code.eOK))
+        proteles.echo("metrics:" .. GetSystemMetrics(78) .. "x" .. GetSystemMetrics(79))
+        local gmcp = string.char(255, 250, 201) .. "request prompt" .. string.char(255, 240)
+        local telopt = string.char(255, 250, 102, 1, 1, 255, 240)
+        proteles.echo("sendpkt:" .. tostring(SendPkt(gmcp) == error_code.eOK))
+        proteles.echo("telopt:" .. tostring(SendPkt(telopt) == error_code.eOK))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "worldid:proteles",
+            "getworld:true",
+            "open:false",
+            "activate:true",
+            "save:true",
+            "pause:true",
+            "command:",
+            "cmdheight:true",
+            "cmdselection:true",
+            "export:",
+            "docommand:true",
+            "deleteoutput:true",
+            "debug:true",
+            "metrics:640x480",
+            "sendpkt:true",
+            "telopt:true"
+        ])
+        #expect(effects.contains(.sendGMCP("request prompt")))
+    }
 }

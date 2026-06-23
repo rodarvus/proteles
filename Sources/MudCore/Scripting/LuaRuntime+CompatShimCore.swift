@@ -151,6 +151,7 @@ extension LuaRuntime {
       openactivitywindow = 0, smoothscrolling = 0, smootherscrolling = 0,
     }
     local __numOpt, __alphaOpt = {}, {}    -- SetOption/SetAlphaOption write-through
+    local __notepads = {}                  -- title-key -> { title, text, saveMethod, readOnly }
     local function __optName(n)
       return (tostring(n or ""):lower():gsub("^%s+", ""):gsub("%s+$", ""))
     end
@@ -214,6 +215,110 @@ extension LuaRuntime {
     -- are accepted, so copy/paste features (e.g. dinv priority copy) don't error.
     function GetClipboard() return proteles.clipboardGet() or "" end
     function SetClipboard(text) proteles.clipboardSet(tostring(text or "")); return error_code.eOK end
+    -- Notepad windows: MUSHclient has separate MDI notepad documents. Proteles
+    -- does not show notepad windows, but several accessibility/review-buffer
+    -- plugins use the API as a text store. Keep an in-memory, per-runtime model
+    -- so Append/Replace/Get/List are coherent, with case-insensitive titles like
+    -- MUSHclient's FindNotepad.
+    local function __notepadKey(title) return tostring(title or ""):lower() end
+    local function __notepad(title, create)
+      local key = __notepadKey(title)
+      local pad = __notepads[key]
+      if pad == nil and create then
+        pad = { title = tostring(title or ""), text = "", saveMethod = 0, readOnly = false }
+        __notepads[key] = pad
+      end
+      return pad
+    end
+    function AppendToNotepad(title, contents)
+      local pad = __notepad(title, true)
+      pad.text = pad.text .. tostring(contents or "")
+      return true
+    end
+    function ReplaceNotepad(title, contents)
+      local pad = __notepad(title, true)
+      pad.text = tostring(contents or "")
+      return true
+    end
+    function ActivateNotepad(title) return __notepad(title, false) ~= nil end
+    function GetNotepadLength(title)
+      local pad = __notepad(title, false)
+      return pad and #pad.text or 0
+    end
+    function GetNotepadText(title)
+      local pad = __notepad(title, false)
+      return pad and pad.text or ""
+    end
+    function GetNotepadList(all)
+      local names = {}
+      for _, pad in pairs(__notepads) do names[#names + 1] = pad.title end
+      table.sort(names)
+      return names
+    end
+    function NotepadSaveMethod(title, method)
+      local pad = __notepad(title, false)
+      method = tonumber(method)
+      if pad == nil or (method ~= 0 and method ~= 1 and method ~= 2) then return false end
+      pad.saveMethod = method
+      return true
+    end
+    function NotepadReadOnly(title, readOnly)
+      local pad = __notepad(title, false)
+      if pad == nil then return false end
+      pad.readOnly = readOnly and true or false
+      return true
+    end
+    -- Selection queries: until the native output selection is bridged into Lua,
+    -- report MUSHclient's "no selection" value. SetSelection is accepted but
+    -- cannot drive AppKit selection from the generic runtime.
+    function GetSelectionStartLine() return 0 end
+    function GetSelectionEndLine() return 0 end
+    function GetSelectionStartColumn() return 0 end
+    function GetSelectionEndColumn() return 0 end
+    function SetSelection(startLine, endLine, startColumn, endColumn) end
+    -- Miscellaneous MUSHclient shell/window commands that package helpers probe.
+    -- They have no direct Proteles surface, so return safe defaults rather than
+    -- crashing on a missing global.
+    function GetWorldID() return "proteles" end
+    function GetWorld(name) return nil end
+    function Open(filename) return false end
+    function Activate() return true end
+    function Save(filename, all) return true end
+    function Pause(flag) return error_code.eOK end
+    function GetCommand() return "" end
+    function SetCommandWindowHeight(height) return error_code.eOK end
+    function SetCommandSelection(startColumn, endColumn) return error_code.eOK end
+    function ExportXML(itemType, name) return "" end
+    function DoCommand(name) return error_code.eOK end
+    function DeleteOutput() return error_code.eOK end
+    function Debug() return error_code.eOK end
+    -- Display/window-control calls used by Aardwolf package visual helpers.
+    -- Proteles replaces most of these MUSHclient output-window affordances with
+    -- native panels, so they are safe stubs: enough to avoid nil-global crashes
+    -- while making no claim that the old MUSHclient window chrome exists.
+    function Repaint() end
+    function Redraw() end
+    function AddFont(path) return error_code.eOK end
+    function SetScroll(position, visible) return error_code.eOK end
+    function SetCursor(cursor) return error_code.eOK end
+    function TextRectangle(
+      left, top, right, bottom, borderOffset, borderColour, borderWidth, fillColour, fillStyle
+    )
+      return error_code.eOK
+    end
+    function SetBackgroundImage(filename, mode) return error_code.eOK end
+    function PickColour(suggested)
+      local value = tonumber(suggested)
+      if value == nil then return -1 end
+      return value
+    end
+    function NoteHr() Note(string.rep("-", 80)) end
+    function GetSystemMetrics(which)
+      which = tonumber(which) or 0
+      if which == 78 then return GetInfo(281) or 0 end -- virtual screen width
+      if which == 79 then return GetInfo(280) or 0 end -- virtual screen height
+      return 0
+    end
     -- Convert a plain (literal/wildcard) match to a regex, like MUSHclient's
     -- MakeRegularExpression — escape regex metacharacters so wait.match treats
     -- its text literally.

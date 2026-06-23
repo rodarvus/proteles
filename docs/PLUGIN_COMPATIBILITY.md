@@ -20,6 +20,9 @@ the end.
 
 - About **half run unmodified today.**
 - 0.8.5 unblocked a batch more by expanding the scripting API (below).
+- In the public in-repo corpus, every MUSHclient world-API function that is
+  actually called now exists in the generic shim. Some of those APIs are
+  compatibility stubs or in-memory models, not full MUSHclient UI parity.
 - A few categories don't work yet — almost always because they lean on a
   capability Proteles hasn't built (see [Known gaps](#known-gaps)).
 
@@ -33,6 +36,17 @@ the end.
   `DeleteAliasGroup` / `DeleteTimerGroup` and friends).
 - **`OpenBrowser`** — open a web link, restricted to web addresses and gated
   behind a per-plugin confirmation the first time a plugin asks.
+
+**Current main after 0.8.5:**
+- **Module-loading parity fixes** — plugin-local `require`, `dofile`, and
+  `loadstring` keep the caller's plugin environment even through `pcall`, and
+  `module(..., package.seeall)` remains plugin-local.
+- **Literal MUSHclient note colours** — `ColourNote("red", ...)` uses
+  MUSHclient's bright named-colour table while server ANSI colours remain
+  theme-driven.
+- **Compatibility stubs/models for visual package helpers** — display-control,
+  notepad, selection, raw-GMCP `SendPkt`, and shell/window probe calls now exist
+  so package helpers do not fail on nil globals.
 
 **0.8.4 and earlier rounds** added colour helpers, trigger/alias/timer
 introspection, output-buffer queries, world options, plugin-management calls,
@@ -131,6 +145,7 @@ replaced by native panels.
 | `BroadcastPlugin` / `OnPluginBroadcast` | ✅ | pub/sub; native GMCP is bridged in as the GMCP-handler's broadcast |
 | `IsConnected` | ✅ | live connection state |
 | `Send_GMCP_Packet` | ✅ | frames `IAC SB 201 … IAC SE` |
+| `SendPkt` | 🟡 | recognizes raw GMCP packets and routes them through the native GMCP sender; other raw telnet packets are accepted as no-ops |
 | `Trim` | ✅ | |
 | trigger/alias/timer **introspection** | ✅ | `GetTriggerInfo`/`GetAliasInfo`/`GetTimerInfo`, the `*List` calls, option getters |
 | group **delete** | ✅ | `DeleteTriggerGroup`/`DeleteAliasGroup`/`DeleteTimerGroup` (0.8.5) |
@@ -139,6 +154,9 @@ replaced by native panels.
 | `OpenBrowser` | ✅ | web links only, per-plugin confirmation (0.8.5) |
 | `EnableTrigger`/`EnableTimer`/`EnableGroup`/`EnableAliasGroup` | ✅ | name-based enable/disable; triggers/timers carry loader-assigned names |
 | `AddTriggerEx`, `AddAlias`, `AddTimer` (programmatic) | ✅ | runtime registration through the shim → `ScriptEngine` (alongside declarative XML); recurring `AddTimer` fires repeatedly |
+| notepad APIs | 🟡 | `AppendToNotepad`/`ReplaceNotepad`/`GetNotepad*`/list/save/read-only calls are an in-memory text store, not separate windows |
+| selection APIs | 🟡 | `GetSelection*` reports MUSHclient's no-selection value (`0`); `SetSelection` is accepted as a no-op |
+| display/window control calls | 🟡 | `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `TextRectangle`, `SetBackgroundImage`, `PickColour`, `NoteHr`, and shell/window probe calls are safe stubs/defaults |
 | `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, while advanced transform/filter/window-image calls remain stubbed (see Known gaps) |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 | raw `socket` / `ssl` TLS | ❌ | not exposed to plugins (sandboxing) |

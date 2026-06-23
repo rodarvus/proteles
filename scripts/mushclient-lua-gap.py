@@ -33,8 +33,11 @@ for line in open(CANONICAL):
 #    gets — NOT the S&D-only curated bindings, which are a separate runtime).
 SHIM_FILES = [
     "Sources/MudCore/Scripting/LuaRuntime+CompatShim.swift",
+    "Sources/MudCore/Scripting/LuaRuntime+CompatShimCore.swift",
     "Sources/MudCore/Scripting/LuaRuntime+CompatHelpers.swift",
     "Sources/MudCore/Scripting/LuaRuntime+CompatShimTimers.swift",
+    "Sources/MudCore/Scripting/LuaRuntime+CompatDatabase.swift",
+    "Sources/MudCore/Scripting/LuaRuntime+CompatIO.swift",
     "Sources/MudCore/Scripting/LuaRuntime+MiniWindowShim.swift",
 ]
 ours = set()
@@ -45,21 +48,37 @@ for rel in SHIM_FILES:
     txt = open(path, encoding="utf-8", errors="replace").read()
     ours |= set(re.findall(r'\bfunction\s+([A-Z][A-Za-z0-9_]+)\s*\(', txt))
     ours |= set(re.findall(r'^\s*([A-Z][A-Za-z0-9_]+)\s*=\s*function', txt, re.M))
+    ours |= set(re.findall(r'^\s*([A-Z][A-Za-z0-9_]+)\s*=\s*[A-Z][A-Za-z0-9_]+\s*$', txt, re.M))
 
 # 3. Usage corpus — public, in-repo plugins only.
 corpus = []
 for base in ["submodules/aardwolfclientpackage", "plugins"]:
     for ext in ("*.lua", "*.xml"):
         corpus += glob.glob(f"{ROOT}/{base}/**/{ext}", recursive=True)
-blob = ""
+corpus = [
+    f for f in corpus
+    if os.path.basename(f) not in {
+        # Reference stubs/documentation, not runnable plugin/helper code. Including
+        # this file makes almost every MUSHclient API look "used" once.
+        "mushclient_definitions.lua",
+    }
+]
+blobs = {}
 for f in corpus:
     try:
-        blob += open(f, encoding="utf-8", errors="replace").read() + "\n"
+        blobs[f] = open(f, encoding="utf-8", errors="replace").read()
     except OSError:
         pass
 
-usage = {fn: len(re.findall(r'(?<![A-Za-z0-9_])' + re.escape(fn) + r'\s*\(', blob)) for fn in mush}
-missing_used = sorted(((usage[f], f) for f in mush if f not in ours and usage[f] > 0), reverse=True)
+def call_count(fn, text):
+    return len(re.findall(r'(?<![A-Za-z0-9_])' + re.escape(fn) + r'\s*\(', text))
+
+usage = {fn: sum(call_count(fn, text) for text in blobs.values()) for fn in mush}
+breadth = {fn: sum(1 for text in blobs.values() if call_count(fn, text) > 0) for fn in mush}
+missing_used = sorted(
+    ((usage[f], breadth[f], f) for f in mush if f not in ours and usage[f] > 0),
+    reverse=True
+)
 missing_unused = sorted(f for f in mush if f not in ours and usage[f] == 0)
 
 print(f"corpus files: {len(corpus)}")
@@ -67,7 +86,7 @@ print(f"MUSHclient world functions: {len(mush)}")
 print(f"provided by our generic shim: {len(mush & ours)}")
 print(f"missing & used by real plugins: {len(missing_used)}")
 print(f"missing & unused (ignorable tail): {len(missing_unused)}")
-print("\ncalls  function")
-for count, fn in missing_used:
-    print(f"{count:5d}  {fn}")
+print("\ncalls files  function")
+for count, files, fn in missing_used:
+    print(f"{count:5d} {files:5d}  {fn}")
 print("\nmissing & unused: " + ", ".join(missing_unused))

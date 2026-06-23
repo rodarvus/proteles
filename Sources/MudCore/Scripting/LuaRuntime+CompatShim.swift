@@ -455,6 +455,21 @@ public extension LuaRuntime {
 
     -- GMCP ------------------------------------------------------------------
     function Send_GMCP_Packet(text) proteles.sendGMCP(tostring(text)); return error_code.eOK end
+    function SendPkt(packet)
+      packet = tostring(packet or "")
+      local bytes = { string.byte(packet, 1, -1) }
+      if #bytes >= 5 and bytes[1] == 255 and bytes[2] == 250 and bytes[3] == 201 and
+          bytes[#bytes - 1] == 255 and bytes[#bytes] == 240 then
+        local payload = {}
+        local i = 4
+        while i <= #bytes - 2 do
+          payload[#payload + 1] = string.char(bytes[i])
+          if bytes[i] == 255 and bytes[i + 1] == 255 then i = i + 2 else i = i + 1 end
+        end
+        proteles.sendGMCP(table.concat(payload))
+      end
+      return error_code.eOK
+    end
 
     -- print → Note (tab-joined, like MUSHclient's print override) -----------
     function print(...)

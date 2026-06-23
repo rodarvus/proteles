@@ -11,36 +11,49 @@ order. A real gap surfaced exactly this way: a plugin died on
 **Produced by** `scripts/mushclient-lua-gap.py` (re-run after the shim or
 submodules change). Method:
 - **Canonical list:** the reference's own registration, `submodules/mushclient/scripting/functionlist.cpp`.
-- **Our coverage:** globals defined in the *generic* shim — `LuaRuntime+CompatShim/CompatHelpers/CompatShimTimers/MiniWindowShim`. (The S&D *curated* bindings are a separate runtime and don't count, since an arbitrary 3rd-party plugin doesn't get them.)
+- **Our coverage:** globals defined in the *generic* shim —
+  `LuaRuntime+CompatShim*`, `CompatHelpers`, `CompatDatabase`, `CompatIO`, and
+  `MiniWindowShim`. (The S&D *curated* bindings are a separate runtime and don't
+  count, since an arbitrary 3rd-party plugin doesn't get them.)
 - **Usage corpus (public, in-repo only):** the Aardwolf client package
-  (`submodules/aardwolfclientpackage`) + vendored `plugins/` — 172 files. Never
-  the user's own installed plugins.
+  (`submodules/aardwolfclientpackage`) + vendored `plugins/` — 171 files after
+  excluding reference-only stubs such as `mushclient_definitions.lua`. Never the
+  user's own installed plugins.
 
 **Caveats (it's a prioritisation signal, not gospel).** Static analysis:
 `calls` is a call-site grep (a local var named like a world fn over-counts; a
 global we expose through a mechanism the regex misses under-counts). `breadth` =
 distinct files calling it — a better demand signal than raw calls (a fn called
 90× by one plugin matters less than one used across 14). **Spot-check the shim
-before implementing any entry.**
+before implementing any entry.** Also, "provided" is not the same as "full
+MUSHclient UI parity": some functions are functional bridges, some are
+in-memory models, and some are safe stubs because Proteles intentionally uses
+native UI instead of MUSHclient windows.
 
-## Headline (re-run 2026-06-20)
+## Headline (re-run 2026-06-22)
 
 | | count |
 |---|---|
 | MUSHclient world functions | **418** |
-| Provided by our generic shim | **120** (an undercount — see note) |
-| **Missing AND used by real plugins** | **283** |
-| Missing AND unused (ignorable) | 15 |
+| Provided by our generic shim | **221** |
+| **Missing AND used by real plugins** | **0** |
+| Missing AND unused (ignorable tail) | **197** |
 
-Down from 296 missing (2026-06-16) as Tier 1 plus the Tier 2 introspection and
-output-buffer families shipped. Still a long tail: the actionable remaining
-demand is the Options family + a handful of control/diagnostic fns below.
+This is the useful compatibility milestone: in the public in-repo corpus, there
+are no remaining MUSHclient world-API globals that are both **called** and
+**undefined** by the generic shim.
 
-**Provided is undercounted.** The "provided" detector greps for `function <Name>`,
-so globals we expose by *assignment* (`EnableTriggerGroup = EnableGroup`,
-`load = loadstring`, …) read as missing. Concretely, `EnableTriggerGroup` (35)
-still appears in the missing list below but is **shipped** — spot-check the shim
-before treating any single entry as a real gap.
+That does **not** mean Proteles implements every MUSHclient feature. The
+remaining compatibility story is qualitative:
+
+- Core text/trigger/GMCP/SQLite/plugin-management APIs are functional.
+- Basic miniwindows draw natively; advanced image/filter/transform operations
+  are accepted/stubbed or partial.
+- MUSHclient notepad APIs are an in-memory text store, not separate windows.
+- Output selection APIs report "no selection" until the native output selection
+  is bridged into Lua.
+- MUSHclient shell/window commands that do not map to Proteles return safe
+  defaults rather than crashing.
 
 ## Tier 1 — high value, low effort (do first)
 
@@ -101,27 +114,41 @@ family is the main remaining cluster.
   effects — unload a shim plugin / re-open the last connection), and `LoadPlugin`
   (a logged no-op: runtime file-load is the Plugin Library's job). See the
   per-command reference comparison in the session notes for the exact divergences.
+- **Display-control compatibility stubs — ✅ SHIPPED** (2026-06-22):
+  `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `TextRectangle`,
+  `SetBackgroundImage`, `PickColour`, and `NoteHr`. These close package visual
+  helper nil-globals without claiming old MUSHclient output-window chrome.
+- **Notepad + selection compatibility — ✅ SHIPPED** (2026-06-22):
+  `AppendToNotepad`, `ReplaceNotepad`, `GetNotepadText`, `GetNotepadLength`,
+  `GetNotepadList`, `ActivateNotepad`, `NotepadSaveMethod`,
+  `NotepadReadOnly`; plus `GetSelection*`/`SetSelection`. Notepads are
+  in-memory text stores; selection currently reports MUSHclient's no-selection
+  value (`0`).
+- **Miscellaneous shell/window/raw-packet calls — ✅ SHIPPED** (2026-06-22):
+  `SendPkt` recognizes raw GMCP `IAC SB 201 ... IAC SE` packets and routes them
+  to the native GMCP sender; Aardwolf telopt/raw packets are accepted as no-ops.
+  `GetWorldID`, `GetWorld`, `Open`, `Activate`, `Save`, `Pause`, `GetCommand`,
+  `SetCommandWindowHeight`, `SetCommandSelection`, `ExportXML`, `DoCommand`,
+  `DeleteOutput`, `Debug`, and `GetSystemMetrics` return safe defaults.
 
 ## Tier 3 — display / miniwindow (native-panel territory, defer)
 
 Mostly tied to MUSHclient's miniwindow drawing, which Proteles replaces with
-native panels — implement only if a load-bearing plugin needs it:
-`Repaint` (19), `Redraw` (11), `NoteStyle` (12), `NoteHr` (7),
-`SetScroll` (8), `PickColour` (19), `TextRectangle`, `SetBackgroundImage`,
-`SetCursor`, the `GetSelection*` family. (`GetStyleInfo` moved to Tier 2 —
-shipped with the output-buffer family.)
+native panels. The high-breadth display-control calls are now present as safe
+stubs, but advanced miniwindow image/filter/transform semantics remain partial
+and should only be deepened when a real plugin needs them.
 
 ## Tier 4 — low value (rarely needed by Aardwolf plugins)
 
-Notepad windows (`AppendToNotepad`, `ReplaceNotepad`, `GetNotepad*`,
-`NotepadSaveMethod`/`NotepadReadOnly`), Windows-isms (`GetSystemMetrics`,
-`GetDeviceCaps`), `OpenBrowser`, etc. Implement opportunistically, if ever.
+Windows-isms, chat-window APIs, mapper-editor APIs, spelling/name-generator
+helpers, and other MUSHclient UI surfaces that the public in-repo corpus does
+not call. Implement opportunistically, if ever.
 
-## Ignore — missing AND never called in the corpus (15)
+## Ignore — missing AND never called in the corpus (197)
 
-`BoldColour, CustomColourBackground, CustomColourText, EchoInput, LogInput,
-LogNotes, LogOutput, Mapping, NormalColour, NoteColour, NoteColourBack,
-NoteColourFore, RemoveMapReverses, SpeedWalkDelay, Trace`
+The script prints the full tail. These are mostly notepad-window, chat-window,
+mapper-editor, spellchecker, logging, Windows UI, array helper, and legacy mapping
+APIs no public in-repo plugin calls.
 
 ## How to extend this audit
 
