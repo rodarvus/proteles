@@ -168,7 +168,8 @@ replaced by native panels.
 
 `OnPluginInstall` ✅ · `OnPluginConnect`/`OnPluginDisconnect` ✅ ·
 `OnPluginBroadcast` ✅ · `OnPluginSaveState` ✅ (fired; host persists vars) ·
-`OnPluginListChanged` ⬜ · `OnPluginEnable`/`OnPluginDisable` ⬜ ·
+`OnPluginListChanged` ✅ · `OnPluginDisable` ✅ (before shim plugin unload) ·
+`OnPluginEnable` ⬜ (Proteles has no disabled-but-loaded shim state yet) ·
 `OnPluginTelnetSubnegotiation` ✅ (native GMCP usually makes it unnecessary).
 
 ### Module loading & helper libraries

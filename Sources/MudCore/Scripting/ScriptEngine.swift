@@ -31,6 +31,9 @@ public actor ScriptEngine {
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
     var loadedPluginIDs: [String] = []
+    /// Guard for `OnPluginListChanged`, matching MUSHclient's non-recursive
+    /// broadcast. Plugins may mutate the plugin list from that callback.
+    var firingPluginListChanged = false
     /// Trigger/alias/timer id → owning plugin id, so a fired automation's
     /// script runs in its plugin's environment. Absent ⇒ a user automation
     /// (runs in the shared globals).
@@ -251,6 +254,7 @@ public actor ScriptEngine {
         aliases = AliasEngine()
         timers = TimerEngine()
         loadedPluginIDs.removeAll()
+        firingPluginListChanged = false
         automationOwners.removeAll()
         automationDirty = true
         await runtime.clearPluginEnvironments()

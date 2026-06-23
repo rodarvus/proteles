@@ -166,6 +166,17 @@ extension ScriptEngine {
         return effects
     }
 
+    /// MUSHclient notifies every loaded plugin when the plugin inventory changes
+    /// and suppresses recursive notifications. The session host calls this after
+    /// load/unload/reload boundaries rather than during raw engine mutation, so a
+    /// bulk initial load can emit one settled notification.
+    public func pluginListChanged() async -> [ScriptEffect] {
+        guard !firingPluginListChanged else { return [] }
+        firingPluginListChanged = true
+        defer { firingPluginListChanged = false }
+        return await fireCallbackOnAll("OnPluginListChanged")
+    }
+
     /// Fire `OnPluginConnect` on a **single** plugin (for a mid-session enable
     /// while already in-game — the rest of the world keeps running untouched).
     public func connectPlugin(_ id: String) async -> [ScriptEffect] {
@@ -205,6 +216,14 @@ extension ScriptEngine {
     /// so the caller can clear them from the UI.
     @discardableResult
     public func unloadPlugin(_ id: String) async -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        if loadedPluginIDs.contains(id) {
+            let raw = await runtime.callPluginCallback(id, "OnPluginDisable")
+            effects.append(contentsOf: consumeRegistrations(
+                raw,
+                owner: id
+            ))
+        }
         let ownedIDs = Set(automationOwners.filter { $0.value == id }.keys)
         for ownedID in ownedIDs {
             triggers.remove(id: ownedID)
@@ -217,10 +236,11 @@ extension ScriptEngine {
         timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
         loadedPluginIDs.removeAll { $0 == id }
         automationDirty = true
-        let windowEffects = await runtime.removeMiniWindows(ownedBy: id)
+        let windowEffects = runtime.removeMiniWindows(ownedBy: id)
         await runtime.clearPluginRegistrations(id)
         await runtime.clearPluginEnvironment(id)
-        return windowEffects
+        effects.append(contentsOf: windowEffects)
+        return effects
     }
 
     /// True when `id` names a registered native (Swift) plugin (so the host can

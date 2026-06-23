@@ -78,7 +78,13 @@ extension SessionController {
             // a native/unknown id is a no-op). Apply any window-delete effects
             // the teardown returns so its miniwindows clear from the UI.
             if let scriptEngine {
+                let hadLibraryPlugin = loadedPluginPaths[id] != nil
                 await applyScriptEffects(scriptEngine.unloadPlugin(id))
+                loadedPluginPaths[id] = nil
+                await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map(\.code.path))
+                if hadLibraryPlugin {
+                    await applyScriptEffects(scriptEngine.pluginListChanged())
+                }
             }
         case .connect:
             await connectFromScript()
@@ -149,6 +155,7 @@ extension SessionController {
             stateDirectory: dataDir
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
+        await applyScriptEffects(scriptEngine.pluginListChanged())
         await persistVariablesIfDirty()
         restartTimerLoop()
     }

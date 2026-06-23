@@ -62,6 +62,7 @@ public extension SessionController {
             await logPluginCensus(plugin, engine: scriptEngine)
         }
         loadedPluginPaths = paths
+        await applyScriptEffects(scriptEngine.pluginListChanged())
         // OnPluginInstall may have set variables; persist them.
         await persistVariablesIfDirty()
         // Plugins may have registered timers.
@@ -101,6 +102,7 @@ public extension SessionController {
         await applyScriptEffects(scriptEngine.unloadPlugin(id)) // remove its miniwindows
         loadedPluginPaths[id] = nil
         await scriptEngine.setModuleSearchPaths(loadedPluginPaths.values.map(\.code.path))
+        await applyScriptEffects(scriptEngine.pluginListChanged())
     }
 
     /// Load one library plugin into the live engine (the shared core of the bulk
@@ -132,6 +134,7 @@ public extension SessionController {
         )
         await applyScriptEffects(scriptEngine.loadPlugin(plugin, context: context))
         await logPluginCensus(plugin, engine: scriptEngine)
+        await applyScriptEffects(scriptEngine.pluginListChanged())
         if fireConnect { await applyScriptEffects(scriptEngine.connectPlugin(plugin.id)) }
     }
 

@@ -59,6 +59,31 @@ struct PluginReloadTests {
     </muclient>
     """
 
+    private let lifecyclePlugin = """
+    <muclient>
+    <plugin id="com.test.lifecycle" name="Lifecycle Test" save_state="y"/>
+    <script><![CDATA[
+    function OnPluginListChanged()
+      Send("list:" .. GetPluginID())
+    end
+    function OnPluginDisable()
+      Send("disable:" .. GetPluginID())
+    end
+    ]]></script>
+    </muclient>
+    """
+
+    private let lifecyclePeerPlugin = """
+    <muclient>
+    <plugin id="com.test.lifecycle.peer" name="Lifecycle Peer" save_state="y"/>
+    <script><![CDATA[
+    function OnPluginListChanged()
+      Send("list:" .. GetPluginID())
+    end
+    ]]></script>
+    </muclient>
+    """
+
     @Test("Unloading a plugin removes its static and dynamic automations")
     func unloadClearsOwnedAutomations() async throws {
         let parsed = try MUSHclientPluginLoader.parse(xml: plugin)
@@ -73,6 +98,36 @@ struct PluginReloadTests {
         // Neither trigger fires once unloaded.
         #expect(await engine.process(line: "ping").effects.isEmpty)
         #expect(await engine.process(line: "poke").effects.isEmpty)
+    }
+
+    @Test("Unload fires OnPluginDisable before clearing the plugin environment")
+    func unloadFiresDisableCallback() async throws {
+        let parsed = try MUSHclientPluginLoader.parse(xml: lifecyclePlugin)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(parsed)
+
+        #expect(await engine.unloadPlugin("com.test.lifecycle") == [
+            .send("disable:com.test.lifecycle")
+        ])
+    }
+
+    @Test("Plugin list changed fires once across the settled loaded plugin list")
+    func pluginListChangedBroadcastsToLoadedPlugins() async throws {
+        let first = try MUSHclientPluginLoader.parse(xml: lifecyclePlugin)
+        let second = try MUSHclientPluginLoader.parse(xml: lifecyclePeerPlugin)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(first)
+        await engine.loadPlugin(second)
+
+        #expect(await engine.pluginListChanged() == [
+            .send("list:com.test.lifecycle"),
+            .send("list:com.test.lifecycle.peer")
+        ])
+
+        await engine.unloadPlugin("com.test.lifecycle")
+        #expect(await engine.pluginListChanged() == [
+            .send("list:com.test.lifecycle.peer")
+        ])
     }
 
     @Test("Reload is idempotent — registration counts stay stable, no doubling")
