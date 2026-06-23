@@ -90,6 +90,20 @@ struct OptionsAndPluginMgmtTests {
         #expect(loggedLoad)
     }
 
+    @Test("EnablePlugin(false) and DisablePlugin route to the unload control path")
+    func disablePluginControlEffects() async throws {
+        let lua = try LuaRuntime()
+        try await lua.loadCompatShim()
+        let effects = try await lua.run("""
+        proteles.echo("self=" .. tostring(EnablePlugin(GetPluginID(), false)))
+        proteles.echo("other=" .. tostring(DisablePlugin("com.test.other")))
+        proteles.echo("enable=" .. tostring(EnablePlugin("com.test.other", true)))
+        """)
+        #expect(echoes(effects) == ["self=0", "other=0", "enable=0"])
+        #expect(effects.contains(.unloadPlugin(id: "_user")))
+        #expect(effects.contains(.unloadPlugin(id: "com.test.other")))
+    }
+
     @Test("Connect returns eWorldOpen when already connected (no effect)")
     func connectWhenOpen() async throws {
         let lua = try LuaRuntime()

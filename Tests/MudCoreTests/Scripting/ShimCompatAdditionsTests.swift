@@ -374,8 +374,8 @@ struct ShimCompatAdditionsTests {
         ])
     }
 
-    @Test("miscellaneous shell/window stubs are safe; SendPkt recognizes GMCP")
-    func miscellaneousShellStubsAndSendPktGMCP() async throws {
+    @Test("miscellaneous shell/window stubs are safe; SendPkt recognizes GMCP and Aardwolf telopts")
+    func miscellaneousShellStubsAndSendPktProtocols() async throws {
         let lua = try await shimmed()
         await lua.setOutputGeometry(width: 640, height: 480)
         let effects = try await lua.run("""
@@ -418,5 +418,6 @@ struct ShimCompatAdditionsTests {
             "telopt:true"
         ])
         #expect(effects.contains(.sendGMCP("request prompt")))
+        #expect(effects.contains(.aardwolfTelnet(option: 1, on: true)))
     }
 }

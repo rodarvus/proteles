@@ -367,12 +367,17 @@ public extension LuaRuntime {
     function GetPluginName(id)
       return proteles.pluginInfo(tostring(id or GetPluginID()), 1) or ""
     end
-    -- Plugin enable/disable + presence. We host one plugin per environment and
-    -- can't toggle another plugin from Lua, so these are benign no-ops that
-    -- report success: a plugin that disables itself on install (then `return`s)
-    -- simply proceeds, and callers wrapping the call in `check()` see eOK.
-    function EnablePlugin(id, flag) return error_code.eOK end
-    function DisablePlugin(id) return error_code.eOK end
+    -- Plugin enable/disable + presence. Enabling is a success no-op (plugins are
+    -- added through the Library), but disabling maps to the existing runtime
+    -- unload path so guard code like EnablePlugin(GetPluginID(), false) really
+    -- tears down the plugin's env/automations after the current script returns.
+    local function __pluginFlagOn(flag) return not (flag == false or flag == nil or flag == 0) end
+    function EnablePlugin(id, flag)
+      local key = tostring(id or GetPluginID())
+      if not __pluginFlagOn(flag) then proteles.unloadPlugin(key) end
+      return error_code.eOK
+    end
+    function DisablePlugin(id) return EnablePlugin(id, false) end
     -- True for the caller itself, any LOADED shim plugin, and the natively-
     -- bridged ids (GMCP handler, chat capture, mapper, S&D when attached) —
     -- plugins gate whole features on these (campaign mode checks for S&D).
@@ -458,6 +463,13 @@ public extension LuaRuntime {
     function SendPkt(packet)
       packet = tostring(packet or "")
       local bytes = { string.byte(packet, 1, -1) }
+      if #bytes == 7 and bytes[1] == 255 and bytes[2] == 250 and bytes[3] == 102 and
+          bytes[6] == 255 and bytes[7] == 240 then
+        if bytes[5] == 1 or bytes[5] == 2 then
+          proteles.aardwolfTelnet(bytes[4], bytes[5] == 1)
+        end
+        return error_code.eOK
+      end
       if #bytes >= 5 and bytes[1] == 255 and bytes[2] == 250 and bytes[3] == 201 and
           bytes[#bytes - 1] == 255 and bytes[#bytes] == 240 then
         local payload = {}

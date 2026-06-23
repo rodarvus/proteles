@@ -111,7 +111,8 @@ family is the main remaining cluster.
   `command_stack_character=";"`, and `output_font_name` (live, host-pushed).
 - **Plugin management — ✅ SHIPPED** (2026-06-20): `GetPluginList`/`PluginSupports`
   (host queries over the loaded-plugin set), `UnloadPlugin`/`Connect` (control
-  effects — unload a shim plugin / re-open the last connection), and `LoadPlugin`
+  effects — unload a shim plugin / re-open the last connection),
+  `EnablePlugin(id, false)`/`DisablePlugin` (route to unload), and `LoadPlugin`
   (a logged no-op: runtime file-load is the Plugin Library's job). See the
   per-command reference comparison in the session notes for the exact divergences.
 - **Display-control compatibility stubs — ✅ SHIPPED** (2026-06-22):
@@ -125,8 +126,9 @@ family is the main remaining cluster.
   in-memory text stores; selection currently reports MUSHclient's no-selection
   value (`0`).
 - **Miscellaneous shell/window/raw-packet calls — ✅ SHIPPED** (2026-06-22):
-  `SendPkt` recognizes raw GMCP `IAC SB 201 ... IAC SE` packets and routes them
-  to the native GMCP sender; Aardwolf telopt/raw packets are accepted as no-ops.
+  `SendPkt` recognizes raw GMCP `IAC SB 201 ... IAC SE` packets and Aardwolf
+  option-102 telopts, routing them to the native GMCP/telopt senders. Other raw
+  telnet packet shapes are accepted as no-ops.
   `GetWorldID`, `GetWorld`, `Open`, `Activate`, `Save`, `Pause`, `GetCommand`,
   `SetCommandWindowHeight`, `SetCommandSelection`, `ExportXML`, `DoCommand`,
   `DeleteOutput`, `Debug`, and `GetSystemMetrics` return safe defaults.

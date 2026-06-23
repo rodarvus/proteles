@@ -144,8 +144,9 @@ replaced by native panels.
 | `CallPlugin` | ✅ | per-plugin call routing — routes to native plugins (GMCP handler, mapper, Chat Capture) by id and forwards results; reports `eOK` |
 | `BroadcastPlugin` / `OnPluginBroadcast` | ✅ | pub/sub; native GMCP is bridged in as the GMCP-handler's broadcast |
 | `IsConnected` | ✅ | live connection state |
+| `EnablePlugin` / `DisablePlugin` | 🟡 | disabling unloads the named shim plugin; enabling succeeds but Plugin Library ownership remains native |
 | `Send_GMCP_Packet` | ✅ | frames `IAC SB 201 … IAC SE` |
-| `SendPkt` | 🟡 | recognizes raw GMCP packets and routes them through the native GMCP sender; other raw telnet packets are accepted as no-ops |
+| `SendPkt` | 🟡 | recognizes raw GMCP packets and Aardwolf option-102 telopts; other raw telnet packets are accepted as no-ops |
 | `Trim` | ✅ | |
 | trigger/alias/timer **introspection** | ✅ | `GetTriggerInfo`/`GetAliasInfo`/`GetTimerInfo`, the `*List` calls, option getters |
 | group **delete** | ✅ | `DeleteTriggerGroup`/`DeleteAliasGroup`/`DeleteTimerGroup` (0.8.5) |
