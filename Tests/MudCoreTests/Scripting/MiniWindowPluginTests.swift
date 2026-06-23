@@ -125,7 +125,7 @@ struct MiniWindowPluginTests {
         function onDown(flags, id)
           Send("pointer=" .. tostring(WindowInfo("w", 14)) .. "," .. tostring(WindowInfo("w", 15)) .. "," ..
             tostring(WindowInfo("w", 17)) .. "," .. tostring(WindowInfo("w", 18)) .. "," ..
-            tostring(WindowInfo("w", 19)))
+            tostring(WindowInfo("w", 19)) .. "," .. tostring(WindowInfo("w", 20)))
         end
         ]]></script>
         </muclient>
@@ -157,6 +157,6 @@ struct MiniWindowPluginTests {
             [.number(0), .string("h")],
             event: event
         )
-        #expect(callbackEffects.contains(.send("pointer=7,8,7,8,h")))
+        #expect(callbackEffects.contains(.send("pointer=7,8,7,8,h,h")))
     }
 }

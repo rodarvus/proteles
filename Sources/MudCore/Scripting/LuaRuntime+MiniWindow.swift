@@ -302,7 +302,7 @@ extension LuaRuntime {
         if let value = miniWindowBoundsInfoValue(scene, info) { return value }
         if let value = miniWindowPointerInfoValue(miniWindowPointerStates[name], info) { return value }
         switch info {
-        case 20: return .number(Double(scene.zOrder))
+        case 22: return .number(Double(scene.zOrder))
         case 23: return .string(scene.pluginID)
         default: return .nil
         }
@@ -315,9 +315,10 @@ extension LuaRuntime {
         case 3: .number(Double(scene.width))
         case 4: .number(Double(scene.height))
         case 5: .boolean(scene.visible)
-        case 6: .number(Double(scene.position))
-        case 7: .number(Double(scene.flags))
-        case 8: .number(Double(scene.backgroundColour))
+        case 6: .boolean(false)
+        case 7: .number(Double(scene.position))
+        case 8: .number(Double(scene.flags))
+        case 9: .number(Double(scene.backgroundColour))
         default: nil
         }
     }
@@ -341,6 +342,7 @@ extension LuaRuntime {
         case 17: .number(Double(pointer?.currentX ?? 0))
         case 18: .number(Double(pointer?.currentY ?? 0))
         case 19: .string(pointer?.hotspotID ?? "")
+        case 20: .string(pointer?.downHotspotID ?? "")
         default: nil
         }
     }
@@ -363,9 +365,9 @@ extension LuaRuntime {
     }
 
     private nonisolated func windowInfoKeys(for scene: MiniWindowScene) -> [String] {
-        var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "10", "11", "12", "13", "20", "23"]
+        var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "22", "23"]
         if miniWindowPointerStates[scene.name] != nil {
-            keys.append(contentsOf: ["14", "15", "17", "18", "19"])
+            keys.append(contentsOf: ["14", "15", "17", "18", "19", "20"])
         }
         return keys
     }
@@ -455,6 +457,7 @@ struct MiniWindowPointerState: Equatable {
     var downX: Int = 0
     var downY: Int = 0
     var hotspotID: String = ""
+    var downHotspotID: String = ""
 }
 
 extension LuaRuntime {
@@ -466,6 +469,7 @@ extension LuaRuntime {
         if event.kind == .mouseDown {
             state.downX = event.x
             state.downY = event.y
+            state.downHotspotID = event.hotspotID
         }
         miniWindowPointerStates[event.windowName] = state
     }

@@ -39,6 +39,30 @@ struct MiniWindowShimTests {
         #expect(scene?.fonts["f"]?.name == "Menlo")
     }
 
+    @Test("WindowInfo uses MUSHclient numbering for position, flags, background, and z-order")
+    func windowInfoMUSHclientNumbering() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("w", 10, 20, 200, 100, miniwin.pos_top_right, 18, 0x102030)
+        proteles.echo("initial:" .. table.concat({
+          tostring(WindowInfo("w", 5)), tostring(WindowInfo("w", 6)),
+          WindowInfo("w", 7), WindowInfo("w", 8), WindowInfo("w", 9),
+          WindowInfo("w", 10), WindowInfo("w", 11), WindowInfo("w", 12), WindowInfo("w", 13),
+          WindowInfo("w", 22)
+        }, ","))
+        WindowPosition("w", 30, 40, miniwin.pos_center_all, 2)
+        proteles.echo("moved:" .. table.concat({
+          WindowInfo("w", 1), WindowInfo("w", 2), WindowInfo("w", 7), WindowInfo("w", 8),
+          WindowInfo("w", 10), WindowInfo("w", 11), WindowInfo("w", 12), WindowInfo("w", 13)
+        }, ","))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == [
+            "initial:true,false,6,18,1056816,10,20,210,120,0",
+            "moved:30,40,12,2,30,40,230,140"
+        ])
+    }
+
     @Test("WindowText returns the measured pixel width")
     func textWidthReturned() async throws {
         let lua = try await shimmed()
