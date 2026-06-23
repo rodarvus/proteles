@@ -140,7 +140,7 @@ replaced by native panels.
 | `AnsiNote` | ✅ | renders ANSI-SGR text as styled runs (pairs with `ColoursToANSI`) |
 | `GetVariable`, `SetVariable`, `DeleteVariable` | ✅ | per-plugin scope; values coerced to strings |
 | `GetPluginVariable` | ✅ | cross-plugin reads |
-| `GetInfo(n)` | 🟡 | the path/identity/time/flag subset the corpus uses; window-geometry numbers stubbed |
+| `GetInfo(n)` | 🟡 | the path/identity/time/flag subset the corpus uses; live output size (`280/281`) and text-rectangle geometry (`272-279`, `282`, `290-293`) |
 | `GetPluginID` | ✅ | |
 | `GetPluginInfo(id, n)` | 🟡 | loaded-plugin and native-bridge identity/enabled fields the corpus uses |
 | `CallPlugin` | ✅ | per-plugin call routing — routes to native plugins (GMCP handler, mapper, Chat Capture) by id and forwards results; reports `eOK` |
@@ -159,7 +159,7 @@ replaced by native panels.
 | `AddTriggerEx`, `AddAlias`, `AddTimer` (programmatic) | ✅ | runtime registration through the shim → `ScriptEngine` (alongside declarative XML); recurring `AddTimer` fires repeatedly |
 | notepad APIs | 🟡 | `AppendToNotepad`/`ReplaceNotepad`/`GetNotepad*`/list/save/read-only calls are an in-memory text store, not separate windows |
 | selection APIs | 🟡 | `GetSelection*` reports MUSHclient's no-selection value (`0`); `SetSelection` is accepted as a no-op |
-| display/window control calls | 🟡 | `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `TextRectangle`, `SetBackgroundImage`, `PickColour`, `NoteHr`, and shell/window probe calls are safe stubs/defaults |
+| display/window control calls | 🟡 | `TextRectangle` records queryable geometry; `Repaint`, `Redraw`, `AddFont`, `SetScroll`, `SetCursor`, `SetBackgroundImage`, `PickColour`, `NoteHr`, and shell/window probe calls are safe stubs/defaults |
 | `WindowCreate` and the `Window*` miniwindow family | 🟡 | the basic window API draws via native rendering; list/info queries cover window/font/image/hotspot state, while advanced transform/filter/window-image calls remain stubbed (see Known gaps) |
 | `luacom` / ActiveX / DLL loading | ❌ | Windows-only; out of scope |
 | raw `socket` / `ssl` TLS | ❌ | not exposed to plugins (sandboxing) |

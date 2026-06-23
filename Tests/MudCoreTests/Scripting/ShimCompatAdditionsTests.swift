@@ -313,6 +313,10 @@ struct ShimCompatAdditionsTests {
         proteles.echo("setscroll:" .. tostring(SetScroll(-1, true) == error_code.eOK))
         proteles.echo("setcursor:" .. tostring(SetCursor(0) == error_code.eOK))
         proteles.echo("textrect:" .. tostring(TextRectangle(1, 2, 3, 4, 0, 0, 0, 0, 0) == error_code.eOK))
+        proteles.echo("textrect-info:" .. table.concat({
+          GetInfo(272), GetInfo(273), GetInfo(274), GetInfo(275),
+          GetInfo(276), GetInfo(282), GetInfo(277), GetInfo(278), GetInfo(279)
+        }, ","))
         proteles.echo("background:" .. tostring(SetBackgroundImage("x.png", 0) == error_code.eOK))
         proteles.echo("pick:" .. tostring(PickColour(255)))
         proteles.echo("pickcancel:" .. tostring(PickColour(nil)))
@@ -326,6 +330,7 @@ struct ShimCompatAdditionsTests {
             "setscroll:true",
             "setcursor:true",
             "textrect:true",
+            "textrect-info:1,2,3,4,0,0,0,0,0",
             "background:true",
             "pick:255",
             "pickcancel:-1",

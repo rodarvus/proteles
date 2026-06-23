@@ -281,7 +281,54 @@ public extension LuaRuntime {
     function GetPluginVariableList(id) return proteles.varList(id) end
 
     -- Introspection ---------------------------------------------------------
-    function GetInfo(n) return proteles.info(n) end
+    __proteles_text_rectangle = __proteles_text_rectangle or {
+      left = 0, top = 0, right = 0, bottom = 0,
+      borderOffset = 0, borderColour = 0, borderWidth = 0,
+      outsideFillColour = 0, outsideFillStyle = 0,
+    }
+    local function __text_rectangle_info(code)
+      if code == 272 then return __proteles_text_rectangle.left end
+      if code == 273 then return __proteles_text_rectangle.top end
+      if code == 274 then return __proteles_text_rectangle.right end
+      if code == 275 then return __proteles_text_rectangle.bottom end
+      if code == 276 then return __proteles_text_rectangle.borderOffset end
+      if code == 277 then return __proteles_text_rectangle.borderWidth end
+      if code == 278 then return __proteles_text_rectangle.outsideFillColour end
+      if code == 279 then return __proteles_text_rectangle.outsideFillStyle end
+      if code == 282 then return __proteles_text_rectangle.borderColour end
+      return nil
+    end
+    local function __actual_text_rectangle_info(code)
+      if code < 290 or code > 293 then return nil end
+      local left = __proteles_text_rectangle.left
+      local top = __proteles_text_rectangle.top
+      local right = __proteles_text_rectangle.right
+      local bottom = __proteles_text_rectangle.bottom
+      if left == 0 and top == 0 and right == 0 and bottom == 0 then
+        left, top, right, bottom = 0, 0, GetInfo(281) or 0, GetInfo(280) or 0
+      else
+        if right <= 0 then right = math.max(right + (GetInfo(281) or 0), left + 20) end
+        if bottom <= 0 then bottom = math.max(bottom + (GetInfo(280) or 0), top + 20) end
+      end
+      local borderOffset = __proteles_text_rectangle.borderOffset
+      left = left - borderOffset
+      top = top - borderOffset
+      right = right + borderOffset
+      bottom = bottom + borderOffset
+      if code == 290 then return left end
+      if code == 291 then return top end
+      if code == 292 then return right end
+      return bottom
+    end
+    function GetInfo(n)
+      local code = tonumber(n)
+      if code == nil then return nil end
+      local textRectangle = __text_rectangle_info(code)
+      if textRectangle ~= nil then return textRectangle end
+      local actualTextRectangle = __actual_text_rectangle_info(code)
+      if actualTextRectangle ~= nil then return actualTextRectangle end
+      return proteles.info(code)
+    end
     function GetPluginID() return proteles.pluginID() end
     function IsConnected() return proteles.isConnected() end
     -- WorldName(): the current world's name (GetInfo(2)); defaults to the only

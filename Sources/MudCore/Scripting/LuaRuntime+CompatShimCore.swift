@@ -304,6 +304,15 @@ extension LuaRuntime {
     function TextRectangle(
       left, top, right, bottom, borderOffset, borderColour, borderWidth, fillColour, fillStyle
     )
+      __proteles_text_rectangle.left = tonumber(left) or 0
+      __proteles_text_rectangle.top = tonumber(top) or 0
+      __proteles_text_rectangle.right = tonumber(right) or 0
+      __proteles_text_rectangle.bottom = tonumber(bottom) or 0
+      __proteles_text_rectangle.borderOffset = tonumber(borderOffset) or 0
+      __proteles_text_rectangle.borderColour = tonumber(borderColour) or 0
+      __proteles_text_rectangle.borderWidth = tonumber(borderWidth) or 0
+      __proteles_text_rectangle.outsideFillColour = tonumber(fillColour) or 0
+      __proteles_text_rectangle.outsideFillStyle = tonumber(fillStyle) or 0
       return error_code.eOK
     end
     function SetBackgroundImage(filename, mode) return error_code.eOK end
