@@ -5,10 +5,10 @@ import Foundation
 /// ``LuaRuntime/loadCompatShim()`` after the core shim. See
 /// `docs/plans/MINIWINDOW_FEASIBILITY.md` and `LuaRuntime+MiniWindow`.
 ///
-/// Functions that MUSHclient defines but the spike doesn't model (filters, blend
-/// modes, affine transforms, off-screen image capture, file export) are present
-/// as benign eOK stubs so a plugin that calls them loads and runs rather than
-/// erroring on a nil global — the Phase-5 "fidelity tail" of the plan.
+/// Functions that MUSHclient defines but the spike doesn't model yet (merge
+/// image alpha, affine transforms, image creation) are present as benign eOK
+/// stubs so a plugin that calls them loads and runs rather than erroring on a
+/// nil global — the Phase-5 "fidelity tail" of the plan.
 extension LuaRuntime {
     nonisolated static let miniWindowShimSource = #"""
     local proteles = proteles
@@ -51,6 +51,24 @@ extension LuaRuntime {
       -- image draw modes / merge modes
       image_copy = 1, image_stretch = 2, image_transparent_copy = 3,
       merge_straight = 0, merge_transparent = 1,
+      blend_normal = 1, blend_average = 2, blend_interpolate = 3, blend_dissolve = 4,
+      blend_darken = 5, blend_multiply = 6, blend_colour_burn = 7, blend_linear_burn = 8,
+      blend_inverse_colour_burn = 9, blend_subtract = 10, blend_lighten = 11, blend_screen = 12,
+      blend_colour_dodge = 13, blend_linear_dodge = 14, blend_inverse_colour_dodge = 15,
+      blend_add = 16, blend_overlay = 17, blend_soft_light = 18, blend_hard_light = 19,
+      blend_vivid_light = 20, blend_linear_light = 21, blend_pin_light = 22,
+      blend_hard_mix = 23, blend_difference = 24, blend_exclusion = 25,
+      -- filters
+      filter_noise = 1, filter_monochrome_noise = 2, filter_blur = 3,
+      filter_sharpen = 4, filter_find_edges = 5, filter_emboss = 6,
+      filter_brightness = 7, filter_contrast = 8, filter_gamma = 9,
+      filter_red_brightness = 10, filter_red_contrast = 11, filter_red_gamma = 12,
+      filter_green_brightness = 13, filter_green_contrast = 14, filter_green_gamma = 15,
+      filter_blue_brightness = 16, filter_blue_contrast = 17, filter_blue_gamma = 18,
+      filter_grayscale = 19, filter_normal_grayscale = 20, filter_brightness_multiply = 21,
+      filter_red_brightness_multiply = 22, filter_green_brightness_multiply = 23,
+      filter_blue_brightness_multiply = 24, filter_lesser_blur = 25, filter_minor_blur = 26,
+      filter_average = 27,
       -- cursors
       cursor_none = -1, cursor_arrow = 0, cursor_hand = 1, cursor_ibeam = 2,
       cursor_plus = 3, cursor_wait = 4, cursor_up = 5, cursor_nw_se_arrow = 6,
@@ -120,16 +138,16 @@ extension LuaRuntime {
     end
     function WindowDrawImage(...) proteles.windowDrawImage(...); return eOK end
     function WindowDrawImageAlpha(name, id, l, t, r, b, opacity, sl, st)
-      proteles.windowDrawImage(name, id, l, t, r, b, miniwin.image_copy, sl, st, 0, 0); return eOK
+      proteles.windowDrawImage(name, id, l, t, r, b, miniwin.image_copy, sl, st, 0, 0, opacity); return eOK
     end
     function WindowBlendImage(name, id, l, t, r, b, mode, opacity, sl, st, sr, sb)
-      proteles.windowDrawImage(name, id, l, t, r, b, mode, sl, st, sr, sb); return eOK
+      proteles.windowDrawImage(name, id, l, t, r, b, mode, sl, st, sr, sb, opacity); return eOK
     end
     function WindowImageInfo(...) return proteles.windowImageInfo(...) end
 
     -- Phase-5 tail (benign stubs so callers don't hit a nil global) ----------
     function WindowSetZOrder(name, z) proteles.windowSetZOrder(name, z); return eOK end
-    function WindowFilter(...) return eOK end
+    function WindowFilter(...) proteles.windowFilter(...); return eOK end
     function WindowMergeImageAlpha(...) return eOK end
     function WindowTransformImage(...) return eOK end
     function WindowImageFromWindow(...) return proteles.windowImageFromWindow(...) end

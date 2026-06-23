@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 @testable import MudCore
 import Testing
 
@@ -156,6 +158,97 @@ struct MiniWindowShimTests {
         #expect(!FileManager.default.fileExists(atPath: outside.path))
     }
 
+    @Test("WindowWrite replays loaded image draws into exported pixels")
+    func windowWriteReplaysLoadedImageDraws() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.png")
+        let output = directory.appendingPathComponent("drawn.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let sourcePath = Self.luaString(source.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("source", 0, 0, 2, 2, 0, 0, 0)
+        WindowSetPixel("source", 0, 0, 0x0000ff)
+        WindowSetPixel("source", 1, 0, 0x00ff00)
+        WindowSetPixel("source", 0, 1, 0xff0000)
+        WindowSetPixel("source", 1, 1, 0xffffff)
+        proteles.echo("source:" .. tostring(WindowWrite("source", "\(sourcePath)")))
+        WindowCreate("dest", 0, 0, 4, 4, 0, 0, 0)
+        WindowLoadImage("dest", "img", "\(sourcePath)")
+        WindowDrawImage("dest", "img", 1, 1, 0, 0, miniwin.image_copy)
+        proteles.echo("drawn:" .. tostring(WindowWrite("dest", "\(outputPath)")))
+        WindowLoadImage("dest", "roundtrip", "\(outputPath)")
+        proteles.echo("size:" .. tostring(WindowImageInfo("dest", "roundtrip", 2)) .. "x" ..
+          tostring(WindowImageInfo("dest", "roundtrip", 3)))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["source:0", "drawn:0", "size:4x4"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 1, y: 1) == .init(red: 255, green: 0, blue: 0))
+        #expect(pixels.colour(atX: 2, y: 1) == .init(red: 0, green: 255, blue: 0))
+        #expect(pixels.colour(atX: 1, y: 2) == .init(red: 0, green: 0, blue: 255))
+        #expect(pixels.colour(atX: 2, y: 2) == .init(red: 255, green: 255, blue: 255))
+    }
+
+    @Test("WindowImageFromWindow capture can be drawn and filtered before export")
+    func capturedWindowImageDrawsAndFilters() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("capture.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("source", 0, 0, 2, 1, 0, 0, 0x0a0a0a)
+        WindowSetPixel("source", 1, 0, 0x0000ff)
+        WindowCreate("dest", 0, 0, 3, 2, 0, 0, 0x000000)
+        proteles.echo("capture:" .. tostring(WindowImageFromWindow("dest", "snap", "source")))
+        WindowDrawImage("dest", "snap", 0, 0, 0, 0, miniwin.image_copy)
+        WindowFilter("dest", 0, 0, 1, 1, miniwin.filter_brightness, 20)
+        proteles.echo("write:" .. tostring(WindowWrite("dest", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["capture:0", "write:0"])
+        let pixels = try Self.pngPixels(output)
+        #expect(pixels.colour(atX: 0, y: 0) == .init(red: 30, green: 30, blue: 30))
+        #expect(pixels.colour(atX: 1, y: 0) == .init(red: 255, green: 0, blue: 0))
+    }
+
+    @Test("WindowBlendImage passes opacity into exported image composition")
+    func windowBlendImageOpacityAffectsExportedPixels() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("red.png")
+        let output = directory.appendingPathComponent("blend.png")
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(directory.path)
+        let sourcePath = Self.luaString(source.path)
+        let outputPath = Self.luaString(output.path)
+        let effects = try await lua.run("""
+        WindowCreate("source", 0, 0, 1, 1, 0, 0, 0)
+        WindowSetPixel("source", 0, 0, 0x0000ff)
+        proteles.echo("source:" .. tostring(WindowWrite("source", "\(sourcePath)")))
+        WindowCreate("dest", 0, 0, 1, 1, 0, 0, 0xff0000)
+        WindowLoadImage("dest", "red", "\(sourcePath)")
+        WindowBlendImage("dest", "red", 0, 0, 0, 0, miniwin.blend_normal, 0.5)
+        proteles.echo("blend:" .. tostring(WindowWrite("dest", "\(outputPath)")))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["source:0", "blend:0"])
+        let colour = try Self.pngPixels(output).colour(atX: 0, y: 0)
+        #expect((120...135).contains(colour.red))
+        #expect(colour.green == 0)
+        #expect((120...135).contains(colour.blue))
+    }
+
     @Test("WindowHotspotInfo reports callbacks and drag metadata")
     func windowHotspotInfoCallbacksAndDragMetadata() async throws {
         let lua = try await shimmed()
@@ -276,5 +369,49 @@ struct MiniWindowShimTests {
         value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    private static func pngPixels(_ url: URL) throws -> TestPixels {
+        let data = try Data(contentsOf: url)
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { throw TestImageError.decodeFailed }
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        guard let context = CGContext(
+            data: &bytes,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: image.width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { throw TestImageError.decodeFailed }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return TestPixels(width: image.width, bytes: bytes)
+    }
+
+    private struct TestPixels {
+        var width: Int
+        var bytes: [UInt8]
+
+        func colour(atX x: Int, y: Int) -> TestColour {
+            let index = (y * width + x) * 4
+            return TestColour(
+                red: Int(bytes[index]),
+                green: Int(bytes[index + 1]),
+                blue: Int(bytes[index + 2])
+            )
+        }
+    }
+
+    private struct TestColour: Equatable {
+        var red: Int
+        var green: Int
+        var blue: Int
+    }
+
+    private enum TestImageError: Error {
+        case decodeFailed
     }
 }

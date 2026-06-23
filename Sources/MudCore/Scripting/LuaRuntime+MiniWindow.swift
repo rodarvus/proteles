@@ -45,7 +45,7 @@ extension LuaRuntime {
             .windowDrawImage
         ),
         ("windowImageInfo", .windowImageInfo), ("windowImageFromWindow", .windowImageFromWindow),
-        ("windowWrite", .windowWrite),
+        ("windowWrite", .windowWrite), ("windowFilter", .windowFilter),
         ("windowCircleOp", .windowCircleOp),
         ("windowGradient", .windowGradient), ("windowPolygon", .windowPolygon), ("windowArc", .windowArc),
         ("windowBezier", .windowBezier)
@@ -61,7 +61,8 @@ extension LuaRuntime {
              .windowFontList, .windowImageList, .windowHotspotList, .windowAddHotspot, .windowDeleteHotspot,
              .windowDeleteAllHotspots, .windowMoveHotspot, .windowHotspotInfo, .windowDragHandler,
              .windowScrollwheelHandler, .windowMenu, .windowLoadImage, .windowDrawImage,
-             .windowImageInfo, .windowImageFromWindow, .windowWrite, .windowCircleOp, .windowGradient,
+             .windowImageInfo, .windowImageFromWindow, .windowWrite, .windowFilter, .windowCircleOp,
+             .windowGradient,
              .windowPolygon, .windowArc, .windowBezier:
             return miniWindowCall(function, arguments)
         default:
@@ -78,6 +79,7 @@ extension LuaRuntime {
         let owned = miniWindows.filter { $0.value.pluginID == pluginID }.keys.sorted()
         for name in owned {
             miniWindows[name] = nil
+            miniWindowImageData[name] = nil
             miniWindowsDirty.remove(name)
             miniWindowFramePainted.remove(name)
         }
@@ -212,6 +214,7 @@ extension LuaRuntime {
 
     private nonisolated func deleteMiniWindow(_ name: String) {
         guard miniWindows.removeValue(forKey: name) != nil else { return }
+        miniWindowImageData[name] = nil
         miniWindowsDirty.remove(name)
         miniWindowFramePainted.remove(name)
         effects.append(.deleteMiniWindow(name: name))

@@ -191,6 +191,8 @@ public enum MiniWindowCommand: Sendable, Equatable {
         imageID: String, left: Int, top: Int, right: Int, bottom: Int,
         mode: Int, opacity: Double, srcLeft: Int, srcTop: Int, srcRight: Int, srcBottom: Int
     )
+    /// `WindowFilter(left, top, right, bottom, operation, options)`.
+    case filter(left: Int, top: Int, right: Int, bottom: Int, operation: Int, options: Double)
 }
 
 /// A complete miniwindow: its geometry/placement/flags plus the retained scene

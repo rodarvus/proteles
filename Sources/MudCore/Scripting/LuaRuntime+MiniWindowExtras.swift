@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 import ImageIO
 
@@ -32,11 +31,34 @@ extension LuaRuntime {
     private nonisolated func miniWindowImageOrShapeCall(
         _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
     ) -> [LuaValue] {
+        if let result = miniWindowImageCall(function, name, arguments) {
+            return result
+        }
+        miniWindowShapeCall(function, name, arguments)
+        return []
+    }
+
+    private nonisolated func miniWindowImageCall(
+        _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
+    ) -> [LuaValue]? {
         switch function {
-        case .windowLoadImage: loadMiniWindowImage(name, arguments)
-        case .windowDrawImage: appendImageDraw(name, arguments)
+        case .windowLoadImage:
+            loadMiniWindowImage(name, arguments)
+        case .windowDrawImage:
+            appendImageDraw(name, arguments)
         case .windowImageInfo: return [miniWindowImageInfoValue(name, arguments)]
         case .windowImageFromWindow: return [captureMiniWindowImage(name, arguments)]
+        case .windowFilter:
+            appendFilter(name, arguments)
+        default: return nil
+        }
+        return []
+    }
+
+    private nonisolated func miniWindowShapeCall(
+        _ function: HostFunction, _ name: String, _ arguments: [LuaValue]
+    ) {
+        switch function {
         case .windowCircleOp: appendCircleOp(name, arguments)
         case .windowGradient: appendGradient(name, arguments)
         case .windowPolygon: appendPolygon(name, arguments)
@@ -44,7 +66,6 @@ extension LuaRuntime {
         case .windowBezier: appendBezier(name, arguments)
         default: break
         }
-        return []
     }
 
     // MARK: - Phase 2: hotspots (implemented in this phase)
@@ -183,16 +204,15 @@ extension LuaRuntime {
             : readFileData(source)
         guard let data, !data.isEmpty else { return }
         let metadata = Self.imageMetadata(id: imageID, data: data)
+        miniWindowImageData[name, default: [:]][imageID] = data
         updateMiniWindow(name) { scene in
             scene.images[imageID] = metadata
         }
         effects.append(.loadMiniWindowImage(pluginID: pluginContext.pluginID, imageID: imageID, data: data))
     }
 
-    /// `WindowImageFromWindow(dest, imageID, source)` — MUSHclient captures a
-    /// miniwindow bitmap into an image. Proteles records the captured image's
-    /// metadata so package layout code can query/list it; full raster replay is
-    /// still a renderer-side compatibility gap.
+    /// `WindowImageFromWindow(dest, imageID, source)` — capture a miniwindow
+    /// bitmap into a drawable image.
     private nonisolated func captureMiniWindowImage(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
         let imageID = Self.argString(arguments, 1)
         let sourceName = Self.argString(arguments, 2)
@@ -200,6 +220,9 @@ extension LuaRuntime {
             return .number(30073)
         }
         guard !imageID.isEmpty else { return .number(0) }
+        if let data = miniWindowPNGData(source) {
+            miniWindowImageData[name, default: [:]][imageID] = data
+        }
         updateMiniWindow(name) { scene in
             scene.images[imageID] = MiniWindowImageInfo(
                 id: imageID,
@@ -208,141 +231,6 @@ extension LuaRuntime {
             )
         }
         return .number(0)
-    }
-
-    /// `WindowWrite(name, filename)` — export a simple raster snapshot of the
-    /// retained scene. The snapshot currently reflects the miniwindow's
-    /// background plus explicit `WindowSetPixel` calls; advanced filters/blends
-    /// remain visual-only compatibility gaps.
-    private nonisolated func writeMiniWindowImage(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
-        guard let scene = miniWindows[name] else { return .number(30073) }
-        let path = Self.argString(arguments, 1).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return .number(30003) }
-        guard path.count >= 5 else { return .number(30046) }
-        let lowercased = path.lowercased()
-        guard scene.width > 0, scene.height > 0 else { return .number(30046) }
-
-        let data: Data?
-        if lowercased.hasSuffix(".png") {
-            data = miniWindowPNGData(scene)
-        } else if lowercased.hasSuffix(".bmp") {
-            data = miniWindowBMPData(scene)
-        } else {
-            return .number(30046)
-        }
-        guard let data, writeFileDataAllowed(path, data) else { return .number(30013) }
-        return .number(0)
-    }
-
-    private nonisolated func miniWindowPNGData(_ scene: MiniWindowScene) -> Data? {
-        let rgba = miniWindowRGBABytes(scene)
-        let providerData = Data(rgba) as CFData
-        guard
-            let provider = CGDataProvider(data: providerData),
-            let image = CGImage(
-                width: scene.width,
-                height: scene.height,
-                bitsPerComponent: 8,
-                bitsPerPixel: 32,
-                bytesPerRow: scene.width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                provider: provider,
-                decode: nil,
-                shouldInterpolate: false,
-                intent: .defaultIntent
-            )
-        else { return nil }
-        let data = NSMutableData()
-        guard
-            let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
-        else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
-    }
-
-    private nonisolated func miniWindowBMPData(_ scene: MiniWindowScene) -> Data {
-        let rowBytes = ((scene.width * 3) + 3) & ~3
-        let pixelBytes = rowBytes * scene.height
-        var data = Data()
-        appendLE16(0x4D42, to: &data)
-        appendLE32(UInt32(14 + 40 + pixelBytes), to: &data)
-        appendLE16(0, to: &data)
-        appendLE16(0, to: &data)
-        appendLE32(54, to: &data)
-        appendLE32(40, to: &data)
-        appendLE32(UInt32(scene.width), to: &data)
-        appendLE32(UInt32(scene.height), to: &data)
-        appendLE16(1, to: &data)
-        appendLE16(24, to: &data)
-        appendLE32(0, to: &data)
-        appendLE32(UInt32(pixelBytes), to: &data)
-        appendLE32(0, to: &data)
-        appendLE32(0, to: &data)
-        appendLE32(0, to: &data)
-        appendLE32(0, to: &data)
-
-        let pixels = miniWindowBGRRows(scene)
-        let padding = [UInt8](repeating: 0, count: rowBytes - scene.width * 3)
-        for y in stride(from: scene.height - 1, through: 0, by: -1) {
-            data.append(contentsOf: pixels[y])
-            data.append(contentsOf: padding)
-        }
-        return data
-    }
-
-    private nonisolated func miniWindowRGBABytes(_ scene: MiniWindowScene) -> [UInt8] {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(scene.width * scene.height * 4)
-        for row in miniWindowBGRRows(scene) {
-            for index in stride(from: 0, to: row.count, by: 3) {
-                bytes.append(row[index + 2])
-                bytes.append(row[index + 1])
-                bytes.append(row[index])
-                bytes.append(255)
-            }
-        }
-        return bytes
-    }
-
-    private nonisolated func miniWindowBGRRows(_ scene: MiniWindowScene) -> [[UInt8]] {
-        let background = Self.bgrBytes(scene.backgroundColour)
-        var rows = Array(
-            repeating: Array(repeating: background, count: scene.width),
-            count: scene.height
-        )
-        for (pixel, colour) in scene.pixels {
-            guard pixel.x >= 0, pixel.y >= 0, pixel.x < scene.width, pixel.y < scene.height else { continue }
-            rows[pixel.y][pixel.x] = Self.bgrBytes(colour)
-        }
-        return rows.map { row in
-            var bytes: [UInt8] = []
-            bytes.reserveCapacity(scene.width * 3)
-            for pixel in row {
-                bytes.append(contentsOf: pixel)
-            }
-            return bytes
-        }
-    }
-
-    private nonisolated static func bgrBytes(_ colour: Int) -> [UInt8] {
-        [
-            UInt8(clamping: colour & 0xFF),
-            UInt8(clamping: (colour >> 8) & 0xFF),
-            UInt8(clamping: (colour >> 16) & 0xFF)
-        ]
-    }
-
-    private nonisolated func appendLE16(_ value: UInt16, to data: inout Data) {
-        data.append(UInt8(value & 0xFF))
-        data.append(UInt8((value >> 8) & 0xFF))
-    }
-
-    private nonisolated func appendLE32(_ value: UInt32, to data: inout Data) {
-        data.append(UInt8(value & 0xFF))
-        data.append(UInt8((value >> 8) & 0xFF))
-        data.append(UInt8((value >> 16) & 0xFF))
-        data.append(UInt8((value >> 24) & 0xFF))
     }
 
     private nonisolated func miniWindowImageInfoValue(_ name: String, _ arguments: [LuaValue]) -> LuaValue {
@@ -375,11 +263,22 @@ extension LuaRuntime {
             right: Int(Self.argDouble(arguments, 4)),
             bottom: Int(Self.argDouble(arguments, 5)),
             mode: arguments.count > 6 ? Int(Self.argDouble(arguments, 6)) : 1,
-            opacity: 1,
+            opacity: Self.clampedOpacity(arguments.count > 11 ? Self.argDouble(arguments, 11) : 1),
             srcLeft: Int(Self.argDouble(arguments, 7)),
             srcTop: Int(Self.argDouble(arguments, 8)),
             srcRight: Int(Self.argDouble(arguments, 9)),
             srcBottom: Int(Self.argDouble(arguments, 10))
+        ))
+    }
+
+    private nonisolated func appendFilter(_ name: String, _ arguments: [LuaValue]) {
+        appendMiniWindowCommand(name, .filter(
+            left: Int(Self.argDouble(arguments, 1)),
+            top: Int(Self.argDouble(arguments, 2)),
+            right: Int(Self.argDouble(arguments, 3)),
+            bottom: Int(Self.argDouble(arguments, 4)),
+            operation: Int(Self.argDouble(arguments, 5)),
+            options: Self.argDouble(arguments, 6)
         ))
     }
 

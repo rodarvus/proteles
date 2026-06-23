@@ -243,6 +243,10 @@ public actor LuaRuntime {
     /// across runs — geometry/flags/fonts survive between draw passes — and
     /// flushed to `.updateMiniWindow` effects at the end of each run/callback.
     nonisolated(unsafe) var miniWindows: [String: MiniWindowScene] = [:]
+    /// Loaded/captured miniwindow image bytes, keyed by window then image id.
+    /// Scenes keep only metadata; these bytes are needed for synchronous
+    /// `WindowWrite` snapshots and `WindowImageFromWindow` captures.
+    nonisolated(unsafe) var miniWindowImageData: [String: [String: Data]] = [:]
     /// Windows whose scene changed this run; flushed (one effect each) at run end.
     nonisolated(unsafe) var miniWindowsDirty: Set<String> = []
     /// Windows whose current frame has begun this run — the first draw/hotspot
