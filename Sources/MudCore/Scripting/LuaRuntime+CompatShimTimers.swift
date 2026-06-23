@@ -558,10 +558,6 @@ extension LuaRuntime {
     function InfoColour(name) return error_code.eOK end
     function InfoBackground(name) return error_code.eOK end
     function InfoFont(name, size, style) return error_code.eOK end
-    -- NoteStyle(style): sets bold/underline/etc. for subsequent Note output in
-    -- MUSHclient. We don't carry per-note style state generically, so accept +
-    -- ignore (a no-op) so style-setting plugins run; the text still prints.
-    function NoteStyle(style) return error_code.eOK end
     -- OpenBrowser(url): open a URL in the user's browser. MUSHclient hands the
     -- string straight to ShellExecute; here we (1) restrict to web schemes
     -- (http/https/mailto) so a plugin can't launch arbitrary handlers, and (2)

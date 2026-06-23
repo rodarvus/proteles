@@ -47,6 +47,8 @@ That does **not** mean Proteles implements every MUSHclient feature. The
 remaining compatibility story is qualitative:
 
 - Core text/trigger/GMCP/SQLite/plugin-management APIs are functional.
+- Note output supports named colours, hex colours, ANSI-SGR, and MUSHclient's
+  active `NoteStyle` mask for bold/underline/italic/reverse/strikethrough.
 - Basic miniwindows draw natively; advanced image/filter/transform operations
   are accepted/stubbed or partial.
 - MUSHclient notepad APIs are an in-memory text store, not separate windows.

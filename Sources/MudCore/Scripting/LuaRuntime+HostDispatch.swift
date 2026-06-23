@@ -16,8 +16,9 @@ extension LuaRuntime {
     nonisolated func invokeHostFunction(id: Int32, arguments: [LuaValue]) -> [LuaValue] {
         guard let function = HostFunction(rawValue: id) else { return [] }
         switch function {
-        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi, .colourNote,
-             .hyperlink, .mapperCall, .chatCapture, .publish, .enableTrigger, .enableTimer, .enableGroup,
+        case .send, .sendNoEcho, .execute, .echo, .note, .sendGMCP, .echoAard, .echoAnsi,
+             .colourNote, .styledColourNote, .hyperlink, .mapperCall, .chatCapture,
+             .publish, .enableTrigger, .enableTimer, .enableGroup,
              .doAfter, .addTrigger, .addAlias, .setTriggerGroup, .setTriggerOption, .removeTrigger,
              .removeAlias,
              .enableAlias, .reloadPlugin, .aardwolfTelnet, .accelerator, .http, .notify, .button,
@@ -521,6 +522,7 @@ extension LuaRuntime {
                 background: Self.argOptionalString(arguments, 2)
             ))
         case .colourNote: effects.append(.colourNote(Self.noteSegments(arguments)))
+        case .styledColourNote: effects.append(.colourNote(Self.styledNoteSegments(arguments)))
         case .hyperlink:
             // proteles.hyperlink(text, action, hint?) → a one-segment clickable
             // line. The action string is interpreted like MUSHclient's
@@ -557,6 +559,23 @@ extension LuaRuntime {
             let text = arguments[index + 2].stringValue ?? ""
             segments.append(NoteSegment(text: text, foreground: fore, background: back))
             index += 3
+        }
+        return segments
+    }
+
+    /// Internal shim call used by `NoteStyle`: `(fore, back, text, style)` tuples.
+    /// Kept separate from public `ColourNote` triples so valid multi-triple
+    /// output can never be misparsed as styled output.
+    nonisolated static func styledNoteSegments(_ arguments: [LuaValue]) -> [NoteSegment] {
+        var segments: [NoteSegment] = []
+        var index = 0
+        while index + 4 <= arguments.count {
+            let fore = nonEmpty(arguments[index].stringValue)
+            let back = nonEmpty(arguments[index + 1].stringValue)
+            let text = arguments[index + 2].stringValue ?? ""
+            let style = Int(arguments[index + 3].numberValue ?? 0)
+            segments.append(NoteSegment(text: text, foreground: fore, background: back, noteStyle: style))
+            index += 4
         }
         return segments
     }

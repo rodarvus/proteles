@@ -140,14 +140,13 @@ struct PluginTimerCancelTests {
         #expect(try await lua.number("IsTimer('m2')") == 0) // kept
     }
 
-    @Test("EnablePlugin / DisablePlugin / IsPluginInstalled are benign (return eOK / self)")
+    @Test("EnablePlugin / DisablePlugin / IsPluginInstalled return eOK and unload disabled plugins")
     func pluginControlStubs() async throws {
         let lua = try await shimmed()
-        // A self-disable on install (then return) must not error.
         let effects = try await lua.run(
             "check(EnablePlugin(GetPluginID(), false)); check(DisablePlugin(GetPluginID()))"
         )
-        #expect(effects.isEmpty) // no outward effects, no Lua error
+        #expect(effects == [.unloadPlugin(id: "_user"), .unloadPlugin(id: "_user")])
         #expect(try await lua.boolean("IsPluginInstalled(GetPluginID())") == true)
         #expect(try await lua.boolean("IsPluginInstalled('someone_else')") == false)
     }

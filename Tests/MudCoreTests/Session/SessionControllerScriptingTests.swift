@@ -149,6 +149,19 @@ struct SessionControllerScriptingTests {
         #expect(line.runs[1].style.background == .rgb(red: 0x00, green: 0x00, blue: 0xFF))
     }
 
+    @Test("ColourNote applies MUSHclient NoteStyle bits to styled runs")
+    func colourNoteAppliesNoteStyleBits() {
+        let line = SessionController.colourNoteLine([
+            NoteSegment(text: "styled", foreground: "red", background: nil, noteStyle: 0x2F)
+        ])
+        #expect(line.runs.count == 1)
+        #expect(line.runs[0].style.bold)
+        #expect(line.runs[0].style.underline)
+        #expect(line.runs[0].style.italic)
+        #expect(line.runs[0].style.reverse)
+        #expect(line.runs[0].style.strikethrough)
+    }
+
     @Test("ColourNote resolves #RRGGBB hex colours to RGB runs")
     func colourNoteHexColour() {
         let line = SessionController.colourNoteLine([

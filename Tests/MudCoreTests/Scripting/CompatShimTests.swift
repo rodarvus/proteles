@@ -71,6 +71,38 @@ struct CompatShimTests {
         ])])
     }
 
+    @Test("NoteStyle applies to subsequent Note, ColourTell, and ColourNote segments")
+    func noteStyleAppliesToOutputSegments() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        NoteStyle(3)
+        Note("bold underline")
+        ColourTell("red", "", "red ")
+        NoteStyle(4)
+        ColourNote("cyan", "", "italic")
+        NoteStyle(0)
+        Note("plain")
+        """)
+        #expect(effects == [
+            .colourNote([NoteSegment(text: "bold underline", noteStyle: 3)]),
+            .colourNote([
+                NoteSegment(text: "red ", foreground: "red", background: nil, noteStyle: 3),
+                NoteSegment(text: "italic", foreground: "cyan", background: nil, noteStyle: 4)
+            ]),
+            .echo("plain")
+        ])
+    }
+
+    @Test("GetNoteStyle returns MUSHclient TEXT_STYLE-masked bits")
+    func getNoteStyle() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        NoteStyle(255)
+        proteles.echo(tostring(GetNoteStyle()))
+        """)
+        #expect(effects == [.echo("47")])
+    }
+
     @Test("ColourTell cells carry their colour into the flushed line (leveldb rows)")
     func colourTellCarriesColour() async throws {
         let lua = try await shimmed()

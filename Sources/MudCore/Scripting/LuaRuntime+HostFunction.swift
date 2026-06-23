@@ -31,7 +31,7 @@ extension LuaRuntime {
         case jsonDecode
         case jsonEncode
         case echoAard, echoAnsi, simulate
-        case colourNote, hyperlink, mapperCall, chatCapture
+        case colourNote, styledColourNote, hyperlink, mapperCall, chatCapture
         case colourNameToRGB, rgbColourToName, adjustColour
         case createGUID, uniqueID
         case lineCount, linesInBuffer, lineInfo, styleInfo, recentLines

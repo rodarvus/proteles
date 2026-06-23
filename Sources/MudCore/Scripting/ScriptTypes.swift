@@ -424,6 +424,9 @@ public struct NoteSegment: Sendable, Equatable {
     public let text: String
     public let foreground: String?
     public let background: String?
+    /// MUSHclient NoteStyle bits (HILITE/UNDERLINE/BLINK/INVERSE/STRIKEOUT).
+    /// Zero means no note-specific style.
+    public let noteStyle: Int
     /// Makes the segment a clickable hyperlink (native `proteles.hyperlink`
     /// and the MUSHclient `Hyperlink` shim build linked segments).
     public let link: LineLink?
@@ -432,11 +435,13 @@ public struct NoteSegment: Sendable, Equatable {
         text: String,
         foreground: String? = nil,
         background: String? = nil,
+        noteStyle: Int = 0,
         link: LineLink? = nil
     ) {
         self.text = text
         self.foreground = foreground
         self.background = background
+        self.noteStyle = noteStyle
         self.link = link
     }
 }

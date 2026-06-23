@@ -43,7 +43,8 @@ the end.
   `module(..., package.seeall)` remains plugin-local.
 - **Literal MUSHclient note colours** — `ColourNote("red", ...)` uses
   MUSHclient's bright named-colour table while server ANSI colours remain
-  theme-driven.
+  theme-driven; `NoteStyle`/`GetNoteStyle` apply MUSHclient's note-style bits
+  to `Note`, `ColourNote`, and `ColourTell` output.
 - **Compatibility stubs/models for visual package helpers** — display-control,
   notepad, selection, raw-GMCP `SendPkt`, and shell/window probe calls now exist
   so package helpers do not fail on nil globals.
@@ -133,8 +134,9 @@ replaced by native panels.
 |---|---|---|
 | `Send`, `SendNoEcho`, `Execute` | ✅ | → `proteles.send`/`sendNoEcho`/`execute` |
 | `Note` | ✅ | → `proteles.echo` |
-| `ColourNote`, `ColourTell` | ✅ | full multi-colour: each `(fore, back, text)` triple renders as its own styled run; colour names + `#RRGGBB` |
+| `ColourNote`, `ColourTell` | ✅ | full multi-colour: each `(fore, back, text)` triple renders as its own styled run; colour names + `#RRGGBB`; honors active `NoteStyle` bits |
 | `Tell` | 🟡 | text only (no inline newline suppression); colours via `ColourTell` |
+| `NoteStyle`, `GetNoteStyle` | ✅ | stores the active MUSHclient note-style mask; applies bold, underline, italic, reverse, and strikethrough to note output |
 | `AnsiNote` | ✅ | renders ANSI-SGR text as styled runs (pairs with `ColoursToANSI`) |
 | `GetVariable`, `SetVariable`, `DeleteVariable` | ✅ | per-plugin scope; values coerced to strings |
 | `GetPluginVariable` | ✅ | cross-plugin reads |

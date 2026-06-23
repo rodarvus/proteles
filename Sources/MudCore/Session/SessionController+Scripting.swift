@@ -475,6 +475,7 @@ public extension SessionController {
             var style = StyleAttributes.default
             if let fg = segment.foreground, let color = namedColor(fg) { style.foreground = color }
             if let bg = segment.background, let color = namedColor(bg) { style.background = color }
+            applyNoteStyle(segment.noteStyle, to: &style)
             // A run is needed for a non-default style *or* a hyperlink (which
             // may sit on otherwise-default text).
             if !style.isDefault || segment.link != nil, start < end {
@@ -510,5 +511,16 @@ public extension SessionController {
             green: UInt8((value >> 8) & 0xFF),
             blue: UInt8(value & 0xFF)
         )
+    }
+
+    /// MUSHclient `NoteStyle` bits: HILITE=1, UNDERLINE=2, BLINK=4 (italic),
+    /// INVERSE=8, STRIKEOUT=32. These are the `TEXT_STYLE` bits accepted by the
+    /// reference's `NoteStyle(style)`.
+    internal static func applyNoteStyle(_ noteStyle: Int, to style: inout StyleAttributes) {
+        style.bold = style.bold || (noteStyle & 0x01) != 0
+        style.underline = style.underline || (noteStyle & 0x02) != 0
+        style.italic = style.italic || (noteStyle & 0x04) != 0
+        style.reverse = style.reverse || (noteStyle & 0x08) != 0
+        style.strikethrough = style.strikethrough || (noteStyle & 0x20) != 0
     }
 }

@@ -20,6 +20,7 @@ public extension LuaRuntime {
     /// standard helper libraries for `require`. Idempotent.
     func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
+        _ = try run(Self.compatShimOutputSource)
         _ = try run(Self.automationShimSource)
         _ = try run(Self.utilsShimSource)
         _ = try run(Self.ioShimSource)
@@ -121,75 +122,6 @@ public extension LuaRuntime {
     }
     error_desc = error_desc or {}
 
-    -- Output ----------------------------------------------------------------
-    -- Tell/ColourTell APPEND coloured segments to `__pending`; Note/ColourNote/
-    -- AnsiNote/print FLUSH them as one line — a ColourTell row keeps its colours.
-    local __pending = {}
-    -- Flush `__pending` + `extra` ({fg,bg,text} array) as one colourNote line.
-    local function __flush(extra)
-      local segs = __pending; __pending = {}
-      if extra then for i = 1, #extra do segs[#segs + 1] = extra[i] end end
-      local flat, k = {}, 0
-      for i = 1, #segs do flat[k+1], flat[k+2], flat[k+3] = segs[i][1], segs[i][2], segs[i][3]; k = k + 3 end
-      proteles.colourNote(unpack(flat, 1, k))
-    end
-    -- Append one coloured cell, honouring embedded newlines: a newline in the
-    -- text COMPLETES the current line (flushes `__pending` as one colourNote) and
-    -- starts a fresh one — matching MUSHclient, where a newline in Tell/ColourTell
-    -- text breaks the line. Without this, a plugin that builds a table with
-    -- ColourTell and ends on a trailing-newline cell (no terminating Note — a very
-    -- common idiom, e.g. a list/messages table) accumulated the WHOLE table in
-    -- `__pending` and never emitted it, so its output vanished (it only surfaced
-    -- later, prepended to the next ColourNote that happened to flush).
-    local function __appendCell(fore, back, text)
-      fore = fore == nil and "" or tostring(fore)
-      back = back == nil and "" or tostring(back)
-      text = text == nil and "" or tostring(text)
-      local start = 1
-      while true do
-        local nl = text:find("\\n", start, true)
-        if not nl then
-          local rest = text:sub(start)
-          if rest ~= "" then __pending[#__pending + 1] = { fore, back, rest } end
-          return
-        end
-        local chunk = text:sub(start, nl - 1)
-        if chunk ~= "" then __pending[#__pending + 1] = { fore, back, chunk } end
-        __flush() -- emit everything up to (not including) the newline as one line
-        start = nl + 1
-      end
-    end
-    function Tell(text) __appendCell("", "", text) end
-    function ColourTell(...) -- buffer each triple as a coloured cell (newline-aware)
-      local a, n = {...}, select("#", ...)
-      for b = 1, n, 3 do __appendCell(a[b], a[b + 1], a[b + 2]) end
-    end
-    function Note(text)
-      text = text == nil and "" or tostring(text)
-      if #__pending == 0 then proteles.echo(text)
-      else __flush({ { "", "", text } }) end
-    end
-    -- ColourNote(fore, back, text, ...): each triple → a styled cell, after pending.
-    function ColourNote(...)
-      local a, n = {...}, select("#", ...)
-      local extra = {}
-      for b = 1, n, 3 do
-        extra[#extra + 1] = {
-          a[b]     == nil and "" or tostring(a[b]),
-          a[b + 1] == nil and "" or tostring(a[b + 1]),
-          a[b + 2] == nil and "" or tostring(a[b + 2]),
-        }
-      end
-      __flush(extra)
-    end
-    -- Render ANSI-SGR text in colour. A pending tag prefix is flattened to its
-    -- text (a coloured prefix + an ANSI body can't share one effect).
-    function AnsiNote(text)
-      local prefix = ""
-      for i = 1, #__pending do prefix = prefix .. __pending[i][3] end
-      __pending = {}
-      proteles.echoAnsi(prefix .. (text == nil and "" or tostring(text)))
-    end
     -- GetNormalColour(n)/GetBoldColour(n): the world's ANSI colour n as a BGR int,
     -- matching MUSHColour (Swift) so a trigger's styles[i].textcolour compares.
     -- ONE-BASED like MUSHclient (methods_colours.cpp: bounds 1..8, [n-1] lookup,
@@ -246,7 +178,7 @@ public extension LuaRuntime {
     -- (action: URL → opens browser, else sent as a command). A pending prefix is
     -- flushed first; inline composition with Tell/Note isn't supported.
     function Hyperlink(action, text, hint)
-      if #__pending > 0 then __flush(nil) end
+      __proteles_flush_pending()
       proteles.hyperlink(tostring(text or ""), tostring(action or ""), hint and tostring(hint) or nil)
       return error_code.eOK
     end

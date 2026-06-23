@@ -402,6 +402,7 @@ public actor LuaRuntime {
         setHostFunction("echoAnsi", .echoAnsi)
         setHostFunction("simulate", .simulate)
         setHostFunction("colourNote", .colourNote)
+        setHostFunction("styledColourNote", .styledColourNote)
         setHostFunction("hyperlink", .hyperlink)
         setHostFunction("mapperCall", .mapperCall)
         setHostFunction("chatCapture", .chatCapture)
