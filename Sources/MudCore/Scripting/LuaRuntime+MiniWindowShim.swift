@@ -128,7 +128,7 @@ extension LuaRuntime {
     function WindowImageInfo(...) return proteles.windowImageInfo(...) end
 
     -- Phase-5 tail (benign stubs so callers don't hit a nil global) ----------
-    function WindowSetZOrder(name, z) return eOK end
+    function WindowSetZOrder(name, z) proteles.windowSetZOrder(name, z); return eOK end
     function WindowFilter(...) return eOK end
     function WindowMergeImageAlpha(...) return eOK end
     function WindowTransformImage(...) return eOK end

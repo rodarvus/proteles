@@ -63,6 +63,19 @@ struct MiniWindowShimTests {
         ])
     }
 
+    @Test("WindowSetZOrder updates WindowInfo slot 22")
+    func windowSetZOrderUpdatesInfoSlot() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        WindowCreate("w", 0, 0, 100, 100, 0, 0, 0)
+        proteles.echo("before:" .. tostring(WindowInfo("w", 22)))
+        proteles.echo("set:" .. tostring(WindowSetZOrder("w", 12345)))
+        proteles.echo("after:" .. tostring(WindowInfo("w", 22)))
+        """)
+        let echoes = effects.compactMap { if case .echo(let text) = $0 { text } else { nil } }
+        #expect(echoes == ["before:0", "set:0", "after:12345"])
+    }
+
     @Test("WindowHotspotInfo reports callbacks and drag metadata")
     func windowHotspotInfoCallbacksAndDragMetadata() async throws {
         let lua = try await shimmed()

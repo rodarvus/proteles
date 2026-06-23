@@ -29,7 +29,8 @@ extension LuaRuntime {
     /// `proteles.window*` name → host-function id (the registration table).
     private nonisolated static let miniWindowHostFunctions: [(String, HostFunction)] = [
         ("windowCreate", .windowCreate), ("windowShow", .windowShow), ("windowDelete", .windowDelete),
-        ("windowResize", .windowResize), ("windowPosition", .windowPosition), ("windowRectOp", .windowRectOp),
+        ("windowResize", .windowResize), ("windowPosition", .windowPosition),
+        ("windowSetZOrder", .windowSetZOrder), ("windowRectOp", .windowRectOp),
         ("windowText", .windowText), ("windowLine", .windowLine), ("windowSetPixel", .windowSetPixel),
         ("windowFont", .windowFont), ("windowTextWidth", .windowTextWidth), ("windowInfo", .windowInfo),
         ("windowFontInfo", .windowFontInfo), ("windowList", .windowList), ("windowInfoList", .windowInfoList),
@@ -51,7 +52,7 @@ extension LuaRuntime {
     /// miniwindow surface; anything else is an event-bus/RPC registration.
     nonisolated func miniWindowOrRegister(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         switch function {
-        case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition,
+        case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition, .windowSetZOrder,
              .windowRectOp, .windowText, .windowLine, .windowSetPixel, .windowFont,
              .windowTextWidth, .windowInfo, .windowFontInfo, .windowList, .windowInfoList,
              .windowFontList, .windowImageList, .windowHotspotList, .windowAddHotspot, .windowDeleteHotspot,
@@ -103,7 +104,8 @@ extension LuaRuntime {
     nonisolated func miniWindowCall(_ function: HostFunction, _ arguments: [LuaValue]) -> [LuaValue] {
         let name = Self.argString(arguments, 0)
         switch function {
-        case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition, .windowFont:
+        case .windowCreate, .windowShow, .windowDelete, .windowResize, .windowPosition, .windowSetZOrder,
+             .windowFont:
             miniWindowLifecycle(function, name, arguments)
             return []
         case .windowRectOp, .windowLine, .windowSetPixel:
@@ -129,6 +131,7 @@ extension LuaRuntime {
         case .windowDelete: deleteMiniWindow(name)
         case .windowResize: resizeMiniWindow(name, arguments)
         case .windowPosition: positionMiniWindow(name, arguments)
+        case .windowSetZOrder: setMiniWindowZOrder(name, arguments)
         default: registerMiniWindowFont(name, arguments) // .windowFont
         }
     }
@@ -223,6 +226,12 @@ extension LuaRuntime {
             $0.top = Int(Self.argDouble(arguments, 2))
             $0.position = Int(Self.argDouble(arguments, 3))
             if arguments.count > 4 { $0.flags = Int(Self.argDouble(arguments, 4)) }
+        }
+    }
+
+    private nonisolated func setMiniWindowZOrder(_ name: String, _ arguments: [LuaValue]) {
+        updateMiniWindow(name) {
+            $0.zOrder = Int(Self.argDouble(arguments, 1))
         }
     }
 
