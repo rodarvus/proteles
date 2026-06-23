@@ -249,7 +249,7 @@ extension LuaRuntime {
         }
     }
 
-    private nonisolated static func imageMetadata(id: String, data: Data) -> MiniWindowImageInfo {
+    nonisolated static func imageMetadata(id: String, data: Data) -> MiniWindowImageInfo {
         guard
             let source = CGImageSourceCreateWithData(data as CFData, nil),
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]

@@ -224,11 +224,50 @@ extension LuaRuntime {
     }
 
     private nonisolated func resizeMiniWindow(_ name: String, _ arguments: [LuaValue]) {
-        updateMiniWindow(name) {
-            $0.width = max(0, Int(Self.argDouble(arguments, 1)))
-            $0.height = max(0, Int(Self.argDouble(arguments, 2)))
-            $0.backgroundColour = Int(Self.argDouble(arguments, 3))
+        let width = max(0, Int(Self.argDouble(arguments, 1)))
+        let height = max(0, Int(Self.argDouble(arguments, 2)))
+        let background = Int(Self.argDouble(arguments, 3))
+        guard var scene = miniWindows[name] else { return }
+        guard width != scene.width || height != scene.height else { return }
+
+        let snapshot = resizeSnapshot(for: scene)
+        scene.width = width
+        scene.height = height
+        scene.backgroundColour = background
+        if let snapshot {
+            scene.images[snapshot.image.id] = snapshot.image
+            scene.commands = [snapshot.command]
+        } else {
+            scene.commands.removeAll(keepingCapacity: true)
         }
+        scene.pixels.removeAll(keepingCapacity: true)
+        miniWindows[name] = scene
+        miniWindowFramePainted.insert(name)
+        miniWindowsDirty.insert(name)
+    }
+
+    private nonisolated func resizeSnapshot(for scene: MiniWindowScene) -> MiniWindowResizeSnapshot? {
+        guard scene.width > 0, scene.height > 0, let data = miniWindowPNGData(scene) else { return nil }
+        let imageID = "__proteles_resize_snapshot"
+        miniWindowImageData[scene.name, default: [:]][imageID] = data
+        let image = Self.imageMetadata(id: imageID, data: data)
+        effects.append(.loadMiniWindowImage(pluginID: scene.pluginID, imageID: imageID, data: data))
+        return MiniWindowResizeSnapshot(
+            image: image,
+            command: .image(
+                imageID: imageID,
+                left: 0,
+                top: 0,
+                right: scene.width,
+                bottom: scene.height,
+                mode: 1,
+                opacity: 1,
+                srcLeft: 0,
+                srcTop: 0,
+                srcRight: 0,
+                srcBottom: 0
+            )
+        )
     }
 
     private nonisolated func positionMiniWindow(_ name: String, _ arguments: [LuaValue]) {
@@ -533,6 +572,11 @@ struct MiniWindowPointerState: Equatable {
     var downY: Int = 0
     var hotspotID: String = ""
     var downHotspotID: String = ""
+}
+
+private struct MiniWindowResizeSnapshot {
+    let image: MiniWindowImageInfo
+    let command: MiniWindowCommand
 }
 
 extension LuaRuntime {

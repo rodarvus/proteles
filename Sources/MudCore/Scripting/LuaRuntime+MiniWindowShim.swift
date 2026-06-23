@@ -89,24 +89,24 @@ extension LuaRuntime {
     }
 
     -- Lifecycle --------------------------------------------------------------
-    function WindowCreate(...) return proteles.windowCreate(...) end
-    function WindowDelete(...) return proteles.windowDelete(...) end
-    function WindowResize(...) return proteles.windowResize(...) end
-    function WindowPosition(...) return proteles.windowPosition(...) end
+    function WindowCreate(...) proteles.windowCreate(...); return eOK end
+    function WindowDelete(...) proteles.windowDelete(...); return eOK end
+    function WindowResize(...) proteles.windowResize(...); return eOK end
+    function WindowPosition(...) proteles.windowPosition(...); return eOK end
     function WindowShow(name, show)
       proteles.windowShow(name, not (show == false or show == nil or show == 0))
       return eOK
     end
 
     -- Drawing ----------------------------------------------------------------
-    function WindowRectOp(...) return proteles.windowRectOp(...) end
-    function WindowCircleOp(...) return proteles.windowCircleOp(...) end
-    function WindowLine(...) return proteles.windowLine(...) end
+    function WindowRectOp(...) proteles.windowRectOp(...); return eOK end
+    function WindowCircleOp(...) proteles.windowCircleOp(...); return eOK end
+    function WindowLine(...) proteles.windowLine(...); return eOK end
     function WindowSetPixel(...) proteles.windowSetPixel(...); return eOK end
-    function WindowGradient(...) return proteles.windowGradient(...) end
-    function WindowPolygon(...) return proteles.windowPolygon(...) end
-    function WindowArc(...) return proteles.windowArc(...) end
-    function WindowBezier(...) return proteles.windowBezier(...) end
+    function WindowGradient(...) proteles.windowGradient(...); return eOK end
+    function WindowPolygon(...) proteles.windowPolygon(...); return eOK end
+    function WindowArc(...) proteles.windowArc(...); return eOK end
+    function WindowBezier(...) proteles.windowBezier(...); return eOK end
 
     -- Text + fonts (return a value) -----------------------------------------
     function WindowFont(...) proteles.windowFont(...); return eOK end
