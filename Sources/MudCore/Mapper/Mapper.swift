@@ -18,6 +18,12 @@ import Logging
 /// should send (e.g. `"request area"` when a room's area name isn't known
 /// yet), keeping the actor free of networking.
 public actor Mapper {
+    struct PendingCexit {
+        var from: String
+        var dir: String
+        var destination: String?
+    }
+
     // `var` so the per-character overlay can be attached once the character is
     // known (``attachPersonalStore(at:)``, D-111); otherwise immutable.
     var store: MapperStore
@@ -101,11 +107,12 @@ public actor Mapper {
     private var requestedAreas: Set<String> = []
 
     /// A `mapper cexit <dir>` in progress: the room we left + the command used.
-    /// Resolved by sampling the current room after ``cexitDelaySeconds`` (the
-    /// reference's run-and-sample custom_exit, BASE_CEXIT_DELAY = 2). The
-    /// generation token lets a later cexit supersede a still-pending one.
-    var pendingCexit: (from: String, dir: String)?
-    private var cexitGeneration = 0
+    /// We capture the first new room reached by the command, then finalize it
+    /// after ``cexitDelaySeconds``. That preserves the reference's confirmation
+    /// delay without letting later automation poison the destination sample.
+    /// The generation token lets a later cexit supersede a still-pending one.
+    var pendingCexit: PendingCexit?
+    var cexitGeneration = 0
 
     /// How long to wait for a custom-exit move to land before sampling the
     /// destination room (reference BASE_CEXIT_DELAY).
@@ -138,47 +145,6 @@ public actor Mapper {
     /// re-establishes position.
     func clearCurrentRoom() {
         currentRoomUID = nil
-    }
-
-    /// Arm the timed sampling for an in-flight `mapper cexit`. Returns the
-    /// generation so the caller can schedule the finalize.
-    func beginPendingCexit(from: String, dir: String) -> Int {
-        cexitGeneration += 1
-        pendingCexit = (from: from, dir: dir)
-        return cexitGeneration
-    }
-
-    /// Sample the current room ``cexitDelaySeconds`` after a `mapper cexit`:
-    /// if we moved to a new mappable room, the link is CONFIRMED and stored;
-    /// otherwise it FAILED. Mirrors the reference's wait-then-sample. A stale
-    /// generation (a newer cexit started) is ignored.
-    func finalizeCexit(generation: Int) {
-        guard generation == cexitGeneration, let pending = pendingCexit else { return }
-        pendingCexit = nil
-        guard let dest = currentRoomUID else {
-            emitNote("CEXIT FAILED: Need to know where we ended up.")
-            return
-        }
-        if dest == "-1" {
-            emitNote("CEXIT FAILED: You cannot link custom exits to unmappable rooms.")
-            return
-        }
-        if dest == pending.from {
-            emitNote("CEXIT FAILED: Custom Exit \(pending.dir) leads back here!")
-            return
-        }
-        persist("custom exit") { try store.addCustomExit(
-            dir: pending.dir,
-            from: pending.from,
-            to: dest,
-            level: 0
-        ) }
-        if var room = graph[pending.from] {
-            room.exits[pending.dir] = Exit(dir: pending.dir, to: dest)
-            graph[pending.from] = room
-        }
-        reloadGraphAndPublish()
-        emitNote("Custom Exit CONFIRMED: \(pending.from) (\(pending.dir)) -> \(dest)")
     }
 
     /// Layout subscribers (the map panel). Each gets a fresh ``MapLayout``
@@ -391,6 +357,7 @@ public actor Mapper {
         let uid = Self.uid(for: info)
         let previousRoomUID = currentRoomUID
         currentRoomUID = uid
+        capturePendingCexitDestination(uid)
 
         // Overland tracking (reference: got_gmcp_room's current_room_is_cont).
         // Rooms are still recorded below — only the fan-out *drawing* halts.

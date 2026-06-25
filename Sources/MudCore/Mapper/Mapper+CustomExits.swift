@@ -6,6 +6,57 @@ import Foundation
 /// `change_cexit_delay`). The `cexit`/`fullcexit` create flows and the
 /// `purge cexits` confirm live in Mapper+ExitCommands.
 extension Mapper {
+    /// Arm the timed sampling for an in-flight `mapper cexit`. Returns the
+    /// generation so the caller can schedule the finalize.
+    func beginPendingCexit(from: String, dir: String) -> Int {
+        cexitGeneration += 1
+        pendingCexit = PendingCexit(from: from, dir: dir, destination: nil)
+        return cexitGeneration
+    }
+
+    /// Sample the captured landing after a `mapper cexit`: if we moved to a new
+    /// mappable room, the link is CONFIRMED and stored; otherwise it FAILED.
+    /// A stale generation (a newer cexit started) is ignored.
+    func finalizeCexit(generation: Int) {
+        guard generation == cexitGeneration, let pending = pendingCexit else { return }
+        pendingCexit = nil
+        let dest = pending.destination ?? currentRoomUID
+        guard let dest else {
+            emitNote("CEXIT FAILED: Need to know where we ended up.")
+            return
+        }
+        if dest == "-1" {
+            emitNote("CEXIT FAILED: You cannot link custom exits to unmappable rooms.")
+            return
+        }
+        if dest == pending.from {
+            emitNote("CEXIT FAILED: Custom Exit \(pending.dir) leads back here!")
+            return
+        }
+        persist("custom exit") { try store.addCustomExit(
+            dir: pending.dir,
+            from: pending.from,
+            to: dest,
+            level: 0
+        ) }
+        if var room = graph[pending.from] {
+            room.exits[pending.dir] = Exit(dir: pending.dir, to: dest)
+            graph[pending.from] = room
+        }
+        reloadGraphAndPublish()
+        emitNote("Custom Exit CONFIRMED: \(pending.from) (\(pending.dir)) -> \(dest)")
+    }
+
+    /// While a `mapper cexit` is armed, remember the first room change it
+    /// caused. The delayed finalizer uses this captured landing instead of the
+    /// current room at finalization time, because combat/search automation can
+    /// legitimately resume walking before the confirmation timer fires.
+    func capturePendingCexitDestination(_ uid: String) {
+        guard var pending = pendingCexit, pending.destination == nil, uid != pending.from else { return }
+        pending.destination = uid
+        pendingCexit = pending
+    }
+
     /// `mapper cexits [here|thisroom|<area>]` (reference `custom_exit_list`): a
     /// bordered, clickable table of custom (non-cardinal, non-portal) exits.
     func listCustomExits(_ arg: String) -> [ScriptEffect] {
