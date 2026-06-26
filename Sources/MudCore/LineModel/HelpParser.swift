@@ -42,6 +42,11 @@ public struct HelpArticle: Sendable, Equatable {
 /// `{helpbody}`/`{/helpbody}` are whole-line markers (dropped); `{helpkeywords}`
 /// is an inline prefix on the keyword line (stripped, keywords linkified).
 public enum HelpParser {
+    private struct LinkRange {
+        var range: Range<Int>
+        var link: LineLink
+    }
+
     /// If `text` opens a help block, whether it's a `help search` block;
     /// `nil` when `text` isn't an opening help tag.
     public static func openTag(_ text: String) -> Bool? {
@@ -75,6 +80,13 @@ public enum HelpParser {
         pattern: "[A-Za-z0-9][A-Za-z0-9'&\\-]*"
     )
 
+    /// Quoted inline references such as `'help remort'` or `"Help Combat Empathy"`.
+    /// The quotes are punctuation; the clickable span is the command inside them.
+    private static let quotedHelpRegex = try? NSRegularExpression(
+        pattern: #""(help\s+[^"]*?[^\s"])"|'(help\s+[^']*?[^\s'])'"#,
+        options: [.caseInsensitive]
+    )
+
     /// If `line` is a "Related Helps : a, b, c" line, return it with each topic
     /// marked as a `.sendCommand("help <topic>")` link (styling preserved);
     /// otherwise return it unchanged.
@@ -82,7 +94,7 @@ public enum HelpParser {
         guard line.text.trimmingCharacters(in: .whitespaces).hasPrefix(relatedPrefix),
               let topicRegex
         else { return line }
-        return buildLinkedLine(line, topicRanges: topicRanges(in: line, using: topicRegex))
+        return buildLinkedLine(line, links: helpTopicLinks(in: line, using: topicRegex))
     }
 
     /// If `line` is a "Help Keywords : X Y" line, return it with each keyword
@@ -92,7 +104,32 @@ public enum HelpParser {
         guard line.text.trimmingCharacters(in: .whitespaces).hasPrefix(keywordsPrefix),
               let keywordRegex
         else { return line }
-        return buildLinkedLine(line, topicRanges: topicRanges(in: line, using: keywordRegex))
+        return buildLinkedLine(line, links: helpTopicLinks(in: line, using: keywordRegex))
+    }
+
+    /// Turn quoted inline references like `'help death'` into clickable command
+    /// links. The quotes themselves remain plain text; only the command is linked.
+    public static func linkifyInlineHelpReferences(_ line: Line) -> Line {
+        guard let quotedHelpRegex else { return line }
+        let nsText = line.text as NSString
+        let matches = quotedHelpRegex.matches(
+            in: line.text,
+            range: NSRange(location: 0, length: nsText.length)
+        )
+        let links = matches.compactMap { match -> LinkRange? in
+            guard match.numberOfRanges >= 3 else { return nil }
+            let doubleQuoted = match.range(at: 1)
+            let singleQuoted = match.range(at: 2)
+            let range = doubleQuoted.location != NSNotFound ? doubleQuoted : singleQuoted
+            guard range.location != NSNotFound, range.length > 0 else { return nil }
+            let command = nsText.substring(with: range).trimmingCharacters(in: .whitespaces)
+            guard !command.isEmpty else { return nil }
+            return LinkRange(
+                range: range.lowerBound..<range.upperBound,
+                link: LineLink(action: .sendCommand(command), hint: command)
+            )
+        }
+        return buildLinkedLine(line, links: links)
     }
 
     /// Build the published article from accumulated body lines: drop the
@@ -104,9 +141,11 @@ public enum HelpParser {
             let trimmed = original.text.trimmingCharacters(in: .whitespaces)
             if bodyTags.contains(trimmed) { continue }
             if original.text.contains(helpKeywordsTag) {
-                lines.append(linkifyHelpKeywords(stripping(helpKeywordsTag, from: original)))
+                let linked = linkifyHelpKeywords(stripping(helpKeywordsTag, from: original))
+                lines.append(linkifyInlineHelpReferences(linked))
             } else {
-                lines.append(linkifyRelatedHelps(original))
+                let linked = linkifyRelatedHelps(original)
+                lines.append(linkifyInlineHelpReferences(linked))
             }
         }
         return HelpArticle(title: title(from: lines, isSearch: isSearch), lines: lines, isSearch: isSearch)
@@ -128,10 +167,25 @@ public enum HelpParser {
             .filter { $0.upperBound > $0.lowerBound }
     }
 
-    /// Re-slice `line` so each range in `topicRanges` becomes one
-    /// `help <topic>`-linked run, preserving the existing styling.
-    private static func buildLinkedLine(_ line: Line, topicRanges: [Range<Int>]) -> Line {
-        guard !topicRanges.isEmpty else { return line }
+    private static func helpTopicLinks(in line: Line, using regex: NSRegularExpression) -> [LinkRange] {
+        let nsText = line.text as NSString
+        return topicRanges(in: line, using: regex).map { range in
+            let topic = nsText.substring(with: NSRange(
+                location: range.lowerBound,
+                length: range.upperBound - range.lowerBound
+            ))
+            let command = "help \(topic)"
+            return LinkRange(
+                range: range,
+                link: LineLink(action: .sendCommand(command), hint: command)
+            )
+        }
+    }
+
+    /// Re-slice `line` so each supplied range becomes one linked run,
+    /// preserving existing styling and links outside those ranges.
+    private static func buildLinkedLine(_ line: Line, links: [LinkRange]) -> Line {
+        guard !links.isEmpty else { return line }
         let nsText = line.text as NSString
 
         var points: Set<Int> = [0, nsText.length]
@@ -139,9 +193,9 @@ public enum HelpParser {
             points.insert(run.utf16Range.lowerBound)
             points.insert(run.utf16Range.upperBound)
         }
-        for range in topicRanges {
-            points.insert(range.lowerBound)
-            points.insert(range.upperBound)
+        for link in links {
+            points.insert(link.range.lowerBound)
+            points.insert(link.range.upperBound)
         }
         let sorted = points.sorted()
 
@@ -149,14 +203,9 @@ public enum HelpParser {
         for index in 0..<(sorted.count - 1) {
             let start = sorted[index], end = sorted[index + 1]
             guard start < end else { continue }
-            let style = line.runs.first { $0.utf16Range.contains(start) }?.style ?? .default
-            let link = topicRanges.first { $0.contains(start) }.map { range -> LineLink in
-                let topic = nsText.substring(with: NSRange(
-                    location: range.lowerBound,
-                    length: range.upperBound - range.lowerBound
-                ))
-                return LineLink(action: .sendCommand("help \(topic)"), hint: "help \(topic)")
-            }
+            let existingRun = line.runs.first { $0.utf16Range.contains(start) }
+            let style = existingRun?.style ?? .default
+            let link = links.first { $0.range.contains(start) }?.link ?? existingRun?.link
             if !style.isDefault || link != nil {
                 runs.append(StyledRun(utf16Range: start..<end, style: style, link: link))
             }

@@ -66,6 +66,11 @@
 
     @MainActor
     public final class RenderCoordinator {
+        public enum InitialScrollPosition: Sendable {
+            case top
+            case bottom
+        }
+
         /// Optional callback fired after every flush with that frame's render
         /// telemetry (see ``RenderFrameStats``). Used by perf diagnosis (and the
         /// original validation spike) to measure timing without coupling to a
@@ -104,6 +109,7 @@
         private weak var textView: NSTextView?
         private let builder: AttributedStringBuilder
         private let frameInterval: Duration
+        private let initialScrollPosition: InitialScrollPosition
         /// Intake buffer between the off-main store subscription and the
         /// main-actor frame flush. The subscription pushes here WITHOUT hopping
         /// to the main actor per event, so a burst (e.g. resume seeding
@@ -139,12 +145,14 @@
         public init(
             textView: NSTextView,
             palette: ColorPalette = .xtermDefault,
+            initialScrollPosition: InitialScrollPosition = .bottom,
             frameInterval: Duration = .milliseconds(16)
         ) {
             self.textView = textView
             let font = textView.font
                 ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
             builder = AttributedStringBuilder(palette: palette, font: font)
+            self.initialScrollPosition = initialScrollPosition
             self.frameInterval = frameInterval
         }
 
@@ -246,7 +254,7 @@
             if recentLines.count > tailRetained {
                 recentLines.removeFirst(recentLines.count - tailRetained)
             }
-            scrollToBottom(textView)
+            scroll(textView, to: initialScrollPosition)
             refreshTail()
         }
 
@@ -444,6 +452,22 @@
                     }
                 }
             }
+        }
+
+        private func scroll(_ textView: NSTextView, to position: InitialScrollPosition) {
+            switch position {
+            case .top:
+                scrollToTop(textView)
+            case .bottom:
+                scrollToBottom(textView)
+            }
+        }
+
+        private func scrollToTop(_ textView: NSTextView) {
+            guard let scrollView = textView.enclosingScrollView else { return }
+            let origin = NSPoint(x: 0, y: 0)
+            scrollView.contentView.scroll(to: origin)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
 
         private func isScrolledToBottom(_ textView: NSTextView) -> Bool {

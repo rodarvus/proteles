@@ -130,6 +130,39 @@ struct HelpParserTests {
         #expect(!links.contains(.sendCommand("help Help")))
     }
 
+    @Test("Quoted inline help references become clickable commands")
+    func inlineQuotedHelpReferences() {
+        let text = #"The exprate wish ('help wish') and "help combat empathy" use this toggle."#
+        let result = HelpParser.linkifyInlineHelpReferences(line(text))
+        let links = result.runs.compactMap(\.link?.action)
+
+        #expect(links.contains(.sendCommand("help wish")))
+        #expect(links.contains(.sendCommand("help combat empathy")))
+        #expect(result.runs.first {
+            $0.link?.action == .sendCommand("help wish")
+        }?.utf16Range == utf16Range(of: "help wish", in: text))
+    }
+
+    @Test("Inline help references are case-insensitive but require quotes")
+    func inlineHelpRequiresQuotes() {
+        let text = #"See 'Help power up', "not a help link", and help unquoted."#
+        let result = HelpParser.linkifyInlineHelpReferences(line(text))
+        let links = result.runs.compactMap(\.link?.action)
+
+        #expect(links == [.sendCommand("Help power up")])
+    }
+
+    @Test("makeArticle applies inline help links in body text")
+    func articleAssemblyLinkifiesInlineHelp() {
+        let body = [
+            line("You lose experience by death (see 'help death').")
+        ]
+        let article = HelpParser.makeArticle(from: body, isSearch: false)
+        let links = article.lines.flatMap { $0.runs.compactMap(\.link?.action) }
+
+        #expect(links.contains(.sendCommand("help death")))
+    }
+
     @Test("Title is derived from the help keyword(s) when present")
     func titleFromKeywords() {
         let body = [

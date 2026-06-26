@@ -19,6 +19,9 @@
         /// the newest lines while scrolled up). Pointless for static content
         /// like a captured help article, so the Help window turns it off.
         private let showsLiveTail: Bool
+        /// Where the already-resident snapshot should land when this view first
+        /// attaches to its store.
+        private let initialScrollPosition: RenderCoordinator.InitialScrollPosition
         /// Per-frame render-cost probe: invoked with each flush's telemetry
         /// (paint cost + worst arrival→paint latency) so a caller can log slow
         /// text-render frames to the session transcript (perf diagnosis — see
@@ -36,6 +39,7 @@
             fontSize: CGFloat = 13,
             fontName: String = "",
             showsLiveTail: Bool = true,
+            initialScrollPosition: RenderCoordinator.InitialScrollPosition = .bottom,
             findable: Bool = false,
             onCommand: ((String) -> Void)? = nil,
             onFrameFlush: ((RenderFrameStats) -> Void)? = nil
@@ -45,6 +49,7 @@
             self.fontSize = fontSize
             self.fontName = fontName
             self.showsLiveTail = showsLiveTail
+            self.initialScrollPosition = initialScrollPosition
             self.findable = findable
             self.onCommand = onCommand
             self.onFrameFlush = onFrameFlush
@@ -94,7 +99,7 @@
             // Static content (the Help window): a plain scroll view, no live-tail
             // split — there's nothing "streaming" to mirror.
             if !showsLiveTail {
-                let coordinator = RenderCoordinator(textView: textView, palette: palette)
+                let coordinator = makeRenderCoordinator(textView: textView)
                 coordinator.onFrameFlush = onFrameFlush
                 context.coordinator.renderCoordinator = coordinator
                 let storeRef = store
@@ -131,7 +136,7 @@
                 lineHeight: lineHeight
             )
 
-            let coordinator = RenderCoordinator(textView: textView, palette: palette)
+            let coordinator = makeRenderCoordinator(textView: textView)
             coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
             coordinator.onFrameFlush = onFrameFlush
             context.coordinator.renderCoordinator = coordinator
@@ -184,6 +189,14 @@
         }
 
         // MARK: - Private
+
+        private func makeRenderCoordinator(textView: NSTextView) -> RenderCoordinator {
+            RenderCoordinator(
+                textView: textView,
+                palette: palette,
+                initialScrollPosition: initialScrollPosition
+            )
+        }
 
         private func configure(_ textView: NSTextView) {
             textView.isEditable = false

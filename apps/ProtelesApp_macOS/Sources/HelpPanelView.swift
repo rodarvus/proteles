@@ -27,6 +27,7 @@ struct HelpPanelView: View {
                     fontSize: CGFloat(outputFontSize),
                     fontName: outputFontName,
                     showsLiveTail: false,
+                    initialScrollPosition: .top,
                     onCommand: { command in model.onCommand?(command) }
                 )
                 .id(model.renderToken)

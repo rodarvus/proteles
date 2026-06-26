@@ -16,6 +16,10 @@
     @MainActor
     struct RenderCoordinatorRebuildTests {
         private func makeView() -> NSTextView? {
+            makeScrollView()?.documentView as? NSTextView
+        }
+
+        private func makeScrollView() -> NSScrollView? {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
                 styleMask: [.titled],
@@ -23,10 +27,9 @@
                 defer: false
             )
             let scrollView = NSTextView.scrollableTextView()
-            guard let textView = scrollView.documentView as? NSTextView else { return nil }
             scrollView.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
             window.contentView = scrollView
-            return textView
+            return scrollView
         }
 
         @Test("frame stats carry the live document size")
@@ -49,6 +52,27 @@
             #expect(stats.documentLines == 25)
             #expect(stats.documentUTF16Length == textView.textStorage?.length)
             #expect(stats.documentUTF16Length > 0)
+        }
+
+        @Test("initial top scroll position leaves static snapshots at the beginning")
+        func initialTopScrollPosition() async throws {
+            let scrollView = try #require(makeScrollView())
+            let textView = try #require(scrollView.documentView as? NSTextView)
+            let store = ScrollbackStore(maxLines: 300)
+            for index in 0..<180 {
+                await store.append(text: "line \(index)")
+            }
+            let coordinator = RenderCoordinator(
+                textView: textView,
+                palette: .xtermDefault,
+                initialScrollPosition: .top,
+                frameInterval: .milliseconds(10)
+            )
+
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            #expect(scrollView.contentView.bounds.origin.y <= 1)
         }
 
         @Test("re-attach rebuilds the storage identically; eviction stays consistent")
