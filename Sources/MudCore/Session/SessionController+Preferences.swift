@@ -84,4 +84,18 @@ public extension SessionController {
             helpCaptureBuffer = []
         }
     }
+
+    /// Enable/disable Marketplace capture. When enabled, `lbid` / `market`
+    /// command responses are withheld from main output and published to the
+    /// native Marketplace window.
+    func setMarketCaptureEnabled(_ enabled: Bool) {
+        guard marketCaptureEnabled != enabled else { return }
+        marketCaptureEnabled = enabled
+        if !enabled {
+            marketTagCaptureActive = false
+            marketTagCaptureBuffer = []
+            marketCommandCapture = nil
+            queuedMarketCommandCaptures = []
+        }
+    }
 }

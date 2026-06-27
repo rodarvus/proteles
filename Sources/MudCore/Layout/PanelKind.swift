@@ -26,6 +26,8 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case group
     /// In-game help reader (captured `help <topic>` with clickable cross-refs).
     case help
+    /// Buyer-focused Aardwolf Marketplace window.
+    case market
     /// Native leveldb reporting (live HUD / tables / analytics / journey).
     case levels
     /// Configurable command-button bar (#15).
@@ -47,6 +49,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "Character"
         case .group: "Group"
         case .help: "Help"
+        case .market: "Marketplace"
         case .levels: "Levels"
         case .commandBar: "Commands"
         }
@@ -64,6 +67,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "Char"
         case .group: "Group"
         case .help: "Help"
+        case .market: "Market"
         case .levels: "Levels"
         case .commandBar: "Cmds"
         }
@@ -81,6 +85,7 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
         case .info: "person.text.rectangle"
         case .group: "person.3"
         case .help: "questionmark.circle"
+        case .market: "cart"
         case .levels: "chart.line.uptrend.xyaxis"
         case .commandBar: "rectangle.grid.2x2"
         }
@@ -103,10 +108,9 @@ public enum PanelKind: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 
     /// Panels a user can toggle from the Panels menu (everything but `output`).
-    /// `help` and `levels` are excluded — they're dedicated windows now, not dock
-    /// tiles (the cases remain so older saved layouts that docked them still
-    /// decode/render).
+    /// Dedicated windows stay out of the dock tiles (the cases remain so older
+    /// saved layouts that docked them still decode/render).
     public static var toggleable: [PanelKind] {
-        allCases.filter { $0.isClosable && $0 != .help && $0 != .levels }
+        allCases.filter { $0.isClosable && $0 != .help && $0 != .market && $0 != .levels }
     }
 }

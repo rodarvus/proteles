@@ -25,6 +25,14 @@ extension SessionController {
             helpCaptureEnabled && captureHelpLine(line)
         }
         if capturedHelp { return LineProcessingSummary(gagged: 1) }
+        let capturedMarket = PerformanceProbe.shared.measure(
+            "session.lines.market-capture",
+            events: 1,
+            thresholdMS: 50
+        ) {
+            marketCaptureEnabled && captureMarketLine(line)
+        }
+        if capturedMarket { return LineProcessingSummary(gagged: 1) }
         let omitBlank = Self.omitsFromOutput(line, omitBlankLines: omitBlankLines)
         guard let scriptEngine else {
             return await appendLineWithoutGenericScripts(line, omitBlank: omitBlank)

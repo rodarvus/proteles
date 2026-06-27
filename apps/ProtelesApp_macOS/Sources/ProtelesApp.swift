@@ -76,6 +76,7 @@ struct ProtelesApp: App {
 
     /// In-game Help panel model (shared by the docked + detached Help views).
     @State private var help = HelpPanelModel()
+    @State private var market = MarketPanelModel()
     @State private var levels = LevelDBPanelModel()
     /// MUSHclient import flow (File ▸ Import from MUSHclient…).
     @State var importModel = MUSHclientImportModel()
@@ -174,6 +175,7 @@ struct ProtelesApp: App {
                 snd: snd,
                 consider: consider,
                 help: help,
+                market: market,
                 levels: levels,
                 pluginDBs: pluginDBs,
                 resumeStore: resumeStore,
@@ -252,6 +254,7 @@ struct ProtelesApp: App {
                     snd: snd,
                     consider: consider,
                     help: help,
+                    market: market,
                     levels: levels,
                     scripts: scripts
                 )
@@ -294,6 +297,13 @@ struct ProtelesApp: App {
         .defaultSize(width: 740, height: 640)
         .windowResizability(.contentSize)
 
+        Window("Marketplace", id: ProtelesApp.marketWindowID) {
+            MarketPanelView(model: market)
+                .navigationTitle("Marketplace")
+        }
+        .defaultSize(width: 900, height: 620)
+        .windowResizability(.contentSize)
+
         // Leveling analytics: a dedicated, roomy window (not a dock tile) — the
         // four leveldb faces (live HUD / reports / analytics / journey) carry too
         // much to share the cramped dock. Read-only over the plugin's DB.
@@ -331,6 +341,7 @@ struct ProtelesApp: App {
     static let scriptsWindowID = "scripts"
     static let pluginsWindowID = "plugins"
     static let helpWindowID = "help"
+    static let marketWindowID = "marketplace"
     static let levelsWindowID = "levels"
     static let luaConsoleWindowID = "luaConsole"
 

@@ -99,6 +99,10 @@ public actor SessionController {
     /// the Help panel subscribes and renders the latest. Newest-only.
     public nonisolated let helpArticles: AsyncStream<HelpArticle>
     nonisolated let helpArticlesContinuation: AsyncStream<HelpArticle>.Continuation
+    /// Captured Aardwolf Marketplace command responses; the Marketplace window
+    /// subscribes and renders/gags command output like the Help panel.
+    public nonisolated let marketCaptures: AsyncStream<MarketCapture>
+    nonisolated let marketCapturesContinuation: AsyncStream<MarketCapture>.Continuation
 
     /// User notifications (tells/mentions); the app subscribes + posts them.
     public nonisolated let notifications: AsyncStream<ProtelesNotification>
@@ -339,6 +343,12 @@ public actor SessionController {
     var helpCaptureIsSearch = false
     /// Accumulated help body lines for the in-progress capture.
     var helpCaptureBuffer: [Line] = []
+    /// Capture Marketplace command output into the Marketplace window.
+    public internal(set) var marketCaptureEnabled = false
+    var marketTagCaptureActive = false
+    var marketTagCaptureBuffer: [Line] = []
+    var marketCommandCapture: MarketCommandCaptureState?
+    var queuedMarketCommandCaptures: [MarketCommandCaptureState] = []
 
     /// Drop behaviour; defaults to ``ReconnectPolicy/disabled`` (app sets standard).
     public var reconnectPolicy: ReconnectPolicy
@@ -463,6 +473,8 @@ public actor SessionController {
             AsyncStream<MiniWindowUpdate>.makeStream(bufferingPolicy: .bufferingNewest(64))
         (helpArticles, helpArticlesContinuation) =
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        (marketCaptures, marketCapturesContinuation) =
+            AsyncStream<MarketCapture>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (notifications, notificationsContinuation) =
             AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (mapperMigrationPrompts, mapperMigrationPromptsContinuation) =
@@ -535,6 +547,10 @@ public actor SessionController {
         sentHelpsTagOption = false
         helpCaptureActive = false
         helpCaptureBuffer = []
+        marketTagCaptureActive = false
+        marketTagCaptureBuffer = []
+        marketCommandCapture = nil
+        queuedMarketCommandCaptures = []
         recentDisplayedLines = [] // a fresh connection's `tts last` never replays the old session
         lastSpokenLineText = nil
         lastSpokenVitals = nil

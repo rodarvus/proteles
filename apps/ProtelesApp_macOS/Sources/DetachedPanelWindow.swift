@@ -19,6 +19,7 @@ struct DetachedPanelWindow: View {
     let snd: SnDPanelModel
     let consider: ConsiderPanelModel
     let help: HelpPanelModel
+    let market: MarketPanelModel
     let levels: LevelDBPanelModel
     let scripts: ScriptsModel
 
@@ -85,6 +86,7 @@ struct DetachedPanelWindow: View {
                 Task { try? await session.send(command) }
             })
         case .help: HelpPanelView(model: help)
+        case .market: MarketPanelView(model: market)
         case .levels: LevelDBPanelView(model: levels)
         case .commandBar: CommandBarView(scripts: scripts, onOpenEditor: {
                 openWindow(id: ProtelesApp.scriptsWindowID)

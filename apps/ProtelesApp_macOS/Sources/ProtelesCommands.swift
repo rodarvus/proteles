@@ -147,6 +147,8 @@ struct ProtelesCommands: Commands {
             Button("Levels") { openWindow(id: ProtelesApp.levelsWindowID) }
                 .keyboardShortcut("L", modifiers: [.command, .shift])
 
+            Button("Marketplace") { openWindow(id: ProtelesApp.marketWindowID) }
+
             Button("Game Help") { openWindow(id: ProtelesApp.helpWindowID) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 

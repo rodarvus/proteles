@@ -31,6 +31,7 @@ public extension SessionController {
             await recordDisplayed(Self.inputEchoLine(command), kind: .userInput)
             logTranscript(.input, command)
         }
+        armMarketCapture(for: command)
         try await dispatchCommand(command)
     }
 

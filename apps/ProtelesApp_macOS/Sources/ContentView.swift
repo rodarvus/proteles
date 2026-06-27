@@ -17,6 +17,7 @@ struct ContentView: View {
     let consider: ConsiderPanelModel
     /// In-game Help panel: receives captured help articles + drives navigation.
     let help: HelpPanelModel
+    let market: MarketPanelModel
     /// Native leveldb reporting panel (read-only over the plugin's DB).
     let levels: LevelDBPanelModel
     /// Import/reset hooks for the plugin-owned DBs (dinv, leveldb).
@@ -249,6 +250,14 @@ struct ContentView: View {
                 openWindow(id: ProtelesApp.helpWindowID)
             }
         }
+        .task {
+            market.onCommand = { command in Task { try? await session.send(command) } }
+            await session.setMarketCaptureEnabled(true)
+            for await capture in session.marketCaptures {
+                market.apply(capture)
+                openWindow(id: ProtelesApp.marketWindowID)
+            }
+        }
         .task(id: autoReconnect) {
             await session.setReconnectEnabled(autoReconnect)
         }
@@ -346,7 +355,9 @@ struct ContentView: View {
 
     // `detach(_:)` + `panelContent(_:)` live in the extension below (keeps the
     // view body within the type-length budget).
+}
 
+extension ContentView {
     /// The main game column: MUD output + command input. (The graphical vitals
     /// bar lives at the window level so it spans the full client width — see
     /// ``body``.)
@@ -576,6 +587,7 @@ extension ContentView {
                 Task { try? await session.send(command) }
             }))
         case .help: AnyView(HelpPanelView(model: help))
+        case .market: AnyView(MarketPanelView(model: market))
         case .levels: AnyView(LevelDBPanelView(model: levels))
         case .commandBar: AnyView(CommandBarView(scripts: scripts, onOpenEditor: {
                 openWindow(id: ProtelesApp.scriptsWindowID)
