@@ -47,16 +47,85 @@ extension ScriptEngine {
         named: [String: String],
         styles: [ScriptStyleRun] = []
     ) async -> [ScriptEffect] {
-        await syncAutomationSnapshot()
+        await measureAutomationPhase(
+            "session.script.sync-automation",
+            thresholdMS: 50
+        ) {
+            await syncAutomationSnapshot()
+        }
         let raw: [ScriptEffect] = if let owner {
-            await runtime.runPluginScript(
-                script, pluginID: owner, matches: matches, named: named, styles: styles
-            )
+            await measureAutomationPhase(
+                "session.script.lua.plugin",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await runtime.runPluginScript(
+                    script, pluginID: owner, matches: matches, named: named, styles: styles
+                )
+            }
         } else {
-            await runScript(script, matches: matches, named: named, styles: styles)
+            await measureAutomationPhase(
+                "session.script.lua.user",
+                events: 1,
+                thresholdMS: 50
+            ) {
+                await runScript(script, matches: matches, named: named, styles: styles)
+            }
         }
         // Apply programmatic automation (AddTimer/AddTriggerEx/…); pass the rest on.
-        return consumeRegistrations(raw, owner: owner)
+        let outward = measureAutomationPhase(
+            "session.script.consume-registrations",
+            events: raw.count,
+            thresholdMS: 50
+        ) {
+            consumeRegistrations(raw, owner: owner)
+        }
+        recordScriptEffectBurst(raw: raw, outward: outward)
+        return outward
+    }
+
+    private func measureAutomationPhase<T>(
+        _ phase: String,
+        events: Int = 1,
+        thresholdMS: Int,
+        _ body: () async -> T
+    ) async -> T {
+        guard PerformanceProbe.shared.recordsAttribution else { return await body() }
+        let start = ContinuousClock.now
+        let value = await body()
+        PerformanceProbe.shared.recordPhase(
+            phase,
+            duration: ContinuousClock.now - start,
+            events: events,
+            thresholdMS: thresholdMS
+        )
+        return value
+    }
+
+    private func measureAutomationPhase<T>(
+        _ phase: String,
+        events: Int = 1,
+        thresholdMS: Int,
+        _ body: () -> T
+    ) -> T {
+        PerformanceProbe.shared.measure(
+            phase,
+            events: events,
+            thresholdMS: thresholdMS,
+            body
+        )
+    }
+
+    private func recordScriptEffectBurst(raw: [ScriptEffect], outward: [ScriptEffect]) {
+        PerformanceProbe.shared.recordEventSummary(
+            "session.script.effects",
+            events: raw.count,
+            fields: [
+                ("outward", outward.count),
+                ("registrations", raw.count - outward.count)
+            ],
+            thresholdEvents: 10
+        )
     }
 
     /// Apply one programmatic-automation effect to the engines. Returns `true`

@@ -39,13 +39,14 @@ public final class PerformanceProbe: @unchecked Sendable {
     private var mode: Mode = .stallOnly
     private var inGameAt: Date?
     private var lastSnapshot: Snapshot?
-    private var recentSamples: [PhaseSample] = []
+    private var recentBuckets: [RecentPressureBucket] = []
     private var pendingNotes: [String] = []
     private var summaryStartedAt = Date()
     private var measuredPhases = 0
     private var slowPhases = 0
     private var maxDurationMS = 0
     private var maxPhase: String?
+    private let recentBucketSeconds: TimeInterval = 1
 
     public init() {}
 
@@ -54,7 +55,7 @@ public final class PerformanceProbe: @unchecked Sendable {
             self.mode = mode
             if mode != .full {
                 lastSnapshot = nil
-                recentSamples.removeAll()
+                recentBuckets.removeAll()
                 pendingNotes.removeAll()
                 measuredPhases = 0
                 slowPhases = 0
@@ -76,7 +77,7 @@ public final class PerformanceProbe: @unchecked Sendable {
         lock.withLock {
             inGameAt = nil
             lastSnapshot = nil
-            recentSamples.removeAll()
+            recentBuckets.removeAll()
             pendingNotes.removeAll()
             summaryStartedAt = now
             measuredPhases = 0
@@ -138,14 +139,13 @@ public final class PerformanceProbe: @unchecked Sendable {
                 maxDurationMS = durationMS
                 maxPhase = phase
             }
-            recentSamples.append(PhaseSample(
+            recordRecentPressureLocked(
                 phase: phase,
                 durationMS: durationMS,
                 events: events,
                 timestamp: timestamp,
                 isSlow: durationMS >= thresholdMS
-            ))
-            pruneRecentSamplesLocked(now: timestamp)
+            )
             guard durationMS >= thresholdMS else { return }
             slowPhases += 1
             let snapshot = makeSnapshotLocked(
@@ -271,52 +271,98 @@ public final class PerformanceProbe: @unchecked Sendable {
 
     private func formatRecentPressureIfRecordingLocked(at timestamp: Date) -> String {
         guard mode == .full else { return "" }
-        pruneRecentSamplesLocked(now: timestamp)
-        let samples = recentSamples.filter {
-            timestamp.timeIntervalSince($0.timestamp) <= recentPressureWindow
-        }
+        pruneRecentBucketsLocked(now: timestamp)
+        let aggregate = recentPressureAggregateLocked(at: timestamp)
         let window = String(format: "%.0fs", recentPressureWindow)
-        guard !samples.isEmpty else {
+        guard aggregate.phaseCount > 0 else {
             return "; recent perf: none in last \(window)"
         }
-        let slowCount = samples.filter(\.isSlow).count
-        let eventCount = samples.reduce(0) { $0 + $1.events }
-        let maxSample = samples.max { lhs, rhs in lhs.durationMS < rhs.durationMS }
-        let maxPart = maxSample.map { "\($0.phase) \($0.durationMS)ms" } ?? "none"
-        return "; recent perf: last \(window) phases \(samples.count) "
-            + "slow \(slowCount) events \(eventCount) max \(maxPart) "
-            + "top \(formatTopPhases(samples))"
+        let maxPart = aggregate.maxPhase.map {
+            "\($0) \(aggregate.maxMS)ms"
+        } ?? "none"
+        return "; recent perf: last \(window) phases \(aggregate.phaseCount) "
+            + "slow \(aggregate.slowCount) events \(aggregate.eventCount) "
+            + "measured \(aggregate.measuredMS)ms max \(maxPart) "
+            + "topCount \(formatTopPhasesByCount(aggregate.groups)) "
+            + "topTime \(formatTopPhasesByTime(aggregate.groups))"
     }
 
-    private func formatTopPhases(_ samples: [PhaseSample]) -> String {
-        var groups: [String: (count: Int, maxMS: Int)] = [:]
-        for sample in samples {
-            let current = groups[sample.phase] ?? (count: 0, maxMS: 0)
-            groups[sample.phase] = (
-                count: current.count + 1,
-                maxMS: max(current.maxMS, sample.durationMS)
+    private func formatTopPhasesByCount(_ groups: [String: PhaseGroup]) -> String {
+        groups.sorted {
+            if $0.value.count != $1.value.count {
+                return $0.value.count > $1.value.count
+            }
+            if $0.value.maxMS != $1.value.maxMS {
+                return $0.value.maxMS > $1.value.maxMS
+            }
+            return $0.key < $1.key
+        }
+        .prefix(3)
+        .map { "\($0.key) x\($0.value.count) max \($0.value.maxMS)ms" }
+        .joined(separator: ", ")
+    }
+
+    private func formatTopPhasesByTime(_ groups: [String: PhaseGroup]) -> String {
+        groups.sorted {
+            if $0.value.totalMS != $1.value.totalMS {
+                return $0.value.totalMS > $1.value.totalMS
+            }
+            if $0.value.maxMS != $1.value.maxMS {
+                return $0.value.maxMS > $1.value.maxMS
+            }
+            return $0.key < $1.key
+        }
+        .prefix(3)
+        .map { "\($0.key) total \($0.value.totalMS)ms max \($0.value.maxMS)ms" }
+        .joined(separator: ", ")
+    }
+
+    private func recordRecentPressureLocked(
+        phase: String,
+        durationMS: Int,
+        events: Int,
+        timestamp: Date,
+        isSlow: Bool
+    ) {
+        let key = recentBucketKey(for: timestamp)
+        if let index = recentBuckets.firstIndex(where: { $0.key == key }) {
+            recentBuckets[index].record(
+                phase: phase,
+                durationMS: durationMS,
+                events: events,
+                isSlow: isSlow
+            )
+        } else {
+            recentBuckets.append(RecentPressureBucket(key: key))
+            recentBuckets[recentBuckets.count - 1].record(
+                phase: phase,
+                durationMS: durationMS,
+                events: events,
+                isSlow: isSlow
             )
         }
-        return groups
-            .sorted {
-                if $0.value.count != $1.value.count {
-                    return $0.value.count > $1.value.count
-                }
-                if $0.value.maxMS != $1.value.maxMS {
-                    return $0.value.maxMS > $1.value.maxMS
-                }
-                return $0.key < $1.key
-            }
-            .prefix(3)
-            .map { "\($0.key) x\($0.value.count) max \($0.value.maxMS)ms" }
-            .joined(separator: ", ")
+        pruneRecentBucketsLocked(now: timestamp)
     }
 
-    private func pruneRecentSamplesLocked(now: Date) {
-        let keepWindow = max(recentPressureWindow, stallAttributionWindow) + 1
-        recentSamples.removeAll {
-            now.timeIntervalSince($0.timestamp) > keepWindow
+    private func recentPressureAggregateLocked(at timestamp: Date) -> RecentPressureAggregate {
+        let cutoff = timestamp.timeIntervalSince1970 - recentPressureWindow
+        var aggregate = RecentPressureAggregate()
+        for bucket in recentBuckets where bucket.endTime >= cutoff {
+            aggregate.record(bucket)
         }
+        return aggregate
+    }
+
+    private func pruneRecentBucketsLocked(now: Date) {
+        let keepWindow = max(recentPressureWindow, stallAttributionWindow) + 1
+        let cutoff = now.timeIntervalSince1970 - keepWindow
+        recentBuckets.removeAll {
+            $0.endTime < cutoff
+        }
+    }
+
+    private func recentBucketKey(for timestamp: Date) -> Int64 {
+        Int64(floor(timestamp.timeIntervalSince1970 / recentBucketSeconds))
     }
 
     private func formatLoginTimingLocked(_ timestamp: Date) -> String {
@@ -332,10 +378,73 @@ public final class PerformanceProbe: @unchecked Sendable {
     }
 }
 
-private struct PhaseSample: Equatable {
-    let phase: String
-    let durationMS: Int
-    let events: Int
-    let timestamp: Date
-    let isSlow: Bool
+private struct PhaseGroup: Equatable {
+    var count = 0
+    var maxMS = 0
+    var totalMS = 0
+
+    mutating func record(_ durationMS: Int) {
+        count += 1
+        maxMS = max(maxMS, durationMS)
+        totalMS += durationMS
+    }
+}
+
+private struct RecentPressureBucket: Equatable {
+    let key: Int64
+    var phaseCount = 0
+    var slowCount = 0
+    var eventCount = 0
+    var measuredMS = 0
+    var maxPhase: String?
+    var maxMS = 0
+    var groups: [String: PhaseGroup] = [:]
+
+    var endTime: TimeInterval {
+        TimeInterval(key + 1)
+    }
+
+    mutating func record(phase: String, durationMS: Int, events: Int, isSlow: Bool) {
+        phaseCount += 1
+        if isSlow { slowCount += 1 }
+        eventCount += events
+        measuredMS += durationMS
+        if durationMS > maxMS {
+            maxMS = durationMS
+            maxPhase = phase
+        }
+        groups[phase, default: PhaseGroup()].record(durationMS)
+    }
+}
+
+private struct RecentPressureAggregate: Equatable {
+    var phaseCount = 0
+    var slowCount = 0
+    var eventCount = 0
+    var measuredMS = 0
+    var maxPhase: String?
+    var maxMS = 0
+    var groups: [String: PhaseGroup] = [:]
+
+    mutating func record(_ bucket: RecentPressureBucket) {
+        phaseCount += bucket.phaseCount
+        slowCount += bucket.slowCount
+        eventCount += bucket.eventCount
+        measuredMS += bucket.measuredMS
+        if bucket.maxMS > maxMS {
+            maxMS = bucket.maxMS
+            maxPhase = bucket.maxPhase
+        }
+        for (phase, group) in bucket.groups {
+            groups[phase, default: PhaseGroup()].merge(group)
+        }
+    }
+}
+
+private extension PhaseGroup {
+    mutating func merge(_ other: PhaseGroup) {
+        count += other.count
+        maxMS = max(maxMS, other.maxMS)
+        totalMS += other.totalMS
+    }
 }

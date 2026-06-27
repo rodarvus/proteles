@@ -116,6 +116,35 @@ struct PerformanceProbeTests {
         #expect(note.contains("session.lines.script-display x1 max 24ms"))
     }
 
+    @Test("recent pressure stays useful for high-volume attribution bursts")
+    func recentPressureAggregatesHighVolumeBursts() {
+        let probe = PerformanceProbe()
+        let login = Date(timeIntervalSince1970: 2250)
+        probe.reset(now: login)
+        probe.setMode(.full)
+        probe.recentPressureWindow = 10
+        probe.markInGame(at: login)
+
+        for index in 0..<12050 {
+            let phase = index.isMultiple(of: 2)
+                ? "session.script.lua.plugin"
+                : "session.lines.script-display"
+            probe.recordPhase(
+                phase,
+                duration: .milliseconds(index.isMultiple(of: 100) ? 7 : 1),
+                events: 1,
+                thresholdMS: 100,
+                at: login.addingTimeInterval(5)
+            )
+        }
+
+        let note = probe.stallNote(blockedMS: 90, at: login.addingTimeInterval(6))
+        #expect(note.contains("recent perf: last 10s phases 12050"))
+        #expect(note.contains("slow 0 events 12050"))
+        #expect(note.contains("session.script.lua.plugin x6025 max 7ms"))
+        #expect(note.contains("session.lines.script-display x6025 max 1ms"))
+    }
+
     @Test("stall note reports no recent pressure when attribution was quiet")
     func stallWithoutRecentPressure() {
         let probe = PerformanceProbe()
