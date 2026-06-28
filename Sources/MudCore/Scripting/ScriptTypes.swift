@@ -351,6 +351,10 @@ public enum ScriptEffect: Sendable, Equatable {
     /// The host runs it and delivers any resulting broadcasts (e.g. the
     /// 500/501 path results) back through `OnPluginBroadcast`.
     case mapperCall(function: String, args: [String])
+    /// A mapper command emitted a reference-compatible plugin broadcast.
+    /// The host delivers it back through `OnPluginBroadcast` with the mapper's
+    /// well-known plugin id/name.
+    case mapperBroadcast(id: Int, text: String)
     /// `CallPlugin(<S&D id>, fn, …)` from a shim plugin, bridged to the native
     /// S&D host (the user plugin's campaign mode drives `do_cp_check` etc.).
     case callSearchAndDestroy(function: String, args: [String])

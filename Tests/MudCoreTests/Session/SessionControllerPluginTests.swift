@@ -132,6 +132,124 @@ struct SessionControllerPluginTests {
         #expect(await store.scopes["com.test.save-reload"]?["saved_marker"] == "yes")
     }
 
+    @Test("mapper findpath broadcast reaches the calling plugin")
+    func mapperFindPathBroadcastReturnsToPlugin() async throws {
+        let pluginsDir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: pluginsDir) }
+        let xml = """
+        <muclient>
+        <plugin id="com.test.mapper-probe" name="Mapper Probe" save_state="y"/>
+        <aliases>
+          <alias match="^probe-path$" enabled="y" regexp="y" send_to="12">
+            <send>CallPlugin("b6eae87ccedd84f510b74714", "findpath", "2", "3", true, true)</send>
+          </alias>
+        </aliases>
+        <script><![CDATA[
+        function OnPluginBroadcast(msg, id, name, text)
+          if tonumber(msg) == 502 and id == "b6eae87ccedd84f510b74714" then
+            SetVariable("path_broadcast", text)
+          end
+        end
+        ]]></script>
+        </muclient>
+        """
+        try xml.write(
+            to: pluginsDir.appendingPathComponent("mapper-probe.xml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let mapperURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-probe-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: mapperURL) }
+        let mapper = try Mapper(store: MapperStore(url: mapperURL))
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"z","name":"Z"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":3,"name":"Three","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Two","zone":"z","exits":{"n":3}}"#
+        )
+
+        let engine = try ScriptEngine()
+        let controller = SessionController(scriptEngine: engine)
+        await controller.attachMapper(mapper)
+        await controller.loadPlugins(directories: [pluginsDir], character: "test")
+
+        try await controller.dispatchCommand("probe-path")
+
+        let snapshot = await engine.variablesSnapshot()
+        #expect(snapshot["com.test.mapper-probe"]?["path_broadcast"] ==
+            #"found_paths = { { dir = "n", uid = "3" } }"#)
+    }
+
+    @Test("native mapper goto broadcasts path results to loaded plugins once")
+    func mapperGotoBroadcastsToPlugin() async throws {
+        let pluginsDir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: pluginsDir) }
+        let xml = """
+        <muclient>
+        <plugin id="com.test.mapper-monitor-probe" name="Mapper Monitor Probe" save_state="y"/>
+        <script><![CDATA[
+        function OnPluginInstall()
+          SetVariable("count500", "0")
+          SetVariable("count501", "0")
+          SetVariable("count502", "0")
+        end
+
+        function bump(name)
+          SetVariable(name, tostring((tonumber(GetVariable(name)) or 0) + 1))
+        end
+
+        function OnPluginBroadcast(msg, id, name, text)
+          if id ~= "b6eae87ccedd84f510b74714" then return end
+          if tonumber(msg) == 500 then
+            bump("count500")
+            SetVariable("found_text", text)
+          elseif tonumber(msg) == 501 then
+            bump("count501")
+          elseif tonumber(msg) == 502 then
+            bump("count502")
+          end
+        end
+        ]]></script>
+        </muclient>
+        """
+        try xml.write(
+            to: pluginsDir.appendingPathComponent("mapper-monitor-probe.xml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let mapperURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mapper-monitor-probe-\(UUID().uuidString).db")
+        defer { try? FileManager.default.removeItem(at: mapperURL) }
+        let mapper = try Mapper(store: MapperStore(url: mapperURL))
+        _ = await mapper.ingest(package: "room.area", json: #"{"id":"z","name":"Z"}"#)
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":3,"name":"Three","zone":"z","exits":{}}"#
+        )
+        _ = await mapper.ingest(
+            package: "room.info",
+            json: #"{"num":2,"name":"Two","zone":"z","exits":{"n":3}}"#
+        )
+
+        let engine = try ScriptEngine()
+        let controller = SessionController(scriptEngine: engine)
+        await controller.attachMapper(mapper)
+        await controller.loadPlugins(directories: [pluginsDir], character: "test")
+
+        try await controller.dispatchCommand("mapper goto 3")
+
+        let snapshot = await engine.variablesSnapshot()
+        let scope = snapshot["com.test.mapper-monitor-probe"]
+        #expect(scope?["count500"] == "1")
+        #expect(scope?["count501"] == "1")
+        #expect(scope?["count502"] == "0")
+        #expect(scope?["found_text"]?.contains(#"["3"]"#) == true)
+    }
+
     @Test("loadPlugins is a no-op for an empty / missing directory")
     func emptyDirectoryNoOp() async throws {
         let directory = try temporaryDirectory()

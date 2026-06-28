@@ -40,6 +40,12 @@ struct MapperSearchTests {
         if case .colourNote(let segs) = effect { segs.first?.link } else { nil }
     }
 
+    private func mapperBroadcasts(_ effects: [ScriptEffect]) -> [(id: Int, text: String)] {
+        effects.compactMap {
+            if case .mapperBroadcast(let id, let text) = $0 { (id, text) } else { nil }
+        }
+    }
+
     private let start = "+------------------------------ START OF SEARCH -------------------------------+"
     private let end = "+-------------------------------- END OF SEARCH -------------------------------+"
 
@@ -49,6 +55,12 @@ struct MapperSearchTests {
     func findFullFind() async throws {
         let mapper = try await makeMapper()
         let effects = await mapper.handleCommand("mapper find aylor")
+        let broadcasts = mapperBroadcasts(effects)
+        #expect(broadcasts.map(\.id) == [500, 501])
+        #expect(broadcasts[0].text.contains(#"["1"]"#))
+        #expect(broadcasts[0].text.contains(#"["2"]"#))
+        #expect(broadcasts[0].text.contains(#"reason = true"#))
+        #expect(broadcasts[1].text == "unfound_paths = {  }")
         let out = notes(effects)
         // Pattern is echoed verbatim with the SQL wildcards.
         #expect(out.first == "Found 2 targets matching '%aylor%'.")

@@ -574,7 +574,7 @@ extension LuaRuntime {
     nonisolated func recordMapperCall(_ arguments: [LuaValue]) {
         effects.append(.mapperCall(
             function: Self.argString(arguments, 0),
-            args: arguments.dropFirst().map { $0.stringValue ?? "" }
+            args: arguments.dropFirst().map(Self.bridgeString)
         ))
     }
 }

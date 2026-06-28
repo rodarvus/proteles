@@ -24,6 +24,15 @@ struct CompatShimTests {
         #expect(effects == [.mapperCall(function: "find", args: ["3", "9"])])
     }
 
+    @Test("CallPlugin to the mapper preserves boolean arguments")
+    func callPluginMapperBooleans() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run(
+            "CallPlugin('b6eae87ccedd84f510b74714', 'findpath', '2', '3', true, false)"
+        )
+        #expect(effects == [.mapperCall(function: "findpath", args: ["2", "3", "true", "false"])])
+    }
+
     @Test("CallPlugin to another id forwards to exports (no mapperCall)")
     func callPluginOther() async throws {
         let lua = try await shimmed()

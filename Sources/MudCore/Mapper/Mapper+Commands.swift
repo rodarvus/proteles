@@ -156,12 +156,17 @@ extension Mapper {
             level: level, tier: tier, allowPortals: allowPortals, allowRecalls: allowPortals
         )
         guard let path = Pathfinder(graph: graph).path(from: src, to: uid, options: options) else {
-            return [Self.note("No route found to \(uid).")]
+            return mapperBroadcastEffects(for: [
+                .init(uid: uid, reason: nil, genericReason: true, path: nil)
+            ]) + [Self.note("No route found to \(uid).")]
         }
         if path.isEmpty { return [Self.note("You are already in that room.")] }
         lastSpeedwalkTarget = uid
         let name = graph.rooms[uid]?.name ?? "room \(uid)"
-        var effects: [ScriptEffect] = [Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s).")]
+        var effects = mapperBroadcastEffects(for: [
+            .init(uid: uid, reason: nil, genericReason: true, path: path)
+        ])
+        effects.append(Self.note("Walking to \(name) [\(uid)] — \(path.count) step(s)."))
         // Run each step through the command pipeline (`.execute`), not a raw
         // `.send`: the reference mapper speedwalks via `ExecuteWithWaits`, so a
         // step that's a plugin/alias command — e.g. a portal hop stored as
@@ -235,7 +240,13 @@ extension Mapper {
             ? "Path from \(src) to \(dest) is:"
             : "Path to \(dest) is:"
         // The reference format ends with "Distance: N\n", so a trailing blank.
-        return [Self.note(header), Self.note(speedwalk), Self.note("Distance: \(path.count)"), Self.note("")]
+        return [
+            mapperBroadcastEffect(MapperPluginBridge.pathBroadcast(path)),
+            Self.note(header),
+            Self.note(speedwalk),
+            Self.note("Distance: \(path.count)"),
+            Self.note("")
+        ]
     }
 
     /// The reference `printpath` speedwalk string: build the compact speedwalk,
@@ -406,5 +417,13 @@ extension Mapper {
     /// A mapper note line, in the reference mapper colour (see ``MapperOutput``).
     static func note(_ text: String) -> ScriptEffect {
         MapperOutput.line(text)
+    }
+
+    func mapperBroadcastEffects(for targets: [MapperPluginBridge.Target]) -> [ScriptEffect] {
+        MapperPluginBridge.broadcasts(for: targets).map(mapperBroadcastEffect)
+    }
+
+    func mapperBroadcastEffect(_ broadcast: MapperBroadcast) -> ScriptEffect {
+        .mapperBroadcast(id: broadcast.id, text: broadcast.text)
     }
 }

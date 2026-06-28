@@ -35,17 +35,21 @@ public enum MapperPluginBridge {
     public static let foundPathsBroadcast = 500
     /// Broadcast id for "unfound paths" (a `{ {uid=…, reason=…} }` list).
     public static let unfoundPathsBroadcast = 501
+    /// Broadcast id used by the reference mapper's arbitrary-source `findpath`.
+    public static let foundPathBroadcast = 502
 
     /// A resolved target: a destination uid, an optional opaque `reason`
     /// (passed through to the broadcast), and the route (`nil` = no path).
     public struct Target: Sendable, Equatable {
         public let uid: String
         public let reason: String?
+        public let genericReason: Bool
         public let path: [PathStep]?
 
-        public init(uid: String, reason: String?, path: [PathStep]?) {
+        public init(uid: String, reason: String?, genericReason: Bool = false, path: [PathStep]?) {
             self.uid = uid
             self.reason = reason
+            self.genericReason = genericReason
             self.path = path
         }
     }
@@ -58,6 +62,15 @@ public enum MapperPluginBridge {
         ]
     }
 
+    /// The reference mapper's `findpath(src, dst, ...)` broadcasts a plain path
+    /// list on id 502: `found_paths = { {dir="n", uid="2"}, ... }`.
+    public static func pathBroadcast(_ path: [PathStep]) -> MapperBroadcast {
+        let steps = path
+            .map { #"{ dir = \#(quote($0.dir)), uid = \#(quote($0.uid)) }"# }
+            .joined(separator: ", ")
+        return MapperBroadcast(id: foundPathBroadcast, text: "found_paths = { \(steps) }")
+    }
+
     /// `found_paths = { ["uid"] = { path = { {dir="n", uid="2"}, … }, reason = … } }`.
     static func foundPaths(_ targets: [Target]) -> String {
         let entries = targets.compactMap { target -> String? in
@@ -65,7 +78,7 @@ public enum MapperPluginBridge {
             let steps = path
                 .map { #"{ dir = \#(quote($0.dir)), uid = \#(quote($0.uid)) }"# }
                 .joined(separator: ", ")
-            let reason = target.reason.map { ", reason = \(quote($0))" } ?? ""
+            let reason = reasonLiteral(target)
             return "[\(quote(target.uid))] = { path = { \(steps) }\(reason) }"
         }
         return "found_paths = { \(entries.joined(separator: ", ")) }"
@@ -75,10 +88,16 @@ public enum MapperPluginBridge {
     static func unfoundPaths(_ targets: [Target]) -> String {
         let entries = targets.compactMap { target -> String? in
             guard target.path == nil else { return nil }
-            let reason = target.reason.map { ", reason = \(quote($0))" } ?? ""
+            let reason = reasonLiteral(target)
             return "{ uid = \(quote(target.uid))\(reason) }"
         }
         return "unfound_paths = { \(entries.joined(separator: ", ")) }"
+    }
+
+    private static func reasonLiteral(_ target: Target) -> String {
+        if let reason = target.reason { return ", reason = \(quote(reason))" }
+        if target.genericReason { return ", reason = true" }
+        return ""
     }
 
     /// A double-quoted Lua string literal (escapes `\` and `"`).

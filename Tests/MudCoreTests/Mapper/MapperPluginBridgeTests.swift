@@ -82,6 +82,17 @@ struct MapperPluginBridgeTests {
         #expect(unfound?.text.contains(#"uid = "9999""#) == true)
     }
 
+    @Test("findpath with source and destination broadcasts the reference path list")
+    func findPathFromSourceBroadcasts502() async throws {
+        let (mapper, url) = try await seeded()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = await mapper.handlePluginCall("findpath", args: ["2", "3", "true", "true"])
+        #expect(result.results == ["1"])
+        #expect(result.broadcasts.count == 1)
+        #expect(result.broadcasts.first?.id == MapperPluginBridge.foundPathBroadcast)
+        #expect(result.broadcasts.first?.text == #"found_paths = { { dir = "n", uid = "3" } }"#)
+    }
+
     @Test("Unknown functions are a graceful no-op")
     func unknownFunction() async throws {
         let (mapper, url) = try await seeded()

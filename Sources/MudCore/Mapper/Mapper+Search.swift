@@ -25,8 +25,12 @@ extension Mapper {
     /// optional reason label carried from the destination.
     private struct FoundEntry {
         let uid: String
-        let dist: Int
+        let path: [PathStep]
         let reason: String?
+
+        var dist: Int {
+            path.count
+        }
     }
 
     // MARK: - Reference `find`/`area`/`list` aliases
@@ -116,15 +120,19 @@ extension Mapper {
         var notfound: [FindDest] = []
         for dest in dests {
             if dest.uid == current {
-                found.append(FoundEntry(uid: dest.uid, dist: 0, reason: dest.reason))
+                found.append(FoundEntry(uid: dest.uid, path: [], reason: dest.reason))
             } else if let path = pathfinder.path(from: current, to: dest.uid, options: options) {
-                found.append(FoundEntry(uid: dest.uid, dist: path.count, reason: dest.reason))
+                found.append(FoundEntry(uid: dest.uid, path: path, reason: dest.reason))
             } else {
                 notfound.append(dest)
             }
         }
         found.sort { $0.dist < $1.dist }
 
+        out.append(contentsOf: mapperBroadcastEffects(for: broadcastTargets(
+            found: found,
+            notfound: notfound
+        )))
         out.append(searchHeader)
         for entry in found {
             out.append(contentsOf: foundRow(entry, current: current))
@@ -132,6 +140,27 @@ extension Mapper {
         out.append(contentsOf: notFoundSection(notfound, foundCount: found.count, expected: dests.count))
         out.append(searchFooter)
         return out
+    }
+
+    private func broadcastTargets(
+        found: [FoundEntry],
+        notfound: [FindDest]
+    ) -> [MapperPluginBridge.Target] {
+        found.map {
+            MapperPluginBridge.Target(
+                uid: $0.uid,
+                reason: $0.reason,
+                genericReason: $0.reason == nil,
+                path: $0.path
+            )
+        } + notfound.map {
+            MapperPluginBridge.Target(
+                uid: $0.uid,
+                reason: $0.reason,
+                genericReason: $0.reason == nil,
+                path: nil
+            )
+        }
     }
 
     /// One reachable-room result: a clickable `[i] <name> (<area>)` row (or a

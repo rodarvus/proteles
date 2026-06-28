@@ -15,15 +15,20 @@ public extension Mapper {
     func handlePluginCall(_ function: String, args: [String]) -> MapperCallResult {
         switch function.lowercased() {
         case "get_current_room":
-            MapperCallResult(results: [currentRoomUID ?? ""])
+            return MapperCallResult(results: [currentRoomUID ?? ""])
         case "getkeyword":
-            MapperCallResult(results: [keywordMatches(args.first ?? "")])
+            return MapperCallResult(results: [keywordMatches(args.first ?? "")])
         case "override_continents":
-            MapperCallResult() // accepted; we have no continent bigmap
-        case "find", "do_find", "findpath":
-            MapperCallResult(broadcasts: MapperPluginBridge.broadcasts(for: resolveTargets(args)))
+            return MapperCallResult() // accepted; we have no continent bigmap
+        case "find", "do_find":
+            return MapperCallResult(broadcasts: MapperPluginBridge.broadcasts(for: resolveTargets(args)))
+        case "findpath":
+            if args.count >= 2 {
+                return resolvePath(from: args[0], to: args[1], args: args)
+            }
+            return MapperCallResult(broadcasts: MapperPluginBridge.broadcasts(for: resolveTargets(args)))
         default:
-            MapperCallResult()
+            return MapperCallResult()
         }
     }
 
@@ -54,6 +59,38 @@ public extension Mapper {
                 reason: nil,
                 path: finder.path(from: src, to: uid, options: options)
             )
+        }
+    }
+
+    /// Reference-compatible `findpath(src, dst, noportals, norecalls)`: path
+    /// from an arbitrary source, broadcasting id 502 when a path is found.
+    private func resolvePath(
+        from source: String,
+        to destination: String,
+        args: [String]
+    ) -> MapperCallResult {
+        guard source != destination else { return MapperCallResult(results: ["0"]) }
+        let noPortals = Self.luaBool(args.dropFirst(2).first)
+        let noRecalls = Self.luaBool(args.dropFirst(3).first)
+        let options = Pathfinder.Options(
+            level: level,
+            tier: tier,
+            allowPortals: !noPortals,
+            allowRecalls: !noRecalls
+        )
+        guard let path = Pathfinder(graph: graph).path(from: source, to: destination, options: options) else {
+            return MapperCallResult()
+        }
+        return MapperCallResult(
+            results: [String(path.count)],
+            broadcasts: [MapperPluginBridge.pathBroadcast(path)]
+        )
+    }
+
+    private static func luaBool(_ value: String?) -> Bool {
+        switch value?.lowercased() {
+        case "true", "1", "yes", "y": true
+        default: false
         }
     }
 }

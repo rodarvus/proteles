@@ -194,6 +194,8 @@ public extension SessionController {
         switch effect {
         case .persistPluginState(let id):
             await persistNativePluginState(id: id)
+        case .mapperBroadcast(let id, let text):
+            await deliverMapperBroadcast(id: id, text: text)
         default:
             return false
         }
@@ -227,14 +229,16 @@ public extension SessionController {
     /// any resulting broadcasts (e.g. 500/501 path results) back to plugins
     /// via `OnPluginBroadcast`.
     private func applyMapperCall(function: String, args: [String]) async {
-        guard let mapper, let scriptEngine else { return }
+        guard let mapper else { return }
         let result = await mapper.handlePluginCall(function, args: args)
         for broadcast in result.broadcasts {
-            await applyScriptEffects(scriptEngine.deliverMapperBroadcast(
-                id: broadcast.id,
-                text: broadcast.text
-            ))
+            await deliverMapperBroadcast(id: broadcast.id, text: broadcast.text)
         }
+    }
+
+    private func deliverMapperBroadcast(id: Int, text: String) async {
+        guard let scriptEngine else { return }
+        await applyScriptEffects(scriptEngine.deliverMapperBroadcast(id: id, text: text))
     }
 
     /// Load the vendored **dinv** inventory manager (run verbatim through the
