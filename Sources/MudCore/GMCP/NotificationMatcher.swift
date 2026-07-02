@@ -51,12 +51,15 @@ public struct NotificationMatcher: Sendable, Equatable {
     }
 
     /// A notification for `chatLine` (a `comm.channel` line), or `nil`. Tells win
-    /// over mentions, then a user `.channel` rule; a mention only fires when your
-    /// `characterName` appears in a *non-tell* channel message you didn't send.
+    /// over mentions, then a user `.channel` rule; `mobsay` is always silent,
+    /// and a mention only fires when your `characterName` appears in a
+    /// *non-tell* channel message you didn't send.
     public func notification(for chatLine: ChatLine, characterName: String?) -> ProtelesNotification? {
         let channel = chatLine.channel.lowercased()
         let message = chatLine.line.text
         let sender = chatLine.player.trimmingCharacters(in: .whitespaces)
+
+        guard !Self.suppressesNotifications(forChannel: channel) else { return nil }
 
         if notifyOnTells, channel.contains("tell") {
             let from = sender.isEmpty ? "Someone" : sender
@@ -193,6 +196,10 @@ public struct NotificationMatcher: Sendable, Equatable {
             guard rule.enabled, case .channel(let name) = rule.trigger, !name.isEmpty else { return false }
             return channel.contains(name.lowercased())
         }
+    }
+
+    private static func suppressesNotifications(forChannel channel: String) -> Bool {
+        channel.trimmingCharacters(in: .whitespacesAndNewlines) == "mobsay"
     }
 
     /// Build a notification for a fired `rule`: title/body from its templates

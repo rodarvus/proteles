@@ -43,6 +43,15 @@ struct NotificationMatcherTests {
         #expect(note?.title == "Bob mentioned you on chat")
     }
 
+    @Test("mobsay never produces a built-in mention notification")
+    func mobsayMentionIsSilent() {
+        let matcher = NotificationMatcher()
+        #expect(matcher.notification(
+            for: chat("mobsay", player: "The medic", message: "Greetings, Alice."),
+            characterName: "Alice"
+        ) == nil)
+    }
+
     @Test("Your name as a substring of another word is not a mention")
     func noPartialMention() {
         let matcher = NotificationMatcher()
@@ -85,6 +94,16 @@ struct NotificationMatcherTests {
         // A different channel doesn't fire.
         #expect(matcher.notification(
             for: chat("auction", player: "Bob", message: "wts sword"),
+            characterName: "Alice"
+        ) == nil)
+    }
+
+    @Test("mobsay never produces a custom channel notification")
+    func mobsayChannelRuleIsSilent() {
+        let rules = [NotificationRule(trigger: .channel("mobsay"))]
+        let matcher = NotificationMatcher(notifyOnTells: false, notifyOnMention: false, rules: rules)
+        #expect(matcher.notification(
+            for: chat("mobsay", player: "The medic", message: "Greetings, Alice."),
             characterName: "Alice"
         ) == nil)
     }
