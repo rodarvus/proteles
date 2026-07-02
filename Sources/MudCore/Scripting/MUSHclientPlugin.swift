@@ -11,6 +11,8 @@ public struct MUSHclientPlugin: Sendable, Equatable {
     public var author: String
     public var version: String
     public var purpose: String
+    /// The `<description>` body MUSHclient exposes as `GetPluginInfo(id, 3)`.
+    public var pluginDescription: String
     public var requires: String
     /// `save_state="y"` — whether the plugin's variables persist.
     public var savesState: Bool
@@ -28,6 +30,7 @@ public struct MUSHclientPlugin: Sendable, Equatable {
         author: String = "",
         version: String = "",
         purpose: String = "",
+        pluginDescription: String = "",
         requires: String = "",
         savesState: Bool = false,
         sequence: Int = 0,
@@ -41,6 +44,7 @@ public struct MUSHclientPlugin: Sendable, Equatable {
         self.author = author
         self.version = version
         self.purpose = purpose
+        self.pluginDescription = pluginDescription
         self.requires = requires
         self.savesState = savesState
         self.sequence = sequence
@@ -112,6 +116,7 @@ public enum MUSHclientPluginLoader {
             author: attributes["author"] ?? "",
             version: attributes["version"] ?? "",
             purpose: attributes["purpose"] ?? "",
+            pluginDescription: delegate.pluginDescription,
             requires: attributes["requires"] ?? "",
             savesState: attributes["save_state"] == "y",
             sequence: Int(attributes["sequence"] ?? "") ?? 0,
@@ -131,11 +136,15 @@ private final class PluginParserDelegate: NSObject, XMLParserDelegate {
     var aliases: [Alias] = []
     var timers: [MudTimer] = []
     var script = ""
+    var pluginDescription = ""
 
     private var currentElementAttributes: [String: String]?
     private var sendBuffer = ""
+    private var descriptionBuffer = ""
     private var inSend = false
     private var inScript = false
+    private var inDescription = false
+    private var shouldTrimDescription = false
 
     func parser(
         _: XMLParser,
@@ -155,18 +164,26 @@ private final class PluginParserDelegate: NSObject, XMLParserDelegate {
             sendBuffer = ""
         case "script":
             inScript = true
+        case "description":
+            inDescription = true
+            shouldTrimDescription = attributes["trim"]?.lowercased() == "y"
+            descriptionBuffer = ""
         default:
             break
         }
     }
 
     func parser(_: XMLParser, foundCharacters string: String) {
-        if inSend { sendBuffer += string } else if inScript { script += string }
+        if inSend { sendBuffer += string } else if inScript { script += string } else if inDescription {
+            descriptionBuffer += string
+        }
     }
 
     func parser(_: XMLParser, foundCDATA CDATABlock: Data) {
         let text = String(decoding: CDATABlock, as: UTF8.self)
-        if inSend { sendBuffer += text } else if inScript { script += text }
+        if inSend { sendBuffer += text } else if inScript { script += text } else if inDescription {
+            descriptionBuffer += text
+        }
     }
 
     func parser(
@@ -181,25 +198,36 @@ private final class PluginParserDelegate: NSObject, XMLParserDelegate {
         case "script":
             inScript = false
             script = script.trimmingCharacters(in: .whitespacesAndNewlines)
-        case "trigger":
-            if let attributes = currentElementAttributes {
-                triggers.append(PluginMapping.trigger(attributes, send: sendBuffer))
-            }
-            currentElementAttributes = nil
-        case "alias":
-            if let attributes = currentElementAttributes {
-                aliases.append(PluginMapping.alias(attributes, send: sendBuffer))
-            }
-            currentElementAttributes = nil
-        case "timer":
-            if let attributes = currentElementAttributes {
-                if let timer = PluginMapping.timer(attributes, send: sendBuffer) {
-                    timers.append(timer)
-                }
-            }
-            currentElementAttributes = nil
+        case "description":
+            finishDescription()
+        case "trigger", "alias", "timer":
+            finishAutomationElement(element)
         default:
             break
         }
+    }
+
+    private func finishDescription() {
+        inDescription = false
+        pluginDescription = shouldTrimDescription
+            ? descriptionBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            : descriptionBuffer
+    }
+
+    private func finishAutomationElement(_ element: String) {
+        guard let attributes = currentElementAttributes else { return }
+        switch element {
+        case "trigger":
+            triggers.append(PluginMapping.trigger(attributes, send: sendBuffer))
+        case "alias":
+            aliases.append(PluginMapping.alias(attributes, send: sendBuffer))
+        case "timer":
+            if let timer = PluginMapping.timer(attributes, send: sendBuffer) {
+                timers.append(timer)
+            }
+        default:
+            break
+        }
+        currentElementAttributes = nil
     }
 }

@@ -25,6 +25,8 @@ public struct PluginContext: Sendable, Equatable {
     /// The plugin's version string (from its `<plugin version="…">`); surfaced
     /// via `GetPluginInfo(id, 19)`, which plugins print on install.
     public var version: String
+    /// The plugin's `<description>` body, surfaced as `GetPluginInfo(id, 3)`.
+    public var pluginDescription: String
     /// Directory the plugin was loaded from (its own files live here).
     public var pluginDirectory: String
     public var worldName: String
@@ -51,6 +53,7 @@ public struct PluginContext: Sendable, Equatable {
         pluginID: String,
         pluginName: String,
         version: String = "",
+        pluginDescription: String = "",
         pluginDirectory: String = "",
         worldName: String = "Aardwolf",
         worldDirectory: String = "",
@@ -62,6 +65,7 @@ public struct PluginContext: Sendable, Equatable {
         self.pluginID = pluginID
         self.pluginName = pluginName
         self.version = version
+        self.pluginDescription = pluginDescription
         self.pluginDirectory = pluginDirectory
         self.worldName = worldName
         self.worldDirectory = worldDirectory

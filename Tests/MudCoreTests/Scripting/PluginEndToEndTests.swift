@@ -290,4 +290,26 @@ extension PluginEndToEndTests {
         })
         #expect(await engine.expandInput("show").contains(.echo("name=Versioned")))
     }
+
+    @Test("GetPluginInfo(id, 3) returns the plugin description")
+    func getPluginInfoDescription() async throws {
+        let xml = """
+        <muclient>
+        <plugin id="com.test.desc" name="Described"/>
+        <description trim="y"><![CDATA[
+        Help from the description block.
+        ]]></description>
+        <aliases>
+          <alias match="desc help" enabled="y" send_to="12">
+            <send>Note(GetPluginInfo(GetPluginID(), 3))</send>
+          </alias>
+        </aliases>
+        </muclient>
+        """
+        let plugin = try MUSHclientPluginLoader.parse(xml: xml)
+        let engine = try ScriptEngine()
+        await engine.loadPlugin(plugin)
+
+        #expect(await engine.expandInput("desc help").contains(.echo("Help from the description block.")))
+    }
 }

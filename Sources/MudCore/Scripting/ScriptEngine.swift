@@ -275,6 +275,7 @@ public actor ScriptEngine {
         // Carry the plugin's version so `GetPluginInfo(id, 19)` resolves (some
         // plugins print it on install and concat-crash on a nil otherwise).
         resolved.version = plugin.version
+        resolved.pluginDescription = plugin.pluginDescription
         if resolved.pluginName.isEmpty { resolved.pluginName = plugin.name }
         await runtime.createPluginEnvironment(plugin.id)
         await runtime.setPluginContext(resolved)

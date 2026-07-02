@@ -65,6 +65,7 @@ extension LuaRuntime {
 
     private nonisolated func pluginInfoValue(context: PluginContext, code: Int) -> LuaValue {
         if code == 17 { return .boolean(true) }
+        if code == 3 { return .string(context.pluginDescription) }
         if code == 6 || code == 20 {
             guard let value = context.info(60) else { return .nil }
             if case .text(let text) = value { return .string(text) }
