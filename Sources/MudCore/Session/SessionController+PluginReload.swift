@@ -157,6 +157,7 @@ extension SessionController {
         let context = PluginContext(
             pluginID: plugin.id,
             pluginName: plugin.name,
+            pluginSourceFile: xml.path,
             pluginDirectory: Self.directoryPath(paths.code),
             worldDirectory: dataDir,
             appDirectory: dataDir,

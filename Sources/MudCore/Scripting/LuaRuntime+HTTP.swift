@@ -10,6 +10,13 @@ import Foundation
 /// The host (`SessionController`) performs the request off-actor via an
 /// ``HTTPClient`` and re-enters ``completeHTTPRequest(_:_:)`` on the actor.
 extension LuaRuntime {
+    struct PendingHTTPRequest {
+        let callback: Int32?
+        let onTimeout: Int32?
+        let variableScope: String
+        let pluginContext: PluginContext
+    }
+
     /// `proteles.__http(kind, url, protocol, timeout, payload, callback,
     /// onTimeout)` — record an outbound request as a `.httpRequest` effect,
     /// stashing the (claimed) callback refs under a fresh id. `kind` is
@@ -47,9 +54,11 @@ extension LuaRuntime {
 
         let id = nextHTTPRequestID
         nextHTTPRequestID += 1
-        pendingHTTP[id] = (
+        pendingHTTP[id] = PendingHTTPRequest(
             callback: callback.map { claim($0) },
-            onTimeout: onTimeout.map { claim($0) }
+            onTimeout: onTimeout.map { claim($0) },
+            variableScope: currentVariableScope,
+            pluginContext: pluginContext
         )
         effects.append(.httpRequest(HTTPRequest(
             id: id,
@@ -83,7 +92,13 @@ extension LuaRuntime {
     func completeHTTPRequest(_ request: HTTPRequest, _ response: HTTPResponse) -> [ScriptEffect] {
         guard let pending = pendingHTTP.removeValue(forKey: request.id) else { return [] }
         effects.removeAll(keepingCapacity: true)
+        let previousScope = currentVariableScope
+        let previousContext = pluginContext
+        currentVariableScope = pending.variableScope
+        pluginContext = pluginContexts[pending.pluginContext.pluginID] ?? pending.pluginContext
         defer {
+            currentVariableScope = previousScope
+            pluginContext = previousContext
             if let callback = pending.callback { luaL_unref(state, LUA_REGISTRYINDEX, callback) }
             if let onTimeout = pending.onTimeout { luaL_unref(state, LUA_REGISTRYINDEX, onTimeout) }
             releaseTransientRefs()

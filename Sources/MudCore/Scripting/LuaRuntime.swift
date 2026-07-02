@@ -256,7 +256,7 @@ public actor LuaRuntime {
 
     /// Pending async HTTP callbacks by request id (claimed refs, freed on
     /// completion — see `LuaRuntime+HTTP`); `nextHTTPRequestID` keys them.
-    nonisolated(unsafe) var pendingHTTP: [Int: (callback: Int32?, onTimeout: Int32?)] = [:]
+    nonisolated(unsafe) var pendingHTTP: [Int: PendingHTTPRequest] = [:]
     nonisolated(unsafe) var nextHTTPRequestID = 0
 
     /// Live miniwindow scenes by name (see `LuaRuntime+MiniWindow`). Persisted

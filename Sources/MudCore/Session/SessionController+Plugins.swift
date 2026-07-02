@@ -97,6 +97,7 @@ public extension SessionController {
         let context = PluginContext(
             pluginID: plugin.id,
             pluginName: plugin.name,
+            pluginSourceFile: xml.path,
             pluginDirectory: Self.directoryPath(directory),
             worldDirectory: Self.directoryPath(dataDir),
             appDirectory: Self.directoryPath(dataDir),
@@ -178,6 +179,7 @@ public extension SessionController {
         let context = PluginContext(
             pluginID: plugin.id,
             pluginName: plugin.name,
+            pluginSourceFile: xml.path,
             pluginDirectory: Self.directoryPath(directory),
             worldDirectory: dataPath,
             appDirectory: dataPath,

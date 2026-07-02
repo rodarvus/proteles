@@ -336,8 +336,8 @@ public extension LuaRuntime {
     -- WorldName(): the current world's name (GetInfo(2)); defaults to the only
     -- world Proteles targets when unset.
     function WorldName() return proteles.info(2) or "Aardwolf" end
-    -- GetPluginInfo(id, 20) = the plugin's directory; resolved for the
-    -- current plugin via GetInfo(60). Other infotypes/plugins return nil.
+    -- GetPluginInfo(id, 6) = source XML file; 20 = plugin directory.
+    -- Other infotypes/plugins return nil unless the host supplies them.
     function GetPluginInfo(id, n)
       local value = proteles.pluginInfo(tostring(id or GetPluginID()), tonumber(n) or 0)
       if value ~= nil then return value end

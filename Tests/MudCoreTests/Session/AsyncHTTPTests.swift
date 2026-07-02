@@ -38,10 +38,10 @@ struct AsyncHTTPTests {
         return await condition()
     }
 
-    private func plugin(_ body: String) -> String {
+    private func plugin(_ body: String, id: String = "cccccccccccccccccccccccc") -> String {
         """
         <muclient>
-        <plugin id="cccccccccccccccccccccccc" name="Net"/>
+        <plugin id="\(id)" name="Net"/>
         <aliases><alias match="^go$" enabled="y" regexp="y" send_to="12" script="go"/></aliases>
         <script><![CDATA[
         require "async"
@@ -72,6 +72,75 @@ struct AsyncHTTPTests {
 
         #expect(await eventually { conn.sentLines.contains("got:OK:200") })
         #expect(client.requests.first?.method == .post ? false : true) // GET (no body)
+        await controller.disconnect()
+    }
+
+    @Test("async callbacks keep the requesting plugin's context after another plugin loads")
+    func callbackPreservesPluginContext() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("async-http-context-\(UUID().uuidString)", isDirectory: true)
+        let sourceDir = root.appendingPathComponent("source", isDirectory: true)
+        let lastDataDir = root.appendingPathComponent("last-data", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: lastDataDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceXML = sourceDir.appendingPathComponent("source.xml")
+        let wrongFallback = lastDataDir.appendingPathComponent("source.xml")
+        try "original".write(to: sourceXML, atomically: true, encoding: .utf8)
+
+        let engine = try ScriptEngine()
+        await engine.setSQLiteDirectory(root.path)
+        let requestingPlugin = try MUSHclientPluginLoader.parse(xml: plugin("""
+        function go()
+          async.doAsyncRemoteRequest("https://example.com/source", function(retval, page, status)
+            local path = GetPluginInfo(GetPluginID(), 6)
+            if not path or path == "" then
+              path = GetPluginInfo(GetPluginID(), 20) .. "source.xml"
+            end
+            local f = assert(io.open(path, "wb"))
+            f:write(page)
+            f:close()
+            SetVariable("callback_owner", GetPluginID())
+            Send("wrote:" .. tostring(path))
+          end, "HTTPS", 5)
+        end
+        """, id: "com.test.net"))
+        _ = await engine.loadPlugin(requestingPlugin, context: PluginContext(
+            pluginID: requestingPlugin.id,
+            pluginName: requestingPlugin.name,
+            pluginSourceFile: sourceXML.path,
+            pluginDirectory: sourceDir.path + "/"
+        ))
+
+        let lastPlugin = try MUSHclientPluginLoader.parse(xml: """
+        <muclient>
+        <plugin id="com.test.last" name="Last"/>
+        <script><![CDATA[]]></script>
+        </muclient>
+        """)
+        _ = await engine.loadPlugin(lastPlugin, context: PluginContext(
+            pluginID: lastPlugin.id,
+            pluginName: lastPlugin.name,
+            pluginDirectory: lastDataDir.path + "/"
+        ))
+
+        let conn = InMemoryConnection()
+        let client = StubHTTPClient(HTTPResponse(
+            retval: 1, page: "updated", status: 200, headers: "", fullStatus: "HTTP 200", timedOut: false
+        ))
+        let controller = SessionController(scriptEngine: engine, makeConnection: { conn }, httpClient: client)
+        try await controller.connect(to: .init(host: "test.invalid", port: 23))
+
+        try await controller.send("go")
+
+        #expect(await eventually {
+            (try? String(contentsOf: sourceXML, encoding: .utf8)) == "updated"
+        })
+        #expect(!FileManager.default.fileExists(atPath: wrongFallback.path))
+        let variables = await engine.variablesSnapshot()
+        #expect(variables["com.test.net"]?["callback_owner"] == "com.test.net")
+        #expect(variables["com.test.last"]?["callback_owner"] == nil)
         await controller.disconnect()
     }
 

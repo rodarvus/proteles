@@ -383,14 +383,48 @@ struct CompatShimTests {
         #expect(try await lua.boolean("IsConnected() == true"))
     }
 
-    @Test("GetPluginInfo directory fields return the plugin directory")
+    @Test("GetPluginInfo source file and directory fields stay distinct")
     func getPluginInfoDirectory() async throws {
         let lua = try await shimmed()
         await lua.setPluginContext(PluginContext(
-            pluginID: "p", pluginName: "P", pluginDirectory: "/plugins/p"
+            pluginID: "p", pluginName: "P", pluginDirectory: "/plugins/p/"
         ))
-        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p")
-        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 6)") == "/plugins/p")
+        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p/")
+        #expect(try await lua.boolean("GetPluginInfo(GetPluginID(), 6) == nil"))
+
+        await lua.setPluginContext(PluginContext(
+            pluginID: "p",
+            pluginName: "P",
+            pluginSourceFile: "/plugins/p/plugin.xml",
+            pluginDirectory: "/plugins/p/"
+        ))
+        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 20)") == "/plugins/p/")
+        #expect(try await lua.string("GetPluginInfo(GetPluginID(), 6)") == "/plugins/p/plugin.xml")
+    }
+
+    @Test("GetPluginInfo source file supports self-update writes")
+    func getPluginInfoSourceFileWrite() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("plugin-source-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let xml = dir.appendingPathComponent("plugin.xml")
+        try "<plugin version=\"0.1\"/>".write(to: xml, atomically: true, encoding: .utf8)
+
+        let lua = try await shimmed()
+        await lua.setSQLiteDirectory(dir.path)
+        await lua.setPluginContext(PluginContext(
+            pluginID: "p",
+            pluginName: "P",
+            pluginSourceFile: xml.path,
+            pluginDirectory: dir.path + "/"
+        ))
+        _ = try await lua.run("""
+        local f = assert(io.open(GetPluginInfo(GetPluginID(), 6), "wb"))
+        f:write('<plugin version="0.2"/>')
+        f:close()
+        """)
+
+        #expect(try String(contentsOf: xml, encoding: .utf8) == "<plugin version=\"0.2\"/>")
     }
 
     @Test("Execute runs script-prefixed text as Lua, plain text as a command")
