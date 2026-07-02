@@ -9,9 +9,20 @@ public extension SessionController {
     /// Match a freshly captured chat line and publish a notification if it's
     /// notification-worthy (a tell, or your name mentioned on a channel).
     func notifyForChat(_ chatLine: ChatLine) async {
-        guard notificationsEnabled else { return }
+        guard notificationsEnabled else {
+            logTranscript(.notif, "chat chan=\(chatLine.channel) → skipped (notifications disabled)")
+            return
+        }
         let name = await gmcpState.state.base?.name
-        if let note = notificationMatcher.notification(for: chatLine, characterName: name) {
+        let note = notificationMatcher.notification(for: chatLine, characterName: name)
+        logTranscript(
+            .notif,
+            "chat chan=\(chatLine.channel) player=\(chatLine.player) "
+                + "name=\(name ?? "<nil>") tells=\(notificationMatcher.notifyOnTells) "
+                + "mention=\(notificationMatcher.notifyOnMention) rules=\(notificationMatcher.rules.count) "
+                + "→ \(note.map { "match '\($0.title)'" } ?? "no-match")"
+        )
+        if let note {
             publishNotification(note)
         }
     }
@@ -19,8 +30,19 @@ public extension SessionController {
     /// The single publish gate: drop a recent duplicate (coalescing), else yield
     /// the notification for the app to post.
     func publishNotification(_ note: ProtelesNotification) {
-        guard notificationCoalescer.shouldShow(note) else { return }
-        notificationsContinuation.yield(note)
+        guard notificationCoalescer.shouldShow(note) else {
+            logTranscript(.notif, "publish '\(note.title)' → coalesced (duplicate within window)")
+            return
+        }
+        let result = notificationsContinuation.yield(note)
+        logTranscript(.notif, "publish '\(note.title)' → yielded to app (\(result))")
+    }
+
+    /// App-layer delivery outcomes (posted / focus-suppressed / OS error) written
+    /// back into the transcript, so a recording shows the WHOLE chain — the app
+    /// side is otherwise invisible to recordings.
+    func logNotificationDelivery(_ outcome: String) {
+        logTranscript(.notif, "app: \(outcome)")
     }
 
     /// Edge-triggered low-HP check: recompute HP% from GMCP vitals/maxstats and

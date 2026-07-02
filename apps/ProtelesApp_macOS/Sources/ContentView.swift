@@ -285,9 +285,7 @@ struct ContentView: View {
             notifications.notifyWhenFocused = notifyWhenFocused
         }
         .task {
-            for await note in session.notifications {
-                notifications.post(note)
-            }
+            await notifications.consume(from: session)
         }
         .task {
             // Render soundpack/plugin cues (#10) — AVAudioPlayer one-shots.

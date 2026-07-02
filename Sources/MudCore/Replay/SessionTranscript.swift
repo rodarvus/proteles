@@ -48,6 +48,11 @@ public final class SessionTranscript: @unchecked Sendable {
         /// gag). Logged with its reason so a recording shows *what* was gagged,
         /// not just what arrived — `recv` is pre-gag, so it can't reveal that.
         case gag = "GAG"
+        /// A user-notification decision (matched/no-match, coalesced, posted,
+        /// focus-suppressed). Same rationale as `gag`: recordings must show
+        /// what the notification chain *decided*, or a missing banner is
+        /// undiagnosable after the fact.
+        case notif = "NOTIF"
     }
 
     /// On-disk path of the transcript.
