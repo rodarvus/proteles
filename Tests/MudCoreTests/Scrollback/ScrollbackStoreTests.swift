@@ -187,6 +187,7 @@ struct ScrollbackStoreEventsTests {
     private enum Kind: Equatable {
         case append(LineID)
         case evict(LineID)
+        case limit(ScrollbackLimit, evicted: [LineID])
         case removedTail([LineID])
     }
 
@@ -194,6 +195,7 @@ struct ScrollbackStoreEventsTests {
         switch event {
         case .appended(let line): .append(line.id)
         case .evicted(let id): .evict(id)
+        case .limitChanged(let limit, let ids): .limit(limit, evicted: ids)
         case .removedTail(let ids): .removedTail(ids)
         }
     }
@@ -311,5 +313,74 @@ struct ScrollbackStoreEventsTests {
             .append(LineID(2)),
             .evict(LineID(0))
         ])
+    }
+}
+
+@Suite("ScrollbackStore — live retention changes")
+struct ScrollbackStoreLimitTests {
+    @Test("Reducing the limit immediately removes one prefix and emits one event")
+    func reducingLimitEvictsPrefixInBulk() async {
+        let store = ScrollbackStore(maxLines: 10)
+        for index in 0..<10 {
+            await store.append(text: "\(index)")
+        }
+        let stream = await store.events()
+
+        await store.setLimit(.limited(4))
+
+        var received: ScrollbackEvent?
+        for await event in stream {
+            received = event
+            break
+        }
+        #expect(received == .limitChanged(
+            .limited(4),
+            evicted: (0..<6).map { LineID(UInt64($0)) }
+        ))
+        #expect(await store.snapshot().map(\.text) == ["6", "7", "8", "9"])
+    }
+
+    @Test("Unlimited retains every subsequent append")
+    func unlimitedStopsProactiveEviction() async {
+        let store = ScrollbackStore(maxLines: 2)
+        await store.setLimit(.unlimited)
+        for index in 0..<6 {
+            await store.append(text: "\(index)")
+        }
+
+        #expect(await store.limit == .unlimited)
+        #expect(await store.maxLines == 0)
+        #expect(await store.snapshot().map(\.text) == ["0", "1", "2", "3", "4", "5"])
+    }
+
+    @Test("Changing unlimited to finite trims immediately, then enforces the cap")
+    func unlimitedToFinite() async {
+        let store = ScrollbackStore(limit: .unlimited)
+        for index in 0..<6 {
+            await store.append(text: "\(index)")
+        }
+
+        await store.setLimit(.limited(3))
+        await store.append(text: "6")
+
+        #expect(await store.snapshot().map(\.text) == ["4", "5", "6"])
+    }
+
+    @Test("A larger limit emits a policy event without evicting lines")
+    func increasingLimitDoesNotEvict() async {
+        let store = ScrollbackStore(maxLines: 2)
+        await store.append(text: "0")
+        await store.append(text: "1")
+        let stream = await store.events()
+
+        await store.setLimit(.limited(5))
+
+        var received: ScrollbackEvent?
+        for await event in stream {
+            received = event
+            break
+        }
+        #expect(received == .limitChanged(.limited(5), evicted: []))
+        #expect(await store.snapshot().map(\.text) == ["0", "1"])
     }
 }

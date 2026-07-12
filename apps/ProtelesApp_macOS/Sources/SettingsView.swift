@@ -29,7 +29,7 @@ struct SettingsView: View {
                 .tabItem { Label("Input", systemImage: "keyboard") }
             PanelsSettingsView()
                 .tabItem { Label("Panels", systemImage: "rectangle.3.group") }
-            SessionSettingsView()
+            SessionSettingsView(session: session)
                 .tabItem { Label("Session", systemImage: "network") }
             NotificationsSettingsView()
                 .tabItem { Label("Notifications", systemImage: "bell") }
@@ -422,6 +422,8 @@ private struct PanelsSettingsView: View {
 
 /// The wire and what's kept on disk: reconnect, keep-alive, session logs.
 private struct SessionSettingsView: View {
+    let session: SessionController
+
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("keepAlive") private var keepAlive = true
     @AppStorage("sessionLogging") private var sessionLogging = false
@@ -445,6 +447,7 @@ private struct SessionSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            ScrollbackSettingsSection(session: session)
             Section("Session Logs") {
                 Toggle("Save a readable log of each session", isOn: $sessionLogging)
                     .help("A per-session text/HTML log (distinct from the replayable recording)")

@@ -21,7 +21,7 @@ final class PreferencesFile {
     private static let managedKeys: [String] = [
         "themeID", "outputFontName", "outputFontSize",
         "omitBlankLines", "gagTagLines", "richExits",
-        "autoReconnect", "autoRecordSessions", "keepAlive",
+        "autoReconnect", "autoRecordSessions", "keepAlive", ScrollbackPreference.key,
         "sessionLogging", "sessionLogFormat", "perWorldLogs", "logRetention",
         "notificationsEnabled", "notifyOnTells", "notifyOnMention", "notifyWhenFocused",
         "commandSpellCheck", "inputGhostHint", "navigationMode",

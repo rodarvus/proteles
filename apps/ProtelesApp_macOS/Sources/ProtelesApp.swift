@@ -104,6 +104,7 @@ struct ProtelesApp: App {
         let scriptEngine = try? ScriptEngine()
         self.scriptEngine = scriptEngine
         session = SessionController(
+            scrollbackStore: ScrollbackStore(limit: ScrollbackPreference.current),
             scriptEngine: scriptEngine,
             autoRecord: true,
             reconnectPolicy: .standard,

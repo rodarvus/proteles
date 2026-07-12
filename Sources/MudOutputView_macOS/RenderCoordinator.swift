@@ -32,11 +32,6 @@
     /// ones stream in.
     @MainActor
     public final class RenderCoordinator {
-        public enum InitialScrollPosition: Sendable {
-            case top
-            case bottom
-        }
-
         /// Optional callback fired after every flush with that frame's render
         /// telemetry (see ``RenderFrameStats``). Used by perf diagnosis (and the
         /// original validation spike) to measure timing without coupling to a
@@ -75,6 +70,8 @@
         private var evictionBacklog = 0
         private var evictionTrimSequence = 0
         private var lastAnchorOutcome = "none"
+        private var configuredLimit = ScrollbackLimit.limited(ScrollbackLimit.defaultLineCount)
+        private var lastLimitChangeOutcome = "none"
 
         private weak var textView: NSTextView?
         private let builder: AttributedStringBuilder
@@ -158,6 +155,7 @@
             // render the existing buffer up front — so a freshly (re)created
             // view (e.g. after a font-size change) isn't blank.
             let (snapshot, stream) = await store.eventsWithSnapshot()
+            configuredLimit = await store.limit
             renderSnapshot(snapshot)
             emitHealth(reason: "attach")
             // Drain the stream OFF the main actor (Task.detached) into the
@@ -234,8 +232,8 @@
         /// reaches a full ``evictionBatch``, so the layout-invalidating
         /// top-of-document delete happens once per batch rather than once per
         /// flush. Must be called inside the storage's `beginEditing` scope.
-        private func trimEvictionBacklogIfFull(_ storage: NSTextStorage) -> Int {
-            guard evictionBacklog >= evictionBatch else { return 0 }
+        private func trimEvictionBacklog(_ storage: NSTextStorage, force: Bool) -> Int {
+            guard evictionBacklog >= evictionBatch || force && evictionBacklog > 0 else { return 0 }
             let trimmedLines = evictionBacklog
             return PerformanceProbe.shared.measure(
                 "main-output.eviction-trim",
@@ -297,14 +295,6 @@
             subsystem: "com.proteles", category: "render"
         )
 
-        private struct FlushMutation {
-            var didAppend = false
-            var didRemoveTail = false
-            var trimmedLines = 0
-            var appendedCount = 0
-            var maxArrivalLatency: TimeInterval = 0
-        }
-
         private func flushPending() {
             guard let textView, let storage = textView.textStorage else { return }
             let toApply = inbox.drain()
@@ -314,7 +304,9 @@
 
             let start = ContinuousClock.now
             let followsTail = isFollowingTail(textView)
-            let willTrim = evictionBacklog + toApply.lazy.filter(\.isEviction).count >= evictionBatch
+            let pendingEvictions = toApply.lazy.map(\.evictionCount).reduce(0, +)
+            let forcedTrim = toApply.contains(where: \.requiresImmediateEvictionTrim)
+            let willTrim = forcedTrim || evictionBacklog + pendingEvictions >= evictionBatch
             let reviewAnchor = !followsTail && willTrim
                 ? currentViewportAnchor(in: textView)
                 : nil
@@ -371,13 +363,28 @@
                             "ScrollbackStore eviction order does not match coordinator FIFO"
                         )
                         evictionBacklog += 1
+                    case .limitChanged(let limit, let ids):
+                        configuredLimit = limit
+                        mutation.limitChange = (limit.diagnosticLabel, ids.count)
+                        mutation.forceEvictionTrim = true
+                        for id in ids where evictionBacklog < lineLengths.count {
+                            assert(lineLengths[evictionBacklog].id == id)
+                            evictionBacklog += 1
+                        }
                     case .removedTail(let ids):
                         mutation.didRemoveTail = true
                         removeTail(ids, from: storage)
                     }
                 }
-                mutation.trimmedLines = trimEvictionBacklogIfFull(storage)
+                mutation.trimmedLines = trimEvictionBacklog(
+                    storage,
+                    force: mutation.forceEvictionTrim
+                )
                 storage.endEditing()
+            }
+            if let change = mutation.limitChange {
+                lastLimitChangeOutcome = "\(change.label)-evicted-\(change.evicted)"
+                    + "-trimmed-\(mutation.trimmedLines)"
             }
             return mutation
         }
@@ -402,7 +409,9 @@
                 documentUTF16Length: documentUTF16Length
             ))
         }
+    }
 
+    extension RenderCoordinator {
         func currentViewportAnchor() -> OutputViewportAnchor? {
             guard let textView else { return nil }
             return currentViewportAnchor(in: textView)
@@ -540,6 +549,7 @@
                 topLayoutFragmentState: viewport.topLayoutFragmentState,
                 topVisualLineCount: viewport.topVisualLineCount,
                 extra: "backlog \(evictionBacklog) tailLines \(recentLines.count) "
+                    + "limit \(configuredLimit.diagnosticLabel) limitChange \(lastLimitChangeOutcome) "
                     + "mode \(mode) modeReason \(modeReason) anchor \(lastAnchorOutcome)"
             )
         }

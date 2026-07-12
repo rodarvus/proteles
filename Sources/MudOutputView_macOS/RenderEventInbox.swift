@@ -31,8 +31,16 @@
     }
 
     extension ScrollbackEvent {
-        var isEviction: Bool {
-            if case .evicted = self { return true }
+        var evictionCount: Int {
+            switch self {
+            case .evicted: 1
+            case .limitChanged(_, let evicted): evicted.count
+            default: 0
+            }
+        }
+
+        var requiresImmediateEvictionTrim: Bool {
+            if case .limitChanged = self { return true }
             return false
         }
     }

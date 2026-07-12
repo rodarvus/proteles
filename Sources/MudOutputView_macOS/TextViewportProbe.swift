@@ -99,6 +99,26 @@
             in textView: NSTextView,
             renderedLines: [RenderedLineSpan]
         ) -> Bool {
+            let survived = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
+            let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView
+            let expectedReason = scrollView?.scrollModeReason
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView,
+                      let scrollView = textView.enclosingScrollView
+                      as? BottomPinnedOutputScrollView,
+                      scrollView.scrollMode == .reviewing,
+                      scrollView.scrollModeReason == expectedReason
+                else { return }
+                _ = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
+            }
+            return survived
+        }
+
+        private static func restoreAnchorNow(
+            _ anchor: OutputViewportAnchor,
+            in textView: NSTextView,
+            renderedLines: [RenderedLineSpan]
+        ) -> Bool {
             guard !renderedLines.isEmpty,
                   let scrollView = textView.enclosingScrollView,
                   let layoutManager = textView.textLayoutManager,

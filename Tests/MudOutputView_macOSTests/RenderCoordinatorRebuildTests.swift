@@ -149,6 +149,146 @@
             #expect(coordinator.currentScrollMode == .reviewing)
         }
 
+        @Test("live limit reduction trims immediately and reports its outcome")
+        func liveLimitReductionTrimsImmediately() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            coordinator.evictionBatch = 1000
+            let health = HealthBox()
+            coordinator.onHealthSnapshot = { health.latest = $0 }
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index)")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            await store.setLimit(.limited(40))
+            try await Task.sleep(for: .milliseconds(250))
+
+            let rendered = viewport.textView.string
+            #expect(rendered.split(separator: "\n").count == 40)
+            #expect(rendered.contains("line 60\n"))
+            #expect(!rendered.contains("line 59\n"))
+            #expect(health.latest?.extra.contains("limit limited-40") == true)
+            #expect(health.latest?.extra.contains("evicted-60-trimmed-60") == true)
+        }
+
+        @Test("a coalesced later increase cannot suppress a required trim")
+        func coalescedLimitIncreaseStillTrims() async throws {
+            let textView = try #require(makeView())
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(20)
+            )
+            coordinator.evictionBatch = 1000
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index)")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            await store.setLimit(.limited(40))
+            await store.setLimit(.unlimited)
+            try await Task.sleep(for: .milliseconds(250))
+
+            #expect(textView.string.split(separator: "\n").count == 40)
+            #expect(await store.limit == .unlimited)
+        }
+
+        @Test("switching to unlimited flushes an existing deferred eviction backlog")
+        func unlimitedFlushesExistingEvictionBacklog() async throws {
+            let textView = try #require(makeView())
+            let store = ScrollbackStore(maxLines: 50)
+            let coordinator = RenderCoordinator(
+                textView: textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            coordinator.evictionBatch = 20
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<69 {
+                await store.append(text: "line \(index)")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            #expect(textView.string.split(separator: "\n").count == 69)
+
+            await store.setLimit(.unlimited)
+            try await Task.sleep(for: .milliseconds(250))
+
+            #expect(textView.string.split(separator: "\n").count == 50)
+            #expect(textView.string.contains("line 19\n"))
+            #expect(!textView.string.contains("line 18\n"))
+        }
+
+        @Test("live limit reduction preserves a surviving review anchor")
+        func liveLimitReductionPreservesReviewAnchor() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            let range = (viewport.textView.string as NSString).range(of: "line 70 content")
+            viewport.textView.scrollRangeToVisible(range)
+            viewport.scrollView.noteUserScroll(reason: "unit-review")
+            let before = try #require(coordinator.currentViewportAnchor())
+
+            await store.setLimit(.limited(50))
+            try await Task.sleep(for: .milliseconds(250))
+            let after = try #require(coordinator.currentViewportAnchor())
+
+            #expect(after.lineID == before.lineID)
+            #expect(after.utf16OffsetInLine == before.utf16OffsetInLine)
+            #expect(coordinator.currentScrollMode == .reviewing)
+        }
+
+        @Test("live limit reduction clamps an evicted review anchor")
+        func liveLimitReductionClampsEvictedReviewAnchor() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            let range = (viewport.textView.string as NSString).range(of: "line 20 content")
+            viewport.textView.scrollRangeToVisible(range)
+            viewport.scrollView.noteUserScroll(reason: "unit-review")
+
+            await store.setLimit(.limited(50))
+            try await Task.sleep(for: .milliseconds(250))
+            let after = try #require(coordinator.currentViewportAnchor())
+
+            #expect(after.lineID == LineID(50))
+            #expect(coordinator.currentScrollMode == .reviewing)
+        }
+
         @Test("selecting historical output enters review mode")
         func selectingHistoricalOutputEntersReviewMode() async {
             let viewport = makeOutputViewport(height: 120)

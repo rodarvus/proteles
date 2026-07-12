@@ -12,6 +12,11 @@ public enum ScrollbackEvent: Sendable, Equatable {
     /// hit its `maxLines` budget. Delivered in eviction order (FIFO with
     /// the original append order).
     case evicted(LineID)
+    /// The configured retention policy changed. When reducing a finite limit,
+    /// `evicted` contains the removed prefix in display order. This is one
+    /// event regardless of the number of removed lines so renderers can trim
+    /// the document in one transaction.
+    case limitChanged(ScrollbackLimit, evicted: [LineID])
     /// The newest resident lines were deleted by a scripting API such as
     /// MUSHclient `DeleteLines`. Delivered newest-last in the same order the
     /// lines appeared in the buffer.
@@ -34,9 +39,15 @@ public enum ScrollbackEvent: Sendable, Equatable {
 ///
 /// Cancel either stream's iteration to unsubscribe.
 public actor ScrollbackStore {
-    /// Maximum number of lines retained in memory. Older lines are
-    /// evicted on append.
-    public let maxLines: Int
+    /// Active retention policy. A finite limit evicts older lines on append;
+    /// unlimited retention performs no proactive eviction.
+    public private(set) var limit: ScrollbackLimit
+
+    /// Compatibility projection for callers that only need the persisted
+    /// representation (`0` means unlimited).
+    public var maxLines: Int {
+        limit.storedValue
+    }
 
     private var lines: Deque<Line> = []
     private var nextLineRaw: UInt64 = 0
@@ -50,9 +61,16 @@ public actor ScrollbackStore {
     /// eventually saturated the main thread during a six-hour combat session.
     /// Only the most recent tail is persisted to the flat JSONL sidecar for
     /// session resume (#42); there is no disk-backed infinite scrollback.
-    public init(maxLines: Int = 100_000) {
+    public init(maxLines: Int = ScrollbackLimit.defaultLineCount) {
         precondition(maxLines > 0, "maxLines must be positive")
-        self.maxLines = maxLines
+        limit = .limited(maxLines)
+    }
+
+    public init(limit: ScrollbackLimit) {
+        if case .limited(let lineCount) = limit {
+            precondition(lineCount > 0, "limited scrollback must be positive")
+        }
+        self.limit = limit
     }
 
     /// Append a line built from its parts. Returns the assigned ``LineID``.
@@ -132,6 +150,26 @@ public actor ScrollbackStore {
     /// keep the deque under ``maxLines``).
     public var totalAppended: UInt64 {
         nextLineRaw
+    }
+
+    /// Change retention for the live store. Reducing a finite limit removes
+    /// the oldest excess lines immediately and publishes one bulk event.
+    public func setLimit(_ newLimit: ScrollbackLimit) {
+        if case .limited(let lineCount) = newLimit {
+            precondition(lineCount > 0, "limited scrollback must be positive")
+        }
+        guard newLimit != limit else { return }
+        limit = newLimit
+
+        var evicted: [LineID] = []
+        if let lineCount = newLimit.lineCount, lines.count > lineCount {
+            let excess = lines.count - lineCount
+            evicted = lines.prefix(excess).map(\.id)
+            lines.removeFirst(excess)
+        }
+        for continuation in eventSubscribers.values {
+            continuation.yield(.limitChanged(newLimit, evicted: evicted))
+        }
     }
 
     /// Snapshot of all currently-resident lines in append order.
@@ -222,7 +260,7 @@ public actor ScrollbackStore {
         for continuation in eventSubscribers.values {
             continuation.yield(.appended(line))
         }
-        while lines.count > maxLines {
+        while let lineCount = limit.lineCount, lines.count > lineCount {
             let evicted = lines.removeFirst()
             for continuation in eventSubscribers.values {
                 continuation.yield(.evicted(evicted.id))

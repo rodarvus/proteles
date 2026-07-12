@@ -219,9 +219,12 @@ into one UI update per frame (D-01). Live panels are docked in the main window
 Streaming performance is solved with two levers: **render coalescing** (one UI
 update per frame, D-01) and **eviction-bounded stock `NSTextStorage`**
 (`ScrollbackStore` emits `.appended`/`.evicted`; `RenderCoordinator` mirrors
-evictions, D-12). Copy-with-colour-codes (ANSI/`@`/HTML) and per-segment coloured
-output (`ColourNote`) are supported. Clickable links (`StyledRun.link`, D-40)
-back Rich Exits, Help cross-refs, and URL linkify.
+evictions, D-12). Main-output retention is live-configurable as a finite line
+budget or unlimited (`0` on disk); explicit reductions publish one bulk prefix
+event so TextKit performs one edit and preserves a stable viewport anchor
+(D-114). Copy-with-colour-codes (ANSI/`@`/HTML) and per-segment coloured output
+(`ColourNote`) are supported. Clickable links (`StyledRun.link`, D-40) back Rich
+Exits, Help cross-refs, and URL linkify.
 
 ---
 
