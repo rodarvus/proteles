@@ -11,6 +11,18 @@ struct CharStatusCombatTargetTests {
         #expect(target?.percent == 45)
     }
 
+    @Test("Colour-coded enemy names expose only their visible text")
+    func colourCodedEnemy() {
+        let status = CharStatus(
+            level: 111,
+            enemy: "the @x165Frac@x171tal Ano@x176maly@w",
+            enemypct: 96
+        )
+
+        #expect(status.combatTarget?.name == "the Fractal Anomaly")
+        #expect(status.enemy == "the @x165Frac@x171tal Ano@x176maly@w")
+    }
+
     @Test("Out of combat: empty enemy → nil (Aardwolf clears it to \"\")")
     func emptyEnemy() {
         #expect(CharStatus(level: 100, enemy: "", enemypct: 0).combatTarget == nil)

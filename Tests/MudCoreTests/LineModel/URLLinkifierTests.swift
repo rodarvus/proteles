@@ -56,4 +56,20 @@ struct URLLinkifierTests {
         #expect(linked?.utf16Range == utf16Range(of: "http://www.google.com/", in: text))
         #expect(linked?.link?.action == .openURL("http://www.google.com/"))
     }
+
+    @Test("A URL followed by prose stops at the first space")
+    func URLFollowedByProse() {
+        let text = "Zargulis answers 'https://www.aardwolf.com/wiki/index.php/Main/MudMessages "
+            + "has a lot of mud messages'"
+        let result = URLLinkifier.linkify(line(text))
+        let linked = result.runs.first { $0.link != nil }
+
+        #expect(linked?.utf16Range == utf16Range(
+            of: "https://www.aardwolf.com/wiki/index.php/Main/MudMessages",
+            in: text
+        ))
+        #expect(linked?.link?.action == .openURL(
+            "https://www.aardwolf.com/wiki/index.php/Main/MudMessages"
+        ))
+    }
 }

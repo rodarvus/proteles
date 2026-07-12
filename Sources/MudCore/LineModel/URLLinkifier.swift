@@ -20,8 +20,15 @@ public enum URLLinkifier {
         let matches = detector.matches(in: line.text, range: NSRange(location: 0, length: length))
         let urlRanges = matches.compactMap { match -> (Range<Int>, String)? in
             guard match.resultType == .link else { return nil }
-            let range = match.range.lowerBound..<match.range.upperBound
-            return (range, nsText.substring(with: match.range))
+            // NSDataDetector can treat ordinary prose after a URL as a URL
+            // whose spaces have been percent-encoded. Literal whitespace is
+            // never part of a URL, so constrain the detected span before
+            // creating both the link target and its rendered range.
+            let detected = nsText.substring(with: match.range)
+            let urlLength = detected.prefix { !$0.isWhitespace }.utf16.count
+            guard urlLength > 0 else { return nil }
+            let range = match.range.location..<(match.range.location + urlLength)
+            return (range, nsText.substring(with: NSRange(range)))
         }
         guard !urlRanges.isEmpty else { return line }
 

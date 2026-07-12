@@ -92,7 +92,9 @@ public struct CharStatus: Codable, Sendable, Equatable {
     /// gauge (the useful slice of `aard_health_bars_gmcp`).
     public var combatTarget: (name: String, percent: Int)? {
         guard let enemy, !enemy.isEmpty, let enemypct else { return nil }
-        return (enemy, enemypct)
+        let name = AardwolfColor.stripped(enemy)
+        guard !name.isEmpty else { return nil }
+        return (name, enemypct)
     }
 
     /// Whether it's a safe moment to interrupt with an update prompt (#42): not
