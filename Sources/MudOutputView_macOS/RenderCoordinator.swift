@@ -30,40 +30,6 @@
     /// the view jumps to the new bottom after the append. Otherwise scroll
     /// position is preserved so the user can read older lines while new
     /// ones stream in.
-    /// Per-flush render telemetry: how long the paint took, how much it painted,
-    /// and — the key perf number — the worst **arrival→paint** latency among the
-    /// lines shown this frame (`Date.now − line.timestamp`). Because `Line` is
-    /// stamped at parse time (in `pipeline.consume`, *before* the GMCP-dispatch
-    /// loop), that latency captures the whole path from "bytes arrived from the
-    /// MUD" to "pixels on screen": GMCP-dispatch wait + queueing + frame wait +
-    /// the flush itself. A high latency with a *low* `flushDuration` means the
-    /// stall is upstream (processing), not the paint.
-    public struct RenderFrameStats: Sendable {
-        public let flushDuration: Duration
-        public let appendedLines: Int
-        public let maxArrivalLatency: TimeInterval
-        /// Live document size after this flush (#65 follow-up): the line FIFO
-        /// count and the NSTextStorage UTF-16 length. In the field these are
-        /// the datum that separates "eviction broken → unbounded document"
-        /// from "fixed-size document degrading" when flushes slow down.
-        public let documentLines: Int
-        public let documentUTF16Length: Int
-
-        public init(
-            flushDuration: Duration,
-            appendedLines: Int,
-            maxArrivalLatency: TimeInterval,
-            documentLines: Int = 0,
-            documentUTF16Length: Int = 0
-        ) {
-            self.flushDuration = flushDuration
-            self.appendedLines = appendedLines
-            self.maxArrivalLatency = maxArrivalLatency
-            self.documentLines = documentLines
-            self.documentUTF16Length = documentUTF16Length
-        }
-    }
-
     @MainActor
     public final class RenderCoordinator {
         public enum InitialScrollPosition: Sendable {
@@ -76,6 +42,8 @@
         /// original validation spike) to measure timing without coupling to a
         /// logging framework.
         public var onFrameFlush: ((RenderFrameStats) -> Void)?
+        /// Sanitized text-view geometry/state probe for transcript diagnostics.
+        public var onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)?
 
         /// Distance from the bottom (in points) within which auto-scroll
         /// remains engaged.
@@ -105,6 +73,8 @@
         /// logically gone; they're trimmed in one delete once a full batch
         /// accumulates.
         private var evictionBacklog = 0
+        private var evictionTrimSequence = 0
+        private var lastAnchorOutcome = "none"
 
         private weak var textView: NSTextView?
         private let builder: AttributedStringBuilder
@@ -172,6 +142,7 @@
         /// with the store's eviction order.
         public func attach(to store: ScrollbackStore) async {
             detach()
+            configureInitialScrollMode()
             // Clear any prior rendered state so attach is a full reset and is
             // safe to call on an already-populated view (e.g. a font-size
             // change re-creates the view, but a defensive reset keeps attach
@@ -188,6 +159,7 @@
             // view (e.g. after a font-size change) isn't blank.
             let (snapshot, stream) = await store.eventsWithSnapshot()
             renderSnapshot(snapshot)
+            emitHealth(reason: "attach")
             // Drain the stream OFF the main actor (Task.detached) into the
             // thread-safe inbox. This is the load-bearing detail: a plain
             // `Task {}` here would inherit this @MainActor method's isolation,
@@ -262,20 +234,22 @@
         /// reaches a full ``evictionBatch``, so the layout-invalidating
         /// top-of-document delete happens once per batch rather than once per
         /// flush. Must be called inside the storage's `beginEditing` scope.
-        private func trimEvictionBacklogIfFull(_ storage: NSTextStorage) {
-            guard evictionBacklog >= evictionBatch else { return }
-            PerformanceProbe.shared.measure(
+        private func trimEvictionBacklogIfFull(_ storage: NSTextStorage) -> Int {
+            guard evictionBacklog >= evictionBatch else { return 0 }
+            let trimmedLines = evictionBacklog
+            return PerformanceProbe.shared.measure(
                 "main-output.eviction-trim",
-                events: evictionBacklog,
+                events: trimmedLines,
                 thresholdMS: 50
             ) {
                 var evictBytes = 0
-                for index in 0..<evictionBacklog {
+                for index in 0..<trimmedLines {
                     evictBytes += lineLengths[index].utf16Length
                 }
                 storage.deleteCharacters(in: NSRange(location: 0, length: evictBytes))
-                lineLengths.removeFirst(evictionBacklog)
+                lineLengths.removeFirst(trimmedLines)
                 evictionBacklog = 0
+                return trimmedLines
             }
         }
 
@@ -323,6 +297,14 @@
             subsystem: "com.proteles", category: "render"
         )
 
+        private struct FlushMutation {
+            var didAppend = false
+            var didRemoveTail = false
+            var trimmedLines = 0
+            var appendedCount = 0
+            var maxArrivalLatency: TimeInterval = 0
+        }
+
         private func flushPending() {
             guard let textView, let storage = textView.textStorage else { return }
             let toApply = inbox.drain()
@@ -331,21 +313,42 @@
             defer { Self.signposter.endInterval("render-flush", signpostState) }
 
             let start = ContinuousClock.now
-            let wallNow = Date()
-            let stickToBottom = isScrolledToBottom(textView)
-            var didAppend = false
-            var didRemoveTail = false
-            var appendedCount = 0
-            var maxArrivalLatency: TimeInterval = 0
+            let followsTail = isFollowingTail(textView)
+            let willTrim = evictionBacklog + toApply.lazy.filter(\.isEviction).count >= evictionBatch
+            let reviewAnchor = !followsTail && willTrim
+                ? currentViewportAnchor(in: textView)
+                : nil
+            let mutation = apply(toApply, to: storage, wallNow: Date())
 
+            if followsTail {
+                scrollToBottom(textView)
+            } else if mutation.trimmedLines > 0 {
+                restoreReviewAnchor(reviewAnchor, in: textView)
+            }
+            if mutation.didAppend || mutation.didRemoveTail { refreshTail() }
+
+            finishFlush(
+                start: start,
+                appendedCount: mutation.appendedCount,
+                maxArrivalLatency: mutation.maxArrivalLatency,
+                documentUTF16Length: storage.length
+            )
+            emitHealth(reason: "flush")
+        }
+
+        private func apply(
+            _ events: [ScrollbackEvent],
+            to storage: NSTextStorage,
+            wallNow: Date
+        ) -> FlushMutation {
+            var mutation = FlushMutation()
             PerformanceProbe.shared.measure(
                 "main-output.storage-edit",
-                events: toApply.count,
+                events: events.count,
                 thresholdMS: 50
             ) {
                 storage.beginEditing()
-
-                for event in toApply {
+                for event in events {
                     switch event {
                     case .appended(let line):
                         let attributed = builder.build(line)
@@ -355,48 +358,28 @@
                         if recentLines.count > tailRetained {
                             recentLines.removeFirst(recentLines.count - tailRetained)
                         }
-                        didAppend = true
-                        appendedCount += 1
-                        maxArrivalLatency = max(
-                            maxArrivalLatency,
+                        mutation.didAppend = true
+                        mutation.appendedCount += 1
+                        mutation.maxArrivalLatency = max(
+                            mutation.maxArrivalLatency,
                             wallNow.timeIntervalSince(line.timestamp)
                         )
-
                     case .evicted(let id):
-                        // Defer the top-delete (see ``evictionBatch``): the line
-                        // stays rendered for now; we only advance the backlog
-                        // cursor. The store evicts in append order, so the next
-                        // eviction is always the first not-yet-deleted line,
-                        // `lineLengths[evictionBacklog]`.
                         guard evictionBacklog < lineLengths.count else { break }
                         assert(
                             lineLengths[evictionBacklog].id == id,
                             "ScrollbackStore eviction order does not match coordinator FIFO"
                         )
                         evictionBacklog += 1
-
                     case .removedTail(let ids):
-                        didRemoveTail = true
+                        mutation.didRemoveTail = true
                         removeTail(ids, from: storage)
                     }
                 }
-
-                trimEvictionBacklogIfFull(storage)
-
+                mutation.trimmedLines = trimEvictionBacklogIfFull(storage)
                 storage.endEditing()
             }
-
-            if stickToBottom {
-                scrollToBottom(textView)
-            }
-            if didAppend || didRemoveTail { refreshTail() }
-
-            finishFlush(
-                start: start,
-                appendedCount: appendedCount,
-                maxArrivalLatency: maxArrivalLatency,
-                documentUTF16Length: storage.length
-            )
+            return mutation
         }
 
         /// Emit the frame telemetry (split from ``flushPending`` for the
@@ -420,6 +403,55 @@
             ))
         }
 
+        func currentViewportAnchor() -> OutputViewportAnchor? {
+            guard let textView else { return nil }
+            return currentViewportAnchor(in: textView)
+        }
+
+        var currentScrollMode: BottomPinnedOutputScrollView.ScrollMode {
+            guard let scrollView = textView?.enclosingScrollView as? BottomPinnedOutputScrollView
+            else { return .followingTail }
+            return scrollView.scrollMode
+        }
+
+        private func configureInitialScrollMode() {
+            guard let scrollView = textView?.enclosingScrollView as? BottomPinnedOutputScrollView
+            else { return }
+            let mode: BottomPinnedOutputScrollView.ScrollMode = initialScrollPosition == .bottom
+                ? .followingTail
+                : .reviewing
+            scrollView.setInitialScrollMode(mode)
+        }
+
+        private func currentViewportAnchor(in textView: NSTextView) -> OutputViewportAnchor? {
+            TextViewportProbe.captureAnchor(
+                in: textView,
+                renderedLines: renderedLineSpans
+            )
+        }
+
+        private func restoreReviewAnchor(
+            _ anchor: OutputViewportAnchor?,
+            in textView: NSTextView
+        ) {
+            evictionTrimSequence += 1
+            guard let anchor else {
+                lastAnchorOutcome = "trim-\(evictionTrimSequence)-missing"
+                return
+            }
+            let survived = TextViewportProbe.restoreAnchor(
+                anchor,
+                in: textView,
+                renderedLines: renderedLineSpans
+            )
+            lastAnchorOutcome = "trim-\(evictionTrimSequence)-"
+                + (survived ? "restored-\(anchor.lineID.raw)" : "clamped-\(anchor.lineID.raw)")
+        }
+
+        private var renderedLineSpans: [RenderedLineSpan] {
+            lineLengths.map { RenderedLineSpan(id: $0.id, utf16Length: $0.utf16Length) }
+        }
+
         /// Pin the view to the bottom. We scroll immediately *and* again on the
         /// next runloop tick: TextKit lays text out asynchronously, so an
         /// immediate `scrollToEndOfDocument` can land short of the true end
@@ -432,10 +464,15 @@
                 events: 1,
                 thresholdMS: 50
             ) {
-                textView.scrollToEndOfDocument(nil)
+                if let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView {
+                    scrollView.scrollToBottomPreservingMode()
+                } else {
+                    textView.scrollToEndOfDocument(nil)
+                }
             }
             DispatchQueue.main.async { [weak textView, weak self] in
                 guard let textView, let self else { return }
+                guard isFollowingTail(textView) else { return }
                 // Only pay the second scroll when the immediate one actually
                 // landed short. `scrollToEndOfDocument` on a big document
                 // walks TextKit 2's run storage to estimate the target
@@ -448,10 +485,63 @@
                         events: 1,
                         thresholdMS: 50
                     ) {
-                        textView.scrollToEndOfDocument(nil)
+                        let outputScrollView = textView.enclosingScrollView
+                            as? BottomPinnedOutputScrollView
+                        if let scrollView = outputScrollView {
+                            scrollView.scrollToBottomPreservingMode()
+                        } else {
+                            textView.scrollToEndOfDocument(nil)
+                        }
                     }
                 }
+                emitHealth(reason: "deferred-scroll")
             }
+        }
+
+        private func emitHealth(reason: String) {
+            guard let onHealthSnapshot,
+                  let snapshot = healthSnapshot(reason: reason)
+            else { return }
+            onHealthSnapshot(snapshot)
+        }
+
+        private func healthSnapshot(reason: String) -> TextViewHealthSnapshot? {
+            guard let textView else { return nil }
+            let scrollView = textView.enclosingScrollView
+            let visible = scrollView?.contentView.documentVisibleRect ?? textView.visibleRect
+            let documentWidth = scrollView?.documentView?.frame.width ?? textView.frame.width
+            let documentHeight = scrollView?.documentView?.frame.height ?? textView.frame.height
+            let distanceFromBottom = documentHeight - (visible.origin.y + visible.height)
+            let viewport = TextViewportProbe.metrics(for: textView)
+            let outputScrollView = scrollView as? BottomPinnedOutputScrollView
+            let mode = outputScrollView?.scrollMode.rawValue ?? "geometry"
+            let modeReason = outputScrollView?.scrollModeReason ?? "fallback"
+            return TextViewHealthSnapshot(
+                surface: "main-output",
+                reason: reason,
+                renderedLines: lineLengths.count,
+                storageUTF16Length: textView.textStorage?.length ?? 0,
+                textViewBoundsHeight: Double(textView.bounds.height),
+                documentHeight: Double(documentHeight),
+                visibleOriginY: Double(visible.origin.y),
+                visibleHeight: Double(visible.height),
+                distanceFromBottom: Double(distanceFromBottom),
+                isPinnedToBottom: distanceFromBottom < autoScrollThreshold,
+                isViewHidden: textView.isHiddenOrHasHiddenAncestor,
+                hasWindow: textView.window != nil,
+                textViewBoundsWidth: Double(textView.bounds.width),
+                documentWidth: Double(documentWidth),
+                visibleOriginX: Double(visible.origin.x),
+                visibleWidth: Double(visible.width),
+                textContainerWidth: Double(textView.textContainer?.size.width ?? 0),
+                usesTextLayoutManager: textView.textLayoutManager != nil,
+                viewportStartUTF16: viewport.viewportStartUTF16,
+                viewportEndUTF16: viewport.viewportEndUTF16,
+                topLayoutFragmentState: viewport.topLayoutFragmentState,
+                topVisualLineCount: viewport.topVisualLineCount,
+                extra: "backlog \(evictionBacklog) tailLines \(recentLines.count) "
+                    + "mode \(mode) modeReason \(modeReason) anchor \(lastAnchorOutcome)"
+            )
         }
 
         private func scroll(_ textView: NSTextView, to position: InitialScrollPosition) {
@@ -480,38 +570,13 @@
                 contentHeight - (visible.origin.y + visible.height)
             return distanceFromBottom < autoScrollThreshold
         }
-    }
 
-    /// Thread-safe FIFO of scrollback events, filled by the off-main store
-    /// subscription and drained by the main-actor frame flush. Decoupling
-    /// intake from the frame rate is the point: a burst pushed faster than the
-    /// frame interval (resume seeding, a reconnect dump) accumulates here and
-    /// drains as ONE batch, instead of one-per-frame when each push had to hop
-    /// the main actor and interleave with the ticker (#42/#65).
-    private final class EventInbox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var events: [ScrollbackEvent] = []
-
-        func push(_ event: ScrollbackEvent) {
-            lock.lock()
-            events.append(event)
-            lock.unlock()
-        }
-
-        /// Return and clear everything buffered, in arrival order.
-        func drain() -> [ScrollbackEvent] {
-            lock.lock()
-            defer { lock.unlock() }
-            guard !events.isEmpty else { return [] }
-            let drained = events
-            events.removeAll(keepingCapacity: true)
-            return drained
-        }
-
-        func clear() {
-            lock.lock()
-            events.removeAll(keepingCapacity: true)
-            lock.unlock()
+        private func isFollowingTail(_ textView: NSTextView) -> Bool {
+            if let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView {
+                return scrollView.scrollMode == .followingTail
+            }
+            return isScrolledToBottom(textView)
         }
     }
+
 #endif

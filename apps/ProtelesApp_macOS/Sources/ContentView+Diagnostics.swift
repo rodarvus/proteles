@@ -7,9 +7,15 @@ import SwiftUI
 /// Split from `ContentView.swift` for the file-length budget (and because
 /// these are instruments, not UI).
 extension ContentView {
+    var fullAttributionTextHealthRecorder: ((TextViewHealthSnapshot) -> Void)? {
+        guard performanceDiagnosticsMode == PerformanceProbe.Mode.full.rawValue else { return nil }
+        return recordTextHealthSnapshot
+    }
+
     func syncPerformanceDiagnosticsMode(_ rawValue: String) {
         let mode = PerformanceProbe.Mode(rawValue: rawValue) ?? .stallOnly
         PerformanceProbe.shared.setMode(mode)
+        renderStats.clearTextHealth()
         Task {
             await session.recordNote(
                 "performance diagnostics: \(mode.transcriptLabel)"
@@ -32,11 +38,13 @@ extension ContentView {
             last = now
             guard PerformanceProbe.shared.recordsStalls else { continue }
             if overrun > 0.08 {
+                let blockedMS = Int(overrun * 1000)
                 let note = PerformanceProbe.shared.stallNote(
-                    blockedMS: Int(overrun * 1000),
+                    blockedMS: blockedMS,
                     at: now
                 )
                 await session.recordNote(note)
+                await recordTextHealthNotes(context: "after-stall \(blockedMS)ms")
             }
         }
     }
@@ -75,7 +83,15 @@ extension ContentView {
         let note = "render: \(stats.appendedLines) line(s) "
             + "flush \(Int(flushMS))ms arrival→paint \(Int(latencyMS))ms "
             + "doc \(stats.documentLines) lines/\(stats.documentUTF16Length) u16"
-        Task { await session.recordNote(note) }
+        Task {
+            await session.recordNote(note)
+            await recordTextHealthNotes(context: "slow-render")
+        }
+    }
+
+    func recordTextHealthSnapshot(_ snapshot: TextViewHealthSnapshot) {
+        guard PerformanceProbe.shared.recordsAttribution else { return }
+        renderStats.record(snapshot)
     }
 
     /// Every 10 minutes, one transcript line with the live document size —
@@ -91,6 +107,14 @@ extension ContentView {
                 "render-health: doc \(stats.documentLines) lines/"
                     + "\(stats.documentUTF16Length) u16, last flush \(Int(flushMS))ms"
             )
+            await recordTextHealthNotes(context: "periodic")
+        }
+    }
+
+    private func recordTextHealthNotes(context: String) async {
+        guard PerformanceProbe.shared.recordsAttribution else { return }
+        for note in renderStats.textHealthNotes(context: context) {
+            await session.recordNote(note)
         }
     }
 }
@@ -111,6 +135,22 @@ private extension PerformanceProbe.Mode {
 @MainActor
 final class RenderStatsBox {
     var latest: RenderFrameStats?
+    private var latestTextHealth: [String: TextViewHealthSnapshot] = [:]
+
+    func record(_ snapshot: TextViewHealthSnapshot) {
+        latestTextHealth[snapshot.surface] = snapshot
+    }
+
+    func clearTextHealth() {
+        latestTextHealth.removeAll(keepingCapacity: true)
+    }
+
+    func textHealthNotes(context: String) -> [String] {
+        latestTextHealth
+            .keys
+            .sorted()
+            .compactMap { latestTextHealth[$0]?.transcriptNote(context: context) }
+    }
 }
 
 /// A small bounded ring of recent output lines (plain text) — the word source

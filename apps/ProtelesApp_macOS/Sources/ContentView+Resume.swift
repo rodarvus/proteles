@@ -9,6 +9,17 @@ import SwiftUI
 /// reopen the world, restore scrollback (seeded in `ProtelesApp.init`), connect,
 /// and show a "Reconnecting…" pill instead of a cold start.
 extension ContentView {
+    static func map(
+        _ state: NetworkConnection.State
+    ) -> StatusBarView.ConnectionState {
+        switch state {
+        case .disconnected: .disconnected
+        case .connecting: .connecting
+        case .connected: .connected
+        case .closing: .reconnecting
+        }
+    }
+
     /// First-launch + auto/resume connect. Driven by `.task { await launch() }`.
     func launch() async {
         await worlds.load()

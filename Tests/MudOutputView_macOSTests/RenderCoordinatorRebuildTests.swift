@@ -12,7 +12,7 @@
     /// removed — it yanked the live view to the top and forced a multi-second
     /// scroll-to-end walk during normal play; the 10k document cap and this
     /// telemetry are the parts of #65 that stay.)
-    @Suite("RenderCoordinator rebuild + document stats (#65)")
+    @Suite("RenderCoordinator rebuild + document stats (#65)", .serialized)
     @MainActor
     struct RenderCoordinatorRebuildTests {
         private func makeView() -> NSTextView? {
@@ -52,6 +52,121 @@
             #expect(stats.documentLines == 25)
             #expect(stats.documentUTF16Length == textView.textStorage?.length)
             #expect(stats.documentUTF16Length > 0)
+        }
+
+        @Test("health snapshots report sanitized main output geometry")
+        func healthSnapshotsReportMainOutputGeometry() async throws {
+            let viewport = makeOutputViewport()
+            let textView = viewport.textView
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: textView, palette: .xtermDefault, frameInterval: .milliseconds(10)
+            )
+            let box = HealthBox()
+            coordinator.onHealthSnapshot = { box.latest = $0 }
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            await store.append(text: "first room")
+            try await Task.sleep(for: .milliseconds(150))
+            let snapshot = try #require(box.latest)
+
+            #expect(snapshot.surface == "main-output")
+            #expect(snapshot.renderedLines == 1)
+            #expect(snapshot.storageUTF16Length == textView.textStorage?.length)
+            #expect(snapshot.usesTextLayoutManager)
+            #expect(snapshot.textViewBoundsWidth > 0)
+            #expect(snapshot.visibleWidth > 0)
+            #expect(snapshot.transcriptNote(context: "unit").contains("text-health: main-output unit"))
+            #expect(snapshot.transcriptNote(context: "unit").contains("source "))
+            #expect(!snapshot.transcriptNote(context: "unit").contains("first room"))
+        }
+
+        @Test("transient layout distance cannot disengage explicit tail following")
+        func layoutLagDoesNotDisengageTailFollowing() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 500)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index)")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+
+            let maximumY = max(
+                0,
+                (viewport.scrollView.documentView?.frame.height ?? 0)
+                    - viewport.scrollView.contentView.bounds.height
+            )
+            viewport.scrollView.contentView.scroll(to: NSPoint(x: 0, y: maximumY - 40))
+            viewport.scrollView.reflectScrolledClipView(viewport.scrollView.contentView)
+            viewport.scrollView.setInitialScrollMode(.followingTail)
+            #expect(!viewport.scrollView.isScrolledToBottom())
+
+            await store.append(text: "line 100")
+            try await Task.sleep(for: .milliseconds(200))
+
+            #expect(coordinator.currentScrollMode == .followingTail)
+            #expect(viewport.scrollView.isScrolledToBottom())
+        }
+
+        @Test("review anchor survives a batched prefix trim")
+        func reviewAnchorSurvivesBatchedPrefixTrim() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 50)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            coordinator.evictionBatch = 20
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<69 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(300))
+
+            let range = (viewport.textView.string as NSString).range(of: "line 30 content")
+            viewport.textView.scrollRangeToVisible(range)
+            viewport.scrollView.noteUserScroll(reason: "unit-review")
+            let before = try #require(coordinator.currentViewportAnchor())
+            #expect(coordinator.currentScrollMode == .reviewing)
+
+            await store.append(text: "line 69 content")
+            try await Task.sleep(for: .milliseconds(300))
+            let after = try #require(coordinator.currentViewportAnchor())
+
+            #expect(after.lineID == before.lineID)
+            #expect(after.utf16OffsetInLine == before.utf16OffsetInLine)
+            #expect(coordinator.currentScrollMode == .reviewing)
+        }
+
+        @Test("selecting historical output enters review mode")
+        func selectingHistoricalOutputEntersReviewMode() async {
+            let viewport = makeOutputViewport(height: 120)
+            viewport.textView.string = (0..<100)
+                .map { "line \($0) content" }
+                .joined(separator: "\n")
+            viewport.scrollView.followTailAndScrollToBottom(reason: "unit-tail")
+
+            let range = (viewport.textView.string as NSString).range(of: "line 20 content")
+            viewport.textView.scrollRangeToVisible(range)
+            viewport.textView.setSelectedRange(range)
+            viewport.textView.textViewDidChangeSelection(
+                Notification(name: NSTextView.didChangeSelectionNotification)
+            )
+            await Task.yield()
+
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+            #expect(viewport.scrollView.scrollModeReason == "selection")
         }
 
         @Test("initial top scroll position leaves static snapshots at the beginning")
@@ -159,10 +274,54 @@
             #expect(afterTrim.contains("line 20\n")) // oldest survivor
             #expect(!afterTrim.contains("line 19\n")) // trimmed in the batch
         }
+
+        private func makeOutputViewport(height: CGFloat = 400) -> TestOutputViewport {
+            TestOutputViewport(height: height)
+        }
     }
 
     /// Single-slot stats holder for @Sendable callbacks.
     private final class StatsBox: @unchecked Sendable {
         var latest: RenderFrameStats?
+    }
+
+    private final class HealthBox: @unchecked Sendable {
+        var latest: TextViewHealthSnapshot?
+    }
+
+    @MainActor
+    private final class TestOutputViewport {
+        let window: NSWindow
+        let scrollView: BottomPinnedOutputScrollView
+        let textView: MudTextView
+
+        init(height: CGFloat) {
+            window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: height),
+                styleMask: [.titled],
+                backing: .buffered,
+                defer: false
+            )
+            scrollView = BottomPinnedOutputScrollView(
+                frame: NSRect(x: 0, y: 0, width: 600, height: height)
+            )
+            textView = MudTextView()
+            textView.delegate = textView
+            textView.minSize = .zero
+            textView.maxSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.isVerticallyResizable = true
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = [.width]
+            textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+            textView.textContainerInset = NSSize(width: 8, height: 8)
+            textView.textContainer?.widthTracksTextView = true
+            textView.textContainer?.lineFragmentPadding = 0
+            scrollView.documentView = textView
+            window.contentView = scrollView
+            window.contentView?.layoutSubtreeIfNeeded()
+        }
     }
 #endif

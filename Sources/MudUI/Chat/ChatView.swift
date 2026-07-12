@@ -7,6 +7,7 @@ import SwiftUI
 /// optional timestamp column.
 public struct ChatView: View {
     @Bindable private var model: ChatModel
+    private let onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)?
     @AppStorage("themeID") private var themeID = Theme.default.id
     @AppStorage("themeRevision") private var themeRevision = 0
     @AppStorage("chat.timestamps") private var showTimestamps = false
@@ -22,8 +23,12 @@ public struct ChatView: View {
         panelBackgroundOpacity < 1 ? 0 : 1
     }
 
-    public init(model: ChatModel) {
+    public init(
+        model: ChatModel,
+        onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)? = nil
+    ) {
         self.model = model
+        self.onHealthSnapshot = onHealthSnapshot
     }
 
     private var palette: ColorPalette {
@@ -125,7 +130,8 @@ public struct ChatView: View {
                 showTimestamps: showTimestamps,
                 timestampSeconds: timestampSeconds,
                 filterKey: model.selectedChannel ?? "__all__",
-                fillOpacity: fillOpacity
+                fillOpacity: fillOpacity,
+                onHealthSnapshot: onHealthSnapshot
             )
         #else
             ScrollViewReader { proxy in

@@ -84,7 +84,7 @@ struct ContentView: View {
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
     @AppStorage(PerformanceDiagnosticsDefaults.key)
-    private var performanceDiagnosticsMode = PerformanceDiagnosticsDefaults.defaultMode
+    var performanceDiagnosticsMode = PerformanceDiagnosticsDefaults.defaultMode
     @AppStorage("keepAlive") private var keepAlive = true
     /// User session logging (Logging preferences); pushed to the session, takes
     /// effect on the next connect.
@@ -368,7 +368,8 @@ extension ContentView {
                 fontName: outputFontName,
                 findable: true, // ⌘F find-in-scrollback (D-104)
                 onCommand: { command in Task { try? await session.send(command) } },
-                onFrameFlush: { stats in logSlowFrame(stats) }
+                onFrameFlush: { stats in logSlowFrame(stats) },
+                onHealthSnapshot: fullAttributionTextHealthRecorder
             )
             // Recreate (and re-render) when the theme or output font changes.
             .id("\(themeID)|\(themeRevision)|\(outputFontName)|\(outputFontSize)")
@@ -531,20 +532,6 @@ extension ContentView {
             }
         }
     }
-
-    /// Load profiles, then either guide a first-time user to the Worlds
-    /// window (so they can connect or enter credentials) or auto-connect
-    /// the active profile on subsequent launches.
-    static func map(
-        _ state: NetworkConnection.State
-    ) -> StatusBarView.ConnectionState {
-        switch state {
-        case .disconnected: .disconnected
-        case .connecting: .connecting
-        case .connected: .connected
-        case .closing: .reconnecting
-        }
-    }
 }
 
 extension ContentView {
@@ -569,7 +556,10 @@ extension ContentView {
         case .output: AnyView(gameColumn)
         case .map: AnyView(MapPanelView(model: map))
         case .asciiMap: AnyView(MapView(model: asciiMap))
-        case .channels: AnyView(ChatView(model: chat))
+        case .channels: AnyView(ChatView(
+                model: chat,
+                onHealthSnapshot: fullAttributionTextHealthRecorder
+            ))
         case .hunt: AnyView(SearchAndDestroyPanelView(model: snd))
         case .consider: AnyView(ConsiderPanelView(model: consider))
         default: auxPanelContent(kind)

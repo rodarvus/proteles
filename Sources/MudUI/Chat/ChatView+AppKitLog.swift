@@ -13,6 +13,7 @@
         let timestampSeconds: Bool
         let filterKey: String
         let fillOpacity: Double
+        let onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)?
 
         func makeCoordinator() -> Coordinator {
             Coordinator()
@@ -109,6 +110,10 @@
                     scrollView.restoreVisibleOrigin(previousOrigin)
                 }
             }
+            emitHealth(from: scrollView, reason: "update")
+            DispatchQueue.main.async {
+                emitHealth(from: scrollView, reason: "settled")
+            }
         }
 
         private static var baseFont: NSFont {
@@ -118,6 +123,17 @@
         private var backgroundColor: NSColor {
             NSColor(rgb: palette.defaultBackground)
                 .withAlphaComponent(CGFloat(fillOpacity))
+        }
+
+        private func emitHealth(from scrollView: ChatLogScrollView, reason: String) {
+            guard let onHealthSnapshot else { return }
+            let storageLength = (scrollView.documentView as? NSTextView)?.textStorage?.length ?? 0
+            let snapshot = scrollView.healthSnapshot(
+                reason: reason,
+                renderedLines: lines.count,
+                storageUTF16Length: storageLength
+            )
+            onHealthSnapshot(snapshot)
         }
 
         @MainActor
@@ -186,6 +202,45 @@
             return distanceFromBottom < threshold
         }
 
+        func healthSnapshot(
+            reason: String,
+            renderedLines: Int,
+            storageUTF16Length: Int
+        ) -> TextViewHealthSnapshot {
+            let textView = documentView as? NSTextView
+            let visible = contentView.documentVisibleRect
+            let documentWidth = documentView?.frame.width ?? 0
+            let documentHeight = documentView?.frame.height ?? 0
+            let distanceFromBottom = documentHeight - (visible.origin.y + visible.height)
+            let viewport = textView.flatMap { Self.viewportMetrics(for: $0) }
+                ?? ViewportMetrics(start: nil, end: nil, fragmentState: nil, visualLines: nil)
+            return TextViewHealthSnapshot(
+                surface: "channels",
+                reason: reason,
+                renderedLines: renderedLines,
+                storageUTF16Length: storageUTF16Length,
+                textViewBoundsHeight: Double(textView?.bounds.height ?? 0),
+                documentHeight: Double(documentHeight),
+                visibleOriginY: Double(visible.origin.y),
+                visibleHeight: Double(visible.height),
+                distanceFromBottom: Double(distanceFromBottom),
+                isPinnedToBottom: distanceFromBottom < autoScrollThreshold,
+                isViewHidden: isHiddenOrHasHiddenAncestor,
+                hasWindow: window != nil,
+                textViewBoundsWidth: Double(textView?.bounds.width ?? 0),
+                documentWidth: Double(documentWidth),
+                visibleOriginX: Double(visible.origin.x),
+                visibleWidth: Double(visible.width),
+                textContainerWidth: Double(textView?.textContainer?.size.width ?? 0),
+                usesTextLayoutManager: textView?.textLayoutManager != nil,
+                viewportStartUTF16: viewport.start,
+                viewportEndUTF16: viewport.end,
+                topLayoutFragmentState: viewport.fragmentState,
+                topVisualLineCount: viewport.visualLines,
+                extra: "scroller \(hasVerticalScroller)"
+            )
+        }
+
         func scrollToBottomSoon() {
             scrollToBottom()
             DispatchQueue.main.async { [weak self] in
@@ -201,6 +256,40 @@
 
         private func scrollToBottom() {
             (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+        }
+
+        private struct ViewportMetrics {
+            let start: Int?
+            let end: Int?
+            let fragmentState: Int?
+            let visualLines: Int?
+        }
+
+        private static func viewportMetrics(for textView: NSTextView) -> ViewportMetrics? {
+            guard let layoutManager = textView.textLayoutManager,
+                  let contentManager = layoutManager.textContentManager
+            else { return nil }
+            let documentStart = contentManager.documentRange.location
+            let viewportRange = layoutManager.textViewportLayoutController.viewportRange
+            let start = viewportRange.map {
+                contentManager.offset(from: documentStart, to: $0.location)
+            }
+            let end = viewportRange.map {
+                contentManager.offset(from: documentStart, to: $0.endLocation)
+            }
+            let visible = textView.enclosingScrollView?.contentView.documentVisibleRect
+                ?? textView.visibleRect
+            let origin = textView.textContainerOrigin
+            let fragment = layoutManager.textLayoutFragment(for: CGPoint(
+                x: max(0, visible.minX - origin.x + 1),
+                y: max(0, visible.minY - origin.y + 0.5)
+            ))
+            return ViewportMetrics(
+                start: start,
+                end: end,
+                fragmentState: fragment.map { Int($0.state.rawValue) },
+                visualLines: fragment?.textLineFragments.count
+            )
         }
     }
 

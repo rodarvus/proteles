@@ -136,7 +136,11 @@
         }
 
         @objc private func jumpToBottom() {
-            (scrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            if let outputScrollView = scrollView as? BottomPinnedOutputScrollView {
+                outputScrollView.followTailAndScrollToBottom(reason: "jump-button")
+            } else {
+                (scrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            }
             updateTailVisibility()
         }
 
@@ -333,14 +337,71 @@
     /// Main output scroll view that preserves bottom pinning across viewport
     /// resizes, e.g. when the command input grows or shrinks underneath it.
     final class BottomPinnedOutputScrollView: NSScrollView {
+        enum ScrollMode: String {
+            case followingTail = "follow"
+            case reviewing = "review"
+        }
+
         var autoScrollThreshold: CGFloat = 32
+        private(set) var scrollMode: ScrollMode = .followingTail
+        private(set) var scrollModeReason = "initial"
+        private var programmaticScrollDepth = 0
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(userDidLiveScroll),
+                name: NSScrollView.didLiveScrollNotification,
+                object: self
+            )
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
 
         override func setFrameSize(_ newSize: NSSize) {
-            let wasPinned = isScrolledToBottom()
+            let wasFollowingTail = scrollMode == .followingTail
             super.setFrameSize(newSize)
-            if wasPinned {
+            if wasFollowingTail {
                 scrollToBottomSoon()
             }
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            super.scrollWheel(with: event)
+            DispatchQueue.main.async { [weak self] in
+                self?.noteUserScroll(reason: "wheel")
+            }
+        }
+
+        func setInitialScrollMode(_ mode: ScrollMode) {
+            setScrollMode(mode, reason: mode == .followingTail ? "initial-bottom" : "initial-top")
+        }
+
+        func followTailAndScrollToBottom(reason: String) {
+            setScrollMode(.followingTail, reason: reason)
+            scrollToBottomSoon()
+        }
+
+        func beginReviewing(reason: String) {
+            setScrollMode(.reviewing, reason: reason)
+        }
+
+        func scrollToBottomPreservingMode() {
+            performProgrammaticScroll {
+                (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            }
+        }
+
+        func noteUserScroll(reason: String) {
+            guard programmaticScrollDepth == 0 else { return }
+            setScrollMode(
+                isScrolledToBottom() ? .followingTail : .reviewing,
+                reason: reason
+            )
         }
 
         func isScrolledToBottom() -> Bool {
@@ -365,14 +426,29 @@
         }
 
         private func scrollToBottomSoon() {
-            scrollToBottom()
+            scrollToBottomPreservingMode()
             DispatchQueue.main.async { [weak self] in
-                self?.scrollToBottom()
+                self?.scrollToBottomPreservingMode()
             }
         }
 
-        private func scrollToBottom() {
-            (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+        private func setScrollMode(_ mode: ScrollMode, reason: String) {
+            scrollMode = mode
+            scrollModeReason = reason
+        }
+
+        private func performProgrammaticScroll(_ action: () -> Void) {
+            programmaticScrollDepth += 1
+            action()
+            programmaticScrollDepth -= 1
+        }
+
+        @objc private func userDidLiveScroll() {
+            noteUserScroll(reason: "live-scroll")
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
     }
 #endif

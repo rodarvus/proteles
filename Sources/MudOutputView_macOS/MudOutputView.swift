@@ -27,6 +27,7 @@
         /// text-render frames to the session transcript (perf diagnosis — see
         /// ``RenderCoordinator/RenderFrameStats``).
         private let onFrameFlush: ((RenderFrameStats) -> Void)?
+        private let onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)?
         /// Opt this instance's history view into ⌘F (the system find bar,
         /// D-104). Exactly one view per window should be findable, so
         /// ``MudOutputFindBar`` can locate it unambiguously — the app turns
@@ -42,7 +43,8 @@
             initialScrollPosition: RenderCoordinator.InitialScrollPosition = .bottom,
             findable: Bool = false,
             onCommand: ((String) -> Void)? = nil,
-            onFrameFlush: ((RenderFrameStats) -> Void)? = nil
+            onFrameFlush: ((RenderFrameStats) -> Void)? = nil,
+            onHealthSnapshot: ((TextViewHealthSnapshot) -> Void)? = nil
         ) {
             self.store = store
             self.palette = palette
@@ -53,6 +55,7 @@
             self.findable = findable
             self.onCommand = onCommand
             self.onFrameFlush = onFrameFlush
+            self.onHealthSnapshot = onHealthSnapshot
         }
 
         /// The base output font: the named family if available, else the system
@@ -101,6 +104,7 @@
             if !showsLiveTail {
                 let coordinator = makeRenderCoordinator(textView: textView)
                 coordinator.onFrameFlush = onFrameFlush
+                coordinator.onHealthSnapshot = onHealthSnapshot
                 context.coordinator.renderCoordinator = coordinator
                 let storeRef = store
                 Task { @MainActor in
@@ -139,6 +143,7 @@
             let coordinator = makeRenderCoordinator(textView: textView)
             coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
             coordinator.onFrameFlush = onFrameFlush
+            coordinator.onHealthSnapshot = onHealthSnapshot
             context.coordinator.renderCoordinator = coordinator
             let storeRef = store
             Task { @MainActor in
@@ -148,7 +153,10 @@
             return container
         }
 
-        public func updateNSView(_: NSView, context _: Context) {}
+        public func updateNSView(_: NSView, context: Context) {
+            context.coordinator.renderCoordinator?.onFrameFlush = onFrameFlush
+            context.coordinator.renderCoordinator?.onHealthSnapshot = onHealthSnapshot
+        }
 
         /// Cancel the render coordinator's frame ticker + store subscription when
         /// SwiftUI tears the view down (e.g. an `.id(...)` change recreating it),

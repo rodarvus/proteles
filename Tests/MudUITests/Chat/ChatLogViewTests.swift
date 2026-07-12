@@ -91,6 +91,29 @@
             ))
         }
 
+        @Test("Health snapshot reports Channels geometry without text")
+        @MainActor
+        func healthSnapshotReportsChannelsGeometryWithoutText() {
+            let scrollView = ChatLogScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+            let textView = ChatLogTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 600))
+            textView.string = "first\nsecond"
+            scrollView.documentView = textView
+
+            let snapshot = scrollView.healthSnapshot(
+                reason: "unit",
+                renderedLines: 2,
+                storageUTF16Length: textView.textStorage?.length ?? 0
+            )
+            let note = snapshot.transcriptNote(context: "unit")
+
+            #expect(snapshot.surface == "channels")
+            #expect(snapshot.renderedLines == 2)
+            #expect(snapshot.storageUTF16Length == textView.textStorage?.length)
+            #expect(note.contains("text-health: channels unit"))
+            #expect(!note.contains("first"))
+            #expect(!note.contains("second"))
+        }
+
         private var builder: ChatAttributedStringBuilder {
             ChatAttributedStringBuilder(
                 palette: palette,

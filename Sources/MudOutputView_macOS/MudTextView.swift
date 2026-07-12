@@ -39,6 +39,17 @@
             return true
         }
 
+        /// A find result or explicit text selection means the user is reading
+        /// history. Re-evaluate after AppKit has scrolled the selection into
+        /// view so incoming output cannot immediately reclaim the viewport.
+        public func textViewDidChangeSelection(_: Notification) {
+            guard selectedRange().length > 0 else { return }
+            DispatchQueue.main.async { [weak self] in
+                (self?.enclosingScrollView as? BottomPinnedOutputScrollView)?
+                    .beginReviewing(reason: "selection")
+            }
+        }
+
         /// The command input field is the window's permanent typing target.
         /// When the user types a printable key while the *output* has focus
         /// (e.g. right after selecting text to copy), focus snaps back to the
@@ -54,6 +65,12 @@
                   window?.firstResponder !== field
             else {
                 super.keyDown(with: event)
+                if Self.navigationKeyCodes.contains(event.keyCode) {
+                    DispatchQueue.main.async { [weak self] in
+                        (self?.enclosingScrollView as? BottomPinnedOutputScrollView)?
+                            .noteUserScroll(reason: "navigation-key")
+                    }
+                }
                 return
             }
             window?.makeFirstResponder(field)
