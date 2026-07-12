@@ -225,7 +225,8 @@ public actor ScriptEngine {
     }
 
     /// Apply persisted enabled/disabled flags to registered native plugins.
-    public func applyNativePluginEnabled(_ enabledByID: [String: Bool]) {
+    @discardableResult
+    public func applyNativePluginEnabled(_ enabledByID: [String: Bool]) -> [ScriptEffect] {
         nativePlugins.applyEnabled(enabledByID)
     }
 

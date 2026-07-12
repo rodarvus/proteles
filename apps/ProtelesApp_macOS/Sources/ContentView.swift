@@ -9,6 +9,7 @@ struct ContentView: View {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
+    let plugins: PluginsModel
     let layout: LayoutStore
     let chat: ChatModel
     let map: MapPanelModel
@@ -36,6 +37,7 @@ struct ContentView: View {
     /// Speaks TTS requests (#9) — AVSpeechSynthesizer or VoiceOver routing.
     @State private var speech = SpeechController()
     @Environment(\.openWindow) var openWindow
+    @Environment(\.dismissWindow) var dismissWindow
     /// Not `private` so the `ContentView+PluginDatabases` extension (separate
     /// file) can gate import/reset on the live connection state.
     @State var connectionState: StatusBarView.ConnectionState = .disconnected
@@ -236,28 +238,17 @@ struct ContentView: View {
         .task(id: outputFontName) {
             await session.setOutputFontName(outputFontName)
         }
-        // Help is captured to the dedicated Help window (always on, so
-        // `help <topic>` can auto-open it); never printed inline.
-        .task {
-            await session.setHelpCaptureEnabled(true)
+        .task(id: worlds.activeProfileID) {
+            await observeModuleListings(profileID: worlds.activeProfileID)
         }
-        // Feed captured help articles to the Help window, auto-opening it,
-        // and route its link clicks + search back to the session.
-        .task {
-            help.onCommand = { command in Task { try? await session.send(command) } }
-            for await article in session.helpArticles {
-                await help.apply(article)
-                openWindow(id: ProtelesApp.helpWindowID)
-            }
+        .task(id: plugins.moduleEnabled(SessionController.helpModuleID)) {
+            applyHelpModulePresentation()
         }
-        .task {
-            market.onCommand = { command in Task { try? await session.send(command) } }
-            await session.setMarketCaptureEnabled(true)
-            for await capture in session.marketCaptures {
-                market.apply(capture)
-                openWindow(id: ProtelesApp.marketWindowID)
-            }
+        .task(id: plugins.moduleEnabled(SessionController.marketplaceModuleID)) {
+            applyMarketplaceModulePresentation()
         }
+        .task { await consumeHelpArticles() }
+        .task { await consumeMarketCaptures() }
         .task(id: autoReconnect) {
             await session.setReconnectEnabled(autoReconnect)
         }

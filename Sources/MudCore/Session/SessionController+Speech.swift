@@ -185,6 +185,8 @@ public extension SessionController {
     /// registers its built-in set through here.
     func registerNativePlugin(_ plugin: any NativePlugin) async {
         guard let scriptEngine else { return }
-        await applyScriptEffects(scriptEngine.registerNativePlugin(plugin))
+        let saved = await nativePluginStore?.document.enabled[plugin.metadata.id]
+        await applyScriptEffects(scriptEngine.registerNativePlugin(plugin, enabled: saved ?? true))
+        await publishModuleListing()
     }
 }

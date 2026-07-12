@@ -103,6 +103,9 @@ public actor SessionController {
     /// subscribes and renders/gags command output like the Help panel.
     public nonisolated let marketCaptures: AsyncStream<MarketCapture>
     nonisolated let marketCapturesContinuation: AsyncStream<MarketCapture>.Continuation
+    /// Live built-in module listings for the Plugins window and app chrome.
+    public nonisolated let moduleListings: AsyncStream<[NativePluginInfo]>
+    nonisolated let moduleListingsContinuation: AsyncStream<[NativePluginInfo]>.Continuation
 
     /// User notifications (tells/mentions); the app subscribes + posts them.
     public nonisolated let notifications: AsyncStream<ProtelesNotification>
@@ -332,9 +335,9 @@ public actor SessionController {
     var richExitsCustomExits: [RichExits.CustomExit] = []
 
     /// Capture Aardwolf `help <topic>` output into the Help panel (gagged from
-    /// the main output) with clickable cross-references; off by default. Tied to
-    /// the Help panel's visibility. See ``HelpParser``.
-    public internal(set) var helpCaptureEnabled = false
+    /// the main output) with clickable cross-references; enabled by default and
+    /// governed by the per-profile Game Help module. See ``HelpParser``.
+    public internal(set) var helpCaptureEnabled = true
     /// Whether the HELPS tag option (option-102 subneg) was sent this session.
     var sentHelpsTagOption = false
     /// True while buffering lines between `{help}` and `{/help}`.
@@ -344,7 +347,7 @@ public actor SessionController {
     /// Accumulated help body lines for the in-progress capture.
     var helpCaptureBuffer: [Line] = []
     /// Capture Marketplace command output into the Marketplace window.
-    public internal(set) var marketCaptureEnabled = false
+    public internal(set) var marketCaptureEnabled = true
     var marketTagCaptureActive = false
     var marketTagCaptureBuffer: [Line] = []
     var marketCommandCapture: MarketCommandCaptureState?
@@ -475,6 +478,8 @@ public actor SessionController {
             AsyncStream<HelpArticle>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (marketCaptures, marketCapturesContinuation) =
             AsyncStream<MarketCapture>.makeStream(bufferingPolicy: .bufferingNewest(8))
+        (moduleListings, moduleListingsContinuation) =
+            AsyncStream<[NativePluginInfo]>.makeStream(bufferingPolicy: .bufferingNewest(1))
         (notifications, notificationsContinuation) =
             AsyncStream<ProtelesNotification>.makeStream(bufferingPolicy: .bufferingNewest(8))
         (mapperMigrationPrompts, mapperMigrationPromptsContinuation) =

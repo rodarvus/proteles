@@ -95,6 +95,12 @@ public struct PluginsView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .alert("Couldn’t Change Module", isPresented: moduleErrorPresented) {
+            Button("OK") { model.moduleError = nil }
+        } message: {
+            Text("The setting could not be saved, so the live module was left unchanged.\n\n"
+                + (model.moduleError ?? "Unknown error"))
+        }
         .confirmationDialog(
             removalCandidate.map { "Remove the plugin “\($0.name)”?" } ?? "",
             isPresented: confirmingRemoval,
@@ -272,6 +278,13 @@ public struct PluginsView: View {
         Binding(
             get: { removalCandidate != nil },
             set: { if !$0 { removalCandidate = nil } }
+        )
+    }
+
+    private var moduleErrorPresented: Binding<Bool> {
+        Binding(
+            get: { model.moduleError != nil },
+            set: { if !$0 { model.moduleError = nil } }
         )
     }
 

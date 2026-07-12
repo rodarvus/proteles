@@ -147,6 +147,25 @@ public final class MarketPanelModel {
         bidReview = nil
     }
 
+    /// Remove listings, pending requests/bids, and command routing when the
+    /// Marketplace module is disabled.
+    public func reset() {
+        items = []
+        detailsByItemNumber = [:]
+        historiesByItemNumber = [:]
+        requestedDetailNumbers = []
+        requestedHistoryNumbers = []
+        status = "Ready"
+        lastUpdated = nil
+        selectedItemNumber = nil
+        listMode = .all
+        activeFilter = nil
+        bidAmount = ""
+        proxyBid = false
+        bidReview = nil
+        onCommand = nil
+    }
+
     public func apply(_ capture: MarketCapture) {
         switch capture.kind {
         case .list(let variant):

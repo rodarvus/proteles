@@ -201,6 +201,7 @@ public struct NativePluginRegistry: Sendable {
     private struct Entry {
         var plugin: any NativePlugin
         var enabled: Bool
+        let defaultEnabled: Bool
     }
 
     private var entries: [Entry] = []
@@ -213,7 +214,7 @@ public struct NativePluginRegistry: Sendable {
     public mutating func register(_ plugin: any NativePlugin, enabled: Bool = true) -> [ScriptEffect] {
         var plugin = plugin
         let effects = enabled ? plugin.install() : []
-        entries.append(Entry(plugin: plugin, enabled: enabled))
+        entries.append(Entry(plugin: plugin, enabled: enabled, defaultEnabled: enabled))
         return effects
     }
 
@@ -330,13 +331,21 @@ public struct NativePluginRegistry: Sendable {
         }
     }
 
-    /// Apply persisted enabled/disabled flags (ids absent from the map keep
-    /// their registration-time default).
-    public mutating func applyEnabled(_ enabledByID: [String: Bool]) {
+    /// Apply one profile's persisted enabled/disabled flags. Missing ids reset
+    /// to their registration-time default, rather than inheriting the previous
+    /// profile's live state.
+    @discardableResult
+    public mutating func applyEnabled(_ enabledByID: [String: Bool]) -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
         for index in entries.indices {
-            if let enabled = enabledByID[entries[index].plugin.metadata.id] {
-                entries[index].enabled = enabled
+            let enabled = enabledByID[entries[index].plugin.metadata.id]
+                ?? entries[index].defaultEnabled
+            let wasEnabled = entries[index].enabled
+            entries[index].enabled = enabled
+            if enabled, !wasEnabled {
+                effects.append(contentsOf: entries[index].plugin.install())
             }
         }
+        return effects
     }
 }

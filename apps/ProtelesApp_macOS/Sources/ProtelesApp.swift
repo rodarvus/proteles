@@ -169,6 +169,7 @@ struct ProtelesApp: App {
                 session: session,
                 worlds: worlds,
                 scripts: scripts,
+                plugins: plugins,
                 layout: layout,
                 chat: chat,
                 map: map,
@@ -214,6 +215,7 @@ struct ProtelesApp: App {
                 session: session,
                 worlds: worlds,
                 scripts: scripts,
+                plugins: plugins,
                 layout: layout,
                 resumeStore: resumeStore,
                 importFromMUSHclient: presentMUSHclientImport
@@ -291,16 +293,37 @@ struct ProtelesApp: App {
         // article is captured; width-capped (~90 chars) since help is
         // pre-wrapped at ~76 columns.
         Window("Help", id: ProtelesApp.helpWindowID) {
-            HelpPanelView(model: help)
-                .frame(minWidth: 520, idealWidth: 740, maxWidth: 820, minHeight: 380, maxHeight: .infinity)
-                .navigationTitle("Help")
+            Group {
+                if plugins.moduleEnabled(SessionController.helpModuleID) {
+                    HelpPanelView(model: help)
+                        .navigationTitle("Help")
+                }
+            }
+            // Keep the scene's sizing constraints stable while its disabled
+            // branch is empty. Otherwise content-sized windows collapse before
+            // dismissWindow runs and macOS persists that minimum geometry.
+            .frame(
+                minWidth: 520,
+                idealWidth: 740,
+                maxWidth: 820,
+                minHeight: 380,
+                idealHeight: 640,
+                maxHeight: .infinity
+            )
         }
         .defaultSize(width: 740, height: 640)
         .windowResizability(.contentSize)
 
         Window("Marketplace", id: ProtelesApp.marketWindowID) {
-            MarketPanelView(model: market)
-                .navigationTitle("Marketplace")
+            Group {
+                if plugins.moduleEnabled(SessionController.marketplaceModuleID) {
+                    MarketPanelView(model: market)
+                        .navigationTitle("Marketplace")
+                }
+            }
+            // Marketplace has the same conditional content-sized lifecycle as
+            // Help; retain its constraints during teardown for the same reason.
+            .frame(minWidth: 760, idealWidth: 900, minHeight: 420, idealHeight: 620)
         }
         .defaultSize(width: 900, height: 620)
         .windowResizability(.contentSize)
@@ -326,7 +349,7 @@ struct ProtelesApp: App {
             PluginsView(model: plugins)
                 .task(id: worlds.activeProfileID) {
                     guard let id = worlds.activeProfileID else { return }
-                    plugins.prepare(profileID: id)
+                    await plugins.prepare(profileID: id)
                     // A core-feature toggle (D-107) applies by reloading the
                     // world's scripts — the attach/arm gating lives there.
                     let scripts = scripts

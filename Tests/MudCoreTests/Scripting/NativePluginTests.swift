@@ -94,6 +94,16 @@ struct NativePluginRegistryTests {
         #expect(listing[1].help.commands.isEmpty == false)
         #expect(listing[1].help.commands.contains { $0.syntax.contains("vitals") })
     }
+
+    @Test("Applying a new profile resets missing ids to registration defaults")
+    func profileDefaultsDoNotBleed() {
+        var registry = NativePluginRegistry()
+        registry.register(PingPlugin())
+        registry.applyEnabled(["test.ping": false])
+        #expect(registry.isEnabled(id: "test.ping") == false)
+        registry.applyEnabled([:])
+        #expect(registry.isEnabled(id: "test.ping") == true)
+    }
 }
 
 @Suite("ScriptEngine — native plugin integration")

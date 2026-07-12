@@ -68,6 +68,17 @@ public final class HelpPanelModel {
         onCommand?("help search \(trimmed)")
     }
 
+    /// Remove all captured UI state and command routing when the module is disabled.
+    public func reset() {
+        store = ScrollbackStore()
+        renderToken = UUID()
+        title = "Help"
+        hasContent = false
+        history = []
+        index = -1
+        onCommand = nil
+    }
+
     private func display(_ article: HelpArticle) async {
         let fresh = ScrollbackStore()
         for line in article.lines {

@@ -25,6 +25,7 @@ struct ProtelesCommands: Commands {
     let session: SessionController
     let worlds: WorldsModel
     let scripts: ScriptsModel
+    @Bindable var plugins: PluginsModel
     @Bindable var layout: LayoutStore
     /// Resume breadcrumb store (#42) — cleared on an explicit Disconnect so an
     /// intentional disconnect doesn't auto-reconnect on a later relaunch.
@@ -147,10 +148,14 @@ struct ProtelesCommands: Commands {
             Button("Levels") { openWindow(id: ProtelesApp.levelsWindowID) }
                 .keyboardShortcut("L", modifiers: [.command, .shift])
 
-            Button("Marketplace") { openWindow(id: ProtelesApp.marketWindowID) }
+            if plugins.moduleEnabled(SessionController.marketplaceModuleID) {
+                Button("Marketplace") { openWindow(id: ProtelesApp.marketWindowID) }
+            }
 
-            Button("Game Help") { openWindow(id: ProtelesApp.helpWindowID) }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
+            if plugins.moduleEnabled(SessionController.helpModuleID) {
+                Button("Game Help") { openWindow(id: ProtelesApp.helpWindowID) }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
+            }
 
             Divider()
 

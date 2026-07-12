@@ -315,12 +315,19 @@ public extension SessionController {
     /// native plugins from it (their saved state + enabled flags). Call when
     /// a world loads.
     func attachNativePluginStore(_ store: NativePluginStore) async {
-        guard let scriptEngine else { return }
         nativePluginStore = store
         try? await store.load()
         let document = await store.document
-        await scriptEngine.restoreNativePluginStates(document.state)
-        await scriptEngine.applyNativePluginEnabled(document.enabled)
+        if let scriptEngine {
+            await scriptEngine.restoreNativePluginStates(document.state)
+            await applyScriptEffects(scriptEngine.applyNativePluginEnabled(document.enabled))
+        }
+        await applyModuleEnabled(document.enabled[Self.helpModuleID] ?? true, id: Self.helpModuleID)
+        await applyModuleEnabled(
+            document.enabled[Self.marketplaceModuleID] ?? true,
+            id: Self.marketplaceModuleID
+        )
+        await publishModuleListing()
     }
 
     /// Attach the lsqlite3 sandbox root (the `~/Documents/Proteles` tree), so
@@ -391,9 +398,7 @@ public extension SessionController {
 
     /// Toggle a native plugin and persist the new enabled flag.
     func setNativePluginEnabled(_ enabled: Bool, id: String) async {
-        guard let scriptEngine else { return }
-        _ = await scriptEngine.setNativePluginEnabled(enabled, id: id)
-        try? await nativePluginStore?.setEnabled(enabled, id: id)
+        try? await setModuleEnabled(enabled, id: id)
     }
 
     /// Persist any variable scopes mutated since the last call to the

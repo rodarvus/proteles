@@ -181,6 +181,24 @@ public final class LayoutStore {
         save()
     }
 
+    /// Remove a feature from every persisted presentation path, including old
+    /// saved layouts from before Help/Marketplace became dedicated windows.
+    public func removeEverywhere(_ kind: PanelKind) {
+        layout = layout.removing(kind)
+        detached.remove(kind)
+        floating[kind] = nil
+        lastSlot[kind] = nil
+        presets = presets.map {
+            LayoutPreset(
+                name: $0.name,
+                layout: $0.layout.removing(kind),
+                floating: $0.floating.filter { $0 != kind }
+            )
+        }
+        save()
+        savePresets()
+    }
+
     /// Record where `kind` currently sits, so a later re-show restores it there.
     private func rememberSlot(_ kind: PanelKind) {
         if let slot = layout.anchorSlot(for: kind) {

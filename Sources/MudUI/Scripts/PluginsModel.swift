@@ -63,6 +63,8 @@ public final class PluginsModel {
     public private(set) var libraryPlugins: [LibraryPluginRow] = []
     /// Built-in native plugins registered on the session's engine.
     public private(set) var nativePlugins: [NativePluginRow] = []
+    /// A module-toggle persistence failure surfaced by the Plugins window.
+    public var moduleError: String?
 
     /// Built-in / bundled plugins surfaced in the Plugins window: the native
     /// mapper (always on), dinv (bundled), and Search & Destroy (installed on
@@ -145,6 +147,10 @@ public final class PluginsModel {
         libraryPlugins.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    public func moduleEnabled(_ id: String) -> Bool {
+        nativePlugins.first { $0.id == id }?.enabled ?? true
+    }
+
     private let session: SessionController
     private var profileID: UUID?
     private var library: PluginLibraryStore?
@@ -178,9 +184,12 @@ public final class PluginsModel {
     /// unload just the one plugin via ``SessionController/enablePlugin(directory:character:)``
     /// / ``disablePlugin(id:directory:)``), not a full world reload.
     /// Call when the Plugins window appears / the active profile changes.
-    public func prepare(profileID: UUID) {
+    public func prepare(profileID: UUID) async {
         self.profileID = profileID
         library = (try? PluginLibraryStore.defaultStoreURL()).map { PluginLibraryStore(url: $0) }
+        if let url = try? NativePluginStore.defaultStoreURL(forProfile: profileID) {
+            await session.attachNativePluginStore(NativePluginStore(url: url))
+        }
     }
 
     /// The active character's data-dir key (for the per-character plugin data dir).
@@ -260,13 +269,20 @@ public final class PluginsModel {
     /// Enable/disable a native plugin by id; applies live and persists the flag
     /// to the world's native-plugin store.
     public func setNativeEnabled(_ enabled: Bool, id: String) async {
-        await session.setNativePluginEnabled(enabled, id: id)
+        do {
+            try await session.setModuleEnabled(enabled, id: id)
+        } catch {
+            moduleError = error.localizedDescription
+        }
         await refreshNative()
     }
 
     /// Load the built-in native plugins' current enabled state from the engine.
     public func refreshNative() async {
-        let listing = await session.scriptEngine?.nativePluginListing() ?? []
+        await applyModuleListing(session.moduleListing())
+    }
+
+    public func applyModuleListing(_ listing: [NativePluginInfo]) {
         nativePlugins = listing.map {
             NativePluginRow(
                 id: $0.metadata.id,
