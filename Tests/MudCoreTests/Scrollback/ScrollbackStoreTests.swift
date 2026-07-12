@@ -24,6 +24,13 @@ struct ScrollbackStoreEventsSnapshotTests {
 
 @Suite("ScrollbackStore — append & identifiers")
 struct ScrollbackStoreAppendTests {
+    @Test("The default line budget is the 100k field experiment")
+    func defaultLineBudget() async {
+        let store = ScrollbackStore()
+        let maxLines = await store.maxLines
+        #expect(maxLines == 100_000)
+    }
+
     @Test("Append assigns monotonic IDs starting at 0")
     func appendAssignsMonotonicIDs() async {
         let store = ScrollbackStore()

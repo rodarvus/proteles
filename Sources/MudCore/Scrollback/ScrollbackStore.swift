@@ -43,15 +43,14 @@ public actor ScrollbackStore {
     private var lineSubscribers: [UUID: AsyncStream<Line>.Continuation] = [:]
     private var eventSubscribers: [UUID: AsyncStream<ScrollbackEvent>.Continuation] = [:]
 
-    /// 10k default (#65): the rendered `NSTextStorage` mirrors this store,
-    /// and TextKit 2's per-flush viewport layout cost grows with document
-    /// size — at the old 50k default a six-hour combat session saturated the
-    /// main thread (100% CPU in run-storage enumeration) until force-quit.
-    /// 10k is double MUSHclient's shipped 5k output buffer (Mudlet ships
-    /// 10k). Only the most recent tail is persisted, to a flat JSONL sidecar
-    /// for session-resume (#42) — there is no disk-backed "infinite"
-    /// scrollback, matching the reference clients.
-    public init(maxLines: Int = 10000) {
+    /// 100k field experiment (D-113): deliberately revisits the 10k safeguard
+    /// from #65 so long live sessions retain substantially more history while
+    /// the existing render-health instrumentation measures the TextKit cost.
+    /// This is not yet a proven-safe production budget: the earlier 50k default
+    /// eventually saturated the main thread during a six-hour combat session.
+    /// Only the most recent tail is persisted to the flat JSONL sidecar for
+    /// session resume (#42); there is no disk-backed infinite scrollback.
+    public init(maxLines: Int = 100_000) {
         precondition(maxLines > 0, "maxLines must be positive")
         self.maxLines = maxLines
     }

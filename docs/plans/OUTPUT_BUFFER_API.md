@@ -89,7 +89,8 @@ it calls `scriptEngine.recordOutputLine(line, kind:)`. `kind` is
 script `note`/`echo` effect vs echoed input) → backs infotypes 4/5 faithfully.
 
 **Ring bound.** Proposed **1000** lines (the consumer is "recent context", not
-full history; our TextKit doc is separately bounded at 10k). Tunable; flagged
+full history; our TextKit doc is separately bounded at 100k during D-113's field
+experiment). Tunable; flagged
 as a decision below.
 
 **Dispatch.** Five value-returning host functions
