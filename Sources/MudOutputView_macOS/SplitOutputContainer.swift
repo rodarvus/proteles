@@ -189,7 +189,7 @@
             resizeHandle.isHidden = !show
             jumpButton.alphaValue = 0.3 // reset hover brightness when re-shown
             if show {
-                (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+                scrollTailToBottom()
             }
         }
 
@@ -205,7 +205,15 @@
             let proposed = min(max(point.y, minHeight), maxHeight)
             tailHeightConstraint.constant = proposed
             UserDefaults.standard.set(Double(proposed), forKey: Self.heightDefaultsKey)
-            (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            scrollTailToBottom()
+        }
+
+        private func scrollTailToBottom() {
+            if let tailScrollView = tailScrollView as? PassthroughScrollView {
+                tailScrollView.scrollToDocumentBottom()
+            } else {
+                (tailScrollView.documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            }
         }
 
         /// Pure decision: show the live tail only when the content is taller
@@ -325,6 +333,34 @@
     final class PassthroughScrollView: NSScrollView {
         weak var forwardingTarget: NSScrollView?
 
+        func scrollToDocumentBottom() {
+            (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            for _ in 0..<2 {
+                settleDocumentGeometry()
+                alignToDocumentBottom()
+            }
+        }
+
+        private func alignToDocumentBottom() {
+            guard let documentView else { return }
+            let visible = contentView.documentVisibleRect
+            let targetY = max(documentView.frame.minY, documentView.frame.maxY - visible.height)
+            contentView.scroll(to: CGPoint(x: visible.minX, y: targetY))
+            reflectScrolledClipView(contentView)
+        }
+
+        private func settleDocumentGeometry() {
+            window?.contentView?.layoutSubtreeIfNeeded()
+            guard let textView = documentView as? NSTextView else { return }
+            if let layoutManager = textView.textLayoutManager {
+                if let documentRange = layoutManager.textContentManager?.documentRange {
+                    layoutManager.ensureLayout(for: documentRange)
+                }
+            }
+            textView.layoutSubtreeIfNeeded()
+            window?.contentView?.layoutSubtreeIfNeeded()
+        }
+
         override func scrollWheel(with event: NSEvent) {
             if let forwardingTarget {
                 forwardingTarget.scrollWheel(with: event)
@@ -345,7 +381,9 @@
         var autoScrollThreshold: CGFloat = 32
         private(set) var scrollMode: ScrollMode = .followingTail
         private(set) var scrollModeReason = "initial"
+        private(set) var userInteractionGeneration = 0
         private var programmaticScrollDepth = 0
+        private var reviewOriginGeneration = 0
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
@@ -371,6 +409,7 @@
         }
 
         override func scrollWheel(with event: NSEvent) {
+            userInteractionGeneration += 1
             super.scrollWheel(with: event)
             DispatchQueue.main.async { [weak self] in
                 self?.noteUserScroll(reason: "wheel")
@@ -382,26 +421,50 @@
         }
 
         func followTailAndScrollToBottom(reason: String) {
+            userInteractionGeneration += 1
             setScrollMode(.followingTail, reason: reason)
             scrollToBottomSoon()
         }
 
         func beginReviewing(reason: String) {
+            userInteractionGeneration += 1
             setScrollMode(.reviewing, reason: reason)
         }
 
         func scrollToBottomPreservingMode() {
             performProgrammaticScroll {
                 (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+                alignToDocumentBottom()
             }
         }
 
         func noteUserScroll(reason: String) {
             guard programmaticScrollDepth == 0 else { return }
-            setScrollMode(
-                isScrolledToBottom() ? .followingTail : .reviewing,
-                reason: reason
-            )
+            userInteractionGeneration += 1
+            let mode: ScrollMode = isScrolledToBottom() ? .followingTail : .reviewing
+            setScrollMode(mode, reason: reason)
+            if mode == .reviewing {
+                preserveReviewOrigin(contentView.bounds.origin)
+            }
+        }
+
+        func preserveReviewOrigin(_ origin: CGPoint) {
+            reviewOriginGeneration += 1
+            let originGeneration = reviewOriginGeneration
+            let expectedInteraction = userInteractionGeneration
+            alignToDocumentOrigin(origin)
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(16)) { [weak self] in
+                guard let self,
+                      scrollMode == .reviewing,
+                      reviewOriginGeneration == originGeneration,
+                      userInteractionGeneration == expectedInteraction
+                else { return }
+                alignToDocumentOrigin(origin)
+            }
+        }
+
+        func invalidateReviewOriginPreservation() {
+            reviewOriginGeneration += 1
         }
 
         func isScrolledToBottom() -> Bool {
@@ -430,6 +493,26 @@
             DispatchQueue.main.async { [weak self] in
                 self?.scrollToBottomPreservingMode()
             }
+        }
+
+        private func alignToDocumentBottom() {
+            guard let documentView else { return }
+            let visible = contentView.documentVisibleRect
+            let targetY = max(documentView.frame.minY, documentView.frame.maxY - visible.height)
+            alignToDocumentOrigin(CGPoint(x: visible.minX, y: targetY))
+        }
+
+        private func alignToDocumentOrigin(_ origin: CGPoint) {
+            guard let documentView else { return }
+            let maximumY = max(
+                documentView.frame.minY,
+                documentView.frame.maxY - contentView.documentVisibleRect.height
+            )
+            contentView.scroll(to: CGPoint(
+                x: origin.x,
+                y: min(max(documentView.frame.minY, origin.y), maximumY)
+            ))
+            reflectScrolledClipView(contentView)
         }
 
         private func setScrollMode(_ mode: ScrollMode, reason: String) {

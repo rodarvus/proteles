@@ -18,6 +18,14 @@
         let viewportEndUTF16: Int?
         let topLayoutFragmentState: Int?
         let topVisualLineCount: Int?
+        let topVisualLineClip: CGFloat?
+        let bottomVisualLineClip: CGFloat?
+    }
+
+    struct TextViewportHealthContext {
+        let renderedLines: Int
+        let pinnedThreshold: CGFloat
+        let extra: String
     }
 
     @MainActor
@@ -30,7 +38,9 @@
                     viewportStartUTF16: nil,
                     viewportEndUTF16: nil,
                     topLayoutFragmentState: nil,
-                    topVisualLineCount: nil
+                    topVisualLineCount: nil,
+                    topVisualLineClip: nil,
+                    bottomVisualLineClip: nil
                 )
             }
 
@@ -43,12 +53,114 @@
                 contentManager.offset(from: documentStart, to: $0.endLocation)
             }
             let fragment = topLayoutFragment(for: textView, layoutManager: layoutManager)
+            let clipping = visualLineClipping(for: textView, layoutManager: layoutManager)
             return TextViewportProbeMetrics(
                 viewportStartUTF16: viewportStart,
                 viewportEndUTF16: viewportEnd,
                 topLayoutFragmentState: fragment.map { Int($0.state.rawValue) },
-                topVisualLineCount: fragment?.textLineFragments.count
+                topVisualLineCount: fragment?.textLineFragments.count,
+                topVisualLineClip: clipping?.top,
+                bottomVisualLineClip: clipping?.bottom
             )
+        }
+
+        static func healthSnapshot(
+            for textView: NSTextView,
+            surface: String,
+            reason: String,
+            context: TextViewportHealthContext
+        ) -> TextViewHealthSnapshot {
+            let scrollView = textView.enclosingScrollView
+            let visible = scrollView?.contentView.documentVisibleRect ?? textView.visibleRect
+            let documentWidth = scrollView?.documentView?.frame.width ?? textView.frame.width
+            let documentHeight = scrollView?.documentView?.frame.height ?? textView.frame.height
+            let distanceFromBottom = documentHeight - visible.maxY
+            let viewport = metrics(for: textView)
+            return TextViewHealthSnapshot(
+                surface: surface,
+                reason: reason,
+                renderedLines: context.renderedLines,
+                storageUTF16Length: textView.textStorage?.length ?? 0,
+                textViewBoundsHeight: Double(textView.bounds.height),
+                documentHeight: Double(documentHeight),
+                visibleOriginY: Double(visible.origin.y),
+                visibleHeight: Double(visible.height),
+                distanceFromBottom: Double(distanceFromBottom),
+                isPinnedToBottom: distanceFromBottom < context.pinnedThreshold,
+                isViewHidden: textView.isHiddenOrHasHiddenAncestor,
+                hasWindow: textView.window != nil,
+                textViewBoundsWidth: Double(textView.bounds.width),
+                documentWidth: Double(documentWidth),
+                visibleOriginX: Double(visible.origin.x),
+                visibleWidth: Double(visible.width),
+                textContainerWidth: Double(textView.textContainer?.size.width ?? 0),
+                usesTextLayoutManager: textView.textLayoutManager != nil,
+                viewportStartUTF16: viewport.viewportStartUTF16,
+                viewportEndUTF16: viewport.viewportEndUTF16,
+                topLayoutFragmentState: viewport.topLayoutFragmentState,
+                topVisualLineCount: viewport.topVisualLineCount,
+                topVisualLineClip: viewport.topVisualLineClip.map(Double.init),
+                bottomVisualLineClip: viewport.bottomVisualLineClip.map(Double.init),
+                extra: context.extra
+            )
+        }
+
+        /// Cheap confirmation used by tail reconciliation. Geometry can say
+        /// "at bottom" while TextKit's active viewport still ends thousands
+        /// of UTF-16 units short after an invalidating prefix edit.
+        static func viewportEndsAtStorageEnd(in textView: NSTextView) -> Bool? {
+            let storageLength = textView.textStorage?.length ?? 0
+            guard storageLength > 0 else { return true }
+            guard let layoutManager = textView.textLayoutManager,
+                  let contentManager = layoutManager.textContentManager,
+                  let viewportRange = layoutManager.textViewportLayoutController.viewportRange
+            else { return nil }
+            let documentStart = contentManager.documentRange.location
+            let viewportEnd = contentManager.offset(
+                from: documentStart,
+                to: viewportRange.endLocation
+            )
+            guard viewportEnd != NSNotFound else { return nil }
+            return viewportEnd >= storageLength
+        }
+
+        private static func visualLineClipping(
+            for textView: NSTextView,
+            layoutManager: NSTextLayoutManager
+        ) -> (top: CGFloat, bottom: CGFloat)? {
+            let visible = textView.enclosingScrollView?.contentView.documentVisibleRect
+                ?? textView.visibleRect
+            let documentBottom = textView.bounds.maxY
+            guard documentBottom > 0 else { return nil }
+            let topPointY = min(max(visible.minY + 0.5, 0.5), documentBottom - 0.5)
+            let bottomPointY = min(max(visible.maxY - 0.5, 0.5), documentBottom - 0.5)
+            guard let topLine = visualLine(at: topPointY, in: textView, layoutManager: layoutManager),
+                  let bottomLine = visualLine(at: bottomPointY, in: textView, layoutManager: layoutManager)
+            else { return nil }
+            return (
+                top: max(0, visible.minY - topLine.lowerBound),
+                bottom: max(0, bottomLine.upperBound - visible.maxY)
+            )
+        }
+
+        private static func visualLine(
+            at documentY: CGFloat,
+            in textView: NSTextView,
+            layoutManager: NSTextLayoutManager
+        ) -> ClosedRange<CGFloat>? {
+            let origin = textView.textContainerOrigin
+            let containerY = max(0, documentY - origin.y)
+            let point = CGPoint(x: 1, y: containerY)
+            guard let fragment = layoutManager.textLayoutFragment(for: point),
+                  let line = fragment.textLineFragment(
+                      forVerticalOffset: containerY - fragment.layoutFragmentFrame.minY,
+                      requiresExactMatch: false
+                  )
+            else { return nil }
+            let lineTop = origin.y
+                + fragment.layoutFragmentFrame.minY
+                + line.typographicBounds.minY
+            return lineTop...(lineTop + line.typographicBounds.height)
         }
 
         static func captureAnchor(
@@ -93,25 +205,33 @@
             )
         }
 
+        static func layoutViewport(in textView: NSTextView) {
+            textView.textLayoutManager?.textViewportLayoutController.layoutViewport()
+        }
+
         @discardableResult
         static func restoreAnchor(
             _ anchor: OutputViewportAnchor,
             in textView: NSTextView,
             renderedLines: [RenderedLineSpan]
         ) -> Bool {
-            let survived = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
             let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView
+            scrollView?.invalidateReviewOriginPreservation()
+            let firstPass = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
+            let refinedPass = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
             let expectedReason = scrollView?.scrollModeReason
+            let expectedInteraction = scrollView?.userInteractionGeneration
             DispatchQueue.main.async { [weak textView] in
                 guard let textView,
                       let scrollView = textView.enclosingScrollView
                       as? BottomPinnedOutputScrollView,
                       scrollView.scrollMode == .reviewing,
-                      scrollView.scrollModeReason == expectedReason
+                      scrollView.scrollModeReason == expectedReason,
+                      scrollView.userInteractionGeneration == expectedInteraction
                 else { return }
                 _ = restoreAnchorNow(anchor, in: textView, renderedLines: renderedLines)
             }
-            return survived
+            return firstPass || refinedPass
         }
 
         private static func restoreAnchorNow(

@@ -72,11 +72,11 @@
         private var lastAnchorOutcome = "none"
         private var configuredLimit = ScrollbackLimit.limited(ScrollbackLimit.defaultLineCount)
         private var lastLimitChangeOutcome = "none"
-
-        private weak var textView: NSTextView?
+        weak var textView: NSTextView?
+        var tailReconciliation = TailReconciliationState()
         private let builder: AttributedStringBuilder
         private let frameInterval: Duration
-        private let initialScrollPosition: InitialScrollPosition
+        let initialScrollPosition: InitialScrollPosition
         /// Intake buffer between the off-main store subscription and the
         /// main-actor frame flush. The subscription pushes here WITHOUT hopping
         /// to the main actor per event, so a burst (e.g. resume seeding
@@ -184,6 +184,7 @@
         /// Stop the frame ticker and cancel the store subscription. Safe to
         /// call when already detached.
         public func detach() {
+            cancelTailReconciliation(reason: "detach")
             subscriptionTask?.cancel()
             subscriptionTask = nil
             frameTask?.cancel()
@@ -215,9 +216,7 @@
                 storage.beginEditing()
                 for line in lines {
                     let attributed = builder.build(line)
-                    storage.append(attributed)
-                    lineLengths.append((id: line.id, utf16Length: attributed.length))
-                    recentLines.append(attributed)
+                    appendRenderedLine(line.id, attributed: attributed, to: storage)
                 }
                 storage.endEditing()
             }
@@ -261,7 +260,40 @@
                 storage.deleteCharacters(in: NSRange(location: storage.length - length, length: length))
                 lineLengths.removeLast()
                 if !recentLines.isEmpty { recentLines.removeLast() }
+                if !lineLengths.isEmpty {
+                    assert(storage.length > 0 && lineLengths[lineLengths.count - 1].utf16Length > 0)
+                    storage.deleteCharacters(in: NSRange(location: storage.length - 1, length: 1))
+                    lineLengths[lineLengths.count - 1].utf16Length -= 1
+                }
             }
+        }
+
+        /// Encode logical lines with separators between them, never one after
+        /// the final line. A terminal separator creates an additional empty
+        /// TextKit paragraph, which appears as a wasted output row.
+        private func appendRenderedLine(
+            _ id: LineID,
+            attributed: NSAttributedString,
+            to storage: NSTextStorage
+        ) {
+            assert(attributed.length > 0 && attributed.string.hasSuffix("\n"))
+            let contentLength = max(0, attributed.length - 1)
+            if !lineLengths.isEmpty {
+                let separator = attributed.attributedSubstring(from: NSRange(
+                    location: attributed.length - 1,
+                    length: 1
+                ))
+                storage.append(separator)
+                lineLengths[lineLengths.count - 1].utf16Length += 1
+            }
+            if contentLength > 0 {
+                storage.append(attributed.attributedSubstring(from: NSRange(
+                    location: 0,
+                    length: contentLength
+                )))
+            }
+            lineLengths.append((id: id, utf16Length: contentLength))
+            recentLines.append(attributed)
         }
 
         /// Re-render the live-tail pane from the buffered recent lines. The
@@ -283,7 +315,12 @@
                     combined.deleteCharacters(in: NSRange(location: combined.length - 1, length: 1))
                 }
                 storage.setAttributedString(combined)
-                tailTextView?.scrollToEndOfDocument(nil)
+                let tailScrollView = tailTextView?.enclosingScrollView as? PassthroughScrollView
+                if let tailScrollView {
+                    tailScrollView.scrollToDocumentBottom()
+                } else {
+                    tailTextView?.scrollToEndOfDocument(nil)
+                }
             }
         }
 
@@ -307,15 +344,26 @@
             let pendingEvictions = toApply.lazy.map(\.evictionCount).reduce(0, +)
             let forcedTrim = toApply.contains(where: \.requiresImmediateEvictionTrim)
             let willTrim = forcedTrim || evictionBacklog + pendingEvictions >= evictionBatch
+            if willTrim {
+                evictionTrimSequence += 1
+            }
             let reviewAnchor = !followsTail && willTrim
                 ? currentViewportAnchor(in: textView)
+                : nil
+            let reviewOrigin = !followsTail
+                ? textView.enclosingScrollView?.contentView.bounds.origin
                 : nil
             let mutation = apply(toApply, to: storage, wallNow: Date())
 
             if followsTail {
-                scrollToBottom(textView)
+                let source = mutation.trimmedLines > 0
+                    ? "trim"
+                    : mutation.didRemoveTail ? "tail-remove" : "append"
+                scrollToBottom(textView, source: source)
             } else if mutation.trimmedLines > 0 {
                 restoreReviewAnchor(reviewAnchor, in: textView)
+            } else if mutation.didAppend || mutation.didRemoveTail {
+                restoreReviewOrigin(reviewOrigin, in: textView)
             }
             if mutation.didAppend || mutation.didRemoveTail { refreshTail() }
 
@@ -344,9 +392,7 @@
                     switch event {
                     case .appended(let line):
                         let attributed = builder.build(line)
-                        storage.append(attributed)
-                        lineLengths.append((id: line.id, utf16Length: attributed.length))
-                        recentLines.append(attributed)
+                        appendRenderedLine(line.id, attributed: attributed, to: storage)
                         if recentLines.count > tailRetained {
                             recentLines.removeFirst(recentLines.count - tailRetained)
                         }
@@ -412,27 +458,7 @@
     }
 
     extension RenderCoordinator {
-        func currentViewportAnchor() -> OutputViewportAnchor? {
-            guard let textView else { return nil }
-            return currentViewportAnchor(in: textView)
-        }
-
-        var currentScrollMode: BottomPinnedOutputScrollView.ScrollMode {
-            guard let scrollView = textView?.enclosingScrollView as? BottomPinnedOutputScrollView
-            else { return .followingTail }
-            return scrollView.scrollMode
-        }
-
-        private func configureInitialScrollMode() {
-            guard let scrollView = textView?.enclosingScrollView as? BottomPinnedOutputScrollView
-            else { return }
-            let mode: BottomPinnedOutputScrollView.ScrollMode = initialScrollPosition == .bottom
-                ? .followingTail
-                : .reviewing
-            scrollView.setInitialScrollMode(mode)
-        }
-
-        private func currentViewportAnchor(in textView: NSTextView) -> OutputViewportAnchor? {
+        func currentViewportAnchor(in textView: NSTextView) -> OutputViewportAnchor? {
             TextViewportProbe.captureAnchor(
                 in: textView,
                 renderedLines: renderedLineSpans
@@ -443,7 +469,6 @@
             _ anchor: OutputViewportAnchor?,
             in textView: NSTextView
         ) {
-            evictionTrimSequence += 1
             guard let anchor else {
                 lastAnchorOutcome = "trim-\(evictionTrimSequence)-missing"
                 return
@@ -457,100 +482,70 @@
                 + (survived ? "restored-\(anchor.lineID.raw)" : "clamped-\(anchor.lineID.raw)")
         }
 
+        private func restoreReviewOrigin(_ origin: CGPoint?, in textView: NSTextView) {
+            guard let origin, let scrollView = textView.enclosingScrollView else { return }
+            if let outputScrollView = scrollView as? BottomPinnedOutputScrollView {
+                outputScrollView.preserveReviewOrigin(origin)
+                return
+            }
+            let maximumY = max(
+                0,
+                (scrollView.documentView?.frame.height ?? textView.frame.height)
+                    - scrollView.contentView.bounds.height
+            )
+            scrollView.contentView.scroll(to: CGPoint(
+                x: origin.x,
+                y: min(max(0, origin.y), maximumY)
+            ))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
         private var renderedLineSpans: [RenderedLineSpan] {
             lineLengths.map { RenderedLineSpan(id: $0.id, utf16Length: $0.utf16Length) }
         }
 
-        /// Pin the view to the bottom. We scroll immediately *and* again on the
-        /// next runloop tick: TextKit lays text out asynchronously, so an
-        /// immediate `scrollToEndOfDocument` can land short of the true end
-        /// (the new lines aren't measured yet) — most visibly right after
-        /// connect, when the first burst arrives before the view has sized. The
-        /// deferred pass runs after layout settles and lands on the real bottom.
-        private func scrollToBottom(_ textView: NSTextView) {
-            PerformanceProbe.shared.measure(
-                "main-output.scroll-bottom",
-                events: 1,
-                thresholdMS: 50
-            ) {
-                if let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView {
-                    scrollView.scrollToBottomPreservingMode()
-                } else {
-                    textView.scrollToEndOfDocument(nil)
-                }
-            }
-            DispatchQueue.main.async { [weak textView, weak self] in
-                guard let textView, let self else { return }
-                guard isFollowingTail(textView) else { return }
-                // Only pay the second scroll when the immediate one actually
-                // landed short. `scrollToEndOfDocument` on a big document
-                // walks TextKit 2's run storage to estimate the target
-                // location (#65 — the 100%-CPU hang's hot frame), so the
-                // common already-at-bottom case must be a cheap geometry
-                // check, not a second walk.
-                if !isScrolledToBottom(textView) {
-                    PerformanceProbe.shared.measure(
-                        "main-output.scroll-bottom-deferred",
-                        events: 1,
-                        thresholdMS: 50
-                    ) {
-                        let outputScrollView = textView.enclosingScrollView
-                            as? BottomPinnedOutputScrollView
-                        if let scrollView = outputScrollView {
-                            scrollView.scrollToBottomPreservingMode()
-                        } else {
-                            textView.scrollToEndOfDocument(nil)
-                        }
-                    }
-                }
-                emitHealth(reason: "deferred-scroll")
-            }
+        /// Pin immediately, then let the bounded reconciler confirm that the
+        /// TextKit viewport actually reaches the storage end after layout.
+        private func scrollToBottom(_ textView: NSTextView, source: String) {
+            requestTailReconciliation(in: textView, source: source)
         }
 
-        private func emitHealth(reason: String) {
-            guard let onHealthSnapshot,
-                  let snapshot = healthSnapshot(reason: reason)
-            else { return }
-            onHealthSnapshot(snapshot)
+        func emitHealth(reason: String) {
+            guard let onHealthSnapshot else { return }
+            if let snapshot = healthSnapshot(reason: reason) {
+                onHealthSnapshot(snapshot)
+            }
+            if let tailTextView {
+                onHealthSnapshot(TextViewportProbe.healthSnapshot(
+                    for: tailTextView,
+                    surface: "main-output-tail",
+                    reason: reason,
+                    context: TextViewportHealthContext(
+                        renderedLines: recentLines.count,
+                        pinnedThreshold: 1,
+                        extra: "role live-tail"
+                    )
+                ))
+            }
         }
 
         private func healthSnapshot(reason: String) -> TextViewHealthSnapshot? {
             guard let textView else { return nil }
-            let scrollView = textView.enclosingScrollView
-            let visible = scrollView?.contentView.documentVisibleRect ?? textView.visibleRect
-            let documentWidth = scrollView?.documentView?.frame.width ?? textView.frame.width
-            let documentHeight = scrollView?.documentView?.frame.height ?? textView.frame.height
-            let distanceFromBottom = documentHeight - (visible.origin.y + visible.height)
-            let viewport = TextViewportProbe.metrics(for: textView)
-            let outputScrollView = scrollView as? BottomPinnedOutputScrollView
+            let outputScrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView
             let mode = outputScrollView?.scrollMode.rawValue ?? "geometry"
             let modeReason = outputScrollView?.scrollModeReason ?? "fallback"
-            return TextViewHealthSnapshot(
+            return TextViewportProbe.healthSnapshot(
+                for: textView,
                 surface: "main-output",
                 reason: reason,
-                renderedLines: lineLengths.count,
-                storageUTF16Length: textView.textStorage?.length ?? 0,
-                textViewBoundsHeight: Double(textView.bounds.height),
-                documentHeight: Double(documentHeight),
-                visibleOriginY: Double(visible.origin.y),
-                visibleHeight: Double(visible.height),
-                distanceFromBottom: Double(distanceFromBottom),
-                isPinnedToBottom: distanceFromBottom < autoScrollThreshold,
-                isViewHidden: textView.isHiddenOrHasHiddenAncestor,
-                hasWindow: textView.window != nil,
-                textViewBoundsWidth: Double(textView.bounds.width),
-                documentWidth: Double(documentWidth),
-                visibleOriginX: Double(visible.origin.x),
-                visibleWidth: Double(visible.width),
-                textContainerWidth: Double(textView.textContainer?.size.width ?? 0),
-                usesTextLayoutManager: textView.textLayoutManager != nil,
-                viewportStartUTF16: viewport.viewportStartUTF16,
-                viewportEndUTF16: viewport.viewportEndUTF16,
-                topLayoutFragmentState: viewport.topLayoutFragmentState,
-                topVisualLineCount: viewport.topVisualLineCount,
-                extra: "backlog \(evictionBacklog) tailLines \(recentLines.count) "
-                    + "limit \(configuredLimit.diagnosticLabel) limitChange \(lastLimitChangeOutcome) "
-                    + "mode \(mode) modeReason \(modeReason) anchor \(lastAnchorOutcome)"
+                context: TextViewportHealthContext(
+                    renderedLines: lineLengths.count,
+                    pinnedThreshold: autoScrollThreshold,
+                    extra: "backlog \(evictionBacklog) tailLines \(recentLines.count) "
+                        + "limit \(configuredLimit.diagnosticLabel) "
+                        + "limitChange \(lastLimitChangeOutcome) mode \(mode) "
+                        + "modeReason \(modeReason) anchor \(lastAnchorOutcome)"
+                )
             )
         }
 
@@ -559,7 +554,7 @@
             case .top:
                 scrollToTop(textView)
             case .bottom:
-                scrollToBottom(textView)
+                scrollToBottom(textView, source: "snapshot")
             }
         }
 
@@ -570,7 +565,7 @@
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
 
-        private func isScrolledToBottom(_ textView: NSTextView) -> Bool {
+        func isScrolledToBottom(_ textView: NSTextView) -> Bool {
             guard let scrollView = textView.enclosingScrollView else {
                 return true
             }
@@ -581,7 +576,7 @@
             return distanceFromBottom < autoScrollThreshold
         }
 
-        private func isFollowingTail(_ textView: NSTextView) -> Bool {
+        func isFollowingTail(_ textView: NSTextView) -> Bool {
             if let scrollView = textView.enclosingScrollView as? BottomPinnedOutputScrollView {
                 return scrollView.scrollMode == .followingTail
             }

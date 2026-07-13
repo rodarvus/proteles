@@ -54,6 +54,33 @@
             #expect(stats.documentUTF16Length > 0)
         }
 
+        @Test("main storage represents logical lines without an extra terminal paragraph")
+        func mainStorageHasNoExtraTerminalParagraph() async throws {
+            let textView = try #require(makeView())
+            let store = ScrollbackStore(maxLines: 100)
+            let coordinator = RenderCoordinator(
+                textView: textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            await store.append(text: "first")
+            await store.append(text: "")
+            await store.append(text: "third")
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(textView.string == "first\n\nthird")
+
+            await store.removeLast(1)
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(textView.string == "first\n")
+
+            await store.append(text: "replacement")
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(textView.string == "first\n\nreplacement")
+        }
+
         @Test("health snapshots report sanitized main output geometry")
         func healthSnapshotsReportMainOutputGeometry() async throws {
             let viewport = makeOutputViewport()
@@ -114,6 +141,8 @@
 
             #expect(coordinator.currentScrollMode == .followingTail)
             #expect(viewport.scrollView.isScrolledToBottom())
+            #expect(distanceFromBottom(in: viewport) <= 1)
+            #expect(TextViewportProbe.viewportEndsAtStorageEnd(in: viewport.textView) == true)
         }
 
         @Test("review anchor survives a batched prefix trim")
@@ -147,6 +176,63 @@
             #expect(after.lineID == before.lineID)
             #expect(after.utf16OffsetInLine == before.utf16OffsetInLine)
             #expect(coordinator.currentScrollMode == .reviewing)
+        }
+    }
+
+    extension RenderCoordinatorRebuildTests {
+        @Test("repeated prefix trims reconcile the TextKit viewport to the tail")
+        func repeatedPrefixTrimsReconcileViewportToTail() async throws {
+            let viewport = makeOutputViewport(height: 400)
+            let store = ScrollbackStore(maxLines: 5000)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            coordinator.evictionBatch = 1000
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            try await appendGeometryLines(0..<5000, to: store)
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(distanceFromBottom(in: viewport) <= 1)
+            #expect(TextViewportProbe.viewportEndsAtStorageEnd(in: viewport.textView) == true)
+            for cycle in 0..<4 {
+                let start = 5000 + cycle * 1000
+                try await appendGeometryLines(start..<(start + 1000), to: store)
+                try await Task.sleep(for: .milliseconds(250))
+                #expect(viewport.textView.string.split(separator: "\n").count == 5000)
+                #expect(distanceFromBottom(in: viewport) <= 1)
+                #expect(TextViewportProbe.viewportEndsAtStorageEnd(in: viewport.textView) == true)
+            }
+        }
+
+        @Test("queued tail reconciliation cannot override review intent")
+        func queuedTailReconciliationCannotOverrideReviewIntent() async throws {
+            let viewport = makeOutputViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 500)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+
+            coordinator.requestTailReconciliation(in: viewport.textView, source: "unit")
+            let range = (viewport.textView.string as NSString).range(of: "line 20 content")
+            viewport.textView.scrollRangeToVisible(range)
+            viewport.scrollView.beginReviewing(reason: "unit-review")
+            let reviewOrigin = viewport.scrollView.contentView.bounds.origin.y
+            try await Task.sleep(for: .milliseconds(100))
+
+            #expect(coordinator.currentScrollMode == .reviewing)
+            #expect(abs(viewport.scrollView.contentView.bounds.origin.y - reviewOrigin) < 1)
         }
 
         @Test("live limit reduction trims immediately and reports its outcome")
@@ -417,6 +503,32 @@
 
         private func makeOutputViewport(height: CGFloat = 400) -> TestOutputViewport {
             TestOutputViewport(height: height)
+        }
+
+        private func distanceFromBottom(in viewport: TestOutputViewport) -> CGFloat {
+            let documentHeight = viewport.scrollView.documentView?.frame.height ?? 0
+            return documentHeight - viewport.scrollView.contentView.documentVisibleRect.maxY
+        }
+
+        private func makeGeometryLine(_ index: Int) -> Line {
+            let widths = [12, 24, 48, 72, 96, 140, 220, 36, 64, 88]
+            let width = widths[index % widths.count]
+            return Line(
+                id: LineID(0),
+                timestamp: Date(timeIntervalSince1970: TimeInterval(index)),
+                text: String(repeating: "a", count: width)
+            )
+        }
+
+        private func appendGeometryLines(
+            _ range: Range<Int>,
+            to store: ScrollbackStore
+        ) async throws {
+            for start in stride(from: range.lowerBound, to: range.upperBound, by: 25) {
+                let end = min(start + 25, range.upperBound)
+                await store.appendBatch((start..<end).map(makeGeometryLine))
+                try await Task.sleep(for: .milliseconds(20))
+            }
         }
     }
 
