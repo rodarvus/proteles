@@ -92,27 +92,25 @@
             }
             context.coordinator.hasRendered = true
             context.coordinator.lastFilterKey = filterKey
-
-            if forceBottom || wasPinned {
-                PerformanceProbe.shared.measure(
-                    "channels.scroll-bottom",
-                    events: lines.count,
-                    thresholdMS: 50
-                ) {
-                    scrollView.scrollToBottomSoon()
-                }
-            } else {
-                PerformanceProbe.shared.measure(
-                    "channels.restore-origin",
-                    events: lines.count,
-                    thresholdMS: 50
-                ) {
-                    scrollView.restoreVisibleOrigin(previousOrigin)
-                }
+            let transition = onHealthSnapshot.flatMap { _ in
+                context.coordinator.diagnosticTransition(
+                    lineCount: lines.count,
+                    storageUTF16Length: attributed.length,
+                    filterKey: filterKey
+                )
             }
-            emitHealth(from: scrollView, reason: "update")
+
+            restoreScrollPosition(
+                in: scrollView,
+                lineCount: lines.count,
+                shouldPin: forceBottom || wasPinned,
+                previousOrigin: previousOrigin
+            )
+            let updateReason = transition.map { "transition-\($0)-update" } ?? "update"
+            emitHealth(from: scrollView, reason: updateReason)
             DispatchQueue.main.async {
-                emitHealth(from: scrollView, reason: "settled")
+                let settledReason = transition.map { "transition-\($0)-settled" } ?? "settled"
+                emitHealth(from: scrollView, reason: settledReason)
             }
         }
 
@@ -123,6 +121,22 @@
         private var backgroundColor: NSColor {
             NSColor(rgb: palette.defaultBackground)
                 .withAlphaComponent(CGFloat(fillOpacity))
+        }
+
+        private func restoreScrollPosition(
+            in scrollView: ChatLogScrollView,
+            lineCount: Int,
+            shouldPin: Bool,
+            previousOrigin: CGPoint
+        ) {
+            let phase = shouldPin ? "channels.scroll-bottom" : "channels.restore-origin"
+            PerformanceProbe.shared.measure(phase, events: lineCount, thresholdMS: 50) {
+                if shouldPin {
+                    scrollView.scrollToBottomSoon()
+                } else {
+                    scrollView.restoreVisibleOrigin(previousOrigin)
+                }
+            }
         }
 
         private func emitHealth(from scrollView: ChatLogScrollView, reason: String) {
@@ -141,6 +155,26 @@
             weak var textView: ChatLogTextView?
             var hasRendered = false
             var lastFilterKey = ""
+            private var lastDiagnosticLineCount = -1
+            private var lastDiagnosticStorageLength = -1
+            private var lastDiagnosticFilterKey = ""
+            private var diagnosticTransitionSequence = 0
+
+            func diagnosticTransition(
+                lineCount: Int,
+                storageUTF16Length: Int,
+                filterKey: String
+            ) -> Int? {
+                guard lineCount != lastDiagnosticLineCount
+                    || storageUTF16Length != lastDiagnosticStorageLength
+                    || filterKey != lastDiagnosticFilterKey
+                else { return nil }
+                lastDiagnosticLineCount = lineCount
+                lastDiagnosticStorageLength = storageUTF16Length
+                lastDiagnosticFilterKey = filterKey
+                diagnosticTransitionSequence += 1
+                return diagnosticTransitionSequence
+            }
 
             func textView(
                 _: NSTextView,
@@ -213,7 +247,14 @@
             let documentHeight = documentView?.frame.height ?? 0
             let distanceFromBottom = documentHeight - (visible.origin.y + visible.height)
             let viewport = textView.flatMap { Self.viewportMetrics(for: $0) }
-                ?? ViewportMetrics(start: nil, end: nil, fragmentState: nil, visualLines: nil)
+                ?? ViewportMetrics(
+                    start: nil,
+                    end: nil,
+                    fragmentState: nil,
+                    visualLines: nil,
+                    topClip: nil,
+                    bottomClip: nil
+                )
             return TextViewHealthSnapshot(
                 surface: "channels",
                 reason: reason,
@@ -237,6 +278,8 @@
                 viewportEndUTF16: viewport.end,
                 topLayoutFragmentState: viewport.fragmentState,
                 topVisualLineCount: viewport.visualLines,
+                topVisualLineClip: viewport.topClip.map(Double.init),
+                bottomVisualLineClip: viewport.bottomClip.map(Double.init),
                 extra: "scroller \(hasVerticalScroller)"
             )
         }
@@ -256,6 +299,11 @@
 
         private func scrollToBottom() {
             (documentView as? NSTextView)?.scrollToEndOfDocument(nil)
+            guard let documentView else { return }
+            let visible = contentView.documentVisibleRect
+            let targetY = max(documentView.frame.minY, documentView.frame.maxY - visible.height)
+            contentView.scroll(to: CGPoint(x: visible.minX, y: targetY))
+            reflectScrolledClipView(contentView)
         }
 
         private struct ViewportMetrics {
@@ -263,6 +311,8 @@
             let end: Int?
             let fragmentState: Int?
             let visualLines: Int?
+            let topClip: CGFloat?
+            let bottomClip: CGFloat?
         }
 
         private static func viewportMetrics(for textView: NSTextView) -> ViewportMetrics? {
@@ -284,12 +334,56 @@
                 x: max(0, visible.minX - origin.x + 1),
                 y: max(0, visible.minY - origin.y + 0.5)
             ))
+            let clipping = visualLineClipping(
+                for: textView,
+                layoutManager: layoutManager,
+                visible: visible
+            )
             return ViewportMetrics(
                 start: start,
                 end: end,
                 fragmentState: fragment.map { Int($0.state.rawValue) },
-                visualLines: fragment?.textLineFragments.count
+                visualLines: fragment?.textLineFragments.count,
+                topClip: clipping?.top,
+                bottomClip: clipping?.bottom
             )
+        }
+
+        private static func visualLineClipping(
+            for textView: NSTextView,
+            layoutManager: NSTextLayoutManager,
+            visible: CGRect
+        ) -> (top: CGFloat, bottom: CGFloat)? {
+            let documentBottom = textView.bounds.maxY
+            guard documentBottom > 0 else { return nil }
+            let topY = min(max(visible.minY + 0.5, 0.5), documentBottom - 0.5)
+            let bottomY = min(max(visible.maxY - 0.5, 0.5), documentBottom - 0.5)
+            guard let topLine = visualLine(at: topY, in: textView, layoutManager: layoutManager),
+                  let bottomLine = visualLine(at: bottomY, in: textView, layoutManager: layoutManager)
+            else { return nil }
+            return (
+                top: max(0, visible.minY - topLine.lowerBound),
+                bottom: max(0, bottomLine.upperBound - visible.maxY)
+            )
+        }
+
+        private static func visualLine(
+            at documentY: CGFloat,
+            in textView: NSTextView,
+            layoutManager: NSTextLayoutManager
+        ) -> ClosedRange<CGFloat>? {
+            let origin = textView.textContainerOrigin
+            let containerY = max(0, documentY - origin.y)
+            guard let fragment = layoutManager.textLayoutFragment(
+                for: CGPoint(x: 1, y: containerY)
+            ), let line = fragment.textLineFragment(
+                forVerticalOffset: containerY - fragment.layoutFragmentFrame.minY,
+                requiresExactMatch: false
+            ) else { return nil }
+            let lineTop = origin.y
+                + fragment.layoutFragmentFrame.minY
+                + line.typographicBounds.minY
+            return lineTop...(lineTop + line.typographicBounds.height)
         }
     }
 

@@ -27,6 +27,8 @@ public struct TextViewHealthSnapshot: Sendable, Equatable {
     public let viewportEndUTF16: Int?
     public let topLayoutFragmentState: Int?
     public let topVisualLineCount: Int?
+    public let topVisualLineClip: Double?
+    public let bottomVisualLineClip: Double?
     public let extra: String
 
     public init(
@@ -52,6 +54,8 @@ public struct TextViewHealthSnapshot: Sendable, Equatable {
         viewportEndUTF16: Int? = nil,
         topLayoutFragmentState: Int? = nil,
         topVisualLineCount: Int? = nil,
+        topVisualLineClip: Double? = nil,
+        bottomVisualLineClip: Double? = nil,
         extra: String = ""
     ) {
         self.surface = surface
@@ -76,6 +80,8 @@ public struct TextViewHealthSnapshot: Sendable, Equatable {
         self.viewportEndUTF16 = viewportEndUTF16
         self.topLayoutFragmentState = topLayoutFragmentState
         self.topVisualLineCount = topVisualLineCount
+        self.topVisualLineClip = topVisualLineClip
+        self.bottomVisualLineClip = bottomVisualLineClip
         self.extra = extra
     }
 
@@ -90,6 +96,9 @@ public struct TextViewHealthSnapshot: Sendable, Equatable {
         let fragment = topLayoutFragmentState.map { state in
             " fragment \(state)/\(topVisualLineCount ?? 0)"
         } ?? " fragment nil"
+        let clipping = topVisualLineClip.map { top in
+            " clip \(format(top))/\(format(bottomVisualLineClip ?? 0))"
+        } ?? " clip nil"
         let suffix = extra.isEmpty ? "" : " \(extra)"
         return "text-health: \(sanitizedLabel(surface)) \(label) "
             + "lines \(renderedLines) storage \(storageUTF16Length)u16 "
@@ -104,7 +113,7 @@ public struct TextViewHealthSnapshot: Sendable, Equatable {
             + "bottom \(format(distanceFromBottom)) "
             + "pinned \(isPinnedToBottom) hidden \(isViewHidden) "
             + "window \(hasWindow) containerW \(format(textContainerWidth)) "
-            + "textkit2 \(usesTextLayoutManager)\(viewport)\(fragment)"
+            + "textkit2 \(usesTextLayoutManager)\(viewport)\(fragment)\(clipping)"
             + "\(source)\(suffix)"
     }
 

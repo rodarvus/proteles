@@ -59,6 +59,9 @@ extension ContentView {
             for note in PerformanceProbe.shared.drainPendingNotes() {
                 await session.recordNote(note)
             }
+            for note in renderStats.drainPendingTextHealthNotes() {
+                await session.recordNote(note)
+            }
             let now = Date()
             guard now >= nextSummary else { continue }
             nextSummary = now.addingTimeInterval(30)
@@ -136,13 +139,25 @@ private extension PerformanceProbe.Mode {
 final class RenderStatsBox {
     var latest: RenderFrameStats?
     private var latestTextHealth: [String: TextViewHealthSnapshot] = [:]
+    private var pendingTextHealthNotes: [String] = []
 
     func record(_ snapshot: TextViewHealthSnapshot) {
         latestTextHealth[snapshot.surface] = snapshot
+        let recordsImmediately = snapshot.reason.hasPrefix("tail-reconcile-")
+            || snapshot.reason.hasPrefix("transition-")
+        if recordsImmediately {
+            pendingTextHealthNotes.append(snapshot.transcriptNote())
+        }
     }
 
     func clearTextHealth() {
         latestTextHealth.removeAll(keepingCapacity: true)
+        pendingTextHealthNotes.removeAll(keepingCapacity: true)
+    }
+
+    func drainPendingTextHealthNotes() -> [String] {
+        defer { pendingTextHealthNotes.removeAll(keepingCapacity: true) }
+        return pendingTextHealthNotes
     }
 
     func textHealthNotes(context: String) -> [String] {

@@ -18,6 +18,8 @@ struct TextViewHealthSnapshotTests {
             isPinnedToBottom: true,
             isViewHidden: false,
             hasWindow: true,
+            topVisualLineClip: 4.25,
+            bottomVisualLineClip: 8.5,
             extra: "backlog 0 tailLines 10"
         )
 
@@ -28,6 +30,7 @@ struct TextViewHealthSnapshotTests {
         #expect(note.contains("docH 1200.2"))
         #expect(note.contains("visibleY 700.5"))
         #expect(note.contains("pinned true hidden false window true"))
+        #expect(note.contains("clip 4.2/8.5"))
         #expect(note.contains("source flush"))
         #expect(note.contains("backlog 0 tailLines 10"))
         #expect(!note.contains("first room"))

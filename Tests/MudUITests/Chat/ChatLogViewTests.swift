@@ -114,6 +114,42 @@
             #expect(!note.contains("second"))
         }
 
+        @Test("Bottom settlement reaches exact Channels document geometry")
+        @MainActor
+        func bottomSettlementReachesExactGeometry() async throws {
+            let scrollView = ChatLogScrollView(
+                frame: NSRect(x: 0, y: 0, width: 400, height: 200)
+            )
+            let textView = ChatLogTextView(
+                frame: NSRect(x: 0, y: 0, width: 400, height: 600)
+            )
+            scrollView.documentView = textView
+            scrollView.contentView.scroll(to: .zero)
+
+            scrollView.scrollToBottomSoon()
+            try await Task.sleep(for: .milliseconds(50))
+
+            let documentHeight = scrollView.documentView?.frame.height ?? 0
+            let distance = documentHeight - scrollView.contentView.documentVisibleRect.maxY
+            #expect(abs(distance) <= 1)
+        }
+
+        @Test("Diagnostics identify only real Channels content transitions")
+        @MainActor
+        func diagnosticsIdentifyOnlyRealChannelsContentTransitions() {
+            let coordinator = ChatLogView.Coordinator()
+
+            #expect(coordinator.diagnosticTransition(
+                lineCount: 2, storageUTF16Length: 12, filterKey: "all"
+            ) == 1)
+            #expect(coordinator.diagnosticTransition(
+                lineCount: 2, storageUTF16Length: 12, filterKey: "all"
+            ) == nil)
+            #expect(coordinator.diagnosticTransition(
+                lineCount: 2, storageUTF16Length: 12, filterKey: "tells"
+            ) == 2)
+        }
+
         private var builder: ChatAttributedStringBuilder {
             ChatAttributedStringBuilder(
                 palette: palette,
