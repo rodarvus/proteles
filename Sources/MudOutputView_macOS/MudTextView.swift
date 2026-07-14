@@ -37,14 +37,13 @@
             return true
         }
 
-        /// A find result or explicit text selection means the user is reading
-        /// history. Re-evaluate after AppKit has scrolled the selection into
-        /// view so incoming output cannot immediately reclaim the viewport.
+        /// Re-evaluate after AppKit has scrolled a selection or find result
+        /// into view. Selecting visible tail text must not disengage following.
         public func textViewDidChangeSelection(_: Notification) {
             guard selectedRange().length > 0 else { return }
             DispatchQueue.main.async { [weak self] in
                 (self?.enclosingScrollView as? BottomPinnedOutputScrollView)?
-                    .beginReviewing(reason: "selection")
+                    .noteSelectionChange()
             }
         }
 

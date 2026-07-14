@@ -33,6 +33,74 @@
             #expect(viewport.distanceFromBottom > 1)
         }
 
+        @Test("selecting visible tail output keeps following")
+        func selectingVisibleTailOutputKeepsFollowing() async throws {
+            let viewport = TestViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 500)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            let range = (viewport.textView.string as NSString).range(of: "line 99 content")
+            let interactionGeneration = viewport.scrollView.userInteractionGeneration
+
+            viewport.textView.setSelectedRange(range)
+            viewport.textView.textViewDidChangeSelection(
+                Notification(name: NSTextView.didChangeSelectionNotification)
+            )
+            await Task.yield()
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(viewport.scrollView.userInteractionGeneration == interactionGeneration)
+
+            await store.append(text: "line 100 content")
+            try await Task.sleep(for: .milliseconds(100))
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(viewport.distanceFromBottom <= 1)
+            #expect(viewport.textView.selectedRange() == range)
+        }
+
+        @Test("selecting visible tail output does not cancel reconciliation")
+        func selectingVisibleTailOutputDoesNotCancelReconciliation() async throws {
+            let viewport = TestViewport(height: 120)
+            let store = ScrollbackStore(maxLines: 500)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                palette: .xtermDefault,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            coordinator.requestTailReconciliation(in: viewport.textView, source: "unit")
+            let interactionGeneration = viewport.scrollView.userInteractionGeneration
+            let range = (viewport.textView.string as NSString).range(of: "line 99 content")
+
+            viewport.textView.setSelectedRange(range)
+            viewport.textView.textViewDidChangeSelection(
+                Notification(name: NSTextView.didChangeSelectionNotification)
+            )
+            try await Task.sleep(for: .milliseconds(100))
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(viewport.scrollView.userInteractionGeneration == interactionGeneration)
+            #expect(viewport.distanceFromBottom <= 1)
+            #expect(TextViewportProbe.viewportEndsAtStorageEnd(in: viewport.textView) == true)
+        }
+
         @Test("deferred anchor refinement yields to a newer gesture")
         func deferredAnchorRefinementYieldsToGesture() async throws {
             let viewport = TestViewport(height: 160)

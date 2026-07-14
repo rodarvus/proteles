@@ -431,6 +431,16 @@
             setScrollMode(.reviewing, reason: reason)
         }
 
+        /// A selection is review intent only when AppKit moved the viewport
+        /// away from the live tail, such as for Find or drag-autoscroll.
+        func noteSelectionChange() {
+            guard programmaticScrollDepth == 0,
+                  scrollMode == .followingTail,
+                  !isScrolledToBottom()
+            else { return }
+            beginReviewing(reason: "selection")
+        }
+
         func scrollToBottomPreservingMode() {
             performProgrammaticScroll {
                 (documentView as? NSTextView)?.scrollToEndOfDocument(nil)

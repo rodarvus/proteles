@@ -382,6 +382,7 @@
                 .map { "line \($0) content" }
                 .joined(separator: "\n")
             viewport.scrollView.followTailAndScrollToBottom(reason: "unit-tail")
+            await Task.yield()
 
             let range = (viewport.textView.string as NSString).range(of: "line 20 content")
             viewport.textView.scrollRangeToVisible(range)
