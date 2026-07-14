@@ -95,6 +95,7 @@
             // false), which keeps the default NSTextView AX so it isn't
             // mislabelled as game output.
             if showsLiveTail {
+                textView.identifier = NSUserInterfaceItemIdentifier("proteles.main-output")
                 textView.setAccessibilityIdentifier("mud-output")
                 textView.setAccessibilityLabel("MUD output")
             }

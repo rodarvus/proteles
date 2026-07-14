@@ -101,6 +101,54 @@
             #expect(TextViewportProbe.viewportEndsAtStorageEnd(in: viewport.textView) == true)
         }
 
+        @Test("page navigation keeps one wrapped visual row as overlap")
+        func pageNavigationKeepsOneWrappedVisualRowAsOverlap() async throws {
+            let viewport = TestViewport(width: 220, height: 137)
+            viewport.textView.string = (0..<80)
+                .map { "line \($0) content that wraps into several visual rows at this width" }
+                .joined(separator: "\n")
+            viewport.window.contentView?.layoutSubtreeIfNeeded()
+            viewport.scrollView.followTailAndScrollToBottom(reason: "unit-tail")
+            await Task.yield()
+
+            let visibleHeight = viewport.scrollView.contentView.documentVisibleRect.height
+            let font = try #require(viewport.textView.font)
+            let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+            let visibleRows = floor(visibleHeight / lineHeight)
+            let expectedStep = (visibleRows - 1) * lineHeight
+            let bottomOrigin = viewport.scrollView.contentView.bounds.origin.y
+            let selection = viewport.textView.selectedRange()
+
+            viewport.textView.scrollPageUp(nil)
+            let reviewOrigin = viewport.scrollView.contentView.bounds.origin.y
+
+            #expect(abs((bottomOrigin - reviewOrigin) - expectedStep) <= 1)
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+            #expect(viewport.textView.selectedRange() == selection)
+
+            viewport.textView.scrollPageDown(nil)
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(abs(viewport.distanceFromBottom) < 1)
+
+            viewport.textView.scrollPageUp(nil)
+            viewport.textView.scrollPageUp(nil)
+            let secondReviewOrigin = viewport.scrollView.contentView.bounds.origin.y
+
+            #expect(abs((reviewOrigin - secondReviewOrigin) - expectedStep) <= 1)
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+
+            viewport.textView.scrollPageDown(nil)
+
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+
+            viewport.textView.scrollPageDown(nil)
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(abs(viewport.distanceFromBottom) < 1)
+            #expect(viewport.textView.selectedRange() == selection)
+        }
+
         @Test("deferred anchor refinement yields to a newer gesture")
         func deferredAnchorRefinementYieldsToGesture() async throws {
             let viewport = TestViewport(height: 160)
@@ -189,15 +237,15 @@
         let scrollView: BottomPinnedOutputScrollView
         let textView: MudTextView
 
-        init(height: CGFloat) {
+        init(width: CGFloat = 600, height: CGFloat) {
             window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: height),
+                contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                 styleMask: [.titled],
                 backing: .buffered,
                 defer: false
             )
             scrollView = BottomPinnedOutputScrollView(
-                frame: NSRect(x: 0, y: 0, width: 600, height: height)
+                frame: NSRect(x: 0, y: 0, width: width, height: height)
             )
             textView = MudTextView()
             textView.delegate = textView

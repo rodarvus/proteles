@@ -441,6 +441,31 @@
             beginReviewing(reason: "selection")
         }
 
+        @discardableResult
+        func scrollByVisualPage(_ direction: TextViewportProbe.VisualPageDirection) -> Bool {
+            guard let textView = documentView as? NSTextView,
+                  let targetY = TextViewportProbe.visualPageOrigin(
+                      in: textView,
+                      direction: direction
+                  )
+            else { return false }
+
+            userInteractionGeneration += 1
+            invalidateReviewOriginPreservation()
+            performProgrammaticScroll {
+                let current = contentView.documentVisibleRect.origin
+                alignToDocumentOrigin(CGPoint(x: current.x, y: targetY))
+                TextViewportProbe.layoutViewport(in: textView)
+            }
+
+            let mode: ScrollMode = isScrolledToBottom() ? .followingTail : .reviewing
+            setScrollMode(mode, reason: "page-key")
+            if mode == .reviewing {
+                preserveReviewOrigin(contentView.bounds.origin)
+            }
+            return true
+        }
+
         func scrollToBottomPreservingMode() {
             performProgrammaticScroll {
                 (documentView as? NSTextView)?.scrollToEndOfDocument(nil)

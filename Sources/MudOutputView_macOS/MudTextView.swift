@@ -47,6 +47,24 @@
             }
         }
 
+        override public func scrollPageUp(_ sender: Any?) {
+            guard let scrollView = enclosingScrollView as? BottomPinnedOutputScrollView,
+                  scrollView.scrollByVisualPage(.up)
+            else {
+                super.scrollPageUp(sender)
+                return
+            }
+        }
+
+        override public func scrollPageDown(_ sender: Any?) {
+            guard let scrollView = enclosingScrollView as? BottomPinnedOutputScrollView,
+                  scrollView.scrollByVisualPage(.down)
+            else {
+                super.scrollPageDown(sender)
+                return
+            }
+        }
+
         /// The command input field is the window's permanent typing target.
         /// When the user types a printable key while the *output* has focus
         /// (e.g. right after selecting text to copy), focus snaps back to the
@@ -56,13 +74,15 @@
         override public func keyDown(with event: NSEvent) {
             let isPlainTyping = event.modifierFlags
                 .isDisjoint(with: [.command, .control, .option, .function])
+            let isUnmodifiedPageKey = Self.pageKeyCodes.contains(event.keyCode)
+                && event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift])
             guard isPlainTyping,
                   !Self.navigationKeyCodes.contains(event.keyCode),
                   let field = commandField,
                   window?.firstResponder !== field
             else {
                 super.keyDown(with: event)
-                if Self.navigationKeyCodes.contains(event.keyCode) {
+                if Self.navigationKeyCodes.contains(event.keyCode), !isUnmodifiedPageKey {
                     DispatchQueue.main.async { [weak self] in
                         (self?.enclosingScrollView as? BottomPinnedOutputScrollView)?
                             .noteUserScroll(reason: "navigation-key")
@@ -76,6 +96,7 @@
 
         /// Arrow/page/home/end/tab — leave these for scrolling/selection.
         private static let navigationKeyCodes: Set<UInt16> = [123, 124, 125, 126, 116, 121, 115, 119, 48]
+        private static let pageKeyCodes: Set<UInt16> = [116, 121]
 
         /// The window's command input field, located by its stable identifier.
         private var commandField: NSView? {

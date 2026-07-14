@@ -87,6 +87,22 @@ import MudCore
             super.doCommand(by: selector)
         }
 
+        override func scrollPageUp(_ sender: Any?) {
+            guard forwardPageCommand(#selector(NSResponder.scrollPageUp(_:)), sender: sender)
+            else {
+                super.scrollPageUp(sender)
+                return
+            }
+        }
+
+        override func scrollPageDown(_ sender: Any?) {
+            guard forwardPageCommand(#selector(NSResponder.scrollPageDown(_:)), sender: sender)
+            else {
+                super.scrollPageDown(sender)
+                return
+            }
+        }
+
         /// Offer `event` to the macro engine. Only keypresses aimed at our key
         /// window count (so key-capture in the Scripts editor is unaffected).
         private func fireMacroIfMatch(_ event: NSEvent) -> Bool {
@@ -147,6 +163,13 @@ import MudCore
             return textView.isFieldEditor || textView.isEditable
         }
 
+        private func forwardPageCommand(_ selector: Selector, sender: Any?) -> Bool {
+            guard let output = window?.contentView?
+                .firstDescendant(matching: "proteles.main-output")
+            else { return false }
+            return output.tryToPerform(selector, with: sender)
+        }
+
         private func removeKeyMonitor() {
             if let keyMonitor {
                 NSEvent.removeMonitor(keyMonitor.value)
@@ -159,6 +182,16 @@ import MudCore
                 NSEvent.removeMonitor(keyMonitor.value)
             }
             NotificationCenter.default.removeObserver(self)
+        }
+    }
+
+    private extension NSView {
+        func firstDescendant(matching identifier: String) -> NSView? {
+            for subview in subviews {
+                if subview.identifier?.rawValue == identifier { return subview }
+                if let found = subview.firstDescendant(matching: identifier) { return found }
+            }
+            return nil
         }
     }
 

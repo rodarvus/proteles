@@ -187,6 +187,32 @@ struct CommandInputViewSmokeTests {
             #expect(textView.isGrammarCheckingEnabled == false)
             #expect(textView.isContinuousSpellCheckingEnabled == false)
         }
+
+        @MainActor
+        @Test("page commands from command input target the main output")
+        func pageCommandsTargetMainOutput() {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            let root = NSView(frame: window.contentView?.bounds ?? .zero)
+            let input = AutoFocusCommandTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 40))
+            let output = PageCommandRecorderTextView(
+                frame: NSRect(x: 0, y: 40, width: 320, height: 160)
+            )
+            output.identifier = NSUserInterfaceItemIdentifier("proteles.main-output")
+            root.addSubview(output)
+            root.addSubview(input)
+            window.contentView = root
+
+            input.scrollPageUp(nil)
+            input.scrollPageDown(nil)
+
+            #expect(output.pageUpCount == 1)
+            #expect(output.pageDownCount == 1)
+        }
     #endif
 }
 
@@ -244,6 +270,20 @@ struct CommandInputViewSmokeTests {
 
     private enum CommandInputTestError: Error {
         case missingTextView
+    }
+
+    @MainActor
+    private final class PageCommandRecorderTextView: NSTextView {
+        private(set) var pageUpCount = 0
+        private(set) var pageDownCount = 0
+
+        override func scrollPageUp(_: Any?) {
+            pageUpCount += 1
+        }
+
+        override func scrollPageDown(_: Any?) {
+            pageDownCount += 1
+        }
     }
 
     private extension NSView {

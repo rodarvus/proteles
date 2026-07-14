@@ -143,7 +143,7 @@
             )
         }
 
-        private static func visualLine(
+        static func visualLine(
             at documentY: CGFloat,
             in textView: NSTextView,
             layoutManager: NSTextLayoutManager
