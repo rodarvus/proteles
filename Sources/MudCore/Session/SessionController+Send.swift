@@ -6,10 +6,24 @@ public extension SessionController {
     /// Send a user-typed command (aliases when a script engine is present, else
     /// verbatim; `\r\n` appended). Tracks `quit` so the ensuing server close is
     /// a clean logout, not a dropped link that would autoreconnect.
-    func send(_ command: String) async throws {
+    func send(_ submittedCommand: String) async throws {
         // Typed input cuts stale speech (community canon, `tts enter` toggles)
         // - including the bare "press Enter to shut it up" reflex.
         interruptSpeechForTypedCommand()
+        // A copied Proteles command hyperlink behaves exactly like clicking it:
+        // decode the strict path-only URI before echoing or dispatching it. A
+        // malformed/nested command URI is consumed locally, never sent to the
+        // MUD as an accidental player command.
+        let command: String
+        if CommandLinkURI.isCommandURI(submittedCommand) {
+            guard let decoded = CommandLinkURI.decode(submittedCommand) else {
+                await echoSystemNote("Invalid Proteles command link.")
+                return
+            }
+            command = decoded
+        } else {
+            command = submittedCommand
+        }
         // A bare Enter means nothing at the login prompts but restarts
         // Aardwolf's name flow and strands autologin (the 2026-06-11 resume
         // incident: stray empties dead-ended the login). Drop empties while

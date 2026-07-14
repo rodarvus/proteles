@@ -39,4 +39,14 @@ struct HyperlinkAPITests {
         #expect(LineLink(actionString: "mailto:x@y.z").action == .openURL("mailto:x@y.z"))
         #expect(LineLink(actionString: "north").action == .sendCommand("north"))
     }
+
+    @Test("Proteles command-link URI round-trips and rejects unsafe forms")
+    func commandLinkURIRoundTrip() {
+        let url = CommandLinkURI.url(for: "mapper goto 35004")
+        #expect(url?.absoluteString == "proteles-cmd:///mapper%20goto%2035004")
+        #expect(url.flatMap { CommandLinkURI.decode($0.absoluteString) } == "mapper goto 35004")
+        #expect(CommandLinkURI.decode("proteles-cmd://mapper%20goto%2035004") == nil)
+        #expect(CommandLinkURI.decode("proteles-cmd:///proteles-cmd%3A%2F%2F%2Flook") == nil)
+        #expect(CommandLinkURI.decode("proteles-cmd:///say%20hi%0Anorth") == nil)
+    }
 }

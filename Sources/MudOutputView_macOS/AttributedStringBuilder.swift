@@ -167,12 +167,9 @@
         static func linkURL(for action: LinkAction) -> URL? {
             switch action {
             case .openURL(let string):
-                return URL(string: string)
+                URL(string: string)
             case .sendCommand(let command):
-                let encoded = command.addingPercentEncoding(
-                    withAllowedCharacters: .urlPathAllowed
-                ) ?? ""
-                return URL(string: "proteles-cmd:///\(encoded)")
+                CommandLinkURI.url(for: command)
             }
         }
 

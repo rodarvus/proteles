@@ -8,6 +8,35 @@ public enum LinkAction: Sendable, Equatable, Hashable, Codable {
     case sendCommand(String)
 }
 
+/// Encoding shared by rendered command hyperlinks and pasted command-link
+/// input. Only the path-only `proteles-cmd:///…` form emitted by Proteles is
+/// accepted; decoding returns the original local command, never a URL to send
+/// to the MUD.
+public enum CommandLinkURI {
+    public static let prefix = "proteles-cmd:///"
+
+    public static func url(for command: String) -> URL? {
+        let encoded = command.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
+        return URL(string: prefix + encoded)
+    }
+
+    public static func isCommandURI(_ string: String) -> Bool {
+        string.lowercased().hasPrefix("proteles-cmd:")
+    }
+
+    public static func decode(_ string: String) -> String? {
+        guard string.lowercased().hasPrefix(prefix) else { return nil }
+        let raw = String(string.dropFirst(prefix.count))
+        guard !raw.isEmpty,
+              let command = raw.removingPercentEncoding,
+              !command.isEmpty,
+              !isCommandURI(command),
+              !command.contains(where: \.isNewline)
+        else { return nil }
+        return command
+    }
+}
+
 /// A clickable hyperlink carried by a ``StyledRun``: an action plus an
 /// optional hover hint. Backs the native hyperlink primitive shared by the
 /// URL auto-linkifier, native plugins (`proteles.hyperlink`), and the

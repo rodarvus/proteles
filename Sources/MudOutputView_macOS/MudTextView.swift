@@ -29,10 +29,8 @@
         /// otherwise open the URL in the default browser.
         public func textView(_: NSTextView, clickedOnLink link: Any, at _: Int) -> Bool {
             let string = (link as? URL)?.absoluteString ?? (link as? String) ?? ""
-            let scheme = "proteles-cmd:"
-            if string.hasPrefix(scheme) {
-                let raw = String(string.dropFirst(scheme.count)).drop { $0 == "/" }
-                onCommand?(raw.removingPercentEncoding ?? String(raw))
+            if CommandLinkURI.isCommandURI(string) {
+                if let command = CommandLinkURI.decode(string) { onCommand?(command) }
                 return true
             }
             if let url = link as? URL { NSWorkspace.shared.open(url) }
