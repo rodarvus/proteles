@@ -7,6 +7,42 @@
             case down
         }
 
+        enum VisualRowDirection {
+            case up
+            case down
+        }
+
+        /// Return an origin exactly `count` laid-out visual rows away while
+        /// preserving any existing fractional offset within the top row.
+        static func visualRowOrigin(
+            in textView: NSTextView,
+            direction: VisualRowDirection,
+            count: Int
+        ) -> CGFloat? {
+            guard count > 0, let layoutManager = textView.textLayoutManager else { return nil }
+            layoutManager.textViewportLayoutController.layoutViewport()
+            let visible = textView.enclosingScrollView?.contentView.documentVisibleRect
+                ?? textView.visibleRect
+            let minimumY = textView.frame.minY
+            let maximumY = max(minimumY, textView.frame.maxY - visible.height)
+            let lines = fullyVisibleVisualLines(
+                in: textView,
+                layoutManager: layoutManager,
+                maximumCount: 2
+            )
+            guard let first = lines.first else { return nil }
+            let rowStride = lines.dropFirst().first.map {
+                $0.lowerBound - first.lowerBound
+            } ?? (first.upperBound - first.lowerBound)
+            guard rowStride > 0 else { return nil }
+
+            let distance = rowStride * CGFloat(count)
+            let targetY = direction == .up
+                ? visible.minY - distance
+                : visible.minY + distance
+            return min(max(minimumY, targetY), maximumY)
+        }
+
         /// Return the document origin for a page step that retains one fully
         /// visible visual row. Wrapped rows count independently.
         static func visualPageOrigin(
@@ -33,11 +69,15 @@
 
         private static func fullyVisibleVisualLines(
             in textView: NSTextView,
-            layoutManager: NSTextLayoutManager
+            layoutManager: NSTextLayoutManager,
+            maximumCount: Int = 512
         ) -> [ClosedRange<CGFloat>] {
             let visible = textView.enclosingScrollView?.contentView.documentVisibleRect
                 ?? textView.visibleRect
-            guard visible.height > 0, textView.frame.height > 0 else { return [] }
+            guard visible.height > 0,
+                  textView.frame.height > 0,
+                  maximumCount > 0
+            else { return [] }
 
             let tolerance: CGFloat = 0.5
             var probeY = min(
@@ -55,6 +95,7 @@
                 if line.upperBound > visible.maxY + tolerance { break }
                 if line.lowerBound >= visible.minY - tolerance {
                     result.append(line)
+                    if result.count == maximumCount { break }
                 }
 
                 let nextProbeY = line.upperBound + tolerance

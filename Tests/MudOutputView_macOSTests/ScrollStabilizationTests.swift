@@ -181,6 +181,109 @@
             #expect(abs(viewport.scrollView.contentView.bounds.origin.y - userOrigin) < 1)
         }
 
+        @Test("coarse wheel deltas always produce at least one whole row")
+        func coarseWheelDeltasProduceWholeRows() {
+            #expect(CoarseWheelNavigation.rowDelta(
+                scrollingDeltaY: 0.1,
+                hasPreciseScrollingDeltas: false
+            ) == 1)
+            #expect(CoarseWheelNavigation.rowDelta(
+                scrollingDeltaY: -0.1,
+                hasPreciseScrollingDeltas: false
+            ) == -1)
+            #expect(CoarseWheelNavigation.rowDelta(
+                scrollingDeltaY: 2.4,
+                hasPreciseScrollingDeltas: false
+            ) == 2)
+            #expect(CoarseWheelNavigation.rowDelta(
+                scrollingDeltaY: 0.1,
+                hasPreciseScrollingDeltas: true
+            ) == nil)
+        }
+
+        @Test("one coarse wheel row enters review and the reverse returns to tail")
+        func oneCoarseWheelRowRoundTripsTail() async throws {
+            let viewport = TestViewport(width: 220, height: 137)
+            viewport.textView.string = (0..<80)
+                .map { "line \($0) content that wraps into several visual rows at this width" }
+                .joined(separator: "\n")
+            viewport.window.contentView?.layoutSubtreeIfNeeded()
+            viewport.scrollView.followTailAndScrollToBottom(reason: "unit-tail")
+            await Task.yield()
+
+            let font = try #require(viewport.textView.font)
+            let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+            let bottomOrigin = viewport.scrollView.contentView.bounds.origin.y
+            let upEvent = try wheelEvent(units: .line, deltaY: 1)
+            viewport.scrollView.scrollWheel(with: upEvent)
+            let reviewOrigin = viewport.scrollView.contentView.bounds.origin.y
+
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+            #expect(abs((bottomOrigin - reviewOrigin) - lineHeight) <= 1)
+
+            let downEvent = try wheelEvent(units: .line, deltaY: -1)
+            viewport.scrollView.scrollWheel(with: downEvent)
+            await Task.yield()
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(abs(viewport.distanceFromBottom) < 1)
+        }
+
+        @Test("new output remains between a review viewport and the live tail")
+        func newOutputExtendsWheelDistanceFromTail() async throws {
+            let viewport = TestViewport(height: 160)
+            let store = ScrollbackStore(maxLines: 500)
+            let coordinator = RenderCoordinator(
+                textView: viewport.textView,
+                frameInterval: .milliseconds(10)
+            )
+            await coordinator.attach(to: store)
+            defer { coordinator.detach() }
+
+            for index in 0..<100 {
+                await store.append(text: "line \(index) content")
+            }
+            try await Task.sleep(for: .milliseconds(250))
+
+            let upEvent = try wheelEvent(units: .line, deltaY: 1)
+            viewport.scrollView.scrollWheel(with: upEvent)
+            let reviewOrigin = viewport.scrollView.contentView.bounds.origin.y
+
+            await store.append(text: "line 100 content")
+            try await Task.sleep(for: .milliseconds(100))
+
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+            #expect(abs(viewport.scrollView.contentView.bounds.origin.y - reviewOrigin) < 1)
+
+            let downEvent = try wheelEvent(units: .line, deltaY: -1)
+            viewport.scrollView.scrollWheel(with: downEvent)
+            #expect(viewport.scrollView.scrollMode == .reviewing)
+
+            viewport.scrollView.scrollWheel(with: downEvent)
+            await Task.yield()
+
+            #expect(viewport.scrollView.scrollMode == .followingTail)
+            #expect(abs(viewport.distanceFromBottom) < 1)
+        }
+
+        @Test("wheel transition diagnostics preserve raw line-event fields")
+        func wheelTransitionDiagnosticsPreserveRawLineEventFields() throws {
+            let event = try wheelEvent(units: .line, deltaY: 2)
+            let diagnostic = WheelEventDiagnostic(event: event, beforeOriginY: 100)
+            let reason = diagnostic.transcriptReason(
+                afterOriginY: 82,
+                transition: "follow-review"
+            )
+
+            #expect(!diagnostic.hasPreciseScrollingDeltas)
+            #expect(diagnostic.cgIsContinuous == 0)
+            #expect(diagnostic.cgDeltaAxis1 == 2)
+            #expect(reason.contains("transition-follow-review"))
+            #expect(reason.contains("originBefore-100.0000"))
+            #expect(reason.contains("originAfter-82.0000"))
+            #expect(reason.contains("originMove--18.0000"))
+        }
+
         @Test("live-tail refresh settles at the exact document bottom")
         func liveTailRefreshSettlesAtBottom() async throws {
             let viewport = TestViewport(height: 160)
@@ -228,6 +331,18 @@
             tail.scrollView.scrollToDocumentBottom()
             tail.window.contentView?.layoutSubtreeIfNeeded()
             #expect(abs(tail.distanceFromBottom) < 0.25)
+        }
+
+        private func wheelEvent(units: CGScrollEventUnit, deltaY: Int32) throws -> NSEvent {
+            let cgEvent = try #require(CGEvent(
+                scrollWheelEvent2Source: nil,
+                units: units,
+                wheelCount: 1,
+                wheel1: deltaY,
+                wheel2: 0,
+                wheel3: 0
+            ))
+            return try #require(NSEvent(cgEvent: cgEvent))
         }
     }
 

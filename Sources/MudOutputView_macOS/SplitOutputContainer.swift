@@ -384,6 +384,7 @@
         private(set) var userInteractionGeneration = 0
         private var programmaticScrollDepth = 0
         private var reviewOriginGeneration = 0
+        var onWheelDiagnostic: ((String) -> Void)?
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
@@ -409,10 +410,35 @@
         }
 
         override func scrollWheel(with event: NSEvent) {
-            userInteractionGeneration += 1
+            let previousMode = scrollMode
+            let diagnostic = onWheelDiagnostic.map { _ in
+                WheelEventDiagnostic(
+                    event: event,
+                    beforeOriginY: contentView.bounds.origin.y
+                )
+            }
+
+            let coarseRows = CoarseWheelNavigation.rowDelta(for: event)
+            if let coarseRows, scrollByVisualRows(coarseRows) {
+                emitWheelTransitionDiagnostic(diagnostic, from: previousMode)
+                return
+            }
+
+            let reviewsHistory = event.scrollingDeltaY > 0
+            if reviewsHistory {
+                beginReviewing(reason: "wheel")
+            } else {
+                userInteractionGeneration += 1
+            }
             super.scrollWheel(with: event)
             DispatchQueue.main.async { [weak self] in
-                self?.noteUserScroll(reason: "wheel")
+                guard let self else { return }
+                if reviewsHistory {
+                    preserveReviewOrigin(contentView.bounds.origin)
+                } else {
+                    noteUserScroll(reason: "wheel")
+                }
+                emitWheelTransitionDiagnostic(diagnostic, from: previousMode)
             }
         }
 
@@ -458,7 +484,7 @@
                 TextViewportProbe.layoutViewport(in: textView)
             }
 
-            let mode: ScrollMode = isScrolledToBottom() ? .followingTail : .reviewing
+            let mode: ScrollMode = isAtUserTail() ? .followingTail : .reviewing
             setScrollMode(mode, reason: "page-key")
             if mode == .reviewing {
                 preserveReviewOrigin(contentView.bounds.origin)
@@ -476,7 +502,7 @@
         func noteUserScroll(reason: String) {
             guard programmaticScrollDepth == 0 else { return }
             userInteractionGeneration += 1
-            let mode: ScrollMode = isScrolledToBottom() ? .followingTail : .reviewing
+            let mode: ScrollMode = isAtUserTail() ? .followingTail : .reviewing
             setScrollMode(mode, reason: reason)
             if mode == .reviewing {
                 preserveReviewOrigin(contentView.bounds.origin)
@@ -500,27 +526,6 @@
 
         func invalidateReviewOriginPreservation() {
             reviewOriginGeneration += 1
-        }
-
-        func isScrolledToBottom() -> Bool {
-            guard let documentView else { return true }
-            let visible = contentView.documentVisibleRect
-            return Self.isScrolledToBottom(
-                documentHeight: documentView.frame.height,
-                visibleOriginY: visible.origin.y,
-                visibleHeight: visible.height,
-                threshold: autoScrollThreshold
-            )
-        }
-
-        nonisolated static func isScrolledToBottom(
-            documentHeight: CGFloat,
-            visibleOriginY: CGFloat,
-            visibleHeight: CGFloat,
-            threshold: CGFloat
-        ) -> Bool {
-            let distanceFromBottom = documentHeight - (visibleOriginY + visibleHeight)
-            return distanceFromBottom < threshold
         }
 
         private func scrollToBottomSoon() {

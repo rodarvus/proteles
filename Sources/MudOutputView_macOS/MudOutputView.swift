@@ -145,6 +145,7 @@
             coordinator.attachTail(textView: tailTextView, lineCount: Self.tailLineCount)
             coordinator.onFrameFlush = onFrameFlush
             coordinator.onHealthSnapshot = onHealthSnapshot
+            configureWheelDiagnostics(on: scrollView, coordinator: coordinator)
             context.coordinator.renderCoordinator = coordinator
             let storeRef = store
             Task { @MainActor in
@@ -154,9 +155,13 @@
             return container
         }
 
-        public func updateNSView(_: NSView, context: Context) {
+        public func updateNSView(_ nsView: NSView, context: Context) {
             context.coordinator.renderCoordinator?.onFrameFlush = onFrameFlush
             context.coordinator.renderCoordinator?.onHealthSnapshot = onHealthSnapshot
+            updateWheelDiagnostics(
+                in: nsView,
+                coordinator: context.coordinator.renderCoordinator
+            )
         }
 
         /// Cancel the render coordinator's frame ticker + store subscription when
@@ -205,6 +210,36 @@
                 palette: palette,
                 initialScrollPosition: initialScrollPosition
             )
+        }
+
+        private func configureWheelDiagnostics(
+            on scrollView: BottomPinnedOutputScrollView,
+            coordinator: RenderCoordinator
+        ) {
+            guard onHealthSnapshot != nil else {
+                scrollView.onWheelDiagnostic = nil
+                return
+            }
+            scrollView.onWheelDiagnostic = { [weak coordinator] reason in
+                coordinator?.emitHealth(reason: reason)
+            }
+        }
+
+        private func updateWheelDiagnostics(
+            in view: NSView,
+            coordinator: RenderCoordinator?
+        ) {
+            guard let scrollView = outputScrollView(in: view) else { return }
+            guard let coordinator else { return }
+            configureWheelDiagnostics(on: scrollView, coordinator: coordinator)
+        }
+
+        private func outputScrollView(in view: NSView) -> BottomPinnedOutputScrollView? {
+            if let scrollView = view as? BottomPinnedOutputScrollView {
+                return scrollView
+            }
+            return (view as? SplitOutputContainer)?.scrollView
+                as? BottomPinnedOutputScrollView
         }
 
         private func configure(_ textView: NSTextView) {

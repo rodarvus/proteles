@@ -145,6 +145,7 @@ final class RenderStatsBox {
         latestTextHealth[snapshot.surface] = snapshot
         let recordsImmediately = snapshot.reason.hasPrefix("tail-reconcile-")
             || snapshot.reason.hasPrefix("transition-")
+            || snapshot.reason.hasPrefix("wheel-event ")
         if recordsImmediately {
             pendingTextHealthNotes.append(snapshot.transcriptNote())
         }
