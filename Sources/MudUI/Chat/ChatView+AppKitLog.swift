@@ -23,6 +23,7 @@
             let scrollView = ChatLogScrollView()
             scrollView.hasVerticalScroller = true
             scrollView.hasHorizontalScroller = false
+            scrollView.horizontalScrollElasticity = .none
             scrollView.scrollerStyle = .overlay
             scrollView.autohidesScrollers = true
             scrollView.borderType = .noBorder
@@ -293,7 +294,7 @@
 
         func restoreVisibleOrigin(_ origin: CGPoint) {
             let maxY = max(0, (documentView?.frame.height ?? 0) - contentView.bounds.height)
-            contentView.scroll(to: CGPoint(x: origin.x, y: min(origin.y, maxY)))
+            contentView.scroll(to: CGPoint(x: 0, y: min(origin.y, maxY)))
             reflectScrolledClipView(contentView)
         }
 
@@ -302,7 +303,7 @@
             guard let documentView else { return }
             let visible = contentView.documentVisibleRect
             let targetY = max(documentView.frame.minY, documentView.frame.maxY - visible.height)
-            contentView.scroll(to: CGPoint(x: visible.minX, y: targetY))
+            contentView.scroll(to: CGPoint(x: 0, y: targetY))
             reflectScrolledClipView(contentView)
         }
 

@@ -134,6 +134,30 @@
             #expect(abs(distance) <= 1)
         }
 
+        @Test("Channels scrolling clears horizontal viewport drift")
+        @MainActor
+        func channelsScrollingClearsHorizontalViewportDrift() async throws {
+            let scrollView = ChatLogScrollView(
+                frame: NSRect(x: 0, y: 0, width: 400, height: 200)
+            )
+            let textView = ChatLogTextView(
+                frame: NSRect(x: 0, y: 0, width: 600, height: 600)
+            )
+            scrollView.documentView = textView
+            textView.setFrameSize(NSSize(width: 600, height: 600))
+            let driftedOrigin = CGPoint(x: 24, y: 120)
+
+            scrollView.contentView.scroll(to: driftedOrigin)
+            scrollView.restoreVisibleOrigin(driftedOrigin)
+            #expect(scrollView.contentView.bounds.origin.y == driftedOrigin.y)
+            #expect(abs(scrollView.contentView.bounds.origin.x) < 0.01)
+
+            scrollView.contentView.scroll(to: driftedOrigin)
+            scrollView.scrollToBottomSoon()
+            try await Task.sleep(for: .milliseconds(50))
+            #expect(abs(scrollView.contentView.bounds.origin.x) < 0.01)
+        }
+
         @Test("Diagnostics identify only real Channels content transitions")
         @MainActor
         func diagnosticsIdentifyOnlyRealChannelsContentTransitions() {
