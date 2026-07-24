@@ -1,11 +1,12 @@
-# Proteles on iOS — port plan (DRAFT v0.1, for iteration)
+# Proteles on iOS — port plan (v0.2 — in iteration)
 
-> **Status: draft under discussion — nothing here is approved.** This is the
-> proposed *shape* of the iOS port: what the research found, the product shape
-> it suggests, and a phase-by-phase delivery plan in the style of the macOS
-> build-out (ARCHITECTURE.md §8). Ratified choices will be recorded as D-NN
-> entries in `docs/DECISIONS.md` once the shape is agreed; tracking issues get
-> opened per phase. Contested calls are marked **⚖︎** and collected in §6.
+> **Status: shape partially ratified, still iterating.** This is the iOS port
+> plan: what the research found, the product shape, and a phase-by-phase
+> delivery plan in the style of the macOS build-out (ARCHITECTURE.md §8).
+> **Ratified so far (2026-07-24):** the universal-app shape + iPhone-first
+> delivery (**D-117**) and the vendored iOS reference submodules (**D-116**).
+> Remaining contested calls are marked **⚖︎** and collected in §6; tracking
+> issues get opened per phase once the plan is final.
 
 ---
 
@@ -83,14 +84,18 @@ load-bearing facts were verified by grep/read, not assumed):
 5. **Platform rot killed every predecessor.** Small surface, modern APIs, thin
    shell over a tested core.
 
-Reference projects (add as read-only submodules where licensing allows, per the
-repo's research-first convention): **SwiftTerm** (MIT; native Swift terminal
-view with split UIKit/AppKit front-ends — the architectural template for
-`MudOutputView_iOS`), **MUDRammer** (MIT; a complete shipped iOS MUD client),
-**BlowTorch** (MIT; Lua/plugin/miniwindow model + button-set touch UX),
-**Blink Shell** (GPL-3 — *study only, never vendor*; keyboard handling +
-session resilience), **Mudslinger** (websocket→telnet proxy architecture, from
-an Aardwolf-family developer).
+Reference projects — **vendored as read-only submodules (D-116)**, per the
+repo's research-first convention (licenses verified from the vendored trees):
+`submodules/swiftterm` (MIT; native Swift terminal view with split
+UIKit/AppKit front-ends — the architectural template for `MudOutputView_iOS`),
+`submodules/mudrammer` (MIT; a complete shipped iOS MUD client),
+`submodules/blowtorch` (MIT; Lua/plugin/miniwindow model + button-set touch
+UX), `submodules/blink` (**GPL-3 — study only, never copy code**, same
+standing rule as `mudlet`; keyboard handling + session resilience), and
+`submodules/mudslinger` (MIT per `docs/LICENSE.md`; websocket→telnet proxy
+architecture, from an Aardwolf-family developer). The no-guessing /
+research-first rule extends to all iOS work: validate output-view, input,
+lifecycle, and proxy designs against these before inventing behaviour.
 
 ### 1.3 Platform constraints (hard vs chosen)
 
@@ -113,12 +118,13 @@ Hard constraints we design around, not against:
 
 ## 2. Proposed product shape
 
-### 2.1 One universal iOS app, two layout roots ⚖︎
+### 2.1 One universal iOS app, two layout roots — **decided (D-117)**
 
-The initial guideline anticipated **two iOS targets** (iPad-full-featured,
-iPhone-distinct-layout). The research pushes hard toward **one universal
-iOS/iPadOS app (one SKU, one Xcode target), branching at the root view into two
-deliberately distinct layout hierarchies** by size class/idiom:
+The initial guideline anticipated two iOS targets (iPad-full-featured,
+iPhone-distinct-layout); the research pushed toward — and the decision is —
+**one universal iOS/iPadOS app (one SKU, one Xcode target), branching at the
+root view into two deliberately distinct layout hierarchies** by size
+class/idiom:
 
 - Apple actively discourages separate iPhone/iPad SKUs (2.4.1, universal
   purchase, doubled review/metadata surface).
@@ -133,6 +139,17 @@ feature superset on iPad. The **platform split stays where it matters**:
 `ProtelesApp_macOS` and `ProtelesApp_iOS` are sibling XcodeGen targets over the
 shared packages — macOS builds/releases remain fully independent (the
 user-required decoupling), and `swift build`/`swift test` gates are unaffected.
+
+**Delivery is iPhone-first, with a testing reality to plan around (D-117):**
+there is no physical iPhone available — iPhone-layout manual testing happens
+**exclusively in the simulator**; the physical test device is an **iPad
+Pro 14″**. Consequences baked into the plan: on-device performance and
+live-play verification happen on the iPad (which also exercises the compact
+layout in narrow Stage Manager windows); anything the simulator cannot honestly
+exercise (real network transitions, thermals/perf, haptics, backgrounding
+timing) is verified on the iPad even during iPhone-first phases; and real
+iPhone-hardware coverage arrives via external TestFlight testers before the
+App Store launch (I10).
 
 ### 2.2 Sessions: design-for-disconnect (1.0), proxy later
 
@@ -188,9 +205,18 @@ natural home.
 - **Arbitrary third-party plugins**: user-imported via the Files picker with
   source viewable/editable in-app (the Pythonista-precedent posture);
   URL-download reframed or dropped on iOS.
-- **Config travel**: a "Bring over from Mac" flow (export bundle on macOS →
-  AirDrop/Files import on iOS) rather than expecting on-phone authoring.
-  (Cloud sync is a possible later phase, ⚖︎.)
+- **Config travel — iCloud-first (direction set, mechanism ⚖︎)**: bring the
+  Mac setup over rather than expecting on-phone authoring, and **explore
+  iCloud (or similar) as the primary carrier** for the mapper / S&D / dinv
+  databases, user plugins, and profiles/scripts. Candidate mechanisms, to be
+  validated in I7/I8: an **iCloud Drive app folder** the Mac app writes an
+  export bundle into (simple, inspectable, keeps the "visible data folder"
+  spirit; iOS reads via the ubiquity container or the Files picker),
+  vs **CloudKit sync** (heavier, true sync, later-phase material). Manual
+  AirDrop/Files import of the same bundle is the fallback and works with no
+  Apple account plumbing. Two knowns to design around: SQLite files must
+  travel as **closed, whole-file exports** (never live-synced WAL databases),
+  and the per-character DB split (D-111) defines the bundle's shape.
 
 ---
 
@@ -281,14 +307,17 @@ device against the script → feedback issues filed → next phase.
 
 - **I7 — Mapper.**
   Canvas map on touch (pan/zoom/tap-to-walk), texture cache via
-  `CGImage`/`UIImage`, mapper command surface, per-character DB (D-111) brought
-  over via the transfer flow. *Exit:* goto/walkto from the phone works live.
+  `CGImage`/`UIImage`, mapper command surface; **first cut of the iCloud/Files
+  DB import** (shared `Aardwolf.db` + per-character overlay, D-111) so the real
+  map arrives from the Mac. *Exit:* goto/walkto from the device works live on
+  the user's own map.
 
 - **I8 — Scripting, plugins & Mac transfer.**
   Scripts editors (portable forms) sized to each device; bundled native
   ports + dinv/leveldb verified on iOS; S&D per the ⚖︎ decision; Files-based
-  plugin import with in-app source viewing; the "Bring over from Mac" bundle
-  (profiles, scripts, plugin state, map DBs).
+  plugin import with in-app source viewing; the full "Bring over from Mac"
+  bundle over the iCloud-first mechanism (§2.4): profiles, scripts, plugin
+  state, user plugins, S&D/dinv DBs.
   *Exit:* the user's real Mac setup runs on the iPad.
 
 - **I9 — Audio, TTS & accessibility.**
@@ -328,38 +357,48 @@ device against the script → feedback issues filed → next phase.
   internal — instant, no beta review), mirroring the macOS live-debugging
   loop: recordings stay on (`SessionTranscript` works as-is on iOS), and live
   divergence is diagnosed from transcripts, not assumptions.
-- Rendering performance is verified **on device** (combat-burst fixtures
-  replayed through the pipeline), not in the simulator.
+- **Device reality (D-117):** the physical device is an iPad Pro 14″; iPhone
+  testing is simulator-only. Rendering performance is therefore verified on
+  the **iPad** (combat-burst fixtures replayed through the pipeline) — never
+  claimed from the simulator — and the iPhone layout is additionally exercised
+  on the iPad in narrow Stage Manager windows (same compact size class). Real
+  iPhone hardware is covered by external TestFlight testers in I10 before any
+  App Store claim.
 
 ---
 
-## 6. Open questions (⚖︎ — the iteration list)
+## 6. Decisions & open questions
 
-1. **Universal app vs two iOS targets.** §2.1 recommends one universal target
-   with two layout roots, against the initial two-target guideline. Decide
-   before I0 (it shapes the app record + project.yml).
-2. **iPhone-first or iPad-first for I1–I5?** The plan says iPhone-first (it
-   forces the hard design problems early and its layout is required on iPad
-   anyway); iPad-first would deliver a Mac-like experience sooner. Either works
-   mechanically.
-3. **S&D on iOS**: bundle (needs the author's blessing?), Files-import, or
-   keep download-on-request with in-app source viewing under 4.7?
-4. **Plugin Library posture on the App Store build**: user-import only, or
-   keep URL-add with a 4.7-compliant index? (TestFlight builds can be more
-   permissive than the store build.)
-5. **Transport for 1.0**: plain telnet (`NetworkConnection`) as planned, or
+**Resolved (2026-07-24):**
+- ~~Universal app vs two iOS targets~~ → **one universal app, two layout
+  roots** (D-117, §2.1).
+- ~~iPhone-first or iPad-first~~ → **iPhone-first**, with the
+  simulator-only-iPhone / iPad-Pro-14″-hardware testing reality baked into
+  §2.1/§5 (D-117).
+- ~~Which references to vendor~~ → **all five vendored** (D-116, §1.2); Blink
+  stays study-only (GPL-3).
+- **S&D + Plugin Library posture** — direction agreed (bundled/native-ports
+  first; user-imported, source-viewable Lua; URL-download reframed for the
+  store build). Expect iteration + validation against actual App Store review
+  (I8 defines the mechanics, I10 validates; a bundled-only fallback build is
+  kept ready).
+- **Config travel** — direction agreed: **explore iCloud (or similar) import**
+  for mapper/S&D/dinv DBs + user plugins (§2.4); exact mechanism decided by
+  the I7 prototype.
+
+**Still open (⚖︎):**
+1. **Transport for 1.0**: plain telnet (`NetworkConnection`) as planned, or
    flip the existing `WebSocketConnection` on earlier via `TransportSelector`
    for its friendlier lifecycle — does Aardwolf's wss endpoint
    (`play.aardwolf.com:6200`) carry full GMCP/MCCP parity? (Verify against a
    recording before relying on it — no guessing.)
-6. **Mac↔iOS config travel v1**: manual export/AirDrop bundle (proposed) vs
-   iCloud Drive folder vs CloudKit sync.
-7. **Location-keepalive** (Blink precedent): offer as an opt-in power feature
+2. **iCloud mechanism**: iCloud Drive app folder (proposed v1) vs CloudKit
+   sync (later-phase material) — settled by the I7 prototype.
+3. **S&D distribution detail**: bundle (needs the author's blessing?) vs
+   Files-import vs download-on-request with in-app source viewing under 4.7.
+4. **Location-keepalive** (Blink precedent): offer as an opt-in power feature
    pre-proxy, or skip entirely? (Proposed: skip for 1.0.)
-8. **Reference submodules to vendor now**: SwiftTerm + MUDRammer + BlowTorch
-   (all MIT) under `submodules/`? (Blink is GPL — study in place, never
-   vendor.)
-9. **Naming/versioning**: does iOS ship as "Proteles" v1.0 on its own version
+5. **Naming/versioning**: does iOS ship as "Proteles" v1.0 on its own version
    line, or track the macOS marketing version?
 
 ---

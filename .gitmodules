@@ -17,3 +17,18 @@
 [submodule "leveldb"]
 	path = plugins/leveldb
 	url = https://github.com/rodarvus/leveldb
+[submodule "submodules/swiftterm"]
+	path = submodules/swiftterm
+	url = https://github.com/migueldeicaza/SwiftTerm
+[submodule "submodules/mudrammer"]
+	path = submodules/mudrammer
+	url = https://github.com/splinesoft/MUDRammer
+[submodule "submodules/blowtorch"]
+	path = submodules/blowtorch
+	url = https://github.com/blockda/BlowTorch
+[submodule "submodules/blink"]
+	path = submodules/blink
+	url = https://github.com/blinksh/blink
+[submodule "submodules/mudslinger"]
+	path = submodules/mudslinger
+	url = https://github.com/rabidt/mudslinger

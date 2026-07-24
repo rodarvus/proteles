@@ -456,6 +456,14 @@ All are git submodules, reference-only.
   for the scripting surface (reference only; S&D runs natively from an optional
   download, dinv is vendored under `Sources/MudCore/Resources/` + is the
   motivating case for the module loader + lsqlite3).
+- **iOS-port references** (D-116; see `docs/plans/IOS_PORT_PLAN.md`):
+  `submodules/swiftterm/` (MIT — the native terminal-view template for
+  `MudOutputView_iOS`), `submodules/mudrammer/` (MIT — the canonical shipped
+  iOS MUD client), `submodules/blowtorch/` (MIT — Aardwolf's official Android
+  client; touch-macro UX), `submodules/blink/` (**GPL-3, study only — never
+  copy code**; keyboard + session-resilience patterns), and
+  `submodules/mudslinger/` (MIT — the websocket→telnet proxy for the later
+  session-proxy phase).
 
 ---
 
