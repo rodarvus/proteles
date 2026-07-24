@@ -71,9 +71,28 @@ never modify.** You have standing approval to read/search them at any time.
   lsqlite3, no miniwindows).
 - `plugins/leveldb/` — the leveling-DB plugin (the Levels window reads it).
 
+**iOS-port references** (vendored 2026-07 for the iOS port,
+`docs/plans/IOS_PORT_PLAN.md`; same research-first rule applies to all
+iOS/mobile work):
+- `submodules/swiftterm/` — SwiftTerm (MIT): native Swift terminal view with
+  split UIKit/AppKit front-ends — the architectural template for
+  `MudOutputView_iOS` (selection, CoreText metrics, keyboard handling).
+- `submodules/mudrammer/` — MUDRammer (MIT): the canonical shipped iOS MUD
+  client (telnet/ANSI pipeline, world/trigger UI, VoiceOver patterns).
+- `submodules/blowtorch/` — BlowTorch (MIT): Aardwolf's official Android
+  client; Lua/plugin/miniwindow model + the button-set/long-press touch UX.
+- `submodules/blink/` — Blink Shell (**GPL-3 — study only, NEVER copy code**;
+  same rule as `mudlet`): iOS keyboard handling (SmartKeys), hardware-keyboard
+  remap, session-resilience patterns, multi-scene lifecycle.
+- `submodules/mudslinger/` — Mudslinger (MIT): the websocket→telnet proxy
+  architecture (browser client + `telnet_proxy/`), from an Aardwolf-family
+  developer — the reference for the later session-proxy phase.
+
 (`iterm2/` was removed — it was never used.) When implementing, designing, or
 fixing any Aardwolf/MUD feature, investigate how these handle it **first** — they
-encode years of protocol quirks and UX.
+encode years of protocol quirks and UX. The same applies to iOS/mobile work:
+validate output-view, input, lifecycle, and proxy designs against the iOS-port
+references above before inventing behaviour.
 
 ## NO GUESSING on the mapper & Search-and-Destroy (hard rule)
 
