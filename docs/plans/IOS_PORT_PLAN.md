@@ -1,10 +1,12 @@
-# Proteles on iOS — port plan (v0.2 — in iteration)
+# Proteles on iOS — port plan (v0.3 — in iteration)
 
-> **Status: shape partially ratified, still iterating.** This is the iOS port
-> plan: what the research found, the product shape, and a phase-by-phase
-> delivery plan in the style of the macOS build-out (ARCHITECTURE.md §8).
-> **Ratified so far (2026-07-24):** the universal-app shape + iPhone-first
-> delivery (**D-117**) and the vendored iOS reference submodules (**D-116**).
+> **Status: shape ratified through the audio/accessibility round.** This is the
+> iOS port plan: what the research found, the product shape, and a
+> phase-by-phase delivery plan in the style of the macOS build-out
+> (ARCHITECTURE.md §8). **Ratified:** the universal-app shape + iPhone-first
+> delivery (**D-117**), the vendored iOS reference submodules (**D-116**), the
+> **Semantic Core & Audio arc (S0–S3) preceding the iOS UI phases + the sound
+> rebuild at core (D-118)**, and the **voice-input posture (D-119)**.
 > Remaining contested calls are marked **⚖︎** and collected in §6; tracking
 > issues get opened per phase once the plan is final.
 
@@ -38,6 +40,15 @@ constraints) supports three headline conclusions:
    Proteles already does for copyover/resume); the proper long-term answer is a
    session-holding proxy — which aligns exactly with the planned later
    websockets/Lasher phase.
+4. **Accessibility and audio are prerequisites, not polish (v0.3 round, §1.4).**
+   A source audit + external research established that the shipped sound and
+   VoiceOver support are far below their docs' claims, that three existing
+   line-matchers are partial implementations of one missing **semantic event
+   layer**, and that the VoiceOver announcement queue is only fully
+   implementable on iOS. Consequence: a macOS-side **Semantic Core & Audio arc
+   (S0–S3, §4a, D-118)** precedes the iOS UI phases, the lens system (I6)
+   consumes it, and accessibility is designed into the iOS views from I1, not
+   retrofitted (the documented multi-year Mudlet mistake).
 
 ---
 
@@ -114,6 +125,56 @@ Hard constraints we design around, not against:
 - **TestFlight internal testing** (≤100 team users, no beta review, instant
   builds) fits the phase-by-phase manual-testing model perfectly.
 
+### 1.4 Accessibility & audio ground truth (2026-07-26 round)
+
+Inputs: a full source audit of sound/TTS/accessibility/voice-input state, the
+issue #9 history (a blind Aardwolf player working professionally in
+accessibility QA judged the shipped client "not usable for casual blind play"),
+`ACCESSIBILITY_REVIEW.md`, and external research (Mudlet/Mush-Z/VIPMud/
+Blightmud/Mud Portal, Apple API ground truth, game-accessibility guidelines).
+
+**Source-audit verdicts (file-level evidence in the D-118 record):**
+- *Sound:* "a faithful, tested port of one MUSHclient soundpack plugin — not a
+  sound feature." Closed 69-event vocabulary, console-only per-event config,
+  no `sound` action on GUI triggers, no per-category volumes, promised TTS
+  ducking never implemented, notification sounds are a second unrelated audio
+  path, and cues classify **raw** (pre-gag) lines while speech reads
+  **displayed** lines.
+- *TTS:* the decision layer (`SpeechFilter`, modes, 18 `tts` commands, session
+  integration) is real and well-tested; the VoiceOver half is 13 untested
+  open-loop lines, and the app-voice queue was built *backwards* from the
+  review's spine (flushes backlog at 10 utterances vs "preserve order, never
+  interrupt").
+- *Accessibility:* ~10 AX annotations across ~60 views; zero on the HUD the
+  review uses as its worked example; one semantic grouping in the codebase; no
+  AX tests. Review Phases 1–2 ≈ 0%.
+- *Voice input:* zero code (confirmed).
+- *The reusable skeleton:* `NotificationMatcher` (the only user-extensible
+  classifier: captures, thresholds, coalescing), `TriggerEngine`, `ChatStore`
+  (the proven buffer template), `OutputLineBuffer`, and the `AardwolfTags`
+  lexer are the natural substrate of the semantic event layer.
+
+**The platform crux — the VO announcement queue:**
+
+| | macOS | iOS |
+|---|---|---|
+| Announcement-finished callback | **None (public)** — Apple forums 709501, filed by Mudlet's maintainer for streaming MUD text, unanswered since 2022 | **Yes** — `announcementDidFinishNotification` + success/interrupted flag |
+| Queue-don't-interrupt | Only open-loop priority (macOS 14+, unproven for streams) | Attribute since iOS 11 + priorities since iOS 17 |
+| Closed-loop queue (send→confirm→next) | **Not possible** with public API | **Shipped in production** (Mud Portal; retry-queue pattern) |
+| Realistic spine | Accessible caret-mode review surface (Mudlet's landing point) + open-loop announcements + app-voice fallback | Native VO announcement queue |
+
+**Ecosystem consensus** (what "best in class" means): speak displayed lines in
+order with Queue/Interrupt modes and smart eviction on send; speech-level
+gagging distinct from display gagging; caret-navigable output buffer;
+Alt+1–0 speak-Nth-recent / double-tap-copy review-buffer grammar; on-demand
+vitals hotkeys; named semantic sound events with GMCP-first detection and
+per-category volumes under a master (the canonical `aard_soundpack` is already
+event-driven — Proteles' port kept the events but lost the extensibility);
+duck-under-speech (Xbox XAG 105; iOS VoiceOver Audio Ducking must be honored,
+not fought). AppleVis evidence: the iOS VI MUD community is starved (MUDRammer's
+removal left iSH+TinTin++), vocal, and rewards native-VoiceOver quality with
+adoption — Mud Portal is the proof and the only competitor.
+
 ---
 
 ## 2. Proposed product shape
@@ -170,27 +231,31 @@ group, inventory/equipment — with the **unfiltered stream always one gesture
 away** (and always intact: lenses are *views over* the scrollback store, never
 destructive; "the output is sacred" carries over).
 
-This builds on infrastructure that already exists and stays platform-neutral:
+**v0.3 change (D-118): the lens engine is no longer built at I6 — it IS the
+semantic event layer built in S0**, before the iOS UI phases. The accessibility
+review's semantic review buffers + tagged output contracts, the lens system,
+and a real sound feature all need the same substrate, so it is built once, on
+macOS, transcript-tested, and consumed everywhere:
 
 - **GMCP already carries the structured half** (vitals, room, area, group,
   comms → `GMCPStateStore`/`ChatStore`/`Mapper`) — those lenses are mostly
   *rendering* work, not parsing work.
-- **The line pipeline already classifies** (trigger/gag pipeline, chat capture,
-  S&D interception). The new piece is a pure **`StreamClassifier` engine in
-  MudCore** that tags each line with a category (combat round, mob arrival/
-  death, loot, spellup wear-off, movement spam, …), driven by Aardwolf's
-  server-side tagging facilities (`tags`, `spamreduce`, channel tags) **plus**
-  reference-derived patterns — per the no-guessing rule, the taxonomy and
-  regexes come from the references (S&D, aardwolfclientpackage) and live
-  transcripts, not intuition.
-- Being a pure engine, it is fully unit-testable against recorded transcripts,
-  and its value is **not iOS-exclusive** — a proven classifier can back-feed
-  macOS features later.
+- **S0's `SemanticEvent` layer carries the rest**: categories (combat round,
+  mob arrival/death, loot, spellup wear-off, movement spam, …) driven by
+  Aardwolf's server-side tagging facilities (`tags`, `spamreduce`, channel
+  tags) **plus** reference-derived patterns — per the no-guessing rule, the
+  taxonomy and regexes come from the references (S&D, aardwolfclientpackage,
+  `aard_soundpack`) and live transcripts, not intuition. It generalizes the
+  existing pure engines (`NotificationMatcher` for user rules, the soundpack
+  classifier as the built-in vocabulary pack, `AardwolfTags` as the router)
+  rather than adding a fourth matcher.
+- Lenses are *views over* the scrollback store, never destructive — "the
+  output is sacred" carries over.
 
-Phasing: the classifier foundation lands mid-plan (I6) once real play on iOS
-has taught us which lenses matter; the iPhone layout is designed lens-first
-from the start (the stream is one lens among several), so the experiment has a
-natural home.
+Phasing: S0 builds and proves the engine on macOS (it immediately powers
+sound, speech curation, and review buffers there); I6 becomes the *lens UI*
+experiment on the iPhone layout, iterated live once real play has taught us
+which lenses matter.
 
 ### 2.4 Scripting & plugins on iOS
 
@@ -217,6 +282,32 @@ natural home.
   Apple account plumbing. Two knowns to design around: SQLite files must
   travel as **closed, whole-file exports** (never live-synced WAL databases),
   and the per-character DB split (D-111) defines the bundle's shape.
+
+### 2.5 Sound, accessibility & voice input (D-118, D-119)
+
+- **Sound is rebuilt as a core, event-driven feature (S1)** before the iOS
+  UI phases: an event→cue map as data (per-event + per-category volumes under
+  a master cap, pan, variants), a `sound` action on GUI triggers that *emits a
+  named event* into the same pipeline (never a raw play-file call), notification
+  sounds unified onto that pipeline, ducking hooks (`speechWillStart`/
+  `speechDidEnd`), playback discipline (concurrency cap, rate limits), preview
+  and per-category controls in Settings ▸ Audio, and an unmute onboarding
+  moment. Mixing *policy* lives in MudCore (macOS has no `AVAudioSession`, so
+  the platform audio layer must stay thin anyway); iOS adds only session
+  category/ducking citizenship.
+- **Accessibility is designed in, not retrofitted.** macOS spine: the
+  caret-mode output review surface + open-loop announcements + app-voice
+  fallback (S2). iOS spine: the closed-loop native VO announcement queue (I9,
+  where the platform actually supports it). The VO-queue *abstraction* is
+  designed before `MudOutputView_iOS` so both output views are built against
+  it. The S3 labeling pass covers the review's Phase 3.
+- **Voice input (D-119):** (1) system Voice Control compatibility comes free
+  with S3's labels + `accessibilityInputLabels` — the only voice feature with
+  an accessibility mandate; (2) App Intents/Shortcuts for discrete actions
+  (connect, read vitals, read last tell) — cheap, mostly iOS; (3) push-to-talk
+  dictation into the iOS command line — post-port; (4) custom always-listening
+  or command-grammar voice control — **not built** (no community demand,
+  keyboard-first VI canon, Talon serves the niche via the same labels).
 
 ---
 
@@ -250,14 +341,70 @@ natural home.
 
 ## 4. Phases
 
-Numbering `I0…I10` (I for iOS), mirroring the macOS build-out's shape: each
-phase is independently shippable to TestFlight, ends with a **manual test
-script** for live verification on device, and lands with tests across the
-board (pure engines → unit tests; lifecycle → integration tests against the
-`InMemoryConnection` seam; views → focused UI tests where they pay).
+Two arcs (D-118): the macOS-side **Semantic Core & Audio arc `S0…S3`** (§4a),
+then the iOS arc `I0…I10` (§4b). Hard ordering constraints — and the only
+ones: **S0+S1 complete before the iOS UI phases (I1+)**; the **VO-queue
+abstraction is designed before `MudOutputView_iOS` is architected**; S2/S3 may
+interleave with the early iOS phases; I0 (scaffolding/CI) has no dependency on
+the S-arc and may run in parallel. Each phase is independently shippable
+(macOS release / TestFlight build), ends with a **manual test script** for
+live verification, and lands with tests across the board (pure engines → unit
+tests; lifecycle → integration tests against the `InMemoryConnection` seam;
+views → focused UI tests where they pay).
 
-Delivery cadence per phase: build → TestFlight internal → user live-tests on
-device against the script → feedback issues filed → next phase.
+### 4a. The Semantic Core & Audio arc (S-phases, macOS-side, pre-iOS-UI)
+
+These land on `main` as normal macOS releases, live-verified in daily play —
+the S-arc *is* also the delivery vehicle for ACCESSIBILITY_REVIEW.md and
+closes most of issue #9's remaining scope.
+
+- **S0 — The semantic event layer** (MudCore, pure, transcript-tested).
+  `SemanticEvent` taxonomy (category, severity, captured payload, source);
+  `SoundEventClassifier` demoted to the built-in Aardwolf vocabulary pack
+  behind it and moved to the **displayed**-line path (closing the raw-vs-
+  displayed asymmetry); `NotificationMatcher` generalized as the
+  user-extensible rule engine feeding the same events; `AardwolfTags` promoted
+  from stripper to **tag-family router** (the review's Tagged Output
+  Contracts, starting with `CHANNELS`/`TELLS`/`SAYS`); events re-published on
+  the internal bus (the `BroadcastPlugin(100)` lesson) for plugins/scripts.
+  Taxonomy + patterns from the references and recordings — no guessing.
+  *Exit:* the layer classifies real recorded sessions correctly under test;
+  sound/speech/notifications consume it with zero behaviour regressions.
+
+- **S1 — Sound as a real feature.** Event→cue map as data (per-event +
+  per-category volumes under a master, pan, variants); a `sound` action on GUI
+  triggers emitting named events; notification-rule sounds unified onto the
+  pipeline; ducking hooks + playback discipline; Settings ▸ Audio grows
+  preview, per-category controls, and an unmute onboarding moment; `spset` et
+  al. remain as the console surface over the same store.
+  *Exit:* the user (sighted, macOS) declares sound a feature they actually
+  use; a GUI trigger can play a sound with category volume + ducking.
+
+- **S2 — Speech re-plumbed + the macOS accessibility spine.** Speech curation
+  driven by event categories (priority tiers over the classifier heuristics;
+  channel mutes by `ChatLine` identity, not text matching; vitals from GMCP,
+  not prompt regex); the **caret-mode output review mode** (review Phase 2:
+  line/word/char navigation, selection/copy, keyboard link navigation,
+  jump-to-latest, typing returns to input); semantic review buffers over
+  `ChatStore`-shaped stores with the **Alt+1–0 / double-tap-copy grammar**;
+  the macOS VO announcement queue attempted as a **timeboxed spike** (open-loop
+  + macOS 14 priorities) — a finding, not a gate. The queue *abstraction*
+  (send→confirm→next seam) is designed here for iOS to implement closed-loop.
+  *Exit:* the acceptance script in ACCESSIBILITY_REVIEW.md passes on macOS via
+  review-mode + app voice; VI-player validation round scheduled (#9).
+
+- **S3 — The labeling pass** (review Phase 3, interleavable). AX labels/
+  values/actions + semantic grouping across HUD/vitals ("Health, 4872 of
+  7228, 67 percent"), group panel, settings, scripts/plugins windows, button
+  bar; `accessibilityInputLabels` for Voice Control (D-119 tier 1);
+  `performAccessibilityAudit`-based smoke tests.
+  *Exit:* the audit passes; Voice Control can drive the app.
+
+### 4b. The iOS arc
+
+Numbering `I0…I10`, mirroring the macOS build-out's shape. Delivery cadence
+per phase: build → TestFlight internal → user live-tests on device against
+the script → feedback issues filed → next phase.
 
 - **I0 — Scaffolding & CI.**
   App target, Package.swift conditional deps, CLua flag, path abstraction, CI
@@ -297,12 +444,11 @@ device against the script → feedback issues filed → next phase.
   resizable panes, Stage-Manager-safe); layout persistence per world.
   *Exit:* daily-drivable on iPad; iPhone good for a commute session.
 
-- **I6 — Lenses (the semantic-stream experiment).**
-  `StreamClassifier` engine in MudCore (taxonomy + patterns derived from
-  references + recorded transcripts; tested against recordings), lens
-  configuration model, lens UI on the iPhone layout (chips/cards over the
-  stream; raw stream always available). Explicitly experimental: ships behind
-  a toggle, iterated live.
+- **I6 — Lenses (the semantic-stream UI experiment).**
+  *Re-scoped by D-118:* the engine already exists (S0) — this phase is the
+  **lens UI** on the iPhone layout: lens configuration model, chips/cards over
+  the stream, raw stream always one gesture away. Explicitly experimental:
+  ships behind a toggle, iterated live.
   *Exit:* the user can play a CP through lenses and judge the idea.
 
 - **I7 — Mapper.**
@@ -320,13 +466,18 @@ device against the script → feedback issues filed → next phase.
   state, user plugins, S&D/dinv DBs.
   *Exit:* the user's real Mac setup runs on the iPad.
 
-- **I9 — Audio, TTS & accessibility.**
-  `AVAudioSession` (interruptions, silent switch, mixing), soundpack cues,
-  speech (incl. while-backgrounded speech semantics), the VoiceOver pass:
-  labels, streaming-output announcement strategy, speech-level gagging —
-  benchmarked against Mud Portal's state of the art.
-  *Exit:* a VoiceOver-only session is playable; sounds/speech behave like a
-  good iOS citizen.
+- **I9 — Audio & accessibility, iOS-native.**
+  *Re-scoped by D-118:* validation + iOS-specific strengths, not invention.
+  `AVAudioSession` citizenship (interruptions, silent switch, `.mixWithOthers`,
+  honoring VoiceOver's system Audio Ducking); the **closed-loop VO announcement
+  queue** (`announcementDidFinishNotification` + retry — the architecture the
+  S2 abstraction was designed for, on the platform where it works); Queue/
+  Interrupt speech modes with smart eviction on send; speech-level gagging via
+  the semantic layer; review buffers on touch; an **AppleVis-recruited beta**
+  (the starved, vocal iOS VI MUD community — Mud Portal is the only
+  competitor). App Intents for discrete actions (D-119 tier 2).
+  *Exit:* a VoiceOver-only session is playable end-to-end on iPad; sounds/
+  speech behave like a good iOS citizen; AppleVis testers validate.
 
 - **I10 — App Store release engineering.**
   External TestFlight round (forces an early Beta App Review look), review
@@ -336,7 +487,8 @@ device against the script → feedback issues filed → next phase.
 
 - **Later (post-iOS-1.0, separate plans):** the **session proxy / websockets /
   Lasher** engagement (server-held sessions, replay, push-updated Live
-  Activities, possibly "disconnected operations"); cloud config sync; Android
+  Activities, possibly "disconnected operations"); push-to-talk dictation into
+  the iOS command line (D-119 tier 3); cloud config sync; Android
   (Swift-on-Android shipped nightly SDKs in Oct 2025 — MudCore compiling for
   Android under a Compose UI is plausible by then, one more reason MudCore
   stays UI-free).
@@ -347,12 +499,14 @@ device against the script → feedback issues filed → next phase.
 
 - **The existing MudCoreTests suite runs on iOS in CI from I0** — the port's
   regression net for everything below the UI.
-- New pure engines (`StreamClassifier`, lens config, input engines' extraction)
-  get the usual thorough unit tests; lifecycle work gets integration tests
-  through the `InMemoryConnection` seam (backgrounding simulated by driving the
-  state machine); transcript-driven replay tests validate the classifier
-  against real recordings (same discipline as today: reproduce → fail without
-  the fix).
+- New pure engines (the S0 `SemanticEvent` layer, lens config, input engines'
+  extraction) get the usual thorough unit tests; lifecycle work gets
+  integration tests through the `InMemoryConnection` seam (backgrounding
+  simulated by driving the state machine); transcript-driven replay tests
+  validate the semantic layer against real recordings (same discipline as
+  today: reproduce → fail without the fix). The S-arc lands on `main` under
+  the normal four macOS gates and is live-verified in daily play before the
+  iOS UI phases consume it.
 - Per-phase **manual test scripts** for the user's device testing (TestFlight
   internal — instant, no beta review), mirroring the macOS live-debugging
   loop: recordings stay on (`SessionTranscript` works as-is on iOS), and live
@@ -386,6 +540,21 @@ device against the script → feedback issues filed → next phase.
   for mapper/S&D/dinv DBs + user plugins (§2.4); exact mechanism decided by
   the I7 prototype.
 
+**Resolved (2026-07-26):**
+- ~~Does accessibility/sound work precede iOS?~~ → **yes, as the Semantic
+  Core & Audio arc S0–S3** (D-118, §4a): S0+S1 before the iOS UI phases; the
+  VO-queue abstraction before `MudOutputView_iOS`; S2/S3 interleavable; I0 may
+  run in parallel. Lens engine moves from I6 to S0; I9 re-scoped to iOS-native
+  validation.
+- ~~The macOS VO queue question~~ (ACCESSIBILITY_REVIEW.md §1) → answered by
+  research: **not closed-loop implementable on macOS with public API; fully
+  implementable on iOS** (§1.4). macOS spine = caret-mode review; iOS spine =
+  native VO queue. The macOS queue attempt stays a timeboxed spike.
+- ~~Voice activation~~ → **four-tier posture, no custom voice control**
+  (D-119, §2.5).
+- **Docs corrected to match code** (D-118): TTS_PLAN.md status header,
+  ACCESSIBILITY_REVIEW.md addendum, D-109/D-110 corrections recorded.
+
 **Still open (⚖︎):**
 1. **Transport for 1.0**: plain telnet (`NetworkConnection`) as planned, or
    flip the existing `WebSocketConnection` on earlier via `TransportSelector`
@@ -418,3 +587,16 @@ developer-forum guidance, App Store Review Guidelines 2.5.2/4.7 (2024
 liberalization + 2025-11 tightening), Pythonista/Codea precedent, iPadOS 26
 windowing/Stage Manager, TestFlight internal-vs-external, Swift-on-Android
 nightly SDK (2025-10).
+
+v0.3 round (2026-07-26): full source audit of sound/TTS/AX/voice-input state
+(file:line evidence summarized in D-118); issue #9 history; accessibility —
+Apple forums thread 709501 (macOS announcement-completion gap, Mudlet's
+maintainer), `UIAccessibility.announcementDidFinishNotification` +
+`accessibilitySpeechQueueAnnouncement` + iOS 17/macOS 14 announcement
+priorities, Mudlet 4.17 screen-reader work + enable-accessibility package,
+Mush-Z, VIP Mud, Blightmud reader mode, Mud Portal (AppleVis reception),
+ChannelHistory hotkey grammar, `aard_soundpack.xml` architecture (read at
+source), gameaccessibilityguidelines.com, Xbox XAG 105, iOS VoiceOver Audio
+Ducking, `AVAudioSession` mixing options, Apple Voice Control +
+`accessibilityInputLabels`, `SFSpeechRecognizer` limits + SpeechAnalyzer
+(2025), App Intents (iOS 18), curb-cut retrofit-cost literature.

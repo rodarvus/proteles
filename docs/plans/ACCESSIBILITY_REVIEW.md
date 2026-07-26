@@ -2,6 +2,22 @@
 
 Status: proposed, 2026-06-19. Tracks GitHub issue #9.
 
+> **Addendum (2026-07-26, D-118):** this proposal is now delivered via the
+> **Semantic Core & Audio arc** (phases S0–S3) in
+> [IOS_PORT_PLAN.md](IOS_PORT_PLAN.md) §4a, which builds the semantic event
+> layer (§3/§4 here), the output review mode (§2), and the labeling pass (§6)
+> on macOS before/alongside the iOS port. The §1 open technical question is
+> answered by research: **macOS has no public announcement-completion callback**
+> (Apple forums thread 709501 — filed by Mudlet's maintainer for this exact
+> use case, unanswered since 2022), so a closed-loop VO queue is not currently
+> possible on macOS; **iOS has the full closed-loop API**
+> (`announcementDidFinishNotification` + success flag + queue attribute +
+> priorities) with shipped precedent (Mud Portal). Consequence: macOS's spine
+> is the accessible caret-mode review surface (§2, Mudlet's landing point) with
+> open-loop announcements + the app-voice fallback; the queued-VO architecture
+> (§1) is realized fully on iOS. The macOS queue prototype (Roadmap Phase 1)
+> stays a timeboxed spike, not a gate.
+
 ## Summary
 
 Proteles should treat native VoiceOver output as the first accessibility

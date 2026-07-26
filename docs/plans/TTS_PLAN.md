@@ -1,12 +1,19 @@
 # TTS / accessibility — plan + first implementation
 
-> **Status: shipped (feature-complete for 1.0). Historical design doc — kept
-> for the research + rationale below.** Implemented 2026-06-11
-> ([`../DECISIONS.md`](../DECISIONS.md) D-110) as `SpeechFilter` + the
-> `TextToSpeech` native plugin + the app's `SpeechController` (both backends —
-> app voice AND VoiceOver routing), with Settings ▸ Audio. Issue #9 stays open
-> only for the deferred phase-3 items (symbol-pronunciation dictionary,
-> review-buffer navigation, macro key-chords) + VI-player validation.
+> **Status: the app-TTS layer shipped; the accessibility claim was superseded.**
+> Implemented 2026-06-11 ([`../DECISIONS.md`](../DECISIONS.md) D-110) as
+> `SpeechFilter` + the `TextToSpeech` native plugin + the app's
+> `SpeechController`, with Settings ▸ Audio. **Correction (2026-07-26, D-118):**
+> the "both backends" claim overstated the VoiceOver half — VO routing is an
+> unvalidated, open-loop `NSAccessibility.post` with no queue, no ordering
+> guarantee, and no tests; macOS has no public announcement-completion callback,
+> so a closed-loop VO queue may not be possible there at all (Apple forums
+> thread 709501). Per VI-player feedback, app-owned TTS is a fallback, not the
+> accessibility spine — the governing plan is now
+> **[ACCESSIBILITY_REVIEW.md](ACCESSIBILITY_REVIEW.md)** (native VoiceOver
+> output + review mode + semantic buffers), delivered via the Semantic Core &
+> Audio arc in **[IOS_PORT_PLAN.md](IOS_PORT_PLAN.md)** §4a. Issue #9 stays
+> open for that arc + VI-player validation.
 >
 > One design refinement landed in the implementation: `SpeechFilter` runs on
 > **displayed** lines (post-gag, beside `notifyForOutput`), so plugin/map/gauge
