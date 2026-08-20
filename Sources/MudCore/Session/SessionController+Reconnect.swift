@@ -34,7 +34,7 @@ extension SessionController {
     /// resume breadcrumb is dropped, #42).
     public func disconnect() async {
         userInitiatedDisconnect = true
-        cleanSessionEndHandler?() // intentional end → drop the resume breadcrumb (#42)
+        await cleanSessionEndHandler?() // intentional end → flush history + drop breadcrumb
         isReconnecting = false
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -55,7 +55,11 @@ extension SessionController {
     /// `.disconnected`.
     func handleByteStreamEnded() async {
         guard connection != nil else { return }
+        let cleanLogout = closedByAcceptedQuit
         await flushOnDisconnect()
+        // Flush chat history and record its result while the transcript is
+        // still open; teardown below closes the recorder and transcript.
+        if cleanLogout { await cleanSessionEndHandler?() }
         teardownSession()
 
         // A quit that PROMPTLY closed the connection is a clean logout — drop
@@ -63,8 +67,6 @@ extension SessionController {
         // after a quit (Aardwolf refused it; you kept playing) or with no
         // recent quit at all is the session ending while live — keep the
         // breadcrumb so the next launch resumes (#42).
-        if closedByAcceptedQuit { cleanSessionEndHandler?() }
-
         let shouldReconnect = reconnectPolicy.isEnabled
             && !userInitiatedDisconnect
             && !expectsCleanClose

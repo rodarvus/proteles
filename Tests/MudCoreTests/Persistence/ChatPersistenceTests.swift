@@ -8,6 +8,15 @@ import Testing
 /// seed-before-attach restore that must never re-persist.
 @Suite("ChatPersistence", .serialized)
 struct ChatPersistenceTests {
+    @Test("default flush cadence bounds abnormal-exit loss to about one second")
+    func defaultFlushCadence() async throws {
+        let url = temporaryDatabaseURL()
+        let persistence = try ChatPersistence(database: ChatDatabase(url: url))
+        let interval = await persistence.flushInterval
+        #expect(interval == .seconds(1))
+        try cleanup(url: url)
+    }
+
     @Test("Captured chat lines are flushed with channel + player intact")
     func capturedLinesArePersisted() async throws {
         let url = temporaryDatabaseURL()
@@ -30,6 +39,72 @@ struct ChatPersistenceTests {
         try cleanup(url: url)
     }
 
+    @Test("periodic flush drains all mutations published before its checkpoint")
+    func periodicFlushDrainsCheckpoint() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ChatDatabase(url: url)
+        let store = ChatStore()
+        let persistence = ChatPersistence(database: database, flushInterval: .milliseconds(20))
+        await persistence.attach(to: store)
+
+        await store.append(channel: "clantalk", player: "Friend", message: "persist me")
+        try await Task.sleep(for: .milliseconds(80))
+
+        #expect(try database.mostRecent(limit: 10).map(\.text) == ["persist me"])
+        await persistence.detach()
+        try cleanup(url: url)
+    }
+
+    @Test("typed sources and timestamp policy persist; omit-log lines do not")
+    func typedSourcePersistence() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ChatDatabase(url: url)
+        let store = ChatStore()
+        let persistence = ChatPersistence(database: database, flushInterval: .milliseconds(20))
+        await persistence.attach(to: store)
+        await store.append(
+            source: .nonChannel(.globalQuest),
+            message: "Global Quest: starts now",
+            showsTimestamp: false
+        )
+        await store.append(
+            source: .plugin("Q/A"), message: "temporary", shouldPersist: false
+        )
+        try await Task.sleep(for: .milliseconds(80))
+        await persistence.flushNow()
+
+        let rows = try database.mostRecent(limit: 10)
+        #expect(rows.count == 1)
+        #expect(rows[0].sourceKind == "nonchannel")
+        #expect(rows[0].sourceName == NonChannelKind.globalQuest.rawValue)
+        #expect(!rows[0].showsTimestamp)
+        await persistence.detach()
+        try cleanup(url: url)
+    }
+
+    @Test("source and all-history clears remove queued and persisted rows in order")
+    func durableClear() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ChatDatabase(url: url)
+        let store = ChatStore()
+        let persistence = ChatPersistence(database: database, flushInterval: .seconds(60))
+        await persistence.attach(to: store)
+
+        await store.append(source: .nonChannel(.info), message: "INFO: old")
+        await store.append(channel: "tell", player: "Friend", message: "keep")
+        await store.clear(source: .nonChannel(.info))
+        await store.append(source: .nonChannel(.info), message: "INFO: new")
+        await persistence.flushNow()
+
+        #expect(try database.mostRecent(limit: 10).map(\.text) == ["keep", "INFO: new"])
+        await store.clear(source: nil)
+        await persistence.flushNow()
+        #expect(try database.count() == 0)
+
+        await persistence.detach()
+        try cleanup(url: url)
+    }
+
     @Test("detach() flushes buffered writes (graceful shutdown)")
     func detachFlushesBuffer() async throws {
         let url = temporaryDatabaseURL()
@@ -41,7 +116,6 @@ struct ChatPersistenceTests {
         for index in 0..<5 {
             await store.append(channel: "gossip", player: "P", message: "line-\(index)")
         }
-        try await Task.sleep(for: .milliseconds(50))
         await persistence.detach()
 
         let rows = try database.mostRecent(limit: 10)
@@ -49,7 +123,52 @@ struct ChatPersistenceTests {
         try cleanup(url: url)
     }
 
-    @Test("styled runs survive capture → DB → restore; restore never re-persists")
+    @Test("flushNow drains published mutations without a scheduler delay")
+    func immediateFlushDrainsMutations() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ChatDatabase(url: url)
+        let store = ChatStore()
+        let persistence = ChatPersistence(database: database, flushInterval: .seconds(60))
+        await persistence.attach(to: store)
+
+        await store.append(channel: "claninfo", player: "", message: "last line before quit")
+        let result = await persistence.flushNow()
+
+        #expect(try database.mostRecent(limit: 10).map(\.text) == ["last line before quit"])
+        #expect(result.written == 1)
+        #expect(result.pending == 0)
+        #expect(result.errorDescription == nil)
+        await persistence.detach()
+        try cleanup(url: url)
+    }
+
+    @Test("attaching persistence to a fresh Channels store does not hydrate history")
+    func freshSessionStartsEmpty() async throws {
+        let url = temporaryDatabaseURL()
+        let database = try ChatDatabase(url: url)
+        let previousStore = ChatStore()
+        let persistence = ChatPersistence(database: database, flushInterval: .seconds(60))
+        await persistence.attach(to: previousStore)
+        await previousStore.append(channel: "clantalk", player: "Wolf", message: "old session")
+        await persistence.flushNow()
+        await persistence.detach()
+
+        let freshStore = ChatStore()
+        await persistence.attach(to: freshStore)
+
+        #expect(await freshStore.snapshot().isEmpty)
+        #expect(try database.mostRecent(limit: 10).map(\.text) == ["old session"])
+
+        await freshStore.append(channel: "clantalk", player: "Wolf", message: "new session")
+        await persistence.flushNow()
+        #expect(await freshStore.snapshot().map(\.line.text) == ["new session"])
+        #expect(try database.mostRecent(limit: 10).map(\.text) == ["old session", "new session"])
+
+        await persistence.detach()
+        try cleanup(url: url)
+    }
+
+    @Test("recovery restore keeps styled runs and never re-persists")
     func restoreRoundTripWithoutReseeding() async throws {
         let url = temporaryDatabaseURL()
         let database = try ChatDatabase(url: url)
@@ -65,7 +184,7 @@ struct ChatPersistenceTests {
         let persistedCount = try database.count()
         #expect(persistedCount == 1)
 
-        // Relaunch: a fresh store seeded from the tail BEFORE attaching.
+        // Interrupted-session recovery: seed from the tail BEFORE attaching.
         let restoredStore = ChatStore()
         let tail = try await persistence.loadTail(limit: 500)
         for row in tail {

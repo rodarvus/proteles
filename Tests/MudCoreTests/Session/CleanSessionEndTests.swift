@@ -19,6 +19,20 @@ struct CleanSessionEndTests {
         #expect(flag.fired)
     }
 
+    @Test("disconnect() waits for asynchronous clean-end work")
+    func disconnectAwaitsHandler() async {
+        let controller = SessionController()
+        let flag = Flag()
+        await controller.setCleanSessionEndHandler {
+            try? await Task.sleep(for: .milliseconds(20))
+            flag.fired = true
+        }
+
+        await controller.disconnect()
+
+        #expect(flag.fired)
+    }
+
     @Test("typing quit alone does NOT fire the handler — the server may refuse it")
     func quitAloneDoesNotFire() async {
         let controller = SessionController()

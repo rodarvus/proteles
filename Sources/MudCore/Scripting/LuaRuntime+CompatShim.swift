@@ -20,6 +20,7 @@ public extension LuaRuntime {
     /// standard helper libraries for `require`. Idempotent.
     func loadCompatShim() throws {
         _ = try run(Self.compatShimSource)
+        _ = try run(Self.chatCaptureShimSource)
         _ = try run(Self.compatShimOutputSource)
         _ = try run(Self.automationShimSource)
         _ = try run(Self.utilsShimSource)
@@ -524,13 +525,11 @@ public extension LuaRuntime {
         end
         proteles.sndCall(fn, ...); return error_code.eOK
       end
-      -- Aardwolf Chat Capture plugin: storeFromOutside(text, tab, foreground)
-      -- adds a line under a tab. Bridge it to native chat (rsocial, hadar
-      -- spellup, …) so captured lines land in the Channels panel.
+      -- Aardwolf Communication Log: storeFromOutside(text, tab, timestamp,
+      -- omit_log, links) adds styled content under a tab. Bridge it to the
+      -- native Channels panel for compatible third-party callers.
       if id == "b555825a4a5700c35fa80780" and fn == "storeFromOutside" then
-        local args = {...}
-        proteles.chatCapture(args[1] or "", args[2] or "")
-        return error_code.eOK
+        return error_code.eOK, __proteles_store_from_outside(select("#", ...), ...)
       end
       return error_code.eOK, proteles.call(fn, ...)
     end

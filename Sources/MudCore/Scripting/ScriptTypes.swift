@@ -270,6 +270,9 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Print Aardwolf `@`-coded text to the scrollback, rendered as styled
     /// runs (`proteles.echoAard`).
     case echoAard(String)
+    /// Echo an already-styled line (used by reference-ordered chat capture
+    /// after Text Substitution has transformed the GMCP message).
+    case echoLine(Line)
     /// Print ANSI-SGR-coded text to the scrollback, rendered as styled runs
     /// (the shim's `AnsiNote`).
     case echoAnsi(String)
@@ -374,6 +377,21 @@ public enum ScriptEffect: Sendable, Equatable {
     /// appends it to the ``ChatStore`` under `channel` (falling back to a
     /// generic capture channel). `text` may carry Aardwolf `@`-codes.
     case chatCapture(text: String, channel: String)
+    case externalChatCapture(
+        text: String,
+        tab: String,
+        showsTimestamp: Bool,
+        shouldPersist: Bool,
+        linksJSON: String?
+    )
+    /// Store an already-styled line under a typed Channels-panel source.
+    case communicationCapture(
+        source: CommunicationSource,
+        player: String,
+        line: Line,
+        showsTimestamp: Bool,
+        shouldPersist: Bool
+    )
     /// A plugin published a structured snapshot (JSON) of its model for a
     /// native panel to render — the inverse of GMCP-in (e.g. Search-and-
     /// Destroy's window state). The host decodes + forwards it to the UI.

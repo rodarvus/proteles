@@ -210,7 +210,13 @@ extension SessionController {
         ) {
             await gmcpState.apply(message)
         }
-        await dispatchGMCPToChat(message)
+        // In production the reference-ordered Communication Capture native
+        // plugin owns chat intake (Text Substitution → capture → Chat Echo).
+        // Keep the direct path only for deliberately scriptless sessions.
+        let nativeCaptureEnabled = await scriptEngine?.isNativePluginEnabled(
+            id: CommunicationCapture.pluginID
+        ) == true
+        if !nativeCaptureEnabled { await dispatchGMCPToChat(message) }
         // GMCP-driven notifications (phase-3): edge-triggered low HP (any vitals
         // update) + quest-ready (comm.quest). Self-gates on the relevant rules,
         // so it's a cheap no-op when none exist.

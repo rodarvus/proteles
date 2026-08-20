@@ -43,6 +43,86 @@
             #expect(withoutTimestamp.string == "market line")
         }
 
+        @Test("Incremental append is identical to a full document build")
+        @MainActor
+        func incrementalAppendMatchesFullBuild() {
+            let before = [chatLine(id: 1, text: "first"), chatLine(id: 2, text: "second")]
+            let after = before + [chatLine(id: 3, text: "third")]
+            let initial = builder.buildDocument(
+                before,
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let appended = builder.buildDocument(
+                Array(after.dropFirst(before.count)),
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let storage = NSTextStorage(attributedString: initial.attributed)
+            var spans = initial.renderedLines
+
+            ChatTextStorageUpdater.applyIncremental(
+                storage: storage,
+                removeFirst: 0,
+                appended: appended,
+                renderedLines: &spans
+            )
+            let expected = builder.buildDocument(
+                after,
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let expectedStorage = NSTextStorage(attributedString: expected.attributed)
+
+            #expect(storage.isEqual(to: expectedStorage))
+            #expect(spans == expected.renderedLines)
+            #expect(!storage.string.hasSuffix("\n"))
+        }
+
+        @Test("Rolling trim and append is identical to a full document build")
+        @MainActor
+        func rollingTrimAndAppendMatchesFullBuild() {
+            let before = [
+                chatLine(id: 1, text: "first"),
+                chatLine(id: 2, text: "second"),
+                chatLine(id: 3, text: "third")
+            ]
+            let after = [
+                chatLine(id: 2, text: "second"),
+                chatLine(id: 3, text: "third"),
+                chatLine(id: 4, text: "fourth")
+            ]
+            let initial = builder.buildDocument(
+                before,
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let appended = builder.buildDocument(
+                [after[2]],
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let storage = NSTextStorage(attributedString: initial.attributed)
+            var spans = initial.renderedLines
+
+            ChatTextStorageUpdater.applyIncremental(
+                storage: storage,
+                removeFirst: 1,
+                appended: appended,
+                renderedLines: &spans
+            )
+            let expected = builder.buildDocument(
+                after,
+                showTimestamps: false,
+                timestampSeconds: false
+            )
+            let expectedStorage = NSTextStorage(attributedString: expected.attributed)
+
+            #expect(storage.isEqual(to: expectedStorage))
+            #expect(spans == expected.renderedLines)
+            #expect(storage.length == spans.reduce(0) { $0 + $1.utf16Length })
+        }
+
         @Test("URL links survive the AppKit renderer")
         func urlLinksSurviveRenderer() {
             let url = "https://aardwolf.com"

@@ -35,10 +35,20 @@ public extension SessionController {
         await applyScriptEffects([.note(text: text, foreground: "cyan", background: nil)])
     }
 
+    /// Apply a Channels-panel setting through Chat Echo's native command
+    /// surface without presenting it as typed game input or touching the wire.
+    func configureCommunication(_ command: String) async {
+        guard let scriptEngine else { return }
+        if case .effects(let effects) = await scriptEngine.expandInputForDispatch(command) {
+            await applyScriptEffects(effects)
+        }
+    }
+
     /// Apply the effects a script produced: sends go to the MUD, echoes/notes
     /// to the scrollback.
     internal func applyScriptEffects(_ effects: [ScriptEffect]) async {
         for effect in effects {
+            if await applyStyledEchoEffect(effect) { continue }
             switch effect {
             case .send(let command), .sendNoEcho(let command):
                 await sendLines(command)
@@ -59,17 +69,27 @@ public extension SessionController {
                 await recordDisplayed(Self.colourNoteLine(segments), kind: .note)
             case .sendGMCP(let payload):
                 try? await sendRaw(GMCPMessage.encode(payload: payload))
-            case .echoAard(let coded):
-                let linkURLs = await scriptEngine?.isNativePluginEnabled(id: URLLinkify().metadata.id) == true
-                await appendOutputLines(coded) {
-                    maybeLinkifyEffectLine(AardwolfColor.styledLine(from: $0), enabled: linkURLs)
-                }
             case .echoAnsi(let ansi):
                 await appendOutputLines(ansi) { Self.ansiLine($0) }
             default:
                 await applyControlEffect(effect)
             }
         }
+    }
+
+    private func applyStyledEchoEffect(_ effect: ScriptEffect) async -> Bool {
+        let linkURLs = await scriptEngine?.isNativePluginEnabled(id: URLLinkify().metadata.id) == true
+        switch effect {
+        case .echoAard(let coded):
+            await appendOutputLines(coded) {
+                maybeLinkifyEffectLine(AardwolfColor.styledLine(from: $0), enabled: linkURLs)
+            }
+        case .echoLine(let line):
+            await recordDisplayed(maybeLinkifyEffectLine(line, enabled: linkURLs), kind: .note)
+        default:
+            return false
+        }
+        return true
     }
 
     /// Apply a `.execute` effect: re-parse `command` through the full input

@@ -55,18 +55,27 @@ public struct NotificationMatcher: Sendable, Equatable {
     /// and a mention only fires when your `characterName` appears in a
     /// *non-tell* channel message you didn't send.
     public func notification(for chatLine: ChatLine, characterName: String?) -> ProtelesNotification? {
+        guard case .channel = chatLine.source else { return nil }
         let channel = chatLine.channel.lowercased()
         let message = chatLine.line.text
         let sender = chatLine.player.trimmingCharacters(in: .whitespaces)
 
         guard !Self.suppressesNotifications(forChannel: channel) else { return nil }
+        let selfAuthored = Self.isSelfAuthored(
+            channel: channel,
+            message: message,
+            sender: sender,
+            characterName: characterName
+        )
 
-        if notifyOnTells, channel.contains("tell") {
+        if notifyOnTells, channel == "tell", !selfAuthored {
             let from = sender.isEmpty ? "Someone" : sender
             return ProtelesNotification(title: "Tell from \(from)", body: message)
         }
 
-        if mentionFires(message: message, sender: sender, characterName: characterName) {
+        let shouldNotifyMention = !selfAuthored
+            && mentionFires(message: message, sender: sender, characterName: characterName)
+        if shouldNotifyMention {
             let who = sender.isEmpty ? "You were mentioned" : "\(sender) mentioned you"
             let location = chatLine.channel.isEmpty ? "" : " on \(chatLine.channel)"
             return ProtelesNotification(title: who + location, body: message)
@@ -239,9 +248,47 @@ public struct NotificationMatcher: Sendable, Equatable {
     private func mentionFires(message: String, sender: String, characterName: String?) -> Bool {
         guard notifyOnMention,
               let name = characterName?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
-              sender.caseInsensitiveCompare(name) != .orderedSame
+              !Self.senderIsCharacter(sender, name: name)
         else { return false }
         return Self.mentions(message, name: name)
+    }
+
+    private static func isSelfAuthored(
+        channel: String,
+        message: String,
+        sender: String,
+        characterName: String?
+    ) -> Bool {
+        guard let name = characterName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else { return false }
+        if senderIsCharacter(sender, name: name) { return true }
+        guard sender.isEmpty else { return false }
+
+        let text = message.lowercased()
+        let player = name.lowercased()
+        switch channel {
+        case "claninfo":
+            return text.hasPrefix("clan: \(player) has returned")
+                || (text.hasPrefix("clan: \(player),") && text.contains("must now leave"))
+        case "group":
+            return text.hasPrefix("(group) \(player) has joined the group")
+                || text.hasPrefix("(group) warning: \(player) is too strong")
+        case "market":
+            return text.hasPrefix("market: \(player) is selling ")
+        case "auction":
+            return text.hasPrefix("auction: \(player) has placed a bid ")
+        default:
+            return false
+        }
+    }
+
+    /// GMCP sometimes prefixes the speaker with an Aardwolf title. Player
+    /// names contain no spaces, so the final sender token is authoritative.
+    private static func senderIsCharacter(_ sender: String, name: String) -> Bool {
+        let finalToken = sender.split(whereSeparator: \.isWhitespace).last.map(String.init) ?? ""
+        let trimmed = finalToken.trimmingCharacters(in: .punctuationCharacters)
+        return trimmed.caseInsensitiveCompare(name) == .orderedSame
     }
 
     /// Case-insensitive, whole-word containment of `name` in `text` (so "al"

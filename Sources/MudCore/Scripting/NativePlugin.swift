@@ -76,9 +76,22 @@ public struct GMCPDispatchContext: Sendable, Equatable {
     /// sound/speech consumers should suppress their cues exactly like the
     /// echo itself is suppressed. Always false for other packages.
     public var speakerMuted: Bool
+    /// `comm.channel` decoded once and filtered through the enabled native
+    /// Text Substitution plugin, matching the reference plugin sequence.
+    public var communication: CommChannel?
+    public var communicationLine: Line?
+    public var isClanDonation: Bool
 
-    public init(speakerMuted: Bool = false) {
+    public init(
+        speakerMuted: Bool = false,
+        communication: CommChannel? = nil,
+        communicationLine: Line? = nil,
+        isClanDonation: Bool = false
+    ) {
         self.speakerMuted = speakerMuted
+        self.communication = communication
+        self.communicationLine = communicationLine
+        self.isClanDonation = isClanDonation
     }
 }
 
@@ -126,6 +139,10 @@ public protocol NativePlugin: Sendable {
     /// line's id/timestamp. Default: pass through (no gag, no effects).
     mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition
 
+    /// Apply this plugin's output filter to a structured channel line before
+    /// capture/echo. Only Text Substitution overrides this hook.
+    func transformCommunicationLine(_ line: Line) -> Line?
+
     /// React to a GMCP package update (`package` is the lowercased name,
     /// `json` its decoded payload). Default: no effects.
     mutating func onGMCP(package: String, json: String) -> [ScriptEffect]
@@ -170,6 +187,10 @@ public extension NativePlugin {
 
     mutating func onLine(_: Line) -> ScriptEngine.LineDisposition {
         .init()
+    }
+
+    func transformCommunicationLine(_ line: Line) -> Line? {
+        line
     }
 
     mutating func onGMCP(package _: String, json _: String) -> [ScriptEffect] {
@@ -297,13 +318,25 @@ public struct NativePluginRegistry: Sendable {
     /// the reference's non-zero `CallPlugin` rc.
     private func dispatchContext(package: String, json: String) -> GMCPDispatchContext {
         guard package.lowercased() == "comm.channel",
-              let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8)),
-              !comm.player.isEmpty
+              let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8))
         else { return GMCPDispatchContext() }
-        let verdict = call(
+        let verdict = comm.player.isEmpty ? [] : call(
             id: ChatEcho.pluginID, function: "checkIfMuted", arguments: [.string(comm.player)]
         )
-        return GMCPDispatchContext(speakerMuted: verdict.first == .boolean(true))
+        var line: Line? = AardwolfColor.styledLine(from: comm.msg)
+        for entry in entries where entry.enabled {
+            if let current = line { line = entry.plugin.transformCommunicationLine(current) }
+        }
+        let donation = line?.text.range(
+            of: #"^CLAN ANNOUNCEMENT: [A-Za-z]+ has donated"#,
+            options: .regularExpression
+        ) != nil
+        return GMCPDispatchContext(
+            speakerMuted: verdict.first == .boolean(true),
+            communication: comm,
+            communicationLine: line,
+            isClanDonation: donation
+        )
     }
 
     /// Route a `CallPlugin`-style call to an enabled plugin by id. Returns

@@ -52,10 +52,12 @@ public struct ChatView: View {
         HStack(spacing: 4) {
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
-                    tab("All", active: model.selectedChannel == nil) { model.selectedChannel = nil }
-                    ForEach(model.recentChannels, id: \.self) { channel in
-                        tab(channel, active: model.selectedChannel == channel) {
-                            model.selectedChannel = channel
+                    tab("All", source: nil, active: model.selectedSource == nil) {
+                        model.select(nil)
+                    }
+                    ForEach(model.recentSources, id: \.self) { source in
+                        tab(source.displayName, source: source, active: model.selectedSource == source) {
+                            model.select(source)
                         }
                     }
                 }
@@ -63,39 +65,96 @@ public struct ChatView: View {
                 .padding(.vertical, 5)
             }
             .scrollIndicators(.never)
-            timestampMenu
+            settingsMenu
                 .padding(.trailing, 6)
         }
         .background(.bar)
     }
 
-    private func tab(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func tab(
+        _ label: String,
+        source: CommunicationSource?,
+        active: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 3)
-                .background(
-                    active ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary),
-                    in: Capsule()
-                )
-                .foregroundStyle(active ? Color.white : Color.primary)
+            HStack(spacing: 4) {
+                Text(label)
+                if let source, let count = model.unread[source], count > 0 {
+                    Text("\(count)")
+                        .font(.caption2.monospacedDigit().weight(.bold))
+                        .padding(.horizontal, 4)
+                        .background(.black.opacity(0.2), in: Capsule())
+                }
+            }
+            .font(.caption.weight(.medium))
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(
+                active ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary),
+                in: Capsule()
+            )
+            .foregroundStyle(active ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
     }
 
-    private var timestampMenu: some View {
+    private var settingsMenu: some View {
         Menu {
             Toggle("Show timestamps", isOn: $showTimestamps)
             Toggle("Include seconds", isOn: $timestampSeconds).disabled(!showTimestamps)
+            Divider()
+            Toggle("Echo channels in main output", isOn: Binding(
+                get: { model.policy.echoChannels },
+                set: { enabled in Task { await model.setChannelEcho(enabled) } }
+            ))
+            Menu("Capture non-channel information") {
+                ForEach(NonChannelKind.allCases, id: \.self) { kind in
+                    let source = CommunicationSource.nonChannel(kind)
+                    Toggle(kind.displayName, isOn: captureBinding(for: source))
+                }
+            }
+            Menu("Echo non-channel information") {
+                ForEach(NonChannelKind.allCases.filter { $0 != .remoteSocials }, id: \.self) { kind in
+                    let source = CommunicationSource.nonChannel(kind)
+                    Toggle(kind.displayName, isOn: echoBinding(for: source))
+                }
+            }
+            if let source = model.selectedSource {
+                Toggle("Capture \(source.displayName)", isOn: captureBinding(for: source))
+                if source.supportsEchoControl {
+                    Toggle("Echo \(source.displayName) in main output", isOn: echoBinding(for: source))
+                }
+            }
+            Divider()
+            Button(model.selectedSource == nil ? "Clear visible lines" : "Clear this source") {
+                Task { await model.clearSelected() }
+            }
+            Button("Clear all lines") { Task { await model.clearAll() } }
         } label: {
-            Image(systemName: "clock").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Image(systemName: "ellipsis.circle")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Timestamp display")
+        .help("Channels settings")
+    }
+
+    private func captureBinding(for source: CommunicationSource) -> Binding<Bool> {
+        Binding(
+            get: { model.policy.captures(source) },
+            set: { enabled in Task { await model.setCapture(enabled, source: source) } }
+        )
+    }
+
+    private func echoBinding(for source: CommunicationSource) -> Binding<Bool> {
+        Binding(
+            get: { model.policy.echoes(source) },
+            set: { enabled in Task { await model.setEcho(enabled, source: source) } }
+        )
     }
 
     // MARK: - Chat log
@@ -129,7 +188,9 @@ public struct ChatView: View {
                 palette: palette,
                 showTimestamps: showTimestamps,
                 timestampSeconds: timestampSeconds,
-                filterKey: model.selectedChannel ?? "__all__",
+                filterKey: model.selectedSource.map {
+                    "\($0.persistenceKind):\($0.name)"
+                } ?? "__all__",
                 fillOpacity: fillOpacity,
                 onHealthSnapshot: onHealthSnapshot
             )
@@ -149,14 +210,14 @@ public struct ChatView: View {
                 }
                 .defaultScrollAnchor(.bottom)
                 .onChange(of: model.filteredLines.count) { scrollToEnd(proxy) }
-                .onChange(of: model.selectedChannel) { scrollToEnd(proxy) }
+                .onChange(of: model.selectedSource) { scrollToEnd(proxy) }
             }
         #endif
     }
 
     private func row(_ chatLine: ChatLine) -> some View {
         let message = Text(chatLine.line.attributedText(palette: palette))
-        let line = showTimestamps
+        let line = showTimestamps && chatLine.showsTimestamp
             ? Text("\(timestamp(chatLine.timestamp)) ").foregroundStyle(.secondary) + message
             : message
         return line
@@ -174,5 +235,16 @@ public struct ChatView: View {
     private func timestamp(_ date: Date) -> String {
         let style = Date.FormatStyle.dateTime.hour().minute()
         return date.formatted(timestampSeconds ? style.second() : style)
+    }
+}
+
+private extension CommunicationSource {
+    var supportsEchoControl: Bool {
+        switch self {
+        case .channel: true
+        case .nonChannel(.remoteSocials): false
+        case .nonChannel: true
+        case .plugin: false
+        }
     }
 }

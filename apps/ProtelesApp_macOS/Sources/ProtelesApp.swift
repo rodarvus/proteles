@@ -126,7 +126,11 @@ struct ProtelesApp: App {
             store: ProfileStore(url: storeURL),
             transportSelector: transportSelector
         ))
-        _chat = State(initialValue: ChatModel(store: session.chatStore))
+        _chat = State(initialValue: ChatModel(
+            store: session.chatStore,
+            policy: session.communicationPolicy,
+            onCommand: { [session] command in await session.configureCommunication(command) }
+        ))
         _scripts = State(initialValue: ScriptsModel(session: session))
         _plugins = State(initialValue: PluginsModel(session: session))
         _luaConsole = State(initialValue: LuaConsoleModel(session: session))
@@ -144,7 +148,11 @@ struct ProtelesApp: App {
         )
         resumeStore = resumed.store
         resumeToken = resumed.token
-        ProtelesApp.wireResumeClear(session: session, store: resumed.store)
+        ProtelesApp.wireResumeClear(
+            session: session,
+            store: resumed.store,
+            chatPersistence: chatPersistence
+        )
 
         // Single-session client: no window tabbing, so the "Show Tab Bar" /
         // "Show All Tabs" menu items don't clutter the menu bar.
@@ -396,7 +404,8 @@ struct ProtelesApp: App {
             await session.registerNativePlugin(VitalShortcuts())
             await session.registerNativePlugin(NoteMode())
             await session.registerNativePlugin(TextSubstitution())
-            await session.registerNativePlugin(ChatEcho())
+            await session.registerNativePlugin(CommunicationCapture(policy: session.communicationPolicy))
+            await session.registerNativePlugin(ChatEcho(policy: session.communicationPolicy))
             await session.registerNativePlugin(Soundpack())
             await session.registerNativePlugin(TextToSpeech())
             await session.registerNativePlugin(AsciiMap())
@@ -444,9 +453,7 @@ struct ProtelesApp: App {
 
     /// Save plugin state on quit (OnPluginSaveState + variable persist) —
     /// disconnect already saves; quitting while connected must too (`ldb on`
-    /// was lost this way). Also drains both persistence cold paths (#66:
-    /// index/chat flush every 60 s, so a quit mid-interval would otherwise
-    /// leave up to a minute unindexed/unwritten). Wired via
+    /// was lost this way). Also drains both persistence cold paths. Wired via
     /// ``AppDelegate/onTerminate``.
     private static func wireTerminationSave(
         session: SessionController,
@@ -457,7 +464,11 @@ struct ProtelesApp: App {
             AppDelegate.onTerminate = {
                 await session.savePluginState()
                 await persistence?.flushNow()
-                await chatPersistence?.flushNow()
+                if let result = await chatPersistence?.flushNow() {
+                    await session.recordNote(
+                        "[chat-persistence] termination \(result.summary)"
+                    )
+                }
             }
         }
     }

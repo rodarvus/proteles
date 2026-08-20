@@ -25,6 +25,19 @@ struct NotificationMatcherTests {
         #expect(note?.body == "meet me at recall")
     }
 
+    @Test("group tells and outgoing direct tells are not built-in tell notifications")
+    func onlyIncomingDirectTells() {
+        let matcher = NotificationMatcher()
+        #expect(matcher.notification(
+            for: chat("gtell", player: "Bob", message: "Bob tells the group hello"),
+            characterName: "Alice"
+        ) == nil)
+        #expect(matcher.notification(
+            for: chat("tell", player: "Alice", message: "You tell Bob hello"),
+            characterName: "Alice"
+        ) == nil)
+    }
+
     @Test("Tells can be disabled")
     func tellsDisabled() {
         let matcher = NotificationMatcher(notifyOnTells: false, notifyOnMention: true)
@@ -68,6 +81,41 @@ struct NotificationMatcherTests {
             for: chat("chat", player: "Alice", message: "Alice reporting in"),
             characterName: "Alice"
         ) == nil)
+    }
+
+    @Test("a titled self sender is still recognised as your own line")
+    func titledOwnLine() {
+        let matcher = NotificationMatcher()
+        #expect(matcher.notification(
+            for: chat("market", player: "Questant Alice", message: "Alice is selling a sword"),
+            characterName: "Alice"
+        ) == nil)
+    }
+
+    @Test("observed blank-sender self actions do not become mention notifications")
+    func blankSenderSelfActions() {
+        let matcher = NotificationMatcher()
+        let cases = [
+            chat("claninfo", player: "", message: "CLAN: Alice has returned from the void."),
+            chat("claninfo", player: "", message: "CLAN: Alice, you must now leave."),
+            chat("group", player: "", message: "(Group) Alice has joined the group."),
+            chat("group", player: "", message: "(Group) Warning: Alice is too strong for this group."),
+            chat("market", player: "", message: "Market: Alice is selling a sword."),
+            chat("auction", player: "", message: "Auction: Alice has placed a bid on a sword.")
+        ]
+        for line in cases {
+            #expect(matcher.notification(for: line, characterName: "Alice") == nil)
+        }
+    }
+
+    @Test("blank-sender receipts mentioning you remain eligible")
+    func blankSenderReceipt() {
+        let matcher = NotificationMatcher()
+        let note = matcher.notification(
+            for: chat("market", player: "", message: "Market: a sword was sold to Alice."),
+            characterName: "Alice"
+        )
+        #expect(note?.title == "You were mentioned on market")
     }
 
     @Test("No mention + not a tell → no notification")

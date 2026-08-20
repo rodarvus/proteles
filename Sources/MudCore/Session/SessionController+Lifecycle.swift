@@ -5,6 +5,10 @@ import Foundation
 /// 600-line budget (the stored tasks these drive stay in the main file —
 /// stored properties can't live in an extension).
 extension SessionController {
+    public func setCleanSessionEndHandler(_ handler: @escaping @Sendable () async -> Void) {
+        cleanSessionEndHandler = handler
+    }
+
     func startProcessingLoop(on conn: any MudConnection) {
         processTask?.cancel()
         let bytesStream = conn.bytes

@@ -44,22 +44,27 @@ extension ProtelesApp {
             }
         }
 
-        // Chat window resume (#57): same dance — seed, then attach. Unlike
-        // scrollback the Chat window has no divider concept; restored lines
-        // keep their original timestamps, which the window already shows.
-        // Seed as ONE batch (like scrollback's appendBatch) so the panel fills
-        // in a single pass rather than line-by-line.
+        // Channels recovery (#57): a cold session starts empty. Only an
+        // interrupted-session resume (fresh breadcrumb: crash, quick Cmd+Q,
+        // or update relaunch) receives the persisted tail. Unlike scrollback,
+        // Channels has no divider; recovered lines keep their timestamps.
+        // Seed as ONE batch so recovery fills the panel in a single pass.
         if let chatPersistence, let chatStore {
             Task {
-                let tail = await resuming ? ((try? chatPersistence.loadTail(limit: 500)) ?? []) : []
+                let tail = resuming
+                    ? await ((try? chatPersistence.loadTail(limit: 500)) ?? [])
+                    : []
                 let rows = tail.compactMap { row -> ChatLine? in
                     (try? row.toLine()).map {
                         ChatLine(
                             id: 0,
                             timestamp: row.timestamp,
-                            channel: row.channel,
+                            source: CommunicationSource(
+                                persistenceKind: row.sourceKind, name: row.sourceName
+                            ),
                             player: row.player,
-                            line: $0
+                            line: $0,
+                            showsTimestamp: row.showsTimestamp
                         )
                     }
                 }
@@ -77,7 +82,18 @@ extension ProtelesApp {
     /// or an app / Sparkle-update shutdown (those leave the session's clean-end
     /// flags false), so update-resume keeps working (#42). Static so `init` can
     /// call it without the escaping `Task` capturing `self`.
-    static func wireResumeClear(session: SessionController, store: ResumeTokenStore?) {
-        Task { await session.setCleanSessionEndHandler { store?.clear() } }
+    static func wireResumeClear(
+        session: SessionController,
+        store: ResumeTokenStore?,
+        chatPersistence: ChatPersistence?
+    ) {
+        Task {
+            await session.setCleanSessionEndHandler { [weak session] in
+                if let result = await chatPersistence?.flushNow() {
+                    await session?.recordNote("[chat-persistence] clean-end \(result.summary)")
+                }
+                store?.clear()
+            }
+        }
     }
 }

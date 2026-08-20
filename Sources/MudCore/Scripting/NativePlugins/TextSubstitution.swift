@@ -60,6 +60,14 @@ public struct TextSubstitution: NativePlugin {
         }
     }
 
+    public func transformCommunicationLine(_ line: Line) -> Line? {
+        switch engine.apply(to: line) {
+        case .unchanged: line
+        case .gag: nil
+        case .replace(let replacement): replacement
+        }
+    }
+
     // MARK: - Commands
 
     public mutating func handleCommand(_ input: String) -> [ScriptEffect]? {

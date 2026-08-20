@@ -83,6 +83,24 @@ public final class ChatDatabase: Sendable {
         }
     }
 
+    /// Delete all history, or only the rows belonging to one typed source.
+    public func clear(source: CommunicationSource?) throws {
+        do {
+            try dbQueue.write { db in
+                if let source {
+                    try db.execute(
+                        sql: "DELETE FROM chat_lines WHERE source_kind = ? AND source_name = ?",
+                        arguments: [source.persistenceKind, source.name]
+                    )
+                } else {
+                    try db.execute(sql: "DELETE FROM chat_lines")
+                }
+            }
+        } catch {
+            throw DatabaseError.writeFailed(error.localizedDescription)
+        }
+    }
+
     // MARK: - Reads
 
     /// Total number of lines stored.
@@ -164,6 +182,19 @@ public final class ChatDatabase: Sendable {
                 fts.tokenizer = .unicode61()
                 fts.column("text")
             }
+        }
+        migrator.registerMigration("v2.typed_sources") { db in
+            try db.alter(table: "chat_lines") { table in
+                table.add(column: "source_kind", .text).notNull().defaults(to: "channel")
+                table.add(column: "source_name", .text).notNull().defaults(to: "")
+                table.add(column: "shows_timestamp", .boolean).notNull().defaults(to: true)
+            }
+            try db.execute(sql: "UPDATE chat_lines SET source_name = channel")
+            // The pre-v2 bridge stored all outside-plugin lines in the generic
+            // Capture bucket; preserve those as plugin sources during upgrade.
+            try db.execute(
+                sql: "UPDATE chat_lines SET source_kind = 'plugin' WHERE channel = 'Capture'"
+            )
         }
         return migrator
     }

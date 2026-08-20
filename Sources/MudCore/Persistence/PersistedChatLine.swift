@@ -16,24 +16,33 @@ public struct PersistedChatLine: Codable, Equatable, Sendable, FetchableRecord, 
     public var id: Int64?
     public var timestamp: Date
     public var channel: String
+    public var sourceKind: String
+    public var sourceName: String
     public var player: String
     public var text: String
     public var runsJSON: String?
+    public var showsTimestamp: Bool
 
     public init(
         id: Int64? = nil,
         timestamp: Date,
         channel: String,
+        sourceKind: String = "channel",
+        sourceName: String? = nil,
         player: String,
         text: String,
-        runsJSON: String? = nil
+        runsJSON: String? = nil,
+        showsTimestamp: Bool = true
     ) {
         self.id = id
         self.timestamp = timestamp
         self.channel = channel
+        self.sourceKind = sourceKind
+        self.sourceName = sourceName ?? channel
         self.player = player
         self.text = text
         self.runsJSON = runsJSON
+        self.showsTimestamp = showsTimestamp
     }
 
     /// Capture the database-assigned rowid after an insert.
@@ -45,18 +54,24 @@ public struct PersistedChatLine: Codable, Equatable, Sendable, FetchableRecord, 
         case id
         case timestamp
         case channel
+        case sourceKind = "source_kind"
+        case sourceName = "source_name"
         case player
         case text
         case runsJSON = "runs_json"
+        case showsTimestamp = "shows_timestamp"
     }
 
     public enum Columns {
         public static let id = Column(CodingKeys.id)
         public static let timestamp = Column(CodingKeys.timestamp)
         public static let channel = Column(CodingKeys.channel)
+        public static let sourceKind = Column(CodingKeys.sourceKind)
+        public static let sourceName = Column(CodingKeys.sourceName)
         public static let player = Column(CodingKeys.player)
         public static let text = Column(CodingKeys.text)
         public static let runsJSON = Column(CodingKeys.runsJSON)
+        public static let showsTimestamp = Column(CodingKeys.showsTimestamp)
     }
 }
 
@@ -75,9 +90,12 @@ public extension PersistedChatLine {
         self.init(
             timestamp: chatLine.timestamp,
             channel: chatLine.channel,
+            sourceKind: chatLine.source.persistenceKind,
+            sourceName: chatLine.source.name,
             player: chatLine.player,
             text: chatLine.line.text,
-            runsJSON: runsJSON
+            runsJSON: runsJSON,
+            showsTimestamp: chatLine.showsTimestamp
         )
     }
 

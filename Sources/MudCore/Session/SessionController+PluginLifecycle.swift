@@ -79,9 +79,11 @@ extension SessionController {
     /// `char.base` broadcast) would otherwise never see them, unlike MUSHclient
     /// where plugins load at connect and catch every broadcast. `char.status` is
     /// excluded: the in-game one that triggered activation is delivered fresh
-    /// right after, by the caller. `applyGMCP` re-fires `OnPluginBroadcast` to
-    /// every loaded plugin (proteles.gmcp is already current); the subnegotiation
-    /// covers plugins reading the option-201 path (dinv's config detection).
+    /// right after, by the caller. The replay re-fires `OnPluginBroadcast` only
+    /// for the late-loaded MUSHclient plugins (`proteles.gmcp` is already current);
+    /// native plugins saw the original message and must not run twice. The
+    /// subnegotiation covers plugins reading the option-201 path (dinv's config
+    /// detection).
     private func replayGMCPToLoadedPlugins() async {
         guard let scriptEngine else { return }
         let priority = ["char.base", "char.maxstats", "char.worth", "char.vitals", "room.info"]
@@ -94,7 +96,7 @@ extension SessionController {
                 events: 1,
                 thresholdMS: 50
             ) {
-                await scriptEngine.applyGMCP(package: package, json: json)
+                await scriptEngine.deliverGMCPBroadcast(package: package)
             }
             await applyScriptEffects(broadcastEffects)
             let subnegEffects = await measureSessionPhase(

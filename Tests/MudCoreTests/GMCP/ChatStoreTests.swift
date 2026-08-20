@@ -67,6 +67,29 @@ struct ChatStoreTests {
         #expect(snapshot[0].id < snapshot[1].id) // fresh monotonic ids
     }
 
+    @Test("restoreBatch publishes one atomic UI event")
+    func restoreBatchPublishesAtomicEvent() async {
+        let store = ChatStore()
+        let stream = await store.subscribeEvents()
+        var iterator = stream.makeAsyncIterator()
+        let rows = (0..<3).map { index in
+            ChatLine(
+                id: 0,
+                timestamp: Date(),
+                channel: "chat",
+                player: "",
+                line: Line(id: LineID(0), text: "old \(index)")
+            )
+        }
+        await store.restoreBatch(rows)
+
+        guard case .restoreBatch(let restored) = await iterator.next() else {
+            Issue.record("expected one restore batch event")
+            return
+        }
+        #expect(restored.map(\.line.text) == ["old 0", "old 1", "old 2"])
+    }
+
     @Test("channels() returns distinct names, sorted")
     func distinctChannels() async {
         let store = ChatStore()
@@ -74,6 +97,18 @@ struct ChatStoreTests {
         await store.append(channel: "gossip", player: "", message: "b")
         await store.append(channel: "tell", player: "", message: "c")
         #expect(await store.channels() == ["gossip", "tell"])
+    }
+
+    @Test("non-channel and plugin sources do not become channel names")
+    func typedSourcesStaySeparate() async {
+        let store = ChatStore()
+        await store.append(source: .nonChannel(.info), message: "INFO: hello")
+        await store.append(source: .plugin("Q/A"), message: "answer")
+        await store.append(channel: "tell", player: "Bob", message: "hi")
+        #expect(await store.channels() == ["tell"])
+        #expect(await store.sources() == [
+            .channel("tell"), .plugin("Q/A"), .nonChannel(.info)
+        ])
     }
 
     @Test("subscribe delivers newly-appended lines")

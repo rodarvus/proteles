@@ -381,11 +381,7 @@ extension LuaRuntime {
     private nonisolated func recordSpecialCall(_ function: HostFunction, _ arguments: [LuaValue]) -> Bool {
         switch function {
         case .mapperCall: recordMapperCall(arguments)
-        case .chatCapture:
-            effects.append(.chatCapture(
-                text: Self.argString(arguments, 0),
-                channel: Self.argOptionalString(arguments, 1) ?? ""
-            ))
+        case .chatCapture: recordChatCapture(arguments)
         case .publish: effects.append(.publishModel(Self.argString(arguments, 0)))
         case .playSound:
             // MUSHclient `PlaySound` units: volume in dB (0 = full; out of
@@ -408,6 +404,23 @@ extension LuaRuntime {
         default: return false
         }
         return true
+    }
+
+    private nonisolated func recordChatCapture(_ arguments: [LuaValue]) {
+        if arguments.count > 2 {
+            effects.append(.externalChatCapture(
+                text: Self.argString(arguments, 0),
+                tab: Self.argOptionalString(arguments, 1) ?? "",
+                showsTimestamp: Self.argBool(arguments, 2),
+                shouldPersist: !Self.argBool(arguments, 3),
+                linksJSON: Self.argOptionalString(arguments, 4)
+            ))
+        } else {
+            effects.append(.chatCapture(
+                text: Self.argString(arguments, 0),
+                channel: Self.argOptionalString(arguments, 1) ?? ""
+            ))
+        }
     }
 
     /// The trigger/alias group + option control calls (`SetTriggerOption`/

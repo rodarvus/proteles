@@ -11,6 +11,17 @@ import Testing
 /// replays the pre-load GMCP to the freshly-loaded plugins to close that gap.
 @Suite("Deferred plugins receive pre-load GMCP", .serialized)
 struct DeferredPluginGMCPReplayTests {
+    /// Native plugins are registered before the connection starts, so they see
+    /// the original GMCP and must not see the compatibility replay intended
+    /// only for MUSHclient plugins that loaded late.
+    private struct NativeReplayProbe: NativePlugin {
+        let metadata = NativePluginMetadata(id: "test.native-replay-probe", name: "Replay Probe")
+
+        func onGMCP(package: String, json _: String) -> [ScriptEffect] {
+            package == "char.base" ? [.echo("NATIVE CHAR.BASE")] : []
+        }
+    }
+
     /// A plugin that, on each `char.base` broadcast, reports the tier it sees by
     /// sending a marker to the MUD (the `gmcp()` accessor stringifies leaves, so
     /// `tier` reads back as `"4"`).
@@ -45,6 +56,7 @@ struct DeferredPluginGMCPReplayTests {
         let engine = try ScriptEngine()
         let conn = InMemoryConnection()
         let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await controller.registerNativePlugin(NativeReplayProbe())
         await controller.armInitialPlugins(directories: [dir], character: "Tester", levelDBDirectory: nil)
         try await controller.connect(to: .init(host: "test.invalid", port: 23))
 
@@ -59,6 +71,12 @@ struct DeferredPluginGMCPReplayTests {
         #expect(
             conn.sentLines.contains("TIER=4"),
             "late-loaded plugin never saw char.base's tier: \(conn.sentLines)"
+        )
+        let nativeUpdates = await controller.scrollbackStore.snapshot()
+            .filter { $0.text == "NATIVE CHAR.BASE" }
+        #expect(
+            nativeUpdates.count == 1,
+            "native plugin saw the live message and the deferred replay"
         )
         await controller.disconnect()
     }

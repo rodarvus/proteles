@@ -47,6 +47,10 @@ public actor SessionController {
     /// observed by the chat-capture window.
     public nonisolated let chatStore: ChatStore
 
+    /// Shared per-world capture/echo policy for native communication plugins
+    /// and the Channels UI. Chat Echo serializes it with native-plugin state.
+    public nonisolated let communicationPolicy: CommunicationPolicyStore
+
     /// Latest captured ASCII map (`<MAPSTART>…<MAPEND>`); observed by the
     /// Map window. Fed by the native ASCII-map plugin via `.updateMap`.
     public nonisolated let mapStore: MapStore
@@ -397,11 +401,7 @@ public actor SessionController {
     /// ``expectsCleanClose`` false). The app uses it to drop the session-resume
     /// breadcrumb so the next launch doesn't restore a session the user left
     /// (#42). Gating on these flags is what keeps update-resume working.
-    var cleanSessionEndHandler: (@Sendable () -> Void)?
-
-    public func setCleanSessionEndHandler(_ handler: @escaping @Sendable () -> Void) {
-        cleanSessionEndHandler = handler
-    }
+    var cleanSessionEndHandler: (@Sendable () async -> Void)?
 
     /// Active autologin instruction for the current connection, plus the
     /// phase tracking how far through the prompt sequence we are. `nil`
@@ -434,6 +434,7 @@ public actor SessionController {
         scrollbackStore: ScrollbackStore = ScrollbackStore(),
         gmcpState: GMCPStateStore = GMCPStateStore(),
         chatStore: ChatStore = ChatStore(),
+        communicationPolicy: CommunicationPolicyStore = CommunicationPolicyStore(),
         scriptEngine: ScriptEngine? = nil,
         autoRecord: Bool = false,
         reconnectPolicy: ReconnectPolicy = .disabled,
@@ -453,6 +454,7 @@ public actor SessionController {
         self.scrollbackStore = scrollbackStore
         self.gmcpState = gmcpState
         self.chatStore = chatStore
+        self.communicationPolicy = communicationPolicy
         mapStore = MapStore()
         bigmapStore = BigmapStore(url: BigmapStore.defaultStoreURL())
         scriptDiagnostics = ScriptDiagnosticsStore()

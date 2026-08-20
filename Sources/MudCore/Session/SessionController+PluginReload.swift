@@ -11,6 +11,7 @@ extension SessionController {
     func applyInboundControlEffect(_ effect: ScriptEffect) async {
         if await applyPluginControlEffect(effect) { return }
         if applyOutwardPluginEffect(effect) { return }
+        if await applyCommunicationCaptureEffect(effect) { return }
         switch effect {
         case .callSearchAndDestroy(let function, let args):
             // A shim plugin's CallPlugin(<S&D id>, fn, …) → the native host.
@@ -31,10 +32,6 @@ extension SessionController {
             // Feed a synthesized GMCP message through the same inbound dispatch
             // as a real packet (native GMCP handler's config-state synthesis).
             await dispatchGMCP(GMCPMessage(package: package, json: json))
-        case .chatCapture(let text, let channel):
-            // Bridge `CallPlugin(<chat-capture>, "storeFromOutside", …)` to native
-            // chat (rsocial/hadar_spellup); `text` may carry Aardwolf @-codes.
-            await chatStore.append(channel: channel.isEmpty ? "Capture" : channel, player: "", message: text)
         default:
             // Miniwindow scene/image updates (the miniwindow spike) — forwarded
             // to the UI stream; a no-op for any other effect.
@@ -42,6 +39,65 @@ extension SessionController {
             // Pace a wait-bearing mapper walk (`.walkWithWaits`) or release the
             // walk-deferral queue on arrival (`.walkCompleted`); no-op otherwise.
             await applyWalkEffect(effect)
+        }
+    }
+
+    private func applyCommunicationCaptureEffect(_ effect: ScriptEffect) async -> Bool {
+        switch effect {
+        case .chatCapture(let text, let channel):
+            let source = CommunicationSource.plugin(channel.isEmpty ? "Capture" : channel)
+            if communicationPolicy.snapshot().captures(source) {
+                await chatStore.append(source: source, message: text)
+            }
+        case .communicationCapture(
+            let source, let player, let line, let showsTimestamp, let shouldPersist
+        ):
+            let chatLine = await chatStore.append(
+                source: source,
+                player: player,
+                line: line,
+                showsTimestamp: showsTimestamp,
+                shouldPersist: shouldPersist
+            )
+            if case .channel = source {
+                recordChannelLine(chatLine)
+                await notifyForChat(chatLine)
+            }
+        case .externalChatCapture(
+            let text, let tab, let showsTimestamp, let shouldPersist, let linksJSON
+        ):
+            await applyExternalCapture(
+                text: text,
+                tab: tab,
+                showsTimestamp: showsTimestamp,
+                shouldPersist: shouldPersist,
+                linksJSON: linksJSON
+            )
+        default:
+            return false
+        }
+        return true
+    }
+
+    private func applyExternalCapture(
+        text: String,
+        tab: String,
+        showsTimestamp: Bool,
+        shouldPersist: Bool,
+        linksJSON: String?
+    ) async {
+        let source = CommunicationSource.plugin(tab.isEmpty ? "Capture" : tab)
+        guard communicationPolicy.snapshot().captures(source) else { return }
+        let codedLines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        for (index, coded) in codedLines.enumerated() {
+            var line = AardwolfColor.styledLine(from: String(coded))
+            line = ExternalCaptureLinks.applying(linksJSON, lineIndex: index, to: line)
+            await chatStore.append(
+                source: source,
+                line: line,
+                showsTimestamp: showsTimestamp,
+                shouldPersist: shouldPersist
+            )
         }
     }
 

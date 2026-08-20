@@ -62,23 +62,143 @@
             scrollView.drawsBackground = fillOpacity > 0
             scrollView.backgroundColor = backgroundColor
             guard let textView = scrollView.documentView as? ChatLogTextView else { return }
-            textView.configure(font: Self.baseFont, background: backgroundColor)
+            textView.updateBackground(backgroundColor)
 
-            let forceBottom = !context.coordinator.hasRendered
-                || context.coordinator.lastFilterKey != filterKey
+            renderUpdate(
+                in: scrollView,
+                target: ChatRenderTarget(textView: textView, coordinator: context.coordinator)
+            )
+        }
+
+        private func renderUpdate(in scrollView: ChatLogScrollView, target: ChatRenderTarget) {
+            let presentation = ChatRenderPresentation(
+                filterKey: filterKey,
+                showTimestamps: showTimestamps,
+                timestampSeconds: timestampSeconds,
+                palette: palette
+            )
+            let nextState = ChatRenderUpdatePlanner.state(
+                lines: lines,
+                presentation: presentation
+            )
+            let planned = ChatRenderUpdatePlanner.plan(
+                from: target.coordinator.renderState,
+                to: nextState
+            )
+            guard planned != .noChange else {
+                target.coordinator.skippedUpdates += 1
+                return
+            }
+
+            let forceBottom = !target.coordinator.hasRendered
+                || target.coordinator.lastFilterKey != filterKey
             let wasPinned = scrollView.isScrolledToBottom()
-            let previousOrigin = scrollView.contentView.bounds.origin
+            let viewport = ChatViewportState(
+                forceBottom: forceBottom,
+                wasPinned: wasPinned,
+                previousOrigin: scrollView.contentView.bounds.origin,
+                anchor: wasPinned ? nil : ChatLogViewportAnchor.capture(
+                    in: target.textView,
+                    renderedLines: target.coordinator.renderedLines
+                )
+            )
             let builder = ChatAttributedStringBuilder(
                 palette: palette,
                 font: Self.baseFont,
                 timestampColor: NSColor.secondaryLabelColor
             )
-            let attributed = PerformanceProbe.shared.measure(
+            let operation = apply(
+                planned,
+                lines: lines,
+                builder: builder,
+                target: target
+            )
+            completeRenderUpdate(
+                in: scrollView,
+                target: target,
+                viewport: viewport,
+                operation: operation,
+                nextState: nextState
+            )
+        }
+
+        private func completeRenderUpdate(
+            in scrollView: ChatLogScrollView,
+            target: ChatRenderTarget,
+            viewport: ChatViewportState,
+            operation: String,
+            nextState: ChatRenderState
+        ) {
+            target.coordinator.renderState = nextState
+            target.coordinator.hasRendered = true
+            target.coordinator.lastFilterKey = filterKey
+            let storageLength = target.textView.textStorage?.length ?? 0
+            assert(
+                storageLength
+                    == target.coordinator.renderedLines.reduce(0) { $0 + $1.utf16Length }
+            )
+            let transition = onHealthSnapshot.flatMap { _ in
+                target.coordinator.diagnosticTransition(
+                    lineCount: lines.count,
+                    storageUTF16Length: storageLength,
+                    filterKey: filterKey
+                )
+            }
+
+            restoreScrollPosition(
+                in: scrollView,
+                target: target,
+                viewport: viewport
+            )
+            let skipped = target.coordinator.skippedUpdates
+            target.coordinator.skippedUpdates = 0
+            let detail = skipped > 0 ? "-after-\(skipped)-noops" : ""
+            let updateReason = transition.map { "transition-\($0)-\(operation)\(detail)-update" }
+                ?? "\(operation)\(detail)-update"
+            emitHealth(from: scrollView, reason: updateReason)
+            DispatchQueue.main.async {
+                let settledReason = transition.map { "transition-\($0)-\(operation)-settled" }
+                    ?? "\(operation)-settled"
+                emitHealth(from: scrollView, reason: settledReason)
+            }
+        }
+
+        private func apply(
+            _ planned: ChatRenderUpdate,
+            lines: [ChatLine],
+            builder: ChatAttributedStringBuilder,
+            target: ChatRenderTarget
+        ) -> String {
+            guard case .incremental(let removeFirst, let appendFrom) = planned,
+                  target.coordinator.canApplyIncremental(to: target.textView)
+            else {
+                rebuild(lines, builder: builder, target: target)
+                return "rebuild"
+            }
+            applyIncremental(
+                lines,
+                removeFirst: removeFirst,
+                appendFrom: appendFrom,
+                builder: builder,
+                target: target
+            )
+            if removeFirst > 0 {
+                return appendFrom < lines.count ? "trim-append" : "trim"
+            }
+            return "append"
+        }
+
+        private func rebuild(
+            _ lines: [ChatLine],
+            builder: ChatAttributedStringBuilder,
+            target: ChatRenderTarget
+        ) {
+            let document = PerformanceProbe.shared.measure(
                 "channels.build",
                 events: lines.count,
                 thresholdMS: 50
             ) {
-                builder.build(
+                builder.buildDocument(
                     lines,
                     showTimestamps: showTimestamps,
                     timestampSeconds: timestampSeconds
@@ -89,29 +209,45 @@
                 events: lines.count,
                 thresholdMS: 50
             ) {
-                textView.textStorage?.setAttributedString(attributed)
-            }
-            context.coordinator.hasRendered = true
-            context.coordinator.lastFilterKey = filterKey
-            let transition = onHealthSnapshot.flatMap { _ in
-                context.coordinator.diagnosticTransition(
-                    lineCount: lines.count,
-                    storageUTF16Length: attributed.length,
-                    filterKey: filterKey
+                guard let storage = target.textView.textStorage else { return }
+                ChatTextStorageUpdater.rebuild(
+                    storage: storage,
+                    document: document,
+                    renderedLines: &target.coordinator.renderedLines
                 )
             }
+        }
 
-            restoreScrollPosition(
-                in: scrollView,
-                lineCount: lines.count,
-                shouldPin: forceBottom || wasPinned,
-                previousOrigin: previousOrigin
-            )
-            let updateReason = transition.map { "transition-\($0)-update" } ?? "update"
-            emitHealth(from: scrollView, reason: updateReason)
-            DispatchQueue.main.async {
-                let settledReason = transition.map { "transition-\($0)-settled" } ?? "settled"
-                emitHealth(from: scrollView, reason: settledReason)
+        private func applyIncremental(
+            _ lines: [ChatLine],
+            removeFirst: Int,
+            appendFrom: Int,
+            builder: ChatAttributedStringBuilder,
+            target: ChatRenderTarget
+        ) {
+            let appended = PerformanceProbe.shared.measure(
+                "channels.build-append",
+                events: lines.count - appendFrom,
+                thresholdMS: 50
+            ) {
+                builder.buildDocument(
+                    Array(lines[appendFrom...]),
+                    showTimestamps: showTimestamps,
+                    timestampSeconds: timestampSeconds
+                )
+            }
+            PerformanceProbe.shared.measure(
+                removeFirst > 0 ? "channels.trim-append" : "channels.append",
+                events: removeFirst + appended.renderedLines.count,
+                thresholdMS: 50
+            ) {
+                guard let storage = target.textView.textStorage else { return }
+                ChatTextStorageUpdater.applyIncremental(
+                    storage: storage,
+                    removeFirst: removeFirst,
+                    appended: appended,
+                    renderedLines: &target.coordinator.renderedLines
+                )
             }
         }
 
@@ -126,18 +262,32 @@
 
         private func restoreScrollPosition(
             in scrollView: ChatLogScrollView,
-            lineCount: Int,
-            shouldPin: Bool,
-            previousOrigin: CGPoint
+            target: ChatRenderTarget,
+            viewport: ChatViewportState
         ) {
+            let shouldPin = viewport.forceBottom || viewport.wasPinned
             let phase = shouldPin ? "channels.scroll-bottom" : "channels.restore-origin"
-            PerformanceProbe.shared.measure(phase, events: lineCount, thresholdMS: 50) {
+            PerformanceProbe.shared.measure(phase, events: lines.count, thresholdMS: 50) {
                 if shouldPin {
                     scrollView.scrollToBottomSoon()
+                } else if restoreAnchor(target: target, viewport: viewport) {
+                    // The same logical line remains at the same viewport offset.
                 } else {
-                    scrollView.restoreVisibleOrigin(previousOrigin)
+                    scrollView.restoreVisibleOrigin(viewport.previousOrigin)
                 }
             }
+        }
+
+        private func restoreAnchor(
+            target: ChatRenderTarget,
+            viewport: ChatViewportState
+        ) -> Bool {
+            guard let anchor = viewport.anchor else { return false }
+            return ChatLogViewportAnchor.restore(
+                anchor,
+                in: target.textView,
+                renderedLines: target.coordinator.renderedLines
+            )
         }
 
         private func emitHealth(from scrollView: ChatLogScrollView, reason: String) {
@@ -151,15 +301,36 @@
             onHealthSnapshot(snapshot)
         }
 
+        private struct ChatRenderTarget {
+            let textView: ChatLogTextView
+            let coordinator: Coordinator
+        }
+
+        private struct ChatViewportState {
+            let forceBottom: Bool
+            let wasPinned: Bool
+            let previousOrigin: CGPoint
+            let anchor: ChatViewportAnchor?
+        }
+
         @MainActor
         final class Coordinator: NSObject, NSTextViewDelegate {
             weak var textView: ChatLogTextView?
             var hasRendered = false
             var lastFilterKey = ""
+            var renderState: ChatRenderState?
+            var renderedLines: [ChatRenderedLineSpan] = []
+            var skippedUpdates = 0
             private var lastDiagnosticLineCount = -1
             private var lastDiagnosticStorageLength = -1
             private var lastDiagnosticFilterKey = ""
             private var diagnosticTransitionSequence = 0
+
+            func canApplyIncremental(to textView: ChatLogTextView) -> Bool {
+                guard let renderState, let storage = textView.textStorage else { return false }
+                return renderState.lineIDs == renderedLines.map(\.id)
+                    && storage.length == renderedLines.reduce(0) { $0 + $1.utf16Length }
+            }
 
             func diagnosticTransition(
                 lineCount: Int,
@@ -202,6 +373,11 @@
                 .foregroundColor: NSColor.linkColor,
                 .underlineStyle: NSUnderlineStyle.single.rawValue
             ]
+        }
+
+        func updateBackground(_ background: NSColor) {
+            drawsBackground = background.alphaComponent > 0
+            if backgroundColor != background { backgroundColor = background }
         }
     }
 
@@ -388,143 +564,4 @@
         }
     }
 
-    struct ChatAttributedStringBuilder {
-        let palette: ColorPalette
-        let font: NSFont
-        let timestampColor: NSColor
-
-        private var boldFont: NSFont {
-            Self.font(font, withTraits: .bold)
-        }
-
-        private var italicFont: NSFont {
-            Self.font(font, withTraits: .italic)
-        }
-
-        private var boldItalicFont: NSFont {
-            Self.font(font, withTraits: [.bold, .italic])
-        }
-
-        func build(
-            _ lines: [ChatLine],
-            showTimestamps: Bool,
-            timestampSeconds: Bool
-        ) -> NSAttributedString {
-            let result = NSMutableAttributedString()
-            for (index, line) in lines.enumerated() {
-                if index > 0 {
-                    result.append(NSAttributedString(string: "\n"))
-                }
-                result.append(build(
-                    line,
-                    showTimestamps: showTimestamps,
-                    timestampSeconds: timestampSeconds
-                ))
-            }
-            return result
-        }
-
-        private func build(
-            _ chatLine: ChatLine,
-            showTimestamps: Bool,
-            timestampSeconds: Bool
-        ) -> NSAttributedString {
-            let prefix = showTimestamps ? "\(timestamp(chatLine.timestamp, seconds: timestampSeconds)) " : ""
-            let text = prefix + chatLine.line.text
-            let result = NSMutableAttributedString(string: text)
-            let fullRange = NSRange(location: 0, length: (text as NSString).length)
-            result.addAttribute(.font, value: font, range: fullRange)
-            result.addAttribute(
-                .foregroundColor,
-                value: NSColor(rgb: palette.defaultForeground),
-                range: fullRange
-            )
-            if !prefix.isEmpty {
-                result.addAttribute(
-                    .foregroundColor,
-                    value: timestampColor,
-                    range: NSRange(location: 0, length: (prefix as NSString).length)
-                )
-            }
-            let offset = (prefix as NSString).length
-            for run in chatLine.line.runs {
-                let range = NSRange(
-                    location: offset + run.utf16Range.lowerBound,
-                    length: run.utf16Range.count
-                )
-                apply(style: run.style, link: run.link, to: result, range: range)
-            }
-            return result
-        }
-
-        private func apply(
-            style: StyleAttributes,
-            link: LineLink?,
-            to attributed: NSMutableAttributedString,
-            range: NSRange
-        ) {
-            attributed.addAttribute(.font, value: font(for: style), range: range)
-            attributed.addAttribute(.ligature, value: 0, range: range)
-            let fg = palette.resolveForeground(style.foreground, bold: style.bold)
-            let bg = palette.resolveBackground(style.background)
-            let (renderedFg, renderedBg) = style.reverse ? (bg, fg) : (fg, bg)
-            attributed.addAttribute(.foregroundColor, value: NSColor(rgb: renderedFg), range: range)
-            if style.background != nil || style.reverse {
-                attributed.addAttribute(.backgroundColor, value: NSColor(rgb: renderedBg), range: range)
-            }
-            if style.underline {
-                attributed.addAttribute(
-                    .underlineStyle,
-                    value: NSUnderlineStyle.single.rawValue,
-                    range: range
-                )
-            }
-            if let url = Self.linkURL(for: link?.action) {
-                attributed.addAttribute(.link, value: url, range: range)
-                attributed.addAttribute(
-                    .underlineStyle,
-                    value: NSUnderlineStyle.single.rawValue,
-                    range: range
-                )
-            }
-        }
-
-        private func font(for style: StyleAttributes) -> NSFont {
-            switch (style.bold, style.italic) {
-            case (false, false): font
-            case (true, false): boldFont
-            case (false, true): italicFont
-            case (true, true): boldItalicFont
-            }
-        }
-
-        private func timestamp(_ date: Date, seconds: Bool) -> String {
-            let style = Date.FormatStyle.dateTime.hour().minute()
-            return date.formatted(seconds ? style.second() : style)
-        }
-
-        private static func font(
-            _ font: NSFont,
-            withTraits traits: NSFontDescriptor.SymbolicTraits
-        ) -> NSFont {
-            let descriptor = font.fontDescriptor.withSymbolicTraits(traits)
-            return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
-        }
-
-        private static func linkURL(for action: LinkAction?) -> URL? {
-            guard case .openURL(let string) = action else { return nil }
-            return URL(string: string)
-        }
-    }
-
-    private extension NSColor {
-        convenience init(rgb: RGB) {
-            self.init(
-                srgbRed: CGFloat(rgb.red) / 255,
-                green: CGFloat(rgb.green) / 255,
-                blue: CGFloat(rgb.blue) / 255,
-                alpha: 1
-            )
-        }
-    }
 #endif

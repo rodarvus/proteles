@@ -5,12 +5,12 @@ import Testing
 @Suite("ChatEcho — channel echo + player mute")
 struct ChatEchoTests {
     private func line(_ text: String) -> Line {
-        Line(id: LineID(1), text: text)
+        Line(id: LineID(0), text: text)
     }
 
     /// Feed a comm.channel GMCP so the line is recognised as channel chatter.
-    private func channel(_ msg: String, player: String) -> String {
-        #"{"chan":"chat","msg":"\#(msg)","player":"\#(player)"}"#
+    private func channel(_ msg: String, player: String, name: String = "chat") -> String {
+        #"{"chan":"\#(name)","msg":"\#(msg)","player":"\#(player)"}"#
     }
 
     @Test("Echo on renders the channel from GMCP and gags the inline dup; echo off suppresses the echo")
@@ -21,7 +21,7 @@ struct ChatEchoTests {
             package: "comm.channel",
             json: channel("Homer chats hi", player: "Homer")
         )
-        #expect(onEffects == [.echoAard("Homer chats hi")])
+        #expect(onEffects.compactMap(\.echoedText) == ["Homer chats hi"])
         #expect(plugin.onLine(line("Homer chats hi")).gag == true)
 
         // Echo off: no echo emitted, inline still gagged (hidden from main).
@@ -43,7 +43,7 @@ struct ChatEchoTests {
             package: "comm.channel",
             json: channel("Bob tells you 'test'", player: "Bob")
         )
-        #expect(effects == [.echoAard("Bob tells you 'test'")])
+        #expect(effects.compactMap(\.echoedText) == ["Bob tells you 'test'"])
     }
 
     @Test("A non-channel line is never gagged")
@@ -53,6 +53,56 @@ struct ChatEchoTests {
         #expect(plugin.onLine(line("You hit the goblin.")).gag == false)
     }
 
+    @Test("wrapped mobsay fragments are gagged in order after one complete GMCP line")
+    func wrappedMobsay() {
+        var plugin = ChatEcho()
+        let full = "A cityguard says 'This deliberately long message wraps "
+            + "across several raw output lines today.'"
+        _ = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel(full, player: "A cityguard", name: "mobsay")
+        )
+
+        #expect(plugin.onLine(line("A cityguard says 'This deliberately long message")).gag)
+        #expect(plugin.onLine(line("wraps across several raw output lines")).gag)
+        #expect(plugin.onLine(line("today.'")).gag)
+    }
+
+    @Test("a mismatched continuation and expired fragment are left visible")
+    func wrappedMobsaySafety() {
+        var plugin = ChatEcho()
+        let full = "A cityguard says 'This deliberately long message wraps into another output line.'"
+        _ = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel(full, player: "A cityguard", name: "mobsay")
+        )
+        let now = Date()
+        #expect(plugin.disposition(
+            for: line("A cityguard says 'This deliberately long message"), now: now
+        ).gag)
+        #expect(!plugin.disposition(for: line("You hit the goblin."), now: now).gag)
+        #expect(!plugin.disposition(
+            for: line("wraps into another output line.'"), now: now
+        ).gag)
+
+        _ = plugin.onGMCP(
+            package: "comm.channel",
+            json: channel(full, player: "A cityguard", name: "mobsay")
+        )
+        #expect(!plugin.disposition(
+            for: line("A cityguard says 'This deliberately long message"),
+            now: now.addingTimeInterval(3)
+        ).gag)
+    }
+
+    @Test("an exact raw duplicate consumes its GMCP match once")
+    func exactMatchConsumedOnce() {
+        var plugin = ChatEcho()
+        _ = plugin.onGMCP(package: "comm.channel", json: channel("Bob chats hi", player: "Bob"))
+        #expect(plugin.onLine(line("Bob chats hi")).gag)
+        #expect(!plugin.onLine(line("Bob chats hi")).gag)
+    }
+
     @Test("A muted speaker isn't echoed; an unmuted one is; both inline dups are gagged")
     func mutePlayer() {
         var plugin = ChatEcho()
@@ -60,7 +110,7 @@ struct ChatEchoTests {
         let homer = plugin.onGMCP(package: "comm.channel", json: channel("Homer chats hi", player: "Homer"))
         let bob = plugin.onGMCP(package: "comm.channel", json: channel("Bob chats yo", player: "Bob"))
         #expect(homer.isEmpty) // muted → no echo (hidden)
-        #expect(bob == [.echoAard("Bob chats yo")]) // unmuted → colored echo
+        #expect(bob.compactMap(\.echoedText) == ["Bob chats yo"]) // unmuted → colored echo
         // Both raw inline dups are gagged (the echo, or its suppression, stands in).
         #expect(plugin.disposition(for: line("Homer chats hi"), now: Date()).gag == true)
         #expect(plugin.disposition(for: line("Bob chats yo"), now: Date()).gag == true)
@@ -96,6 +146,7 @@ struct ChatEchoTests {
         let pluginID = plugin.metadata.id
         let effects = plugin.handleCommand("chats echo off")
         #expect(effects?.contains(.persistPluginState(id: pluginID)) == true)
+        #expect(plugin.handleCommand("chats save") == [.persistPluginState(id: pluginID)])
         #expect(plugin.handleCommand("look") == nil)
         #expect(plugin.handleCommand("chat hello") == nil) // the real channel command
     }
@@ -127,5 +178,12 @@ struct ChatEchoTests {
         restored.restore(from: data)
         _ = restored.onGMCP(package: "comm.channel", json: channel("Villain chats boo", player: "Villain"))
         #expect(restored.disposition(for: line("Villain chats boo"), now: Date()).gag == true)
+    }
+}
+
+private extension ScriptEffect {
+    var echoedText: String? {
+        guard case .echoLine(let line) = self else { return nil }
+        return line.text
     }
 }
