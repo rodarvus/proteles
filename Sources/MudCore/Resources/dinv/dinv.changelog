@@ -2,6 +2,20 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0126] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Search: match items by unique object ID.  "dinv search id <objid>" (and "~id") now finds any item the plugin knows, instead of only items fully identified during the current session; a bare all-digits query such as "dinv search 43977421" also matches by ID.  This works in every query consumer (search, get, put, forget, organize) and fixes the intermittent "dinv report <channel> item <objid|name>" failures, which funneled through the broken ID lookup.]]
+  }
+}
+
+dbot.changelog[3.0125] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc   = [[Search: allow "worn", "equipped", and "all" to compose with other query terms, so order-independent searches such as "dinv search worn loc head" and "dinv search loc head worn" both filter worn equipment correctly.]]
+  }
+}
+
 dbot.changelog[3.0124] =
 {
   { change = drlDbotChangeLogTypeFix,
@@ -2379,5 +2393,4 @@ dbot.changelog[0.1] =
     desc   = "Initial code base"
   }
 }
-
 

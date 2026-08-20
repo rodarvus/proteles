@@ -3304,20 +3304,24 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
             return nil, DRL_RET_MISSING_ENTRY
           end -- if
 
+          local skipRemainingQuery = false
+
           -- There are a few "one-off" search queries that make life simplier.  We support the
           -- "all", "equipped" (or "worn"), and "unequipped" search queries.
           if (key == invQueryKeyCustom) then
 
-            if (value == invQueryKeyAll) then
-              itemMatches = true
-            elseif (value == invQueryKeyEquipped) and (not inv.items.isWorn(itemId)) then
+            if (value == invQueryKeyEquipped) and (not inv.items.isWorn(itemId)) then
               itemMatches = false
+              break
             elseif (value == invQueryKeyUnequipped) and inv.items.isWorn(itemId) then
               itemMatches = false
+              break
             end -- if
 
-            break
+            skipRemainingQuery = true
           end -- if
+
+          if (skipRemainingQuery == false) then
 
           -- Check if the query has a prefix.  We currently support the prefixes "~", "min", and "max".
           local prefix = ""
@@ -3361,6 +3365,22 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
             -- make everything string as objLoc can be numeric or string
             if ((invert == false) and (value ~= tostring(objLoc))) or
                ((invert == true)  and (value == tostring(objLoc))) then
+              itemMatches = false
+              break
+            end -- if
+
+          -- The unique object ID is also meta-information: it is the inventory table key, not a
+          -- stats entry (stats.id only exists transiently after a full in-session identify), so
+          -- match "id" queries against the table key like the location one-off above.
+          elseif (key == invStatFieldId) then
+            local idMatches
+            if (valueNum ~= nil) then
+              idMatches = (tonumber(itemId) == valueNum)
+            else
+              idMatches = (tostring(itemId) == value)
+            end -- if
+            if ((invert == false) and (not idMatches)) or
+               ((invert == true)  and idMatches) then
               itemMatches = false
               break
             end -- if
@@ -3455,6 +3475,8 @@ function inv.items.search(arrayOfQueryArrays, allowIgnored)
             break
           end -- if
 
+          end -- if
+
         end -- for
       end -- if
 
@@ -3520,8 +3542,14 @@ function inv.items.searchCR(rawQueryString, allowIgnored)
     table.insert(kvArray, { invQueryKeyCustom, invQueryKeyEquipped })
 
   -- If there is just a single word in the queryString, assume it is a name search.
-  -- We don't really need to support this, but it is a convenient kludge.
+  -- We don't really need to support this, but it is a convenient kludge.  An all-digits
+  -- word is almost certainly a unique object ID rather than a name, so search those as
+  -- "id <word> || name <word>" and match either way.
   elseif (numWordsInQuery == 1) then
+    local trimmedQuery = Trim(queryString)
+    if (string.find(trimmedQuery, "^%d+$") ~= nil) then
+      table.insert(arrayOfKvArrays, { { invStatFieldId, trimmedQuery } })
+    end -- if
     table.insert(kvArray, { invStatFieldName, queryString })
 
   else
@@ -3532,11 +3560,19 @@ function inv.items.searchCR(rawQueryString, allowIgnored)
       if (element == "||") then
         table.insert(arrayOfKvArrays, kvArray)
         kvArray = {}
+        idx = 1
 
       -- If we are in a query and we are at the key location (it goes key then value), then save the key
       elseif ((idx % 2) ~= 0) then
-        key = element
-        idx = idx + 1
+        local loweredElement = string.lower(element)
+        if (loweredElement == invQueryKeyAll) then
+          table.insert(kvArray, { invQueryKeyCustom, invQueryKeyAll })
+        elseif (loweredElement == invQueryKeyEquipped) or (loweredElement == invQueryKeyWorn) then
+          table.insert(kvArray, { invQueryKeyCustom, invQueryKeyEquipped })
+        else
+          key = element
+          idx = idx + 1
+        end -- if
 
       -- If we are in a query and we are at the value location (it goes key then value), then save the value
       else
@@ -5988,5 +6024,4 @@ function inv.items.timer.idTimeout()
   -- Clean up the identification request
   inv.items.trigger.itemIdEnd()
 end -- inv.items.timer.idTimeout
-
 

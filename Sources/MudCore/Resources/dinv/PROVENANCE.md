@@ -5,7 +5,7 @@ verbatim and run through Proteles' MUSHclient compatibility shim (D-32).
 
 - **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin),
   tracked as the repo submodule at `plugins/dinv`.
-- **Vendored version:** 3.0122 (submodule commit `6820265`; see `dinv.manifest`).
+- **Vendored version:** 3.0126 (submodule commit `ee45156`; see `dinv.manifest`).
 - **License:** MIT (see `LICENSE`) — author: Durel (original `aard_inventory`),
   Rodarvus (the v3.x SQLite/modular fork). Bundling is unambiguous: MIT, and the
   Proteles author is the fork maintainer.

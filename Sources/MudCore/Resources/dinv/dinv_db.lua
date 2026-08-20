@@ -375,8 +375,18 @@ function dinv_db.searchItems(kvArray)
       key = key:sub(4)
     end
 
+    -- The unique object ID is the table's primary key, not a stat column
+    if key == "id" then
+      if valueNum and not prefix then
+        if invert then
+          table.insert(conditions, "obj_id != " .. tostring(valueNum))
+        else
+          table.insert(conditions, "obj_id = " .. tostring(valueNum))
+        end
+      end
+
     -- Skip fields that require Lua handling
-    if dinv_db.luaOnlyFields[key] then
+    elseif dinv_db.luaOnlyFields[key] then
       -- Can't translate this criterion to SQL; skip it (Lua will handle it)
 
     elseif prefix == "min" and valueNum then
