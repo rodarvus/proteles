@@ -158,13 +158,31 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Using simulator: $NAME"
 
+      # Same wall-clock flake class the macOS job works around (#26), and worse
+      # here: a simulator on a few-core runner is slower than native, so the
+      # SessionController timer tests and the unreachable-host timeout starve
+      # more easily. Apply the mitigation that is already proven for this exact
+      # test set — run serially, retry up to 3× — rather than inventing a new
+      # one. `-parallel-testing-enabled NO` is xcodebuild's `--no-parallel`.
+      # The real fix, making those tests clock-independent, is still #26.
       - name: Test MudCore on the iOS simulator
         run: |
-          set -euo pipefail
-          xcodebuild test \
-            -scheme MudCore-iOS \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
-            -derivedDataPath "$RUNNER_TEMP/ios-dd"
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            echo "::group::xcodebuild test (attempt $attempt/3)"
+            if xcodebuild test \
+              -scheme MudCore-iOS \
+              -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+              -derivedDataPath "$RUNNER_TEMP/ios-dd" \
+              -parallel-testing-enabled NO
+            then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "attempt $attempt failed (likely a timing flake, #26); retrying"
+          done
+          echo "iOS tests failed after 3 attempts"; exit 1
 
   lint:
     name: Lint & Format

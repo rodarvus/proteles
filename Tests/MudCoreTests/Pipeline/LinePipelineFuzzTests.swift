@@ -99,9 +99,26 @@ struct LinePipelineFuzzTests {
             }
         }
         let perSecond = Double(lines) / max(elapsed.timeInterval, 0.001)
-        // Real hardware does hundreds of thousands of lines/s; the floor only
-        // catches catastrophic regressions, immune to runner variance.
-        #expect(perSecond > 2000, "pipeline throughput collapsed: \(Int(perSecond)) lines/s")
+        #expect(lines > 0, "the fixture replayed no lines")
+        #if targetEnvironment(simulator)
+            // No throughput floor on a simulator. The floor's original premise —
+            // "real hardware does hundreds of thousands of lines/s, so this is
+            // immune to runner variance" — does not hold here: a simulator on a
+            // loaded CI runner measured 681 lines/s, 3x under the floor, while
+            // the same code on a developer machine's simulator cleared it easily.
+            // That number describes the host, not the pipeline. IOS_PORT_PLAN §5
+            // takes the same position: performance is verified on the iPad and
+            // never claimed from the simulator.
+            //
+            // The replay itself still runs 200x, so the MCCP2 + pipeline path
+            // keeps its correctness and crash coverage on iOS; only the timing
+            // assertion is macOS-only.
+            print("pipeline throughput (simulator, informational): \(Int(perSecond)) lines/s")
+        #else
+            // Real hardware does hundreds of thousands of lines/s; the floor only
+            // catches catastrophic regressions, immune to runner variance.
+            #expect(perSecond > 2000, "pipeline throughput collapsed: \(Int(perSecond)) lines/s")
+        #endif
     }
 }
 
