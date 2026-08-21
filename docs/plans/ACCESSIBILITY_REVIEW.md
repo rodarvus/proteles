@@ -18,6 +18,21 @@ Status: proposed, 2026-06-19. Tracks GitHub issue #9.
 > (§1) is realized fully on iOS. The macOS queue prototype (Roadmap Phase 1)
 > stays a timeboxed spike, not a gate.
 
+> **Addendum 2 (2026-08-21, D-120): this proposal is DEFERRED.** The player whose
+> feedback shaped it stopped playing Aardwolf without sending the promised screen
+> recording, and there are currently no VI users or requests. The delivery vehicle
+> named in Addendum 1 has been re-scoped accordingly: the **semantic event layer
+> (S0) and the sound rebuild (S1) still ship**, because they were justified
+> independently of accessibility, but the parts of this document that depend on a
+> screen-reader user — the VoiceOver output queue (§1), caret-mode output review
+> (§2), the review-buffer grammar, and the UI labeling sweep (§6) — are on hold.
+> Nothing here is withdrawn or considered wrong; the research remains valid and
+> this document is re-openable as written if a VI player appears. Two things were
+> kept because their cost argument is independent of demand: the iOS output view
+> exposes a per-line accessibility element tree from its first commit, and new
+> views are labeled as they are built rather than in a later sweep. See
+> IOS_PORT_PLAN.md §1.6 and §4a.
+
 ## Summary
 
 Proteles should treat native VoiceOver output as the first accessibility

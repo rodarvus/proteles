@@ -29,6 +29,16 @@ per-plugin compatibility reference (`docs/PLUGIN_COMPATIBILITY.md`, from the
 AardCentral community-plugin sweep). ~1836 tests, four gates green. See
 **ARCHITECTURE.md §0** for what works and **docs/DECISIONS.md** for history.
 
+**Current work (from 2026-08-21): the iOS port.**
+`docs/plans/IOS_PORT_PLAN.md` (v0.4) is the governing plan; D-116/D-117/D-118/
+D-119/**D-120** are its decisions. It opens with a macOS-side **Semantic Core
+arc** — **S0** (a `SemanticEvent` layer consolidating the three independent
+line-matchers) then **S1** (sound rebuilt on it) — which ship as ordinary macOS
+releases *before* the iOS UI phases, preceded by **I0a** (the iOS package/CI
+slice). Accessibility work is **deferred** (D-120 — no VI users); read the plan's
+**§1.5** for *why* the arc exists before changing its shape. macOS UI/UX polish
+toward 1.0 continues alongside.
+
 ## Backlog — GitHub Issues are the source of truth
 
 **All pending work — bugs, follow-ups, deferred features, the 1.0 gate — lives
