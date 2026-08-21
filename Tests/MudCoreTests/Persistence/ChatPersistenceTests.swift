@@ -48,9 +48,18 @@ struct ChatPersistenceTests {
         await persistence.attach(to: store)
 
         await store.append(channel: "clantalk", player: "Friend", message: "persist me")
-        try await Task.sleep(for: .milliseconds(80))
 
-        #expect(try database.mostRecent(limit: 10).map(\.text) == ["persist me"])
+        // Deliberately no flushNow() — the point is that the *periodic* flush
+        // drains on its own. Poll to a deadline rather than sleeping a fixed
+        // span: a fixed 80ms wait on a 20ms cadence is ample on a developer
+        // machine and not always enough on a loaded CI runner, which is the
+        // clock-dependence #26 exists to remove. Fast when fast, tolerant when
+        // slow, and the assertion is unchanged.
+        let persisted = try await eventually {
+            try database.mostRecent(limit: 10).map(\.text) == ["persist me"]
+        }
+        #expect(persisted, "periodic flush did not drain within the deadline")
+
         await persistence.detach()
         try cleanup(url: url)
     }
@@ -298,4 +307,20 @@ private func cleanup(url: URL) throws {
         let candidate = URL(fileURLWithPath: url.path + suffix)
         try? fileManager.removeItem(at: candidate)
     }
+}
+
+/// Poll `condition` until it holds or `timeout` elapses. Lets a test assert an
+/// eventual outcome without pinning a wall-clock guess — the pattern #26 wants
+/// in place of fixed `Task.sleep` waits.
+private func eventually(
+    timeout: Duration = .seconds(5),
+    poll: Duration = .milliseconds(10),
+    _ condition: () throws -> Bool
+) async rethrows -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if try condition() { return true }
+        try? await Task.sleep(for: poll)
+    }
+    return try condition()
 }

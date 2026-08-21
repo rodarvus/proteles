@@ -32,6 +32,25 @@
             return scrollView
         }
 
+        /// Guards the fixture itself. If the viewport cannot lay out with a
+        /// usable width, every geometry and scroll assertion in this suite
+        /// fails for one shared, uninteresting reason — so name that reason
+        /// once, here, with the numbers attached, instead of leaving it to be
+        /// re-diagnosed from `width → 0.0` (#26).
+        @Test("the test viewport lays out with a usable width")
+        func viewportHasUsableGeometry() {
+            let viewport = makeOutputViewport()
+            #expect(viewport.textView.bounds.width > 0, "\(viewport.geometrySummary)")
+            #expect(
+                viewport.scrollView.contentView.bounds.width > 0,
+                "\(viewport.geometrySummary)"
+            )
+            #expect(
+                (viewport.textView.textContainer?.containerSize.width ?? 0) > 0,
+                "\(viewport.geometrySummary)"
+            )
+        }
+
         @Test("frame stats carry the live document size")
         func statsCarryDocumentSize() async throws {
             let textView = try #require(makeView())
@@ -530,51 +549,6 @@
                 await store.appendBatch((start..<end).map(makeGeometryLine))
                 try await Task.sleep(for: .milliseconds(20))
             }
-        }
-    }
-
-    /// Single-slot stats holder for @Sendable callbacks.
-    private final class StatsBox: @unchecked Sendable {
-        var latest: RenderFrameStats?
-    }
-
-    private final class HealthBox: @unchecked Sendable {
-        var latest: TextViewHealthSnapshot?
-    }
-
-    @MainActor
-    private final class TestOutputViewport {
-        let window: NSWindow
-        let scrollView: BottomPinnedOutputScrollView
-        let textView: MudTextView
-
-        init(height: CGFloat) {
-            window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: height),
-                styleMask: [.titled],
-                backing: .buffered,
-                defer: false
-            )
-            scrollView = BottomPinnedOutputScrollView(
-                frame: NSRect(x: 0, y: 0, width: 600, height: height)
-            )
-            textView = MudTextView()
-            textView.delegate = textView
-            textView.minSize = .zero
-            textView.maxSize = NSSize(
-                width: CGFloat.greatestFiniteMagnitude,
-                height: CGFloat.greatestFiniteMagnitude
-            )
-            textView.isVerticallyResizable = true
-            textView.isHorizontallyResizable = false
-            textView.autoresizingMask = [.width]
-            textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-            textView.textContainerInset = NSSize(width: 8, height: 8)
-            textView.textContainer?.widthTracksTextView = true
-            textView.textContainer?.lineFragmentPadding = 0
-            scrollView.documentView = textView
-            window.contentView = scrollView
-            window.contentView?.layoutSubtreeIfNeeded()
         }
     }
 #endif
