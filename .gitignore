@@ -1,7 +1,19 @@
 # Swift / Xcode
 .build/
-.swiftpm/
 DerivedData/
+
+# .swiftpm holds per-user Xcode state, EXCEPT the shared schemes we check in.
+# `MudCore-iOS.xcscheme` is load-bearing: SwiftPM cannot exclude a target
+# per-platform, so a package-wide scheme drags MudUI + MudOutputView_macOS into
+# an iOS build and fails (and `-only-testing:` does not prune it). A scheme
+# containing only MudCore + MudCoreTests is how the iOS test gate runs (#81).
+.swiftpm/*
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/
+.swiftpm/xcode/xcshareddata/*
+!.swiftpm/xcode/xcshareddata/xcschemes/
+
 *.xcodeproj/
 *.xcworkspace/
 xcuserdata/

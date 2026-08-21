@@ -215,6 +215,22 @@ Before committing, ALL must pass (from repo root):
 3. `swiftformat --lint .`
 4. `swiftlint --strict`
 
+**Plus the iOS gate when the change touches MudCore, `Package.swift`, or
+`Sources/CLua`** (since the iOS port, #81):
+
+```sh
+xcodebuild test -scheme MudCore-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+`MudCore-iOS` is a **checked-in shared scheme**
+(`.swiftpm/xcode/xcshareddata/xcschemes/`, deliberately un-gitignored) holding
+only MudCore + MudCoreTests. Don't substitute the package-wide scheme: SwiftPM
+cannot exclude a target per-platform, so it drags in MudUI +
+MudOutputView_macOS and fails on any iOS destination — and `-only-testing:`
+does *not* prune the build. CI runs this as the `iOS Tests (simulator)` job.
+`Sources/CLua/PROVENANCE.md` documents the per-platform Lua C flags and the one
+vendored-source patch iOS needs.
+
 ## Workflow conventions
 - **Porting an Aardwolf-package plugin** (ARCHITECTURE.md §7/§10): for every plugin —
   native *feature* or native *plugin* — **PROPOSE a plan first (analysis,

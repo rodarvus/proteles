@@ -36,7 +36,28 @@ static int os_pushresult (lua_State *L, int i, const char *filename) {
 
 
 static int os_execute (lua_State *L) {
+#if defined(LUA_NO_SYSTEM)
+  /*
+  ** PROTELES PATCH (see PROVENANCE.md). iOS marks system() __unavailable, so
+  ** the stock body does not compile for that platform at all. Rather than
+  ** removing os.execute -- which would change the shape of the standard
+  ** library and break the "unsandboxed runtime keeps the full library"
+  ** contract -- keep the function and make it inert, reporting failure the
+  ** way a real system() would on a host with no shell:
+  **
+  **   os.execute()       -> 0   (Lua 5.1: system(NULL), "no shell available")
+  **   os.execute("cmd")  -> -1  (system() failed to run the command)
+  **
+  ** This is dead code in practice: the D-10 sandbox replaces the whole os
+  ** table with {time, clock, date, difftime} before any script runs, and the
+  ** MUSHclient compat shim overrides os.execute again on top of that. Only an
+  ** explicitly unsandboxed runtime can reach here.
+  */
+  const char *command = luaL_optstring(L, 1, NULL);
+  lua_pushinteger(L, command == NULL ? 0 : -1);
+#else
   lua_pushinteger(L, system(luaL_optstring(L, 1, NULL)));
+#endif
   return 1;
 }
 

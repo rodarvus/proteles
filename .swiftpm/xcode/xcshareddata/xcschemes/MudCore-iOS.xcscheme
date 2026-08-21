@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MudCore-iOS — the iOS test gate (GitHub #81, iOS port phase I0a).
+
+  Why this file is checked in (most of .swiftpm is gitignored):
+
+  SwiftPM cannot exclude a target per-platform. `.when(platforms:)` gates
+  target *dependencies*, not target *existence*, so the auto-generated
+  package-wide scheme always builds MudUI and MudOutputView_macOS — both
+  AppKit-bound — and fails for any iOS destination. `-only-testing:MudCoreTests`
+  does not help: it filters which tests run, not which targets build.
+
+  A scheme naming only MudCore + MudCoreTests is the supported way to build the
+  platform-agnostic half of the package on its own. Run it with:
+
+    xcodebuild test -scheme MudCore-iOS \
+      -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+  Delete this and the iOS CI job has no way to run. See Sources/CLua/PROVENANCE.md
+  for the companion C-level iOS fixes, and docs/plans/IOS_PORT_PLAN.md §1.1.
+-->
+<Scheme LastUpgradeVersion = "1600" version = "1.7">
+   <BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "MudCore" BuildableName = "MudCore" BlueprintName = "MudCore" ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "MudCoreTests" BuildableName = "MudCoreTests" BlueprintName = "MudCoreTests" ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference skipped = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "MudCoreTests" BuildableName = "MudCoreTests" BlueprintName = "MudCoreTests" ReferencedContainer = "container:">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+   </TestAction>
+</Scheme>

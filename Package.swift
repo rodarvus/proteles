@@ -33,12 +33,27 @@ let package = Package(
         .systemLibrary(name: "CZlib"),
         .target(
             name: "CLua",
-            exclude: ["LICENSE.txt"],
+            exclude: ["LICENSE.txt", "PROVENANCE.md"],
             cSettings: [
-                // Enables the macOS/POSIX feature set (dlopen-based
-                // package loading, etc.). The Lua environment is
-                // sandboxed at runtime (D-10), not at compile time.
-                .define("LUA_USE_MACOSX")
+                // macOS: the full macOS/POSIX feature set (dlopen-based package
+                // loading, etc.). The Lua environment is sandboxed at runtime
+                // (D-10), not at compile time.
+                .define("LUA_USE_MACOSX", .when(platforms: [.macOS])),
+                // iOS: plain POSIX, deliberately WITHOUT LUA_USE_MACOSX. That
+                // macro also selects Lua 5.1's legacy dyld loader
+                // (LUA_DL_DYLD -> NSLinkModule, NSCreateObjectFileImageFromFile,
+                // _dyld_present, …), every symbol of which is unavailable on
+                // iOS — 8 hard compile errors in loadlib.c. Plain POSIX leaves
+                // LUA_DL_* undefined, so loadlib.c compiles its "dynamic
+                // libraries not enabled" stub instead. That is the posture we
+                // want regardless of the compile error: loading native code at
+                // runtime is barred by the iOS sandbox and by App Store
+                // guideline 2.5.2, and D-10 already denies it in Lua.
+                .define("LUA_USE_POSIX", .when(platforms: [.iOS])),
+                // iOS: make os.execute inert instead of calling system(), which
+                // iOS marks __unavailable. See the PROTELES PATCH note in
+                // Sources/CLua/loslib.c and Sources/CLua/PROVENANCE.md.
+                .define("LUA_NO_SYSTEM", .when(platforms: [.iOS]))
             ]
         ),
         // The vendored `lsqlite3` Lua↔SQLite binding (Tiago Dionizio / Doug
