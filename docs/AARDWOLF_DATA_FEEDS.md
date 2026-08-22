@@ -41,13 +41,14 @@ rainbow/prismatic spray.
 *Consequence: combat damage cannot be classified reliably from lines alone. See
 §5 for what is durable instead.*
 
-**Measured shapes** (captured 2026-08-22 by cycling the setting mid-combat;
-`damage 2` was not exercised and remains uncaptured):
+**Measured shapes** (captured 2026-08-22 by cycling the setting mid-combat; all
+seven modes captured):
 
 | Setting | Example |
 |---|---|
 | 0 — regular, per hit | `Your shock misses a mosquito. [0]` · `Your shock <*><*><*><*> ANNIHILATES <*><*><*><*> a small bird! [244]` |
 | 1 — total/round, regular | `[2] Your shock misses an owl. [0]` |
+| 2 — total/round, basic | `[3] Your anguish does UNBELIEVABLE things to a spider! [3685]` · `[4] Your shock glaciates a spider! [468]` |
 | 3 — average/round, regular | `[0] Your shock misses an owl. [0]` |
 | 4 — average/round, basic | `A lovebird's counter strike DEVASTATES you. [34]` |
 | 5 — total/round, very short basic | `[2] Your spell damages a lovebird! [2384]` · `*[3] You damage a baby bird! [934]` |
@@ -59,9 +60,29 @@ collapses to a generic `damages` in the "basic"/"very short" ones; high damage
 adds `<*><*>` decoration around the verb; mode 5 can prefix `*`.
 
 What is constant across every captured mode: a **trailing `[damage]`**. Caution —
-this is constant *for this player*. It also predates the experiment (26,274 such
-lines in a session from three days earlier), but no toggle governing it was
-identified, so it must not be assumed universal.
+this is constant *for this player*. It predates the experiment (26,274 such lines
+in a session three days earlier) and **`config all` contains no toggle governing
+it** (it lists `NOHEALAMT` for heal numbers, with no damage equivalent). No
+governing setting was found, and none was ruled out — so a parser should treat it
+as optional.
+
+**The verb ladder is 52 entries, and the decoration is part of the entry**
+(`help damage verbs`), ascending from `misses, tickles, bruises, scratches,
+grazes, nicks, scars, hits, injures, wounds, mauls, maims, mangles, mars,
+LACERATES, DECIMATES, DEVASTATES, ERADICATES, OBLITERATES, EXTIRPATES,
+INCINERATES, MUTILATES, DISEMBOWELS, MASSACRES, DISMEMBERS, RENDS` through
+`- BLASTS -, -= DEMOLISHES =-, ** SHREDS **, **** DESTROYS ****,
+***** PULVERIZES *****, -=- VAPORIZES -=-, <-==-> ATOMIZES <-==->` and on to
+`<*><*><*><*> ANNIHILATES <*><*><*><*>` and
+`<-:-><-:-*-:-><-*-> SUPERNOVAS <-*-><-:-*-:-><-:->`, above which "the damage is
+unspeakable (or worse)".
+
+So `<*><*>`-style decoration is **not** an embellishment layered onto a verb — it
+is how that rung is spelled, and ordinal position in this list is the magnitude
+proxy. Observed but **not established**: "basic" modes appear to render some
+rungs undecorated and lowercased (`glaciates` where the ladder reads
+`-<[=-+-=]…GLACIATES…[=-+-=]>-`). The exact case/decoration rule per mode is not
+pinned down and must not be assumed.
 
 **`shortflags` — flag rendering** (`help auras`). Aura flags render either short
 (`(P)`) or long (`(Player)`). Both forms must parse. Note `(Angry)` has **no
@@ -80,7 +101,7 @@ with save/restore. Options remove entire message classes from the stream (e.g.
 | Toggle | Effect on parsing |
 |---|---|
 | `noobjlevel` | Hides item levels in *prose* inventory. **Verified 2026-08-22: `{invdata}` output is byte-identical either way** — the tag feed is immune |
-| `nopretitle` | Hides player pretitles in prose — affects `{roomchars}` occupant lines |
+| `nopretitle` | Hides player pretitles. **Verified — and it makes player names unparseable, see §4** |
 | `brief` | Room descriptions only on first entry — `{rdesc}` becomes intermittent |
 | `info` | Controls which `INFO:` messages display — **the soundpack keys off `^INFO: .+$`** |
 | `echodeaths`, `nowar`, `noweather` | Remove whole message classes |
@@ -309,6 +330,45 @@ Type 20 makes the **portal list** a filter over `invdata`, and type 11 plus
 `invdata <objectid>` makes **bag contents** a drill-down — two journeys served
 with no parsing and no dependency on dinv.
 
+### `{roomchars}` — occupant line grammar, and a parsing hazard
+
+Verified 2026-08-22 with the same player either side of the `nopretitle` toggle:
+
+```
+pretitles on :  (P)(F) Ya boi Tanto <3's ASCII.
+pretitles off:  (P)(F) Tanto <3's ASCII.
+```
+
+The grammar is `(auraflags…) [pretitle ]Name[ title].` — and **the pretitle is a
+free-text prefix with no delimiter separating it from the name.** "Ya boi Tanto"
+cannot be split into pretitle and name without already knowing the name. The
+suffix title (`<3's ASCII.`, `the Chronicler`) is *not* removed by `nopretitle`,
+and clan/rank markers may follow (`[R/C]`).
+
+**Consequence, and why it is survivable:** a player's name cannot be reliably
+extracted from a `{roomchars}` line while pretitles are on. Mobs do not carry
+pretitles, and `(P)` marks players (§ aura flags) — so a *mob*-targeting surface
+is unaffected as long as it **excludes `(P)` entries**, which it must do anyway
+so it never offers to attack a player. Any surface that wants to name *players*
+needs a different source.
+
+### `{scan}` — adjacent rooms
+
+Direction-grouped, flagged, and already enabled by Search-and-Destroy:
+
+```
+{scan}
+Right here you see:
+     - (R) A vampire thrall
+East from here you see:
+     - (I)(R) (Angry) A skinny demon
+South from here you see:
+     - (G)(W) An old adventurer
+```
+
+The feed for "what is one room away, and is it worth going there" — with the same
+aura flags, so `(Angry)` (aggressive) and alignment are visible before moving.
+
 ### Aura flags (`help auras`)
 
 The mob-versus-player discriminator, needed so a targeting surface never offers
@@ -377,7 +437,8 @@ changed here; flagged for whoever touches #42's machinery next.
 | Items on the floor | `{roomobjs}` | parsed by nothing |
 | Exits | `{exits}` + `room.info` | available |
 | Custom exits / arbitrary room | Mapper DB | available |
-| Adjacent-room occupants | `{scan}` | S&D enables it; unused by us |
+| Adjacent-room occupants | `{scan}` (direction-grouped, flagged) | S&D enables it; unused by us |
+| Player names | — | **not reliably parseable from `{roomchars}` under pretitles (§4)** |
 | Vitals | `char.vitals` | available |
 | Combat state / current enemy | `char.status` | available |
 | Affects (spellups) | `{affon}` / `{affoff}` + `slist` for names | available; ids resolve via `slist` |
@@ -406,24 +467,26 @@ above: the authoritative tag family list (§3), the `char.status.state` table
 (§4), `commandtags` as a non-persistent alternative to global tag families (§3),
 `shortflags` confirmed, and the `spam2` toggle list (§2).
 
-**Still open:**
+**Still open — nothing blocking:**
 
-1. **`damage 2` was not captured.** Six of the seven modes were cycled
-   mid-combat (§2); mode 2 ("total per round, basic output") is inferred to sit
-   between the captured 1 and 4 but has no fixture. Needed before any
-   combat-line parser claims to cover all settings.
-2. **`nopretitle` was toggled with no player in the room.** The `look` captures
-   either side of the toggle are identical because they contain only room
-   description — so the effect on a `{roomchars}` occupant line is still
-   unobserved. Needs a capture in a room with another player present.
-3. **Is the trailing `[damage]` universal?** Constant across all six captured
-   modes and present 26,274 times in an older session, but no governing toggle
-   was found. Until one is ruled out, a parser must treat it as optional.
+1. **The trailing `[damage]` has no identified governing toggle.** Present in all
+   seven modes and in older sessions; `config all` shows no damage-number
+   setting. Not ruled out either, so parsers treat it as optional.
+2. **The case/decoration rule for "basic" damage modes is observed, not
+   established** (§2). Only matters to a parser that reads verbs rather than
+   using them as an ordinal ladder.
 
-**Closed by the 2026-08-22 capture round:** the object flag letters (documented
-in `help invdata`, *not* `help object flags` — §4), the measured shape of each
-damage mode (§2), and `noobjlevel`'s effect, which turned out to be **none** on
-the structured feed.
+**Closed by the 2026-08-22 capture rounds:** all seven damage modes (§2); the
+52-entry verb ladder with its decoration (§2); object flag letters — documented
+in `help invdata`, not `help object flags` (§4); `noobjlevel`'s effect on the
+structured feed, which is **none** (§2); the `{roomchars}` occupant grammar and
+its pretitle hazard (§4); `{scan}`'s shape (§4); the authoritative tag family
+list (§3); the `char.status.state` table (§5); spellup tag semantics and
+`{sfail}` reasons (§4); and the `slist` spell model (§4).
+
+**Deliberately not gathered.** Further captures should be pulled *by* a specific
+journey when it needs them, not accumulated in advance — the same
+derive-from-a-named-consumer discipline D-120 applies to the taxonomy.
 
 ## 8. Test implications
 
