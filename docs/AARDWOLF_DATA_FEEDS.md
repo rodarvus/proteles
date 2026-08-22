@@ -50,7 +50,22 @@ vitals from it; `char.vitals` carries them (§4).
 
 **`spamreduce`** (`help spamreduce`, `help spam2`) — a whole suppression system
 with save/restore. Options remove entire message classes from the stream (e.g.
-`areaspells`). A missing line may mean "did not happen" *or* "suppressed".
+`areaspells`). **A missing line may mean "did not happen" *or* "suppressed".**
+
+**Individual toggles that reshape lines we care about** (`help spam2`,
+`config all`):
+
+| Toggle | Effect on parsing |
+|---|---|
+| `noobjlevel` | Drops levels after object descriptions — changes `{roomobjs}` and inventory lines |
+| `nopretitle` | Hides player pretitles — changes `{roomchars}` occupant lines |
+| `brief` | Room descriptions only on first entry — `{rdesc}` becomes intermittent |
+| `info` | Controls which `INFO:` messages display — **the soundpack keys off `^INFO: .+$`** |
+| `echodeaths`, `nowar`, `noweather` | Remove whole message classes |
+| `healtype` | Combines heal messages |
+| `catchtells` | Defers tells to `replay` |
+| `promptflag` | Removes quiet/afk/noexp flags from the prompt |
+| `channels` / `quiet` | Silence channels wholesale |
 
 **`tags <family> on|off`** — see §3.
 
@@ -78,8 +93,57 @@ feature, explicitly and reversibly** — extending the existing `tags exits on`
 precedent. A feature must own its feed rather than assume it, and must not
 silently show an empty surface.
 
-Three families have their own semantics: `help invdata`, `help spelltags`,
-`help telltags`. Some commands carry their own tag option — `help commandtags`.
+### The authoritative family list
+
+From the bare `tags` command. **Status is this player's current setting**, not a
+default — the point of the column is that a feature cannot assume any of it.
+
+| Family | Emits | Status |
+|---|---|---|
+| `BIGMAP` | `{BIGMAP}` | on |
+| `CHANNELS` | `{chan ch=name}` | **off** |
+| `COORDS` | `{coords}` | on |
+| `EDITORS` | `{edit/}` | off |
+| `EQUIP` | `{equip/}` — own equipment | **off** |
+| `EXITS` | `{exits}` | on |
+| `HELPS` | help + help headers | on |
+| `INV` | `{inventory/}` — own inventory | **off** |
+| `MAP` | `<MAPSTART>` / `<MAPEND>` | on |
+| `MAPEXITS` / `MAPNAMES` | exits / room name inside map tags | on |
+| `QUIET` | silences all other tags | off |
+| `ROOMDESCS` | `{rdesc}` | on |
+| `ROOMNAMES` | `{rname}` | on |
+| `SAYS` | `{say}` | **off** |
+| `SCORE` | `{score}` | off |
+| `SKILLGAINS` | skill gain/increase | on |
+| `SPELLUPS` | `{affon}` `{affoff}` `{recon}` `{recoff}` `{sfail}` | on |
+| `TELLS` | `{tell}` | **off** |
+| `TELOPTS` | client auto-set flags | off |
+| `ROOMCHARS` | `{roomchars}` | on |
+| `ROOMOBJS` | `{roomobjs}` | on |
+| `SCAN` | `{scan}` | on |
+| `REPOP` | repop messages | off |
+| `COMMANDS` | game commands (TEST only) | off |
+| `WHERE` | `where` output | off |
+| `MAPDATA` | experimental, does nothing yet | off |
+
+**`CHANNELS`, `TELLS` and `SAYS` are all off** — and those are exactly the three
+S0a's tag-family router was scoped to start with (#82). The router work therefore
+*begins* with enabling them, and must handle their absence.
+
+### `commandtags` — the non-persistent alternative
+
+Per `help commandtags`, some commands take a `tags` argument (`rank 1 tags`)
+which wraps that one command's output in tags **and** disables paging for it,
+without touching any global setting. For one-shot queries this is strictly
+better than flipping a family on: no permanent scroll loss, no change to what
+the player sees the rest of the session. Prefer it wherever the data is pulled
+rather than streamed.
+
+Families with their own semantics: `help invdata`, `help spelltags`,
+`help telltags` (note: enabling `TELLS` also *changes tell behaviour* — tells
+are shown tagged even when they did not go through, e.g. "You tell Ivar
+(Ignored)", and deferred tells store to the replay buffer).
 
 ## 4. Measured feed inventory
 
@@ -141,8 +205,49 @@ Observed shapes:
 {affon}259,2655
 ```
 
-Affects are **numeric spell ids**, not names — a name mapping is required before
-an affects surface can label anything (§7).
+### The spell/skill model — `slist` and the spellup tags
+
+`SPELLUPS` (on) emits a complete, structured spell lifecycle (`help spelltags`):
+
+| Tag | Shape | Meaning |
+|---|---|---|
+| `{affon}` | `72,1650` | spell 72 landed, lasts 1650s |
+| `{affoff}` | `72` | spell 72 wore off |
+| `{recon}` | `15,1200` | recovery (cooldown) 15 started, 1200s |
+| `{recoff}` | `15` | recovery 15 expired |
+| `{sfail}` | `72,0,2,-1` | spell#, target (0=self/1=other), reason, recovery# |
+
+`{sfail}` reasons: 1 lost concentration · **2 already affected** · **3 blocked by
+a recovery** · **4 not enough mana** · 5 nocast room · 6 fighting/can't
+concentrate · 8 don't know it · 9 self-only cast on other · 10 resting/sitting ·
+11 disabled · 12 not enough moves.
+
+Reasons 2, 3 and 4 are precisely the "pick a different spell" signals in the
+combat journey — they say *why* a cast failed, structurally.
+
+**`slist` resolves the ids**, and much more. CSV inside `{spellheaders}`:
+
+```
+SN, Name, target, duration, Pct, recovery, type
+97,adrenaline control,3,1725,97,-1,1
+320,acid stream,1,0,95,-1,1
+```
+
+| Field | Meaning |
+|---|---|
+| `SN` | spell number — **the id in `{affon}` / `{affoff}` / `{sfail}`** |
+| `Name` | skill/spell name |
+| `Target` | 0 special · **1 attack** · **2 spellup** · 3 self-only · 4 object · 5 extended syntax |
+| `Duration` | seconds remaining if currently affected, else 0 |
+| `Pct` | percent practiced |
+| `Recovery` | recovery number this relies on, or `-1` |
+| `Type` | 1 spell · 2 skill |
+
+So one `slist` call yields the id→name map, **which spells are attacks versus
+spellups**, what is currently active and for how long, what is practiced enough
+to be worth casting, and cooldown linkage. `slist learned` / `slist affected` /
+`slist recoveries` narrow it. This is the backbone of any cast/spellup surface —
+no line parsing required.
 
 ### Aura flags (`help auras`)
 
@@ -176,18 +281,32 @@ Given `damage 0–6`, the reliable signals are **not** the damage lines:
   mars, LACERATES, DECIMATES, DEVASTATES, …` ascending. Ordinal position is a
   stable magnitude proxy across settings, where the numeric total is not.
 
-Known `state` values, from our own code and the reference package:
+`char.status.state` — the authoritative table, from Aardwolf's GMCP wiki
+(`help GMCP` points there; the codes are not documented in-game):
 
-| Value | Meaning | Source |
-|---|---|---|
-| 8 | Fighting | `GMCPModules.swift` |
-| 12 | Running | `GMCPModules.swift` |
-| 5 | Note mode | `GMCPModules.swift` |
-| 3, 11 | Map requestable (3 also common at rest) | `aard_ASCII_map.xml` |
-| 2 | *unknown* | — |
+| Value | Meaning |
+|---|---|
+| 1 | Login screen, no player yet |
+| 2 | MOTD / login sequence |
+| 3 | **Fully active, accepting commands** |
+| 4 | AFK |
+| 5 | In a note |
+| 6 | Building / edit mode |
+| 7 | At a paged-output prompt |
+| 8 | **In combat** |
+| 9 | Sleeping |
+| 11 | Resting or sitting |
+| 12 | Running |
 
-**The full table is an open question (§7)** — these were inferred from usage,
-not read from a spec, so they are marked accordingly.
+`char.status` also carries `enemypct` alongside `enemy`.
+
+**Finding — `isSafeToInterrupt` looks incomplete.** `GMCPModules.swift` treats
+only 8 (combat), 12 (running) and 5 (note) as unsafe. Against the full table, **7
+(paged-output prompt)** and **6 (building/edit)** are arguably just as unsafe to
+interrupt with an update prompt, and 9 (sleeping) is worth a thought. Those three
+values were inferred from usage before the table was available, and the
+inferences were right as far as they went — they were simply incomplete. Not
+changed here; flagged for whoever touches #42's machinery next.
 
 ## 6. Entity → feed map (S0b input)
 
@@ -201,7 +320,10 @@ not read from a spec, so they are marked accordingly.
 | Adjacent-room occupants | `{scan}` | S&D enables it; unused by us |
 | Vitals | `char.vitals` | available |
 | Combat state / current enemy | `char.status` | available |
-| Affects (spellups) | `{affon}` / `{affoff}` (ids) | needs id→name map |
+| Affects (spellups) | `{affon}` / `{affoff}` + `slist` for names | available; ids resolve via `slist` |
+| Spell/skill book (attack vs spellup, practiced %, cooldowns) | `slist` | available, unused |
+| Cast failure reason (immune, already up, no mana, cooldown) | `{sfail}` | available, unused |
+| Cooldowns | `{recon}` / `{recoff}` + `slist recoveries` | available, unused |
 | Inventory / worn / bags | `{invdata}` / `{invitem}` / `{invmon}`, dinv | inside a Lua plugin |
 | Portals | dinv | inside a Lua plugin |
 | Target list | S&D `targets_as_json` | reachable only from Lua |
@@ -212,23 +334,37 @@ not read from a spec, so they are marked accordingly.
 The recurring shape: most feeds **exist and are parsed already**, each behind a
 single private consumer. S0b is mostly promotion and unification.
 
-## 7. Open questions — help files still needed
+## 7. Open questions
 
-Requested, in priority order:
+**Resolved 2026-08-22** — the first round of requests came back and is folded in
+above: the authoritative tag family list (§3), the `char.status.state` table
+(§5, from the GMCP wiki since it is not in-game), the spellup tag semantics and
+`{sfail}` reason codes (§4), the `slist` spell model that resolves affect ids
+(§4), `commandtags` as a non-persistent alternative to global tag families (§3),
+`shortflags` confirmed, and the `spam2` toggle list (§2).
 
-1. **`tags`** (bare command, no argument) — the authoritative list of families.
-   Everything in §4 is "what this player happens to have on"; this gives the
-   real set.
-2. **`help GMCP`** and **`help GMCPConfig`** — hoping for the `state` code table
-   (§5) and the authoritative package list.
-3. **`help Spelltags`**, **`help Telltags`**, **`help CommandTags`** — the three
-   families `help tags` says have their own semantics.
-4. **`help shortflags`** — confirm the exact toggle and both rendered forms.
-5. **Spell id → name mapping** — `{affon}259` needs a name before an affects
-   surface can label it. Unknown whether a help file, a command, or GMCP
-   provides this.
-6. **`help spam2`** — the full spam-suppression option list, to know which
-   message classes can vanish.
+**Still open:**
+
+1. **Damage output under settings other than the player's current one.** §2
+   documents that `damage 0–6` produce structurally different combat text, but
+   the recordings only contain *one* setting. Any combat-line parsing needs
+   captures under at least a second setting before it can claim to handle them —
+   see §8. Cheapest path: switch `damage`, fight briefly, switch back.
+2. **`{roomobjs}` / `{roomchars}` under `noobjlevel` and `nopretitle`.** Both
+   toggles reshape exactly the lines a floor-items or occupants surface parses,
+   and the current captures are from one configuration.
+3. **Object flag letter forms are undocumented — do not guess them.**
+   `help auras` gives mob flags *with* their single-letter short forms
+   (`(Player)` → `P`). **`help object flags` gives full names only**, marking
+   displayed flags with `*` but never stating the letters. So the observed
+   `(M)(G)(H)(N)` on a `{roomobjs}` line is ambiguous: `M` could be `Magic` or
+   `Melt-drop*`; `N` could be `Nodrop`, `Nosell`, `Nolocate`, `Nosac`, `Nosave`
+   … Any floor-items or inventory surface that renders flags needs this map
+   first.
+
+   *Cheapest way to resolve:* `shortflags off`, then look at a room with items on
+   the ground (and/or a carried item), capturing the long-form flags — that gives
+   the letter→name mapping directly from live output. `shortflags on` restores.
 
 ## 8. Test implications
 
