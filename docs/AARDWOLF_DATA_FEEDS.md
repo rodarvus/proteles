@@ -23,7 +23,7 @@ configuration it assumes, and cover it with a transcript test.
 | Tier | Stability | Why |
 |---|---|---|
 | **GMCP** | Structural | A parsed protocol. Unaffected by every setting in §2. |
-| **Tags** | Structural, but opt-in | `{name}…{/name}` blocks. Shape is fixed; *availability* is not (§3). |
+| **Tags** | Structural, but opt-in | `{name}…{/name}` blocks. Shape is fixed; *availability* is not (§3). **Verified**: `{invdata}` is byte-identical with `noobjlevel` on and off, while the prose it replaces is not (§2). |
 | **Line patterns** | Fragile | Subject to every axis in §2, per player. |
 
 ## 2. Configurability axes — what can change under us
@@ -41,6 +41,28 @@ rainbow/prismatic spray.
 *Consequence: combat damage cannot be classified reliably from lines alone. See
 §5 for what is durable instead.*
 
+**Measured shapes** (captured 2026-08-22 by cycling the setting mid-combat;
+`damage 2` was not exercised and remains uncaptured):
+
+| Setting | Example |
+|---|---|
+| 0 — regular, per hit | `Your shock misses a mosquito. [0]` · `Your shock <*><*><*><*> ANNIHILATES <*><*><*><*> a small bird! [244]` |
+| 1 — total/round, regular | `[2] Your shock misses an owl. [0]` |
+| 3 — average/round, regular | `[0] Your shock misses an owl. [0]` |
+| 4 — average/round, basic | `A lovebird's counter strike DEVASTATES you. [34]` |
+| 5 — total/round, very short basic | `[2] Your spell damages a lovebird! [2384]` · `*[3] You damage a baby bird! [934]` |
+| 6 — total/round per damage type | `[4] Your shock misses a spider. [0]` |
+
+What varies: a **leading `[n]`** hit/round multiplier appears in the combining
+modes and not in 0; the **verb ladder** (§5) is used by the "regular" modes but
+collapses to a generic `damages` in the "basic"/"very short" ones; high damage
+adds `<*><*>` decoration around the verb; mode 5 can prefix `*`.
+
+What is constant across every captured mode: a **trailing `[damage]`**. Caution —
+this is constant *for this player*. It also predates the experiment (26,274 such
+lines in a session from three days earlier), but no toggle governing it was
+identified, so it must not be assumed universal.
+
 **`shortflags` — flag rendering** (`help auras`). Aura flags render either short
 (`(P)`) or long (`(Player)`). Both forms must parse. Note `(Angry)` has **no
 short form** — it is always long.
@@ -57,8 +79,8 @@ with save/restore. Options remove entire message classes from the stream (e.g.
 
 | Toggle | Effect on parsing |
 |---|---|
-| `noobjlevel` | Drops levels after object descriptions — changes `{roomobjs}` and inventory lines |
-| `nopretitle` | Hides player pretitles — changes `{roomchars}` occupant lines |
+| `noobjlevel` | Hides item levels in *prose* inventory. **Verified 2026-08-22: `{invdata}` output is byte-identical either way** — the tag feed is immune |
+| `nopretitle` | Hides player pretitles in prose — affects `{roomchars}` occupant lines |
 | `brief` | Room descriptions only on first entry — `{rdesc}` becomes intermittent |
 | `info` | Controls which `INFO:` messages display — **the soundpack keys off `^INFO: .+$`** |
 | `echodeaths`, `nowar`, `noweather` | Remove whole message classes |
@@ -249,6 +271,44 @@ to be worth casting, and cooldown linkage. `slist learned` / `slist affected` /
 `slist recoveries` narrow it. This is the backbone of any cast/spellup surface —
 no line parsing required.
 
+### The item model — `invdata` / `eqdata` (`help invdata`, `help objectid`)
+
+Built for client scripts, and the structured counterpart to prose inventory:
+
+- `invdata` — carried inventory
+- `invdata <container objectid>` — **the contents of a bag**
+- `eqdata` — **worn equipment**
+- `… ansi` — ANSI colour instead of Aardwolf `@` codes
+
+One CSV row per item inside a `{invdata}` / `{eqdata}` block:
+
+```
+objectid,flags,itemname,level,type,unique,wear-loc,timer
+3629436877,NKMGH,a @YBag of @RAardwolf@w,201,11,1,-1,-1
+```
+
+**Object flag letters** — the answer to the `(M)(G)(H)(N)` ambiguity, documented
+here and *not* in `help object flags`:
+
+| | | | |
+|---|---|---|---|
+| `N` Nolocate | `I` Invis | `K` Kept | `G` Glowing |
+| `M` Magical | `C` Cursed (nodrop/noremove) | `H` Humming | |
+| *temporary:* `E` Envenomed | `T` Tempered | `W` Weakened | |
+
+So `(M)(G)(H)(N)` = Magical, Glowing, Humming, Nolocate.
+
+**Item types** (field `type`), 1–27: 1 Light · 2 Scroll · 3 Wand · 4 Stave ·
+5 Weapon · 6 Treasure · 7 Armor · 8 Potion · 9 Furniture · 10 Trash ·
+**11 Container** · 12 Drink Container · 13 Key · 14 Food · 15 Boat ·
+16 Mob Corpse · 17 Player Corpse · 18 Fountain · 19 Pill · **20 Portal** ·
+21 Beacon · 22 Gift Card · 24 Raw Material · 25 Campfire · 26 Forge ·
+27 Runestone.
+
+Type 20 makes the **portal list** a filter over `invdata`, and type 11 plus
+`invdata <objectid>` makes **bag contents** a drill-down — two journeys served
+with no parsing and no dependency on dinv.
+
 ### Aura flags (`help auras`)
 
 The mob-versus-player discriminator, needed so a targeting surface never offers
@@ -324,8 +384,11 @@ changed here; flagged for whoever touches #42's machinery next.
 | Spell/skill book (attack vs spellup, practiced %, cooldowns) | `slist` | available, unused |
 | Cast failure reason (immune, already up, no mana, cooldown) | `{sfail}` | available, unused |
 | Cooldowns | `{recon}` / `{recoff}` + `slist recoveries` | available, unused |
-| Inventory / worn / bags | `{invdata}` / `{invitem}` / `{invmon}`, dinv | inside a Lua plugin |
-| Portals | dinv | inside a Lua plugin |
+| Inventory | `invdata` (CSV) | available, structured |
+| Worn equipment | `eqdata` | available, structured |
+| Bag contents | `invdata <container objectid>` (type 11) | available, structured |
+| Portals | `invdata` filtered to type 20 | available, structured |
+| Item flags / level / timer | `invdata` fields | available |
 | Target list | S&D `targets_as_json` | reachable only from Lua |
 | Channels | `comm.channel` + `ChatStore` | available |
 | Group | `group` GMCP | available |
@@ -345,26 +408,22 @@ above: the authoritative tag family list (§3), the `char.status.state` table
 
 **Still open:**
 
-1. **Damage output under settings other than the player's current one.** §2
-   documents that `damage 0–6` produce structurally different combat text, but
-   the recordings only contain *one* setting. Any combat-line parsing needs
-   captures under at least a second setting before it can claim to handle them —
-   see §8. Cheapest path: switch `damage`, fight briefly, switch back.
-2. **`{roomobjs}` / `{roomchars}` under `noobjlevel` and `nopretitle`.** Both
-   toggles reshape exactly the lines a floor-items or occupants surface parses,
-   and the current captures are from one configuration.
-3. **Object flag letter forms are undocumented — do not guess them.**
-   `help auras` gives mob flags *with* their single-letter short forms
-   (`(Player)` → `P`). **`help object flags` gives full names only**, marking
-   displayed flags with `*` but never stating the letters. So the observed
-   `(M)(G)(H)(N)` on a `{roomobjs}` line is ambiguous: `M` could be `Magic` or
-   `Melt-drop*`; `N` could be `Nodrop`, `Nosell`, `Nolocate`, `Nosac`, `Nosave`
-   … Any floor-items or inventory surface that renders flags needs this map
-   first.
+1. **`damage 2` was not captured.** Six of the seven modes were cycled
+   mid-combat (§2); mode 2 ("total per round, basic output") is inferred to sit
+   between the captured 1 and 4 but has no fixture. Needed before any
+   combat-line parser claims to cover all settings.
+2. **`nopretitle` was toggled with no player in the room.** The `look` captures
+   either side of the toggle are identical because they contain only room
+   description — so the effect on a `{roomchars}` occupant line is still
+   unobserved. Needs a capture in a room with another player present.
+3. **Is the trailing `[damage]` universal?** Constant across all six captured
+   modes and present 26,274 times in an older session, but no governing toggle
+   was found. Until one is ruled out, a parser must treat it as optional.
 
-   *Cheapest way to resolve:* `shortflags off`, then look at a room with items on
-   the ground (and/or a carried item), capturing the long-form flags — that gives
-   the letter→name mapping directly from live output. `shortflags on` restores.
+**Closed by the 2026-08-22 capture round:** the object flag letters (documented
+in `help invdata`, *not* `help object flags` — §4), the measured shape of each
+damage mode (§2), and `noobjlevel`'s effect, which turned out to be **none** on
+the structured feed.
 
 ## 8. Test implications
 
