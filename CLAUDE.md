@@ -81,6 +81,16 @@ never modify.** You have standing approval to read/search them at any time.
   lsqlite3, no miniwindows).
 - `plugins/leveldb/` — the leveling-DB plugin (the Levels window reads it).
 
+**Aardwolf data feeds — read before parsing ANY game output.**
+`docs/AARDWOLF_DATA_FEEDS.md` is the measured map of which information is
+structural (GMCP), which is structural-but-opt-in (tags), and which is
+**player-configurable prose** that must not be pattern-matched casually —
+`damage 0–6` alone gives seven different combat output shapes, `shortflags`
+changes aura rendering, `spamreduce` deletes whole message classes, and the
+prompt is user-composed. Ordering rule: **GMCP > tags > line patterns**. It also
+records which tag families anything actually enables (very few), and that
+enabling tags disables the game's scroll/paging.
+
 **iOS-port references** (vendored 2026-07 for the iOS port,
 `docs/plans/IOS_PORT_PLAN.md`; same research-first rule applies to all
 iOS/mobile work):
