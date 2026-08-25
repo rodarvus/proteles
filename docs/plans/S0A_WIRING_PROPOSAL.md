@@ -76,11 +76,30 @@ seam, and carry the result forward to the displayed seam rather than re-entering
 the actor.
 
 - Classification happens once, in the actor pass that already runs.
-- The gag decision is already known by the end of that pass, so events from a
-  gagged line are simply not published — same outcome as classifying later.
 - **No new actor hop.** No second `await` per displayed line.
 - Guard order restored: check "is anything listening" and the soundpack's mute
   **before** running regexes.
+
+**Correction (2026-08-25).** An earlier draft of this option claimed "the gag
+decision is already known by the end of that pass". That is wrong, and worth
+recording rather than quietly fixing. Only the *script/native* gag is known
+inside `process`; Search-and-Destroy, rich-exits, wish-probe, blank and tag gags
+are all decided afterwards in `appendLineWithGenericScripts`, and `shouldDisplay`
+is the AND of all of them.
+
+The corrected shape, which still needs no extra hop:
+
+1. `ScriptEngine.process` classifies and fans events to native plugins **inside
+   the existing pass**, collecting their effects.
+2. Those effects ride back on the existing return value, kept **separate** from
+   ordinary script effects.
+3. `SessionController` applies them **only when `shouldDisplay` is true**, and
+   discards them otherwise.
+
+So a gagged line does its (guarded, usually zero) classification work but never
+publishes — behaviourally identical to classifying at the displayed seam, at the
+cost of one extra field on the disposition instead of one extra actor round-trip
+per line.
 - **For:** achieves the single-classification-point goal at roughly zero cost.
 - **Against:** classification technically still happens in the raw pass, so the
   "classify the displayed line" wording of D-118 is satisfied in effect

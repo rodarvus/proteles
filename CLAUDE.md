@@ -305,8 +305,18 @@ vendored-source patch iOS needs.
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - **Never launch the app** — build only, install to `~/Applications`, clear
   quarantine (`xattr -dr com.apple.quarantine`); the user launches + live-tests.
-- After a feature lands, produce a Release build for the user to verify, then push
-  (when authorised).
+- **Hand over RELEASE builds, always.** `-configuration Release`, never Debug.
+  **Debug is 2.30x slower** (measured: 34.2µs vs 14.9µs per line through the
+  classifier), which is enough to make ordinary play feel wrong and enough to
+  fake a convincing performance regression. Handing over a Debug build cost
+  three days once: kill-burst paint latency went 437ms → 765ms purely from the
+  build configuration, and the difference was attributed to a code change.
+  Debug is for *my* gate runs (`swift build`/`swift test` are Debug already) and
+  for chasing a crash or an assertion — never for anything the user launches,
+  and never for anything measured.
+- **Never compare performance across builds without knowing their configuration.**
+  Recordings do not record it today (see
+  `docs/plans/BURST_INSTRUMENTATION_PROPOSAL.md` §1).
 
 ### Release flow
 1. Bump `apps/ProtelesApp_macOS/project.yml` — **both** the marketing version
