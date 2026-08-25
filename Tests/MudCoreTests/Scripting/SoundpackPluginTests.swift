@@ -27,19 +27,50 @@ struct SoundpackPluginTests {
         Line(id: LineID(0), text: text)
     }
 
+    /// The path a displayed line takes since #82: classify once, then fan the
+    /// events at the plugin. Line cues no longer come from `onLine`.
+    private func displayedEffects(_ plugin: inout Soundpack, _ text: String) -> [ScriptEffect] {
+        guard plugin.wantsSemanticEvents else { return [] }
+        return SemanticClassifier.events(forDisplayed: line(text))
+            .flatMap { plugin.onSemanticEvent($0) }
+    }
+
     @Test("muted by default — no cues, even for a level-up")
     func mutedByDefault() {
         var plugin = Soundpack(configURL: nil)
-        let disposition = plugin.onLine(line("You raise a level! You are now level 142."))
-        #expect(disposition.effects.isEmpty)
-        #expect(disposition.gag == false)
+        #expect(displayedEffects(&plugin, "You raise a level! You are now level 142.").isEmpty)
     }
 
     @Test("unmuted, a level-up line plays level_up.wav at full volume")
     func levelUpCue() {
         var plugin = unmuted()
+        let effects = displayedEffects(&plugin, "You raise a level! You are now level 142.")
+        #expect(cues(effects) == [SoundCue(file: "level_up.wav", volume: 1, pan: 0)])
+    }
+
+    /// The guard that fixes the regression (#82, #85): while muted the plugin
+    /// must decline events *before* anything classifies, so the semantic layer
+    /// costs nothing. The previous attempt classified first and checked mute
+    /// afterwards, which meant 48 regexes per displayed line for a player who
+    /// had sound off — measurable in kill bursts.
+    @Test("a muted soundpack declines events so nothing classifies")
+    func mutedDeclinesEventsBeforeClassifying() {
+        let muted = Soundpack(configURL: nil)
+        #expect(muted.wantsSemanticEvents == false, "muted must not opt in")
+        var unmutedPlugin = unmuted()
+        #expect(unmutedPlugin.wantsSemanticEvents, "unmuted must opt in")
+        // And re-muting withdraws the opt-in again.
+        _ = unmutedPlugin.handleCommand("spmute")
+        #expect(unmutedPlugin.wantsSemanticEvents == false)
+    }
+
+    /// `onLine` runs on the raw line, before the gag decision, so it must not
+    /// produce cues any more.
+    @Test("the raw-line hook no longer produces cues")
+    func rawLineHookIsSilent() {
+        var plugin = unmuted()
         let disposition = plugin.onLine(line("You raise a level! You are now level 142."))
-        #expect(cues(disposition.effects) == [SoundCue(file: "level_up.wav", volume: 1, pan: 0)])
+        #expect(disposition.effects.isEmpty)
     }
 
     @Test("comm.channel keys the event directly; unknown channels are silent")
@@ -253,14 +284,14 @@ struct SoundpackPluginTests {
     func debugNotes() {
         var plugin = unmuted()
         _ = plugin.handleCommand("spdebug")
-        let disposition = plugin.onLine(line("You die."))
-        let hasDebugNote = disposition.effects.contains {
+        let effects = displayedEffects(&plugin, "You die.")
+        let hasDebugNote = effects.contains {
             if case .colourNote(let segments) = $0 {
                 segments.contains { $0.text.contains("death has fired") }
             } else { false }
         }
         #expect(hasDebugNote)
-        #expect(cues(disposition.effects).map(\.file) == ["death.wav"])
+        #expect(cues(effects).map(\.file) == ["death.wav"])
     }
 
     // MARK: - Chat Echo mute integration (#55)

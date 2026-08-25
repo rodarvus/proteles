@@ -77,13 +77,24 @@ public struct Soundpack: NativePlugin {
 
     // MARK: - Event sources
 
-    public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
-        guard !config.muted else { return .init() }
-        var effects: [ScriptEffect] = []
-        for event in SoundEventClassifier.events(forLine: line.text) {
-            effects.append(contentsOf: cueEffects(for: event))
-        }
-        return .init(effects: effects)
+    /// Line cues come from ``onSemanticEvent(_:)`` now (#82); this hook no
+    /// longer classifies. GMCP cues still arrive via
+    /// ``onGMCP(package:json:context:)``, which also carries the inline
+    /// `!!SOUND` handling and the Chat Echo mute check.
+    public mutating func onLine(_: Line) -> ScriptEngine.LineDisposition {
+        .init()
+    }
+
+    /// Opt in only when a cue could actually play. This is the guard that used
+    /// to sit at the top of `onLine`, and it must stay *ahead* of
+    /// classification: while muted, the semantic layer costs nothing at all.
+    public var wantsSemanticEvents: Bool {
+        !config.muted
+    }
+
+    public mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect] {
+        guard !config.muted, case .pattern = event.source else { return [] }
+        return cueEffects(for: event.name)
     }
 
     public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {

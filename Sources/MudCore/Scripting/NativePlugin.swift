@@ -139,6 +139,26 @@ public protocol NativePlugin: Sendable {
     /// line's id/timestamp. Default: pass through (no gag, no effects).
     mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition
 
+    /// Whether this plugin currently wants ``SemanticEvent``s (#82).
+    ///
+    /// Checked **before** any classification runs, and it is the guard that
+    /// keeps the semantic layer free when nothing is listening. The previous
+    /// wiring attempt classified first and let plugins decide afterwards, which
+    /// meant 48 regexes per displayed line even with the soundpack muted — a
+    /// measured regression in kill bursts (see S0A_WIRING_PROPOSAL.md).
+    ///
+    /// Answer cheaply and from already-known state. A plugin that is muted or
+    /// idle should answer `false` so the work is skipped entirely. Default:
+    /// `false` — a plugin opts in.
+    var wantsSemanticEvents: Bool { get }
+
+    /// React to a classified ``SemanticEvent``.
+    ///
+    /// Only called when ``wantsSemanticEvents`` is `true`. Events are produced
+    /// once, from the built-in vocabulary, so a plugin no longer matches text
+    /// itself. Default: no effects.
+    mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect]
+
     /// Apply this plugin's output filter to a structured channel line before
     /// capture/echo. Only Text Substitution overrides this hook.
     func transformCommunicationLine(_ line: Line) -> Line?
@@ -187,6 +207,14 @@ public extension NativePlugin {
 
     mutating func onLine(_: Line) -> ScriptEngine.LineDisposition {
         .init()
+    }
+
+    var wantsSemanticEvents: Bool {
+        false
+    }
+
+    mutating func onSemanticEvent(_: SemanticEvent) -> [ScriptEffect] {
+        []
     }
 
     func transformCommunicationLine(_ line: Line) -> Line? {
@@ -293,6 +321,31 @@ public struct NativePluginRegistry: Sendable {
         }
         if current != line { disposition.replacement = current }
         return disposition
+    }
+
+    /// Whether any *enabled* plugin currently wants semantic events. Cheap
+    /// enough to ask per line, and the check that makes classification free
+    /// when nothing is listening.
+    public var wantsSemanticEvents: Bool {
+        entries.contains { $0.enabled && $0.plugin.wantsSemanticEvents }
+    }
+
+    /// Indices of enabled plugins that currently want semantic events.
+    private var listeningIndices: [Int] {
+        entries.indices.filter { entries[$0].enabled && entries[$0].plugin.wantsSemanticEvents }
+    }
+
+    /// Fan a classified semantic event to the enabled plugins that asked for
+    /// them, concatenating effects.
+    public mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        // Collapsed into one predicate deliberately: a multiline `for … where`
+        // puts the brace on its own line for swiftformat, which swiftlint's
+        // `opening_brace` then rejects (CLAUDE.md gotcha).
+        for index in listeningIndices {
+            effects.append(contentsOf: entries[index].plugin.onSemanticEvent(event))
+        }
+        return effects
     }
 
     /// Fan a GMCP update to every enabled plugin, concatenating effects. The

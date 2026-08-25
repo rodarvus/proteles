@@ -42,6 +42,40 @@ struct AudioEndToEndTests {
         await session.disconnect()
     }
 
+    /// A gagged line must not publish its semantic effects (#82). Option B
+    /// classifies inside the engine pass and holds the effects on the
+    /// disposition; `SessionController` applies them only if the line survives
+    /// every gag.
+    ///
+    /// Paired with `lineSoundCue` below, which proves the same line *does*
+    /// sound when displayed — so a regression that silences everything cannot
+    /// satisfy this test alone.
+    @Test("a gagged level-up line produces no cue")
+    func gaggedLineProducesNoCue() async throws {
+        let engine = try ScriptEngine()
+        try await engine.addTrigger(Trigger(pattern: .substring("You raise a level"), gag: true))
+        let conn = InMemoryConnection()
+        let session = SessionController(scriptEngine: engine, makeConnection: { conn })
+        await session.registerNativePlugin(Soundpack(configURL: nil))
+
+        let cues = Collector<SoundCue>()
+        let pump = Task {
+            for await cue in session.soundCues {
+                await cues.append(cue)
+            }
+        }
+        try await session.connect(to: .init(host: "test.invalid", port: 23))
+        try await session.send("spmute") // unmute (muted by default)
+        conn.injectLine("You raise a level! You are now level 142.")
+
+        let sounded = await SessionTestSupport.poll {
+            await cues.values.contains { $0.file == "level_up.wav" }
+        }
+        #expect(!sounded, "a gagged line must not play a cue")
+        pump.cancel()
+        await session.disconnect()
+    }
+
     @Test("a level-up line through the pipeline plays level_up.wav")
     func lineSoundCue() async throws {
         let engine = try ScriptEngine()

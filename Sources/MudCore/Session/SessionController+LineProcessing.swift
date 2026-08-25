@@ -94,7 +94,14 @@ extension SessionController {
             && !wishGag
             && !tagResult.gag
         if shouldDisplay {
-            return await finishDisplayedLine(tagResult.line, effects: disposition.effects)
+            // Semantic effects (#82) apply only here: the line survived every
+            // gag, so it is what the player actually saw. A gagged line drops
+            // them below, which is why they are held separately from
+            // `disposition.effects`.
+            return await finishDisplayedLine(
+                tagResult.line,
+                effects: disposition.effects + disposition.semanticEffects
+            )
         }
         return await finishGaggedLine(
             line,

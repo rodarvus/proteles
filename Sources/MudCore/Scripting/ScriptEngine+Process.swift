@@ -38,6 +38,7 @@ public extension ScriptEngine {
         if native.gag { result.disposition.gag = true }
         result.disposition.effects.append(contentsOf: native.effects)
         result.disposition.replacement = native.replacement
+        result.disposition.semanticEffects = semanticEffects(for: line)
         // Trigger highlights (D-105) restyle whatever will be displayed.
         return measureScriptPhase(
             "session.script.highlights",
@@ -147,6 +148,30 @@ public extension ScriptEngine {
             events: events,
             thresholdMS: thresholdMS
         )
+    }
+
+    /// Classify the line and fan the events at whichever plugins asked for them
+    /// (#82) — inside the pass that is already running on this actor, so no
+    /// extra round-trip per line.
+    ///
+    /// The opt-in check comes **first**: with nothing listening (the usual case
+    /// — a muted soundpack) this returns before any regex runs, which is what
+    /// the previous attempt got wrong.
+    ///
+    /// The caller decides whether these effects are *applied*: they are held
+    /// separately on the disposition and dropped unless the line survives every
+    /// gag, so a gagged line never publishes.
+    private func semanticEffects(for line: Line) -> [ScriptEffect] {
+        guard nativePlugins.wantsSemanticEvents else { return [] }
+        let events = SemanticClassifier.events(forDisplayed: line)
+        guard !events.isEmpty else { return [] }
+        return measureScriptPhase(
+            "session.script.semantic",
+            events: events.count,
+            thresholdMS: 50
+        ) {
+            events.flatMap { nativePlugins.onSemanticEvent($0) }
+        }
     }
 
     private func recordTriggerBurst(_ firings: [TriggerFiring]) {

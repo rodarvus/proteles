@@ -16,11 +16,28 @@ extension ScriptEngine {
         /// text substitution), preserving the original id/timestamp. `nil`
         /// leaves the incoming line unchanged.
         public var replacement: Line?
+        /// Effects from ``SemanticEvent`` consumers (#82), kept **separate**
+        /// from ``effects`` because they are applied under a different
+        /// condition: ordinary trigger effects run whether or not the line is
+        /// displayed, while these run **only if the line survives every gag**.
+        ///
+        /// They ride back on this value rather than being fetched in a second
+        /// pass. `process(_:)` already runs on the engine actor, so classifying
+        /// there costs nothing extra, whereas re-entering the actor from the
+        /// displayed seam added a round-trip per line — measurably so in a kill
+        /// burst (#85, and the regression recorded in S0A_WIRING_PROPOSAL.md).
+        public var semanticEffects: [ScriptEffect]
 
-        public init(gag: Bool = false, effects: [ScriptEffect] = [], replacement: Line? = nil) {
+        public init(
+            gag: Bool = false,
+            effects: [ScriptEffect] = [],
+            replacement: Line? = nil,
+            semanticEffects: [ScriptEffect] = []
+        ) {
             self.gag = gag
             self.effects = effects
             self.replacement = replacement
+            self.semanticEffects = semanticEffects
         }
     }
 
