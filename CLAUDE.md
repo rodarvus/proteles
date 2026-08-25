@@ -233,6 +233,32 @@ observe, put a written proposal in front of the user and wait:
 This applies to **all** work, not only plugin ports — cross-cutting foundations
 and plumbing are exactly where unreviewed design decisions do the most damage.
 
+### Start every stage by quoting the ratified scope
+
+**Before proposing anything for a stage, quote its scope verbatim from the
+`D-NN` entry, and confirm that reading matches the user's.** Only then propose.
+
+**If you disagree with a ratified decision, raise it as a question — never as a
+proposal that quietly changes scope.** The plan is the user's; a disagreement is
+input to their decision, not grounds to re-scope on your own authority.
+
+This exists because of a specific, repeated failure mode: generating a plausible
+local frame and then acting on it as though it were the agreed frame. It has
+produced (a) a "fix" for a bug that had never occurred, justified by an invented
+benefit nobody checked against the corpus; (b) a performance "regression"
+measured by comparing a Debug build against a Release baseline; and (c) a
+proposal to defer three of S0's four remaining items on a "no consumer" argument,
+when D-118 names all four as scope and the exit criterion names notifications as
+a consumer. Each was caught by the user, not by the model.
+
+Note especially (c): **S0–S3 are deliberately a platform/framework enablement
+gate.** They are built *ahead* of their consumers on purpose — the frameworks are
+platform-independent, and the recordings corpus is what informs their design and
+proves them correct. "It has no consumer yet" is therefore not an argument
+against building an S-phase item; it is a restatement of what the arc is for.
+Derive-from-a-named-consumer (D-120) guards against inventing *speculative
+shapes* — it does not license shrinking a ratified phase.
+
 ### Evidence rules
 
 - **No behavioural claim without recording evidence.** If a change is said to fix

@@ -1,100 +1,66 @@
-# Finishing S0a — proposal for review
+# Finishing S0a — proposal **WITHDRAWN**
 
-> **Status: proposal. No code written.** Tracking: **#82**.
->
-> Three of the seven items on #82 are done. This argues that **one** of the
-> remaining four should be built now and the other three deferred to S0b (#84),
-> because they have no consumer — the same condition that produced the wiring
-> detour, arriving again in a different costume.
+> **Status: withdrawn 2026-08-25, the day it was written. Do not act on it.**
+> It proposed building one of S0a's four remaining items and deferring three.
+> That was wrong. **All four are ratified S0 scope and are being built.**
+> Tracking: **#82**.
 
-## 1. Where S0a actually stands
+## What it argued, and why it was wrong
 
-| # | Item | State |
-|---|---|---|
-| 1 | `SemanticEvent` taxonomy | **done** — `3b66acd0` |
-| 2 | Single classification point | **done** — `43bd3dcd` (Option B) |
-| 3 | `SoundEventClassifier` demoted to vocabulary pack | **done** — `3b66acd0` |
-| 4 | `NotificationMatcher` generalized as the user rule engine | open |
-| 5 | `AardwolfTags` promoted to tag-family router | open |
-| 6 | Events re-published on the internal bus | open |
-| 7 | Transcript-driven replay tests | open |
+The proposal applied a "who consumes this today?" test to items 4–6 of #82
+(generalize `NotificationMatcher`, promote `AardwolfTags` to a tag-family router,
+re-publish events on the internal bus), found no reader for any of them, and
+recommended deferring all three to S0b.
 
-Item 2 is validated in production: near-kill paint 468 ms against a 437 ms
-baseline, and `semantic` does not appear in any burst's phase breakdown — it
-falls below the 1 ms floor. The layer works and costs nothing measurable.
+Three things refute it, all of them already written down at the time:
 
-## 2. The consumer test, applied honestly
+1. **D-118 names all four items as S0's scope**, explicitly:
 
-D-120 requires abstractions be derived from a **named consumer**. Ignoring that
-is what produced a "fix" for a bug that had never occurred once in 593,246
-gagged lines. So, for each remaining item — who reads it *today*?
+   > build **S0** (SemanticEvent taxonomy in MudCore; classifier demoted to the
+   > built-in Aardwolf vocabulary pack on the *displayed*-line path;
+   > **NotificationMatcher generalized as the user rule engine; AardwolfTags
+   > promoted to a tag-family router**)
 
-**Item 4 — generalize `NotificationMatcher`.** Consumer: **none.** Notifications
-work. The generalization's value is that a user-authored rule could feed sound or
-a lens as well as a notification — but there is no `sound` action on triggers yet
-(that is S1/#83) and no lens (S0b/#84). Building it now means designing the rule
-model against imagined readers.
+2. **The exit criterion names the consumer the proposal claimed did not exist:**
 
-**Item 5 — `AardwolfTags` as a tag-family router.** Consumer: **S0b, not S0a.**
-The tag families that matter are the entity feeds — `{roomchars}` → occupants,
-`{roomobjs}` → floor items, `{invdata}` → items. Those are *state*, which is
-explicitly S0b's half of the split. The families S0a would route
-(`CHANNELS`/`TELLS`/`SAYS`) are **all off** on the live config, and per
-`help tags` enabling them **disables the game's scroll/paging** and changes tell
-behaviour. So item 5 costs the player something real, to feed a reader that does
-not exist.
+   > *Exit:* the layer classifies real recorded sessions correctly under test;
+   > sound/speech/**notifications** consume it with zero behaviour regressions.
 
-**Item 6 — re-publish events on the internal bus.** Consumer: **none.** No
-plugin or script asks for semantic events. The `BroadcastPlugin(100)` lesson it
-cites is about *ordering* when there are subscribers; there are none.
+   "Notifications already work" is not "notifications are not a consumer". The
+   plan's intent is that they be *rewired* onto the layer — that rewiring is the
+   enablement.
 
-**Item 7 — transcript-driven replay tests.** Consumer: **us, now.** This is the
-exit criterion — "classifies real recorded sessions correctly under test" — and
-the corpus (51 recordings, 1.8 GB) exists. It is also the only remaining item
-that would have caught a real defect.
+3. **§1.5's core argument is that three matchers are one layer** —
+   `SoundEventClassifier`, `NotificationMatcher`, `TriggerEngine`. Consolidating
+   `NotificationMatcher` is one third of the stated reason the phase exists.
+   Deferring it does not trim S0a; it removes its purpose.
 
-## 3. Recommendation
+## The framing error underneath
 
-**Build item 7. Move items 4, 5 and 6 to #84 (S0b), to be built when a lens
-actually reads them.**
+**S0–S3 are deliberately a platform/framework enablement gate.** They are built
+*ahead* of their consumers on purpose: the frameworks are platform-independent,
+and the recordings corpus is what informs their design and proves them correct.
+"No consumer yet" is not an argument against an S-phase item — it is a
+restatement of what the arc is for.
 
-That closes S0a on its exit criterion — the layer classifies real sessions
-correctly, and sound consumes it with no behaviour regression — without
-speculatively designing three abstractions against imagined readers.
+D-120's derive-from-a-named-consumer rule guards against inventing *speculative
+shapes*. It does not license shrinking a ratified phase, which is how this
+proposal used it.
 
-Concretely for item 7:
+## Why this file is kept rather than deleted
 
-- **Replay a full recording** through `SemanticClassifier` and assert the event
-  stream: total counts per category, and specific known events at known lines.
-- **Fixture from the corpus**, not hand-written, per `AARDWOLF_DATA_FEEDS.md` §8.
-  A trimmed excerpt checked into `Tests/MudCoreTests/Fixtures/` so CI does not
-  depend on `~/Documents`.
-- **Cover the ordering hazard at scale**: the `keep_evaluating="n"` trio is
-  already unit-tested on two lines; a replay proves it across thousands.
-- **Guard against classification drift**: if a future vocabulary change starts
-  firing `info` where it fired `double_end`, the replay counts move and the test
-  fails.
+Two reasons. A stray "defer three items" proposal found later and acted on would
+do real damage, so the withdrawal needs to live where the proposal did. And the
+failure is worth keeping visible: it is one instance of a repeated pattern —
+generating a plausible local frame and then acting on it as though it were the
+agreed frame — which now has a rule against it in CLAUDE.md
+(*"Start every stage by quoting the ratified scope"*).
 
-Bounded: one fixture, one suite, no production code.
+## The one point worth carrying forward
 
-## 4. What this leaves S0a as
-
-A taxonomy, a classifier, one classification point, sound reading it, and a
-replay test proving it against real sessions. That is a complete, honest phase.
-The parts that make the layer *extensible* — user rules, tag routing, a
-subscriber bus — arrive with the thing that needs them extended.
-
-## 5. If you disagree
-
-The counter-argument is real and worth stating: building 4/5/6 now means S0b
-starts with the substrate finished, and there is a cost to revisiting the same
-files twice. I weigh that lower because the lens paper design (`LENS_DESIGN.md`)
-found the entity feeds are mostly *promotion of existing parsers*, so S0b will be
-touching those files regardless — and because the alternative is designing a rule
-model and a router shape with nothing to validate them against.
-
-## 6. What I need from you
-
-1. **Item 7 only**, or all four?
-2. If item 7 only: should 4/5/6 move onto **#84** as checklist items, or become
-   their own issue?
+Small, and an implementation note rather than a scope argument: the tag families
+the router would enable (`CHANNELS`, `TELLS`, `SAYS`) are all **off** on the live
+config, and per `help tags` enabling them **disables the game's scroll/paging**
+and changes tell behaviour. So *which* families the router turns on is a decision
+to make when item 5 is built — per-feature and reversible, per the policy already
+agreed in `AARDWOLF_DATA_FEEDS.md` §3.
