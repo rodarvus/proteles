@@ -217,6 +217,57 @@ Keychain access on every build. Releases use a real **Developer ID Application**
 cert (since `v0.4.5`) via `scripts/release.sh`. (CI only runs `swift build`/`swift
 test`, so it never needs either cert.)
 
+## Staged work — PROPOSE, then implement (hard rule)
+
+**"Go ahead" is tactical approval for the immediate next step. It is NEVER
+latitude to make architectural decisions.** Approval of a *goal* is not approval
+of a *design*. Before writing code that introduces an abstraction, changes an
+existing contract, moves work between layers, or alters behaviour the user can
+observe, put a written proposal in front of the user and wait:
+
+- **What** specifically will change — files, types, seams, call paths.
+- **What will NOT change** — stated explicitly, so silence isn't read as scope.
+- **Trade-offs and options**, including the one not chosen and why.
+- **Impact**: behaviour, performance, and what could regress.
+
+This applies to **all** work, not only plugin ports — cross-cutting foundations
+and plumbing are exactly where unreviewed design decisions do the most damage.
+
+### Evidence rules
+
+- **No behavioural claim without recording evidence.** If a change is said to fix
+  something the user experiences, show the instances in
+  `~/Documents/Proteles/Recordings` first. If they can't be shown, say
+  **"structural only, no observed instances"** — never present an architectural
+  tidy-up as a user-facing fix. (This is not hypothetical: a "gagged lines no
+  longer make noise" fix was shipped for review after zero of 593,246 gagged
+  lines across four sessions would have fired a sound.)
+- **A green test suite is not evidence about live behaviour.** It shows the code
+  agrees with itself.
+
+### Hot-path changes need a measurement plan agreed up front
+
+Anything running per inbound/displayed line, per GMCP packet, or per render
+frame: agree the before/after measurement *before* implementing. Compare against
+recordings, not intuition — and note that **burst behaviour is where regressions
+show**. A per-line cost is invisible in ordinary output and obvious in the ~7–9
+line burst after a kill. Useful probes: `render: … arrival→paint`, and the
+`perf:`/`perf-burst:` phase timings, bucketed near-kill versus elsewhere.
+
+Two traps found the hard way: putting work **before** the guard that used to
+skip it (a muted soundpack did zero regex work; moving classification ahead of
+the mute check made it unconditional), and adding an **extra actor hop** per
+line into an already-contended actor.
+
+### Handover format
+
+Every hand-off states these four separately, and never blurs them:
+
+1. **What changed** (and what did not)
+2. **What I verified** — with the command and result
+3. **What I did NOT verify** — especially anything only the user can see
+4. **What could regress**
+
 ## Definition of done — the four gates
 
 Before committing, ALL must pass (from repo root):
@@ -246,7 +297,8 @@ vendored-source patch iOS needs.
   native *feature* or native *plugin* — **PROPOSE a plan first (analysis,
   trade-offs, options) and wait for approval.** Do NOT port directly. None run
   through the generic shim (that stays for arbitrary 3rd-party plugins).
-  Cross-cutting foundations and app/UI plumbing follow the normal build flow.
+  Cross-cutting foundations and app/UI plumbing are **not** exempt — see
+  **Staged work** above; they need a proposal too.
 - New logic gets thorough tests; prefer pure value-type models in MudCore.
 - Commit straight to `main` (no feature branches); **pushes are user-gated.**
   Logical commits with detailed *why* messages; co-author trailer
