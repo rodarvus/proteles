@@ -447,6 +447,9 @@
             documentUTF16Length: Int
         ) {
             let flushDuration = ContinuousClock.now - start
+            // Ends the open burst's span (#82 follow-up): the player waits for
+            // the paint, not for the append. No-op outside Full attribution.
+            PerformanceProbe.shared.notePainted()
             onFrameFlush?(RenderFrameStats(
                 flushDuration: flushDuration,
                 appendedLines: appendedCount,

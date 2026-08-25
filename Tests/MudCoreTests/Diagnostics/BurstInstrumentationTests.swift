@@ -94,6 +94,7 @@ struct BurstTrackerTests {
         _ = tracker.noteDisplayedLine(at: t0)
         _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(40))
         _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(80))
+        tracker.notePaint(at: t0 + .milliseconds(80))
         let note = tracker.flush()
         #expect(note?.contains("3 lines 80ms") == true, "\(note ?? "nil")")
     }
@@ -120,6 +121,59 @@ struct BurstTrackerTests {
         let engineAt = try #require(text.range(of: "script-engine"))
         let displayAt = try #require(text.range(of: "lines.display"))
         #expect(engineAt.lowerBound < displayAt.lowerBound, "\(text)")
+    }
+
+    /// The correction that mattered: the span must end at the **paint**, not at
+    /// the last append. Measured on a real session, near-kill append span was
+    /// 1ms p50 while paint latency was 468ms — so an append-ended span answers
+    /// "how fast did we ingest", which is not the question.
+    @Test("The span ends at the paint, not the last append")
+    func spanEndsAtPaint() throws {
+        var tracker = BurstTracker()
+        _ = tracker.noteDisplayedLine(at: t0)
+        _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(3))
+        // Appends finish in 3ms; the paint lands 400ms later.
+        tracker.notePaint(at: t0 + .milliseconds(400))
+        let flushed = tracker.flush()
+        let text = try #require(flushed)
+        #expect(text.hasPrefix("burst: 2 lines 400ms"), "\(text)")
+        #expect(!text.contains("unpainted"), "\(text)")
+    }
+
+    /// A single line that took a long time to paint is a real signal. Before
+    /// this correction it reported `1 line 0ms`, because append-to-append is
+    /// trivially zero — and single-line bursts were the majority.
+    @Test("A single-line burst reports its paint latency, not zero")
+    func singleLineReportsPaintLatency() throws {
+        var tracker = BurstTracker()
+        _ = tracker.noteDisplayedLine(at: t0)
+        tracker.notePaint(at: t0 + .milliseconds(120))
+        let flushed = tracker.flush()
+        let text = try #require(flushed)
+        #expect(text.hasPrefix("burst: 1 line 120ms"), "\(text)")
+    }
+
+    /// With no renderer attached the span falls back to appends and says so,
+    /// rather than silently reporting a number that means something else.
+    @Test("An unpainted burst is marked, not silently mis-reported")
+    func unpaintedIsMarked() throws {
+        var tracker = BurstTracker()
+        _ = tracker.noteDisplayedLine(at: t0)
+        _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(5))
+        let flushed = tracker.flush()
+        let text = try #require(flushed)
+        #expect(text.contains("(unpainted)"), "\(text)")
+    }
+
+    /// A paint arriving while nothing is open belongs to no burst.
+    @Test("A paint during idle does not attach to the next burst")
+    func idlePaintDoesNotLeak() throws {
+        var tracker = BurstTracker()
+        tracker.notePaint(at: t0)
+        _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(500))
+        let flushed = tracker.flush()
+        let text = try #require(flushed)
+        #expect(text.contains("(unpainted)"), "\(text)")
     }
 
     @Test("Phases accumulated with no open burst are dropped, not leaked forward")

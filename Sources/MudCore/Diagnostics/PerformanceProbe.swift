@@ -140,6 +140,15 @@ public final class PerformanceProbe: @unchecked Sendable {
         }
     }
 
+    /// Record that the renderer finished painting a frame. This is what ends a
+    /// burst's span — see ``BurstTracker``.
+    public func notePainted(at now: ContinuousClock.Instant = .now) {
+        lock.withLock {
+            guard mode == .full else { return }
+            burst.notePaint(at: now)
+        }
+    }
+
     /// Close any open burst — session end, where no next line will arrive.
     public func flushBurst() {
         lock.withLock {

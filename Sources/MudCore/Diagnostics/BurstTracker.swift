@@ -45,6 +45,15 @@ struct BurstTracker {
     private var lineCount = 0
     private var startedAt: ContinuousClock.Instant?
     private var lastLineAt: ContinuousClock.Instant?
+    /// When the renderer last finished painting while this burst was open.
+    ///
+    /// The burst's span ends **here**, not at the last append. Appending is
+    /// near-instant — a 35-line burst appends in ~31 ms — while the player
+    /// waits for the *paint*, which happens afterwards in the render
+    /// coalescer. Measured on a real session: near-kill append span 1 ms p50
+    /// against 468 ms paint. Ending the span at append answers "how fast did we
+    /// ingest", which is not the question anyone was asking.
+    private var lastPaintAt: ContinuousClock.Instant?
     private var phaseTotals: [String: Int] = [:]
 
     /// True while a burst is open.
@@ -62,11 +71,19 @@ struct BurstTracker {
         if startedAt == nil {
             startedAt = now
             lineCount = 0
+            lastPaintAt = nil
             phaseTotals.removeAll(keepingCapacity: true)
         }
         lineCount += 1
         lastLineAt = now
         return finished
+    }
+
+    /// Record that the renderer finished a paint. Only meaningful while a burst
+    /// is open; a paint during idle belongs to no burst.
+    mutating func notePaint(at now: ContinuousClock.Instant) {
+        guard isOpen else { return }
+        lastPaintAt = now
     }
 
     /// Add a measured phase to the open burst. Cheap by construction: one
@@ -87,15 +104,22 @@ struct BurstTracker {
     /// a long time is a real signal, just a different one.
     private mutating func closedNote(endingAt end: ContinuousClock.Instant) -> String? {
         guard let start = startedAt else { return nil }
-        let spanMS = max(0, Int((end - start) / .milliseconds(1)))
+        // Prefer the paint. Fall back to the last append only when no paint was
+        // observed while the burst was open (diagnostics on, no renderer
+        // attached — a headless test, or the Help window).
+        let painted = lastPaintAt.map { $0 > start ? $0 : end }
+        let spanMS = max(0, Int(((painted ?? end) - start) / .milliseconds(1)))
         let lines = lineCount
         let phases = phaseTotals
+        let sawPaint = lastPaintAt != nil
         startedAt = nil
         lastLineAt = nil
+        lastPaintAt = nil
         lineCount = 0
         phaseTotals.removeAll(keepingCapacity: true)
 
-        var note = "burst: \(lines) line\(lines == 1 ? "" : "s") \(spanMS)ms"
+        var note = "burst: \(lines) line\(lines == 1 ? "" : "s") "
+            + "\(spanMS)ms\(sawPaint ? "" : " (unpainted)")"
         let ranked = phases
             .filter { $0.value >= phaseFloorMS }
             .sorted { ($0.value, $0.key) > ($1.value, $1.key) }
