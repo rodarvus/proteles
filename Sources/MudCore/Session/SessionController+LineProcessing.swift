@@ -156,6 +156,9 @@ extension SessionController {
         _ line: Line,
         effects: [ScriptEffect]
     ) async -> LineProcessingSummary {
+        // Burst measurement, main output only (`.full` diagnostics only). Placed
+        // at the displayed seam so a burst is exactly what the player saw.
+        PerformanceProbe.shared.noteDisplayedLine()
         await measureSessionPhase("session.lines.display", events: 1, thresholdMS: 50) {
             await recordDisplayed(line, kind: .mud)
         }

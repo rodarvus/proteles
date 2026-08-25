@@ -40,6 +40,8 @@ public final class PerformanceProbe: @unchecked Sendable {
     private var inGameAt: Date?
     private var lastSnapshot: Snapshot?
     private var recentBuckets: [RecentPressureBucket] = []
+    /// Burst measurement (#82 follow-up). Main output only, `.full` only.
+    private var burst = BurstTracker()
     private var pendingNotes: [String] = []
     private var summaryStartedAt = Date()
     private var measuredPhases = 0
@@ -124,6 +126,30 @@ public final class PerformanceProbe: @unchecked Sendable {
         }
     }
 
+    /// Record that a line was displayed in the **main output** (#82 follow-up).
+    ///
+    /// Bursts are detected by timing alone — see ``BurstTracker``. A completed
+    /// burst's note is emitted when the *next* line arrives after a gap, which
+    /// avoids a timer; ``flushBurst()`` closes the last one at session end.
+    public func noteDisplayedLine(at now: ContinuousClock.Instant = .now) {
+        lock.withLock {
+            guard mode == .full else { return }
+            if let note = burst.noteDisplayedLine(at: now) {
+                pendingNotes.append(note)
+            }
+        }
+    }
+
+    /// Close any open burst — session end, where no next line will arrive.
+    public func flushBurst() {
+        lock.withLock {
+            guard mode == .full else { return }
+            if let note = burst.flush() {
+                pendingNotes.append(note)
+            }
+        }
+    }
+
     public func recordPhase(
         _ phase: String,
         duration: Duration,
@@ -139,6 +165,7 @@ public final class PerformanceProbe: @unchecked Sendable {
                 maxDurationMS = durationMS
                 maxPhase = phase
             }
+            burst.accumulate(phase: phase, durationMS: durationMS)
             recordRecentPressureLocked(
                 phase: phase,
                 durationMS: durationMS,

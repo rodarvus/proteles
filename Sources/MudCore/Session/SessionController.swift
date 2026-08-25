@@ -588,7 +588,7 @@ public actor SessionController {
 
         if autoRecord, recorder == nil, let url = autoRecordingURL() {
             recorder = try? SessionRecorder(url: url)
-            transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
+            openTranscript(pairedWith: url)
         }
         startSessionLogIfEnabled()
 

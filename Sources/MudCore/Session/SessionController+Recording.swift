@@ -18,11 +18,25 @@ public extension SessionController {
         recorder?.close()
         transcript?.close()
         recorder = try SessionRecorder(url: url)
+        openTranscript(pairedWith: url)
+    }
+
+    /// Open the human-readable transcript beside a recording and stamp which
+    /// build produced it.
+    ///
+    /// The stamp is **ungated** — one line per session, and without it no
+    /// performance comparison across recordings is valid, because Release and
+    /// Debug otherwise look identical while differing by 2.30x (see
+    /// ``BuildInfo`` and CLAUDE.md's Release-build rule).
+    func openTranscript(pairedWith url: URL) {
         transcript = try? SessionTranscript(url: SessionTranscript.url(pairedWith: url))
+        logTranscript(.note, "build: \(BuildInfo.current().transcriptLine)")
     }
 
     /// Stop the current recording. Idempotent.
     func stopRecording() {
+        // No "next line" will arrive to close an open burst.
+        PerformanceProbe.shared.flushBurst()
         recorder?.close()
         recorder = nil
         transcript?.close()

@@ -45,6 +45,25 @@ targets:
       # user's ~/Documents/Proteles/MapImages/ always overrides.
       - path: Resources/DefaultMapTextures
         type: folder
+    # Stamp git provenance into the built Info.plist (BuildInfo). Without it a
+    # recording cannot say which build produced it, and Debug/Release
+    # comparisons silently compare the wrong things — see CLAUDE.md's
+    # Release-build rule. Best-effort: a source drop with no .git still builds.
+    postCompileScripts:
+      - name: Stamp git provenance
+        basedOnDependencyAnalysis: false
+        script: |
+          set -u
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          [ -f "$PLIST" ] || exit 0
+          SHA=$(git -C "${SRCROOT}" rev-parse --short HEAD 2>/dev/null || echo "")
+          if [ -n "$SHA" ]; then
+            if git -C "${SRCROOT}" diff --quiet HEAD 2>/dev/null; then DIRTY=0; else DIRTY=1; fi
+            /usr/libexec/PlistBuddy -c "Add :ProtelesGitCommit string $SHA" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Set :ProtelesGitCommit $SHA" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :ProtelesGitDirty string $DIRTY" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Set :ProtelesGitDirty $DIRTY" "$PLIST"
+          fi
     info:
       path: Info.plist
       properties:
