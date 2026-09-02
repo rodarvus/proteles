@@ -8,8 +8,9 @@ import Foundation
 /// uses. `gmcphelper` is the load-bearing one: its `gmcp(path)` accessor is
 /// re-pointed at our native live `proteles.gmcp` table and stringifies leaf
 /// scalars, matching what Aardwolf plugins expect (e.g. `gmcp("char.status
-/// .state") == "3"`). The bulkier third-party libs (`json`, `serialize`,
-/// `aardwolf_colors`) are added as specific plugins need them.
+/// .state") == "3"`); it lives in `LuaRuntime+CompatHelpersGMCP.swift`. The
+/// bulkier third-party libs (`json`, `serialize`, `aardwolf_colors`) are added
+/// as specific plugins need them.
 extension LuaRuntime {
     static let standardHelpers: [String: String] = [
         "gmcphelper": gmcpHelperSource,
@@ -384,41 +385,6 @@ extension LuaRuntime {
       util = {},
     }
     return json
-    """
-
-    /// `gmcp(path)` / `gmcpval(path)` over the live `proteles.gmcp` table,
-    /// matching the reference gmcphelper (which routes through the GMCP
-    /// handler's `gmcpdata_as_string`): **all scalar leaves are stringified**,
-    /// recursively, so `gmcp("char.status").state` is `"3"` not `3` — Aardwolf
-    /// sends GMCP scalars as JSON numbers, but plugins (dinv, S&D, …) compare
-    /// them as strings. A missing path is nil.
-    private static let gmcpHelperSource = """
-    local function stringifyLeaves(node)
-      if type(node) ~= "table" then return tostring(node) end
-      local out = {}
-      for key, value in pairs(node) do out[key] = stringifyLeaves(value) end
-      return out
-    end
-    local function walk(path)
-      local node = proteles.gmcp
-      for key in string.gmatch(path or "", "[^.]+") do
-        if type(node) ~= "table" then return nil end
-        node = node[key]
-      end
-      return node
-    end
-    function gmcpval(path)
-      local node = walk(path)
-      -- Match the reference gmcphelper: a missing path returns "" (an empty
-      -- string), not nil — so `gmcp("char.status").state` is harmlessly nil
-      -- (string indexing) rather than a nil-index crash, exactly as plugins
-      -- written against MUSHclient expect (aard_GMCP_handler: `… or ""`).
-      if node == nil then return "" end
-      return stringifyLeaves(node)
-    end
-    gmcp = gmcpval
-    function gmcpmessage() return proteles.gmcp end
-    return true
     """
 
     /// `tprint(t)` — pretty-print a table to the output via `Note`.
