@@ -285,6 +285,16 @@ skip it (a muted soundpack did zero regex work; moving classification ahead of
 the mute check made it unconditional), and adding an **extra actor hop** per
 line into an already-contended actor.
 
+Two more, from the same arc. **Baselines drift:** plugin-script execution slowed
+~10 % per week over two weeks on an unchanged `v0.8.8` binary (#86), so a pass
+condition of "within noise of last month's figure" is unfalsifiable — it fails a
+correct change or passes a broken one depending on the calendar. Measure a
+hot-path change **A/B against a same-day control build** (the previous commit,
+Release, identified by the `build:` transcript line), never against a
+historical number. And **normalise per event (per kill), not per burst**: the
+burst count itself moves with script latency, which once turned a 10 % change
+into a phantom 3×.
+
 ### Handover format
 
 Every hand-off states these four separately, and never blurs them:
