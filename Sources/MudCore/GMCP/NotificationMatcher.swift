@@ -30,10 +30,16 @@ public struct ProtelesNotification: Sendable, Equatable {
 }
 
 /// Pure logic deciding whether a chat line warrants a notification — the
-/// built-in **tells** + **name-mention** rules (the MVP; user-configurable
-/// rules + GMCP-threshold rules are a follow-up, see
-/// docs/plans/NOTIFICATIONS_PLAN.md). No `UNUserNotifications`, no focus state
-/// (the app applies suppress-when-focused), so it's fully unit-testable.
+/// built-in **tells** + **name-mention** preferences plus the user's
+/// ``NotificationRule``s (keyword, channel, HP threshold, quest-ready). No
+/// `UNUserNotifications`, no focus state (the app applies suppress-when-focused),
+/// so it's fully unit-testable.
+///
+/// Since S0a item 4 (#82) the rules are a **source of `SemanticEvent`s** — see
+/// `NotificationMatcher+SemanticEvents.swift`. The rule-driven notification
+/// methods below are implemented on top of that event path, so a notification is
+/// *built from* its event rather than produced beside it. Tells and mentions are
+/// preferences, not rules, and are unchanged.
 public struct NotificationMatcher: Sendable, Equatable {
     public var notifyOnTells: Bool
     public var notifyOnMention: Bool
@@ -81,35 +87,17 @@ public struct NotificationMatcher: Sendable, Equatable {
             return ProtelesNotification(title: who + location, body: message)
         }
 
-        // A user `.channel` rule fires on any chat for the named channel.
-        if let rule = firstChannelRule(channel: channel) {
-            let defaultBody = sender.isEmpty ? message : "\(sender): \(message)"
-            return make(
-                rule: rule,
-                defaultTitle: chatLine.channel.isEmpty ? "Channel" : chatLine.channel,
-                defaultBody: defaultBody,
-                tokens: ["channel": chatLine.channel, "player": sender, "message": message, "line": message]
-            )
-        }
-        return nil
+        // A user `.channel` rule fires on any chat for the named channel —
+        // via its event (S0a item 4). First match wins, as before.
+        return events(forChat: chatLine).first.flatMap(notification(from:))
     }
 
     /// An edge-triggered low-HP notification per `.hpBelow` rule that the player
     /// just crossed below (was at/above `threshold` or unknown → now below).
     /// `percent` values are pre-computed by the caller from GMCP vitals/maxstats.
     public func hpNotifications(currentPercent: Int?, previousPercent: Int?) -> [ProtelesNotification] {
-        guard let current = currentPercent else { return [] }
-        return rules.compactMap { rule in
-            guard rule.enabled, case .hpBelow(let threshold) = rule.trigger else { return nil }
-            let wasAtOrAbove = previousPercent.map { $0 >= threshold } ?? true
-            guard current < threshold, wasAtOrAbove else { return nil }
-            return make(
-                rule: rule,
-                defaultTitle: "Low HP",
-                defaultBody: "HP at \(current)% (below \(threshold)%)",
-                tokens: ["percent": "\(current)", "threshold": "\(threshold)"]
-            )
-        }
+        events(forHPPercent: currentPercent, previous: previousPercent)
+            .compactMap(notification(from:))
     }
 
     /// Whether any enabled `.questReady` rule exists — lets the `comm.quest`
@@ -135,18 +123,7 @@ public struct NotificationMatcher: Sendable, Equatable {
     /// A quest-ready notification if the player just became able to request one
     /// (the caller detects the `false → true` edge from `comm.quest` GMCP).
     public func questReadyNotification(becameReady: Bool) -> ProtelesNotification? {
-        guard becameReady else { return nil }
-        for rule in rules where rule.enabled {
-            if case .questReady = rule.trigger {
-                return make(
-                    rule: rule,
-                    defaultTitle: "Quest ready",
-                    defaultBody: "You can request a new quest.",
-                    tokens: [:]
-                )
-            }
-        }
-        return nil
+        events(forQuestReady: becameReady).first.flatMap(notification(from:))
     }
 
     /// Whether any enabled `.keyword` rule exists — lets the per-line output
@@ -171,18 +148,7 @@ public struct NotificationMatcher: Sendable, Equatable {
     /// enabled `.keyword` rule whose phrase appears (case-insensitively) in it.
     /// Channel/tell/mention rules are chat-only (see ``notification(for:characterName:)``).
     public func outputNotification(for line: String) -> ProtelesNotification? {
-        for rule in rules where rule.enabled {
-            guard case .keyword(let phrase) = rule.trigger, !phrase.isEmpty,
-                  let captured = Self.keywordMatch(line, phrase: phrase, regex: rule.regex)
-            else { continue }
-            return make(
-                rule: rule,
-                defaultTitle: "Match: \(phrase)",
-                defaultBody: line,
-                tokens: ["line": line, "match": captured, "capture": captured]
-            )
-        }
-        return nil
+        events(forDisplayed: line).first.flatMap(notification(from:))
     }
 
     /// The matched text for a keyword rule, or `nil`. A regex rule returns its
@@ -199,21 +165,15 @@ public struct NotificationMatcher: Sendable, Equatable {
         return Range(group, in: line).map { String(line[$0]) } ?? phrase
     }
 
-    /// The first enabled `.channel` rule matching `channel` (already lowercased).
-    private func firstChannelRule(channel: String) -> NotificationRule? {
-        rules.first { rule in
-            guard rule.enabled, case .channel(let name) = rule.trigger, !name.isEmpty else { return false }
-            return channel.contains(name.lowercased())
-        }
-    }
-
-    private static func suppressesNotifications(forChannel channel: String) -> Bool {
+    static func suppressesNotifications(forChannel channel: String) -> Bool {
         channel.trimmingCharacters(in: .whitespacesAndNewlines) == "mobsay"
     }
 
     /// Build a notification for a fired `rule`: title/body from its templates
     /// (with `{token}` substitution) or the supplied defaults, and its sound.
-    private func make(
+    /// Internal so the event path (`NotificationMatcher+SemanticEvents`) is the
+    /// one place notifications are assembled from.
+    func make(
         rule: NotificationRule,
         defaultTitle: String,
         defaultBody: String,
