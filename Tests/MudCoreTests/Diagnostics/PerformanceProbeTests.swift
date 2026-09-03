@@ -179,6 +179,81 @@ struct PerformanceProbeTests {
         #expect(note.contains("live"))
     }
 
+    // MARK: - Attribution (PER_PLUGIN_ATTRIBUTION_PROPOSAL.md §2.1)
+
+    /// Pinned literally: the unattributed note is the format two weeks of
+    /// corpus tooling parse. A change here must be deliberate, not a side
+    /// effect of adding a field.
+    @Test("An unattributed note is byte-identical to the pre-attribution format")
+    func unattributedNoteIsUnchanged() {
+        let probe = PerformanceProbe()
+        let login = Date(timeIntervalSince1970: 7000)
+        probe.startupWindow = 120
+        probe.reset(now: login)
+        probe.setMode(.full)
+        probe.markInGame(at: login)
+
+        probe.recordPhase(
+            "session.script.lua.plugin",
+            duration: .milliseconds(281),
+            events: 1,
+            thresholdMS: 50,
+            at: login.addingTimeInterval(7784.6)
+        )
+
+        let note = probe.drainPendingNotes().first ?? ""
+        #expect(note == "perf: session.script.lua.plugin 281ms events 1 login+7784.6s live", "\(note)")
+    }
+
+    @Test("An attributed note names the plugin as a trailing field")
+    func attributedNoteNamesThePlugin() {
+        let probe = PerformanceProbe()
+        let login = Date(timeIntervalSince1970: 7100)
+        probe.startupWindow = 120
+        probe.reset(now: login)
+        probe.setMode(.full)
+        probe.markInGame(at: login)
+
+        probe.recordPhase(
+            "session.script.lua.plugin",
+            duration: .milliseconds(281),
+            events: 1,
+            thresholdMS: 50,
+            at: login.addingTimeInterval(7784.6),
+            attribution: "leveldb"
+        )
+
+        let note = probe.drainPendingNotes().first ?? ""
+        #expect(
+            note == "perf: session.script.lua.plugin 281ms events 1 login+7784.6s live plugin=leveldb",
+            "\(note)"
+        )
+    }
+
+    /// The stall note reuses the same formatter, so attribution reaches it for
+    /// free — a stall right after a slow plugin script names the plugin.
+    @Test("The stall note carries the last slow phase's attribution")
+    func stallNoteCarriesAttribution() {
+        let probe = PerformanceProbe()
+        let login = Date(timeIntervalSince1970: 7200)
+        probe.reset(now: login)
+        probe.setMode(.full)
+        probe.stallAttributionWindow = 5
+        probe.markInGame(at: login)
+        probe.recordPhase(
+            "session.script.lua.plugin",
+            duration: .milliseconds(300),
+            events: 1,
+            thresholdMS: 50,
+            at: login.addingTimeInterval(200),
+            attribution: "leveldb"
+        )
+
+        let note = probe.stallNote(blockedMS: 310, at: login.addingTimeInterval(201))
+        #expect(note.contains("last perf phase: session.script.lua.plugin 300ms events 1"), "\(note)")
+        #expect(note.contains("plugin=leveldb"), "\(note)")
+    }
+
     @Test("summary aggregates counts without recording event text")
     func summaryDoesNotLeakEventText() throws {
         let probe = PerformanceProbe()

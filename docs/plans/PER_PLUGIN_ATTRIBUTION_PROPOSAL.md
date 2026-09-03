@@ -1,8 +1,9 @@
 # Per-plugin attribution — proposal for review
 
-> **Status: proposal. No code written.** Tracking: **#86** (the drift) and
-> **#85** (the instrumentation gap it named). Precedes S0a item 5 by decision
-> (2026-09-03).
+> **Status: approved 2026-09-03 (all three questions in §7, as proposed);
+> implemented the same day, gates green, awaiting the A/B in §4.** Tracking:
+> **#86** (the drift) and **#85** (the instrumentation gap it named). Precedes
+> S0a item 5 by decision (2026-09-03). Implementation notes in §8.
 
 ## 1. The question the corpus cannot answer today
 
@@ -58,7 +59,7 @@ the burst note, ranked by cost, only when non-empty:
 
 ```
 burst: 9 lines 468ms | lines.script-engine 420ms · script.trigger-match 60ms · …
-burst-plugins: script.plugin[leveldb] 380ms · script.plugin[dinv] 40ms
+burst-plugins: script.lua.plugin[leveldb] 380ms · script.lua.plugin[dinv] 40ms
 ```
 
 The existing `burst:` line and its 12-phase cap are untouched. A second line
@@ -147,3 +148,30 @@ first kill session then names the plugin, and #86 resumes on that data.
    rather than folding names into the capped `burst:` breakdown.
 2. Confirm callbacks stay out of this cut (§2.4).
 3. Confirm the pass condition in §4.
+
+*Answered 2026-09-03: second line; callbacks out; pass condition as proposed.*
+
+## 8. Implementation notes (2026-09-03)
+
+Built as specified in §2, with one addition the proposal did not list:
+
+- **`ScriptEngine.probe`**, a stored property defaulting to
+  `PerformanceProbe.shared`, with an internal `useProbe(_:)` setter. Every
+  engine timing call now goes through it instead of naming the singleton.
+  Production behaviour is identical. It exists because the end-to-end test
+  (§5.3) shares the process-wide probe with every session test running in
+  parallel, any of which may `flushBurst()` and drain a burst mid-test — which
+  is exactly what the first full-suite run did. A private probe per test
+  engine makes the test deterministic. Test plumbing, not design.
+
+Two corrections to this document's examples, found by the tests: the short
+phase name in a burst line is `script.lua.plugin`, not `script.plugin` (the
+`session.` prefix is what gets trimmed), so the second line reads
+`burst-plugins: script.lua.plugin[leveldb] 380ms · …`; and the whole-firing
+phase appears alongside it as `script.trigger-script.plugin[leveldb]`.
+
+Gates: `swift build`, `swift test --parallel` (2,087 tests), `swiftformat
+--lint` (modulo the local 0.63/CI 0.61 `wrapIfStatementBodies` noise),
+`swiftlint --strict`, and the iOS simulator gate — all green on the final
+tree. The §4 A/B is the user's to run: two Release builds, control at the
+previous commit and candidate at this tree, same day, same character.

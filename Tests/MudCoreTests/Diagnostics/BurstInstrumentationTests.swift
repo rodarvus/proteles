@@ -73,11 +73,11 @@ struct BurstTrackerTests {
         // Nine lines 5ms apart — a kill burst.
         for index in 0..<9 {
             let note = tracker.noteDisplayedLine(at: t0 + .milliseconds(index * 5))
-            #expect(note == nil, "burst must not close mid-run (line \(index))")
+            #expect(note.isEmpty, "burst must not close mid-run (line \(index))")
         }
         // A line after the gap closes the previous burst.
         let closed = tracker.noteDisplayedLine(at: t0 + .milliseconds(500))
-        #expect(closed?.hasPrefix("burst: 9 lines ") == true, "\(closed ?? "nil")")
+        #expect(closed.first?.hasPrefix("burst: 9 lines ") == true, "\(closed)")
     }
 
     @Test("A gap longer than the threshold separates bursts")
@@ -85,7 +85,7 @@ struct BurstTrackerTests {
         var tracker = BurstTracker()
         _ = tracker.noteDisplayedLine(at: t0)
         let closed = tracker.noteDisplayedLine(at: t0 + .milliseconds(101))
-        #expect(closed?.hasPrefix("burst: 1 line ") == true, "\(closed ?? "nil")")
+        #expect(closed.first?.hasPrefix("burst: 1 line ") == true, "\(closed)")
     }
 
     @Test("The reported span covers first to last line of the burst")
@@ -96,7 +96,7 @@ struct BurstTrackerTests {
         _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(80))
         tracker.notePaint(at: t0 + .milliseconds(80))
         let note = tracker.flush()
-        #expect(note?.contains("3 lines 80ms") == true, "\(note ?? "nil")")
+        #expect(note.first?.contains("3 lines 80ms") == true, "\(note)")
     }
 
     /// The point of §3: a regression should name itself rather than be inferred
@@ -111,7 +111,7 @@ struct BurstTrackerTests {
             tracker.accumulate(phase: "session.lines.semantic", durationMS: 0)
         }
         let note = tracker.flush()
-        let text = try #require(note)
+        let text = try #require(note.first)
         #expect(text.contains("lines.script-engine 360ms"), "\(text)")
         #expect(text.contains("lines.display 108ms"), "\(text)")
         // Below the floor: contributes nothing, so it is not named — which is
@@ -135,7 +135,7 @@ struct BurstTrackerTests {
         // Appends finish in 3ms; the paint lands 400ms later.
         tracker.notePaint(at: t0 + .milliseconds(400))
         let flushed = tracker.flush()
-        let text = try #require(flushed)
+        let text = try #require(flushed.first)
         #expect(text.hasPrefix("burst: 2 lines 400ms"), "\(text)")
         #expect(!text.contains("unpainted"), "\(text)")
     }
@@ -149,7 +149,7 @@ struct BurstTrackerTests {
         _ = tracker.noteDisplayedLine(at: t0)
         tracker.notePaint(at: t0 + .milliseconds(120))
         let flushed = tracker.flush()
-        let text = try #require(flushed)
+        let text = try #require(flushed.first)
         #expect(text.hasPrefix("burst: 1 line 120ms"), "\(text)")
     }
 
@@ -161,7 +161,7 @@ struct BurstTrackerTests {
         _ = tracker.noteDisplayedLine(at: t0)
         _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(5))
         let flushed = tracker.flush()
-        let text = try #require(flushed)
+        let text = try #require(flushed.first)
         #expect(text.contains("(unpainted)"), "\(text)")
     }
 
@@ -172,7 +172,7 @@ struct BurstTrackerTests {
         tracker.notePaint(at: t0)
         _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(500))
         let flushed = tracker.flush()
-        let text = try #require(flushed)
+        let text = try #require(flushed.first)
         #expect(text.contains("(unpainted)"), "\(text)")
     }
 
@@ -182,13 +182,13 @@ struct BurstTrackerTests {
         tracker.accumulate(phase: "session.lines.display", durationMS: 999)
         _ = tracker.noteDisplayedLine(at: t0)
         let note = tracker.flush()
-        #expect(note?.contains("999ms") == false, "\(note ?? "nil")")
+        #expect(note.first?.contains("999ms") == false, "\(note)")
     }
 
     @Test("flush on an idle tracker reports nothing")
     func flushIdleIsSilent() {
         var tracker = BurstTracker()
-        #expect(tracker.flush() == nil)
+        #expect(tracker.flush().isEmpty)
     }
 
     @Test("The breakdown is capped so the note stays one line")
@@ -200,8 +200,64 @@ struct BurstTrackerTests {
             tracker.accumulate(phase: "session.phase\(index)", durationMS: 10 + index)
         }
         let flushed = tracker.flush()
-        let text = try #require(flushed)
+        let text = try #require(flushed.first)
         #expect(text.components(separatedBy: " · ").count == 3, "\(text)")
+    }
+
+    // MARK: - Attribution (PER_PLUGIN_ATTRIBUTION_PROPOSAL.md §2.2)
+
+    /// The question #86 could not answer: *which* plugin. Attributed samples
+    /// are ranked on their own line, so the answer reads off the transcript.
+    @Test("Attributed phases produce a second burst-plugins line, ranked by cost")
+    func attributedPhasesGetTheirOwnLine() throws {
+        var tracker = BurstTracker()
+        _ = tracker.noteDisplayedLine(at: t0)
+        tracker.accumulate(phase: "session.script.lua.plugin", durationMS: 40, attribution: "dinv")
+        tracker.accumulate(phase: "session.script.lua.plugin", durationMS: 380, attribution: "leveldb")
+        tracker.accumulate(phase: "session.script.lua.plugin", durationMS: 20, attribution: "dinv")
+        let flushed = tracker.flush()
+        #expect(flushed.count == 2, "\(flushed)")
+        let plugins = try #require(flushed.last)
+        #expect(
+            plugins == "burst-plugins: script.lua.plugin[leveldb] 380ms · script.lua.plugin[dinv] 60ms",
+            "\(plugins)"
+        )
+    }
+
+    /// The aggregate stays the aggregate: attribution adds a line, it never
+    /// changes the one two weeks of corpus parsers were written against.
+    @Test("The burst line is identical with and without attribution")
+    func burstLineUnchangedByAttribution() {
+        var plain = BurstTracker()
+        _ = plain.noteDisplayedLine(at: t0)
+        plain.accumulate(phase: "session.script.lua.plugin", durationMS: 400)
+        plain.accumulate(phase: "session.lines.display", durationMS: 12)
+        plain.notePaint(at: t0 + .milliseconds(450))
+
+        var attributed = BurstTracker()
+        _ = attributed.noteDisplayedLine(at: t0)
+        attributed.accumulate(phase: "session.script.lua.plugin", durationMS: 400, attribution: "leveldb")
+        attributed.accumulate(phase: "session.lines.display", durationMS: 12)
+        attributed.notePaint(at: t0 + .milliseconds(450))
+
+        let plainNotes = plain.flush()
+        let attributedNotes = attributed.flush()
+        #expect(plainNotes.count == 1, "\(plainNotes)")
+        #expect(attributedNotes.count == 2, "\(attributedNotes)")
+        #expect(plainNotes.first == attributedNotes.first, "\(plainNotes) vs \(attributedNotes)")
+    }
+
+    @Test("Attributed totals below the floor are not named, and reset between bursts")
+    func attributionFloorAndReset() {
+        var tracker = BurstTracker()
+        _ = tracker.noteDisplayedLine(at: t0)
+        tracker.accumulate(phase: "session.script.lua.plugin", durationMS: 0, attribution: "dinv")
+        #expect(tracker.flush().count == 1)
+        _ = tracker.noteDisplayedLine(at: t0 + .milliseconds(500))
+        tracker.accumulate(phase: "session.script.lua.plugin", durationMS: 5, attribution: "leveldb")
+        let second = tracker.flush()
+        #expect(second.last?.contains("[leveldb] 5ms") == true, "\(second)")
+        #expect(second.last?.contains("dinv") == false, "\(second)")
     }
 }
 
@@ -245,5 +301,97 @@ struct BurstInstrumentationCostTests {
         let notes = probe.drainPendingNotes().filter { $0.hasPrefix("burst:") }
         #expect(notes.count == 1, "\(notes)")
         #expect(notes.first?.contains("9 lines") == true, "\(notes)")
+    }
+
+    // MARK: - End to end through the engine (PER_PLUGIN_ATTRIBUTION_PROPOSAL.md §5.3)
+
+    // Each of these gives its engine a private probe. The process-wide one is
+    // shared with every session test running in parallel, any of which may
+    // `flushBurst()` and drain a burst mid-test — which is exactly what
+    // happened on the first full-suite run.
+
+    /// A script that takes long enough to clear the 1 ms burst floor on any
+    /// machine (tens of milliseconds here), while staying far below the 50 ms
+    /// `perf:` threshold's worst case mattering — the burst line is the assert.
+    private static let slowBody = "local s = 0 for i = 1, 1500000 do s = s + i end"
+
+    private static let slowPlugin = """
+    <muclient><plugin id="com.proteles.test.slow" name="Slow Plugin"/>
+    <triggers>
+    <trigger enabled="y" match="^slow trigger$" regexp="y" script="slow_fn" sequence="100"/>
+    </triggers>
+    <aliases>
+    <alias match="^slow alias$" enabled="y" regexp="y" send_to="12" script="slow_fn"/>
+    </aliases>
+    <script><![CDATA[
+    function slow_fn() \(slowBody) end
+    function OnPluginInstall()
+      AddTimer("slow", 0, 0, 1, "", timer_flag.Enabled + timer_flag.OneShot, "slow_fn")
+    end
+    ]]></script></muclient>
+    """
+
+    /// Runs `body` inside an open burst under full attribution, on a probe
+    /// private to `engine`, and returns the burst notes it produced.
+    private func burstNotes(
+        on engine: ScriptEngine,
+        _ body: () async throws -> Void
+    ) async throws -> [String] {
+        let probe = PerformanceProbe()
+        await engine.useProbe(probe)
+        probe.setMode(.full)
+        probe.noteDisplayedLine()
+        try await body()
+        probe.flushBurst()
+        return probe.drainPendingNotes().filter { $0.hasPrefix("burst") }
+    }
+
+    @Test("A plugin trigger's script is attributed to the plugin by name")
+    func pluginTriggerIsAttributed() async throws {
+        let engine = try ScriptEngine()
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: Self.slowPlugin))
+        let notes = try await burstNotes(on: engine) {
+            _ = await engine.process(line: "slow trigger")
+        }
+        let plugins = try #require(notes.first { $0.hasPrefix("burst-plugins:") }, "\(notes)")
+        #expect(plugins.contains("script.lua.plugin[Slow Plugin]"), "\(plugins)")
+        #expect(plugins.contains("script.trigger-script.plugin[Slow Plugin]"), "\(plugins)")
+    }
+
+    @Test("Alias and timer scripts carry the plugin's name too")
+    func aliasAndTimerAreAttributed() async throws {
+        let engine = try ScriptEngine()
+        _ = try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: Self.slowPlugin))
+        let aliasNotes = try await burstNotes(on: engine) {
+            _ = await engine.expandInput("slow alias")
+        }
+        #expect(
+            aliasNotes.last?.contains("script.lua.plugin[Slow Plugin]") == true,
+            "alias: \(aliasNotes)"
+        )
+        let timerNotes = try await burstNotes(on: engine) {
+            _ = await engine.fireDueTimers(at: Date().addingTimeInterval(5))
+        }
+        #expect(
+            timerNotes.last?.contains("script.lua.plugin[Slow Plugin]") == true,
+            "timer: \(timerNotes)"
+        )
+    }
+
+    /// A user script has no owner, so nothing to attribute it to: its phase is
+    /// `lua.user`, the burst line is the only line, and no plugin is blamed.
+    @Test("A user script is not attributed to anyone")
+    func userScriptIsNotAttributed() async throws {
+        let engine = try ScriptEngine()
+        try await engine.addTimer(
+            MudTimer(schedule: .after(1), action: .script(Self.slowBody)),
+            now: Date(timeIntervalSince1970: 0)
+        )
+        let notes = try await burstNotes(on: engine) {
+            _ = await engine.fireDueTimers(at: Date(timeIntervalSince1970: 1))
+        }
+        #expect(notes.count == 1, "\(notes)")
+        #expect(notes.first?.contains("script.lua.user") == true, "\(notes)")
+        #expect(!notes.contains { $0.hasPrefix("burst-plugins:") }, "\(notes)")
     }
 }

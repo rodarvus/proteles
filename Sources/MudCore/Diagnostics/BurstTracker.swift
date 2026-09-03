@@ -6,12 +6,12 @@ import Foundation
 /// ## Why the existing probes could not answer this
 ///
 /// Everything else here is built to catch **one slow thing**:
-/// ``PerformanceProbe/measure(_:events:thresholdMS:_:)`` emits only above a
-/// threshold (50 ms in the line path), and the output view samples per render
-/// flush. But the failure mode that matters is **many small things at once** —
-/// a kill emits 7–9 displayed lines in a single packet, and a few milliseconds
-/// added to each of them is both clearly felt and completely invisible to a
-/// 50 ms threshold.
+/// ``PerformanceProbe/measure(_:events:thresholdMS:attribution:_:)`` emits
+/// only above a threshold (50 ms in the line path), and the output view
+/// samples per render flush. But the failure mode that matters is **many small
+/// things at once** — a kill emits 7–9 displayed lines in a single packet, and
+/// a few milliseconds added to each of them is both clearly felt and completely
+/// invisible to a 50 ms threshold.
 ///
 /// The near-kill figures previously used in this repo were produced by
 /// hand-bucketing render samples "within 30 lines of an experience-gain line" —
@@ -30,6 +30,17 @@ import Foundation
 /// avoids needing a timer; the note carries its own timings, so nothing is lost
 /// by emitting it slightly late.
 ///
+/// ## Attribution (`docs/plans/PER_PLUGIN_ATTRIBUTION_PROPOSAL.md`)
+///
+/// A phase may be accumulated with an *attribution* — today, the plugin whose
+/// script it was. Attributed samples count towards the aggregate phase exactly
+/// as before **and** towards a `(phase, attribution)` total, reported on a
+/// second `burst-plugins:` note ranked by cost. A second line, rather than more
+/// keys in the `burst:` breakdown, because that breakdown is capped at
+/// ``maxPhasesReported`` and a kill burst already fills most of it; folding
+/// plugin keys in would evict real sub-phases and invalidate every parser
+/// written against two weeks of corpus.
+///
 /// Active only under ``PerformanceProbe/Mode/full``; the caller enforces that.
 struct BurstTracker {
     /// Idle gap that ends a burst. Below this, lines belong together.
@@ -41,6 +52,18 @@ struct BurstTracker {
     var maxPhasesReported = 12
     /// Phases below this contribute time but are not named individually.
     var phaseFloorMS = 1
+
+    /// A phase total for one attribution. A struct key, not a joined string,
+    /// so the per-sample cost is a hash and not an allocation; the string is
+    /// built once, at close.
+    private struct AttributionKey: Hashable, Comparable {
+        let phase: String
+        let attribution: String
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            (lhs.phase, lhs.attribution) < (rhs.phase, rhs.attribution)
+        }
+    }
 
     private var lineCount = 0
     private var startedAt: ContinuousClock.Instant?
@@ -55,24 +78,26 @@ struct BurstTracker {
     /// ingest", which is not the question anyone was asking.
     private var lastPaintAt: ContinuousClock.Instant?
     private var phaseTotals: [String: Int] = [:]
+    private var attributedTotals: [AttributionKey: Int] = [:]
 
     /// True while a burst is open.
     var isOpen: Bool {
         startedAt != nil
     }
 
-    /// Record a displayed line. Returns the completed burst's note when this
-    /// line's arrival *ended* the previous burst, otherwise `nil`.
-    mutating func noteDisplayedLine(at now: ContinuousClock.Instant) -> String? {
-        var finished: String?
+    /// Record a displayed line. Returns the completed burst's notes when this
+    /// line's arrival *ended* the previous burst, otherwise nothing.
+    mutating func noteDisplayedLine(at now: ContinuousClock.Instant) -> [String] {
+        var finished: [String] = []
         if let last = lastLineAt, now - last > gapThreshold {
-            finished = closedNote(endingAt: last)
+            finished = closedNotes(endingAt: last)
         }
         if startedAt == nil {
             startedAt = now
             lineCount = 0
             lastPaintAt = nil
             phaseTotals.removeAll(keepingCapacity: true)
+            attributedTotals.removeAll(keepingCapacity: true)
         }
         lineCount += 1
         lastLineAt = now
@@ -87,23 +112,29 @@ struct BurstTracker {
     }
 
     /// Add a measured phase to the open burst. Cheap by construction: one
-    /// dictionary add, no formatting until the burst closes.
-    mutating func accumulate(phase: String, durationMS: Int) {
+    /// dictionary add (two when attributed), no formatting until the burst
+    /// closes.
+    mutating func accumulate(phase: String, durationMS: Int, attribution: String? = nil) {
         guard isOpen else { return }
         phaseTotals[phase, default: 0] += durationMS
+        if let attribution {
+            attributedTotals[AttributionKey(phase: phase, attribution: attribution), default: 0] += durationMS
+        }
     }
 
-    /// Close an open burst and return its note — for session end, where there
+    /// Close an open burst and return its notes — for session end, where there
     /// is no "next line" to trigger the close.
-    mutating func flush() -> String? {
-        guard let last = lastLineAt else { return nil }
-        return closedNote(endingAt: last)
+    mutating func flush() -> [String] {
+        guard let last = lastLineAt else { return [] }
+        return closedNotes(endingAt: last)
     }
 
     /// Format and reset. A single-line burst is still reported: one line taking
-    /// a long time is a real signal, just a different one.
-    private mutating func closedNote(endingAt end: ContinuousClock.Instant) -> String? {
-        guard let start = startedAt else { return nil }
+    /// a long time is a real signal, just a different one. The `burst:` note
+    /// comes first; a `burst-plugins:` note follows only when something was
+    /// attributed above the floor.
+    private mutating func closedNotes(endingAt end: ContinuousClock.Instant) -> [String] {
+        guard let start = startedAt else { return [] }
         // Prefer the paint. Fall back to the last append only when no paint was
         // observed while the burst was open (diagnostics on, no renderer
         // attached — a headless test, or the Help window).
@@ -111,12 +142,14 @@ struct BurstTracker {
         let spanMS = max(0, Int(((painted ?? end) - start) / .milliseconds(1)))
         let lines = lineCount
         let phases = phaseTotals
+        let attributed = attributedTotals
         let sawPaint = lastPaintAt != nil
         startedAt = nil
         lastLineAt = nil
         lastPaintAt = nil
         lineCount = 0
         phaseTotals.removeAll(keepingCapacity: true)
+        attributedTotals.removeAll(keepingCapacity: true)
 
         var note = "burst: \(lines) line\(lines == 1 ? "" : "s") "
             + "\(spanMS)ms\(sawPaint ? "" : " (unpainted)")"
@@ -130,7 +163,18 @@ struct BurstTracker {
                 .joined(separator: " · ")
             note += " | \(breakdown)"
         }
-        return note
+        var notes = [note]
+        let rankedAttributed = attributed
+            .filter { $0.value >= phaseFloorMS }
+            .sorted { ($0.value, $0.key) > ($1.value, $1.key) }
+            .prefix(maxPhasesReported)
+        if !rankedAttributed.isEmpty {
+            let breakdown = rankedAttributed
+                .map { "\(Self.shortPhase($0.key.phase))[\($0.key.attribution)] \($0.value)ms" }
+                .joined(separator: " · ")
+            notes.append("burst-plugins: \(breakdown)")
+        }
+        return notes
     }
 
     /// Trim the common `session.` prefix so a breakdown fits one line.

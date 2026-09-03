@@ -21,6 +21,10 @@ public final class PerformanceProbe: @unchecked Sendable {
         public let timestamp: Date
         public let inGameElapsed: TimeInterval?
         public let isStartupWindow: Bool
+        /// Who the phase belongs to when the caller knows — today, the plugin
+        /// whose script ran (`docs/plans/PER_PLUGIN_ATTRIBUTION_PROPOSAL.md`).
+        /// `nil` leaves the note byte-identical to the unattributed form.
+        public let attribution: String?
     }
 
     public struct Summary: Sendable, Equatable {
@@ -102,6 +106,7 @@ public final class PerformanceProbe: @unchecked Sendable {
         _ phase: String,
         events: Int = 0,
         thresholdMS: Int,
+        attribution: String? = nil,
         _ body: () throws -> T
     ) rethrows -> T {
         guard recordsAttribution else { return try body() }
@@ -112,7 +117,8 @@ public final class PerformanceProbe: @unchecked Sendable {
                 phase,
                 duration: ContinuousClock.now - start,
                 events: events,
-                thresholdMS: thresholdMS
+                thresholdMS: thresholdMS,
+                attribution: attribution
             )
             return value
         } catch {
@@ -120,7 +126,8 @@ public final class PerformanceProbe: @unchecked Sendable {
                 phase,
                 duration: ContinuousClock.now - start,
                 events: events,
-                thresholdMS: thresholdMS
+                thresholdMS: thresholdMS,
+                attribution: attribution
             )
             throw error
         }
@@ -134,9 +141,7 @@ public final class PerformanceProbe: @unchecked Sendable {
     public func noteDisplayedLine(at now: ContinuousClock.Instant = .now) {
         lock.withLock {
             guard mode == .full else { return }
-            if let note = burst.noteDisplayedLine(at: now) {
-                pendingNotes.append(note)
-            }
+            pendingNotes.append(contentsOf: burst.noteDisplayedLine(at: now))
         }
     }
 
@@ -153,9 +158,7 @@ public final class PerformanceProbe: @unchecked Sendable {
     public func flushBurst() {
         lock.withLock {
             guard mode == .full else { return }
-            if let note = burst.flush() {
-                pendingNotes.append(note)
-            }
+            pendingNotes.append(contentsOf: burst.flush())
         }
     }
 
@@ -164,7 +167,8 @@ public final class PerformanceProbe: @unchecked Sendable {
         duration: Duration,
         events: Int = 0,
         thresholdMS: Int,
-        at timestamp: Date = Date()
+        at timestamp: Date = Date(),
+        attribution: String? = nil
     ) {
         let durationMS = max(0, Int(duration / .milliseconds(1)))
         lock.withLock {
@@ -174,7 +178,7 @@ public final class PerformanceProbe: @unchecked Sendable {
                 maxDurationMS = durationMS
                 maxPhase = phase
             }
-            burst.accumulate(phase: phase, durationMS: durationMS)
+            burst.accumulate(phase: phase, durationMS: durationMS, attribution: attribution)
             recordRecentPressureLocked(
                 phase: phase,
                 durationMS: durationMS,
@@ -188,7 +192,8 @@ public final class PerformanceProbe: @unchecked Sendable {
                 phase: phase,
                 durationMS: durationMS,
                 events: events,
-                timestamp: timestamp
+                timestamp: timestamp,
+                attribution: attribution
             )
             lastSnapshot = snapshot
             pendingNotes.append("perf: \(format(snapshot))")
@@ -286,7 +291,8 @@ public final class PerformanceProbe: @unchecked Sendable {
         phase: String,
         durationMS: Int,
         events: Int,
-        timestamp: Date
+        timestamp: Date,
+        attribution: String?
     ) -> Snapshot {
         let elapsed = inGameAt.map { timestamp.timeIntervalSince($0) }
         return Snapshot(
@@ -295,14 +301,18 @@ public final class PerformanceProbe: @unchecked Sendable {
             eventCount: events,
             timestamp: timestamp,
             inGameElapsed: elapsed,
-            isStartupWindow: elapsed.map { $0 >= 0 && $0 < startupWindow } ?? false
+            isStartupWindow: elapsed.map { $0 >= 0 && $0 < startupWindow } ?? false,
+            attribution: attribution
         )
     }
 
+    /// The attribution rides at the end, so an unattributed note is unchanged
+    /// and every parser written against the existing corpus keeps working.
     private func format(_ snapshot: Snapshot) -> String {
         "\(snapshot.phase) \(snapshot.durationMS)ms events \(snapshot.eventCount) "
             + "\(formatLoginTiming(snapshot.inGameElapsed)) "
             + "\(snapshot.isStartupWindow ? "startup" : "live")"
+            + (snapshot.attribution.map { " plugin=\($0)" } ?? "")
     }
 
     private func formatRecentPressureIfRecordingLocked(at timestamp: Date) -> String {

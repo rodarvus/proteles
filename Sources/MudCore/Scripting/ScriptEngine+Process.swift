@@ -79,7 +79,8 @@ public extension ScriptEngine {
                 let effects = await measureScriptPhase(
                     phase,
                     events: 1,
-                    thresholdMS: 50
+                    thresholdMS: 50,
+                    attribution: attributionName(for: owner)
                 ) {
                     await runOwnedScript(
                         body,
@@ -108,16 +109,18 @@ public extension ScriptEngine {
         _ phase: String,
         events: Int = 1,
         thresholdMS: Int,
+        attribution: String? = nil,
         _ body: () async -> T
     ) async -> T {
-        guard PerformanceProbe.shared.recordsAttribution else { return await body() }
+        guard probe.recordsAttribution else { return await body() }
         let start = ContinuousClock.now
         let value = await body()
         recordScriptPhase(
             phase,
             duration: ContinuousClock.now - start,
             events: events,
-            thresholdMS: thresholdMS
+            thresholdMS: thresholdMS,
+            attribution: attribution
         )
         return value
     }
@@ -126,12 +129,14 @@ public extension ScriptEngine {
         _ phase: String,
         events: Int = 1,
         thresholdMS: Int,
+        attribution: String? = nil,
         _ body: () -> T
     ) -> T {
-        PerformanceProbe.shared.measure(
+        probe.measure(
             phase,
             events: events,
             thresholdMS: thresholdMS,
+            attribution: attribution,
             body
         )
     }
@@ -140,13 +145,15 @@ public extension ScriptEngine {
         _ phase: String,
         duration: Duration,
         events: Int,
-        thresholdMS: Int
+        thresholdMS: Int,
+        attribution: String? = nil
     ) {
-        PerformanceProbe.shared.recordPhase(
+        probe.recordPhase(
             phase,
             duration: duration,
             events: events,
-            thresholdMS: thresholdMS
+            thresholdMS: thresholdMS,
+            attribution: attribution
         )
     }
 
@@ -176,7 +183,7 @@ public extension ScriptEngine {
 
     private func recordTriggerBurst(_ firings: [TriggerFiring]) {
         guard !firings.isEmpty else { return }
-        PerformanceProbe.shared.recordEventSummary(
+        probe.recordEventSummary(
             "session.script.triggers",
             events: firings.count,
             fields: [

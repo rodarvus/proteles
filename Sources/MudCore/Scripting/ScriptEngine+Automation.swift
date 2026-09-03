@@ -53,11 +53,13 @@ extension ScriptEngine {
         ) {
             await syncAutomationSnapshot()
         }
+        let attribution = attributionName(for: owner)
         let raw: [ScriptEffect] = if let owner {
             await measureAutomationPhase(
                 "session.script.lua.plugin",
                 events: 1,
-                thresholdMS: 50
+                thresholdMS: 50,
+                attribution: attribution
             ) {
                 await runtime.runPluginScript(
                     script, pluginID: owner, matches: matches, named: named, styles: styles
@@ -76,7 +78,8 @@ extension ScriptEngine {
         let outward = measureAutomationPhase(
             "session.script.consume-registrations",
             events: raw.count,
-            thresholdMS: 50
+            thresholdMS: 50,
+            attribution: attribution
         ) {
             consumeRegistrations(raw, owner: owner)
         }
@@ -84,20 +87,36 @@ extension ScriptEngine {
         return outward
     }
 
+    /// What a timing sample for `owner`'s script is attributed to: the plugin's
+    /// display name, or its id if the name was never registered (a plugin
+    /// loaded by a path that bypassed `loadPlugin`). `nil` for a user script —
+    /// there is nothing to attribute it to, and the note stays as it was.
+    func attributionName(for owner: String?) -> String? {
+        owner.map { pluginNames[$0] ?? $0 }
+    }
+
+    /// Route this engine's timing samples to `probe` instead of the
+    /// process-wide one. Test seam; production never calls it.
+    func useProbe(_ probe: PerformanceProbe) {
+        self.probe = probe
+    }
+
     private func measureAutomationPhase<T>(
         _ phase: String,
         events: Int = 1,
         thresholdMS: Int,
+        attribution: String? = nil,
         _ body: () async -> T
     ) async -> T {
-        guard PerformanceProbe.shared.recordsAttribution else { return await body() }
+        guard probe.recordsAttribution else { return await body() }
         let start = ContinuousClock.now
         let value = await body()
-        PerformanceProbe.shared.recordPhase(
+        probe.recordPhase(
             phase,
             duration: ContinuousClock.now - start,
             events: events,
-            thresholdMS: thresholdMS
+            thresholdMS: thresholdMS,
+            attribution: attribution
         )
         return value
     }
@@ -106,18 +125,20 @@ extension ScriptEngine {
         _ phase: String,
         events: Int = 1,
         thresholdMS: Int,
+        attribution: String? = nil,
         _ body: () -> T
     ) -> T {
-        PerformanceProbe.shared.measure(
+        probe.measure(
             phase,
             events: events,
             thresholdMS: thresholdMS,
+            attribution: attribution,
             body
         )
     }
 
     private func recordScriptEffectBurst(raw: [ScriptEffect], outward: [ScriptEffect]) {
-        PerformanceProbe.shared.recordEventSummary(
+        probe.recordEventSummary(
             "session.script.effects",
             events: raw.count,
             fields: [
@@ -332,6 +353,7 @@ extension ScriptEngine {
         aliasIDsByName = aliasIDsByName.filter { !ownedIDs.contains($0.value) }
         timerIDsByName = timerIDsByName.filter { !ownedIDs.contains($0.value) }
         loadedPluginIDs.removeAll { $0 == id }
+        pluginNames[id] = nil
         automationDirty = true
         let windowEffects = runtime.removeMiniWindows(ownedBy: id)
         await runtime.clearPluginRegistrations(id)

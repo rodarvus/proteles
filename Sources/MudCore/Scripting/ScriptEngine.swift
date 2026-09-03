@@ -31,6 +31,15 @@ public actor ScriptEngine {
     /// Ids of MUSHclient plugins currently loaded, in load order (drives
     /// lifecycle callbacks and the GMCP→`OnPluginBroadcast` bridge).
     var loadedPluginIDs: [String] = []
+    /// Plugin id → display name, for attributing a script's timing to the
+    /// plugin it belongs to (`docs/plans/PER_PLUGIN_ATTRIBUTION_PROPOSAL.md`).
+    /// Kept here so the lookup is one dictionary read on this actor — no
+    /// round-trip to the runtime per script.
+    var pluginNames: [String: String] = [:]
+    /// Where this engine's timing samples go. The process-wide probe in
+    /// production; a private instance under test, so an end-to-end attribution
+    /// test cannot be drained by a parallel session test's `flushBurst()`.
+    var probe: PerformanceProbe = .shared
     /// Guard for `OnPluginListChanged`, matching MUSHclient's non-recursive
     /// broadcast. Plugins may mutate the plugin list from that callback.
     var firingPluginListChanged = false
@@ -255,6 +264,7 @@ public actor ScriptEngine {
         aliases = AliasEngine()
         timers = TimerEngine()
         loadedPluginIDs.removeAll()
+        pluginNames.removeAll()
         firingPluginListChanged = false
         automationOwners.removeAll()
         automationDirty = true
@@ -304,6 +314,7 @@ public actor ScriptEngine {
             if let name = timer.label { timerIDsByName[name] = timer.id }
         }
         if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
+        pluginNames[plugin.id] = resolved.pluginName
         // The XML-declared triggers/aliases/timers above register directly (not
         // via applyAutomationEffect), so flag the introspection mirror stale.
         automationDirty = true
