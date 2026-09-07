@@ -71,9 +71,18 @@ struct ScrollbackSidecarTests {
 
         await store.append(text: "the misty wolf approaches.")
         await store.append(text: "an ogre roars.")
-        try await Task.sleep(for: .milliseconds(120))
 
-        let restored = await persistence.loadTail(limit: 10)
+        // Poll to a deadline rather than sleeping a guessed 120 ms: the flush
+        // is on a timer, and a loaded CI runner missed that guess three times
+        // out of three on 2026-08-25 (the #26 class). The bound is generous;
+        // the test still fails if the flush never lands.
+        var restored: [Line] = []
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
+            restored = await persistence.loadTail(limit: 10)
+            if restored.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(restored.map(\.text) == ["the misty wolf approaches.", "an ogre roars."])
 
         await persistence.detach()
