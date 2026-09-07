@@ -41,13 +41,21 @@ public enum SemanticClassifier {
     /// Text-only entry point, for transcript replay where only the text of a
     /// recorded line survives.
     public static func events(forDisplayedText text: String) -> [SemanticEvent] {
-        SoundEventClassifier.events(forLine: text).map { name in
+        var events = SoundEventClassifier.events(forLine: text).map { name in
             SemanticEvent(
                 category: SemanticEventVocabulary.category(for: name) ?? .system,
                 name: name,
                 source: .pattern(rule: name)
             )
         }
+        // The tag-family router (S0a item 5, D-123): structural events from
+        // the SPELLUPS/SKILLGAINS families. A first-byte check keeps the cost
+        // off every non-tag line; the prose rules above still run on tag lines
+        // exactly as before, so nothing already classified changes.
+        if text.utf8.first == UInt8(ascii: "{") {
+            events += AardwolfTags.events(forTagged: text)
+        }
+        return events
     }
 
     /// The events a GMCP package represents.

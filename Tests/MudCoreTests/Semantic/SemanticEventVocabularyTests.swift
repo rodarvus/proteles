@@ -24,14 +24,27 @@ struct SemanticEventVocabularyTests {
         )
     }
 
-    /// The reverse direction: a category entry naming an event the reference
-    /// does not fire is dead weight, and usually a typo.
+    /// The same totality for the second built-in source: the tag-family router
+    /// (S0a item 5). Its events are not in the soundpack, so they need their
+    /// own check or an uncategorised one would slip through as `.affect` by
+    /// the router's fallback.
+    @Test("Every tag-router event has a category")
+    func routerEventsAreCategorised() {
+        let uncategorised = AardwolfTags.eventNames
+            .filter { SemanticEventVocabulary.category(for: $0) == nil }
+            .sorted()
+        #expect(uncategorised.isEmpty, "router events with no category: \(uncategorised)")
+    }
+
+    /// The reverse direction: a category entry naming an event no built-in
+    /// source produces is dead weight, and usually a typo. Two sources today:
+    /// the soundpack's prose pack and the tag-family router.
     @Test("No category entry names an unknown event")
     func vocabularyHasNoStrays() {
         let strays = SemanticEventVocabulary.categories.keys
-            .filter { SoundEventClassifier.defaults[$0] == nil }
+            .filter { SoundEventClassifier.defaults[$0] == nil && !AardwolfTags.eventNames.contains($0) }
             .sorted()
-        #expect(strays.isEmpty, "categorised events the soundpack never fires: \(strays)")
+        #expect(strays.isEmpty, "categorised events nothing built-in fires: \(strays)")
     }
 
     /// Each event belongs to exactly one grouping — the sets must not overlap,
@@ -43,6 +56,7 @@ struct SemanticEventVocabularyTests {
             ("world", SemanticEventVocabulary.world),
             ("combat", SemanticEventVocabulary.combat),
             ("progression", SemanticEventVocabulary.progression),
+            ("affect", SemanticEventVocabulary.affect),
             ("inventory", SemanticEventVocabulary.inventory),
             ("group", SemanticEventVocabulary.group),
             ("system", SemanticEventVocabulary.system)

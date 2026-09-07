@@ -1,7 +1,7 @@
 # S0a item 5 — `AardwolfTags` as the tag-family router
 
-> **Status: reviewed 2026-09-07; all five questions in §6 answered (see the
-> italic notes under each). No code written yet.** Tracking: **#82**.
+> **Status: approved and implemented 2026-09-07; gates green; awaiting the
+> §5 A/B before commit.** Implementation notes in §7. Tracking: **#82**.
 
 ## 1. The ratified scope, verbatim
 
@@ -151,7 +151,7 @@ classifier does not match either. The structured lifecycle sits unused in
 
 ```
 enum AardwolfTags {
-    enum Family: String, CaseIterable   // the closed list from `tags`, all 26
+    enum Family: String, CaseIterable   // the closed list from `tags`, all 27
     static func family(of line: String) -> (family: Family, closing: Bool, args: String)?
     static func events(forTagged line: String) -> [SemanticEvent]   // event families only
 }
@@ -245,7 +245,7 @@ ships the first lens, tracked as **#87**.*
   values included because the corpus has them.
 - **The reason table** from `help spelltags`, pinned code by code (1–6, 8–12;
   7 is absent in the help and must map to unknown, not invented).
-- **Family totality:** `Family` covers the 26 names from the bare `tags`
+- **Family totality:** `Family` covers the 27 names from the bare `tags`
   command, and every event family is a member.
 - **Guard order:** with no listening plugin, a tag line does no parse
   (extends the existing guard test); a non-tag line pays a first-byte check.
@@ -279,3 +279,38 @@ phase unchanged. Pass condition per the amended CLAUDE.md rule.
    *Answered: agreed.*
 
 Also requested and done: the dinv sanity check, §2.1.
+
+## 7. Implementation notes (2026-09-07)
+
+Built as specified in §2–§3, with three notes:
+
+- **Placement.** §3.3 said "inside `ScriptEngine.process`, next to
+  `semanticEffects(for:)`". The tag branch lives one call deeper, inside
+  `SemanticClassifier.events(forDisplayedText:)`, so the classifier stays the
+  *single* classification point D-118 asks for and the engine is untouched.
+  Same guard (`wantsSemanticEvents` runs first), same disposition, same
+  gag-then-apply rule; the first-byte check sits ahead of the parse. The
+  prose rules still run on tag lines exactly as before, so nothing already
+  classified changes.
+- **Files.** The routing half is `AardwolfTags+Router.swift` (the `Family`
+  list, the marker→family map, `marker(in:)`, the six-event parser); the
+  display half is untouched in `AardwolfTags.swift`. Both use the one marker
+  grammar, `leadingTag(in:)`, so routing and display cannot disagree about
+  what is a tag.
+- **Corrections to this document, found while implementing.** The bare
+  `tags` command lists **27** families, not 26 (`MAPEXITS` and `MAPNAMES` are
+  separate rows; the feeds-doc table joined them). `where` is a Swift keyword
+  and is backticked in the enum. The vocabulary's "no strays" test now
+  checks names against both built-in sources, the soundpack pack and the
+  router, rather than the soundpack alone.
+
+Tests: 19 in `AardwolfTagRouterTests.swift` (corpus fixtures with provenance,
+the reason table with code 7 pinned to `unknown`, family totality against
+the `tags` output, the marker map, comm families recognised-but-never-routed,
+malformed payloads, out-of-scope markers, display unchanged, classifier and
+engine end-to-end with and without a listener) plus one new vocabulary test.
+Gates green: build, 2,109 macOS tests, swiftformat, swiftlint, iOS simulator.
+The §5 A/B is the user's: control = `~/Applications/Proteles-control.app`
+(this tree before item 5, shim fix included), candidate =
+`~/Applications/Proteles.app` (same plus item 5); both stamp `c1383209 dirty`,
+so the sessions are told apart by which app was launched.

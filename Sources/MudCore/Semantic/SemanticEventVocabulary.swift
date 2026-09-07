@@ -36,6 +36,9 @@ public enum SemanticEventVocabulary {
         for name in progression {
             table[name] = .progression
         }
+        for name in affect {
+            table[name] = .affect
+        }
         for name in inventory {
             table[name] = .inventory
         }
@@ -92,7 +95,15 @@ public enum SemanticEventVocabulary {
 
     /// Levels, superhero milestones, and the double-experience window.
     static let progression: Set<String> = [
-        "level_up", "sh_powerup", "reach_sh", "double_exp", "double_end"
+        "level_up", "sh_powerup", "reach_sh", "double_exp", "double_end",
+        // From the SKILLGAINS tag family (S0a item 5): `{skillgain}223,99`.
+        "skill_gain"
+    ]
+    /// The SPELLUPS tag family (S0a item 5, D-123) — the first members of the
+    /// `affect` category. Aardwolf publishes the affect lifecycle only as tags
+    /// (`help spelltags`); there is no GMCP package and no prose rule for it.
+    static let affect: Set<String> = [
+        "affect_on", "affect_off", "recovery_on", "recovery_off", "cast_failed"
     ]
 
     /// Items acquired. Updates S0b's item entities.

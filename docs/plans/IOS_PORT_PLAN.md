@@ -486,8 +486,10 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   behind it and moved to the **displayed**-line path (closing the raw-vs-
   displayed asymmetry); `NotificationMatcher` generalized as the
   user-extensible rule engine feeding the same events; `AardwolfTags` promoted
-  from stripper to **tag-family router**, starting with `CHANNELS`/`TELLS`/
-  `SAYS`; events re-published on the internal bus (the `BroadcastPlugin(100)`
+  from stripper to **tag-family router** — used exclusively for data GMCP does
+  not carry (**D-123**: comms are GMCP, so `CHANNELS`/`TELLS`/`SAYS` are never
+  routed; S0a starts with `SPELLUPS`/`SKILLGAINS`, S0b adds the entity
+  families); events re-published on the internal bus (the `BroadcastPlugin(100)`
   lesson) for plugins/scripts. Taxonomy + patterns from the references and
   recordings — no guessing.
 
