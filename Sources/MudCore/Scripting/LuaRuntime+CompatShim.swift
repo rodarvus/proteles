@@ -119,6 +119,7 @@ public extension LuaRuntime {
       ePluginFileNotFound = 30030,
       eNoSuchPlugin = 30034,
       eNoSuchRoutine = 30036,
+      ePluginCouldNotSaveState = 30037,
       eBadParameter = 30046,
       eFileNotFound = 30051,
       eNoSuchWindow = 30073,
@@ -418,11 +419,29 @@ public extension LuaRuntime {
     -- SaveState(): MUSHclient persists plugin state on demand. We write variables
     -- through automatically, so this just runs the plugin's OnPluginSaveState (if
     -- any) — where it sets the variables to persist — and reports success.
+    --
+    -- Re-entry is refused, exactly as MUSHclient does: while a plugin's
+    -- OnPluginSaveState is running, a nested SaveState() returns
+    -- ePluginCouldNotSaveState without running the callback again
+    -- (methods_plugins.cpp:509 "if we are already saving the state, don't do it
+    -- again"; the m_bSavingStateNow flag in plugins.cpp:797). Plugins commonly
+    -- call SaveState() from a save routine that OnPluginSaveState also calls;
+    -- without the guard the two recursed ~200 deep until Lua's C stack
+    -- overflowed inside pcall, re-serialising the plugin's state at every
+    -- level. That was #86: 167 ms per kill line on a 67-day history table,
+    -- growing a row a day.
     function SaveState()
       local env = getfenv(2)
-      local callback = nil
-      if type(env) == "table" then callback = rawget(env, "OnPluginSaveState") end
-      if type(callback) == "function" then pcall(callback) end
+      if type(env) ~= "table" then return error_code.eOK end
+      if rawget(env, "__protelesSavingState") then
+        return error_code.ePluginCouldNotSaveState
+      end
+      local callback = rawget(env, "OnPluginSaveState")
+      if type(callback) == "function" then
+        rawset(env, "__protelesSavingState", true)
+        pcall(callback)
+        rawset(env, "__protelesSavingState", nil)
+      end
       return error_code.eOK
     end
     -- Keyboard accelerators (MUSHclient Accelerator/AcceleratorTo) bridge to the
