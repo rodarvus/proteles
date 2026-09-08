@@ -489,8 +489,10 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   from stripper to **tag-family router** — used exclusively for data GMCP does
   not carry (**D-123**: comms are GMCP, so `CHANNELS`/`TELLS`/`SAYS` are never
   routed; S0a starts with `SPELLUPS`/`SKILLGAINS`, S0b adds the entity
-  families); events re-published on the internal bus (the `BroadcastPlugin(100)`
-  lesson) for plugins/scripts. Taxonomy + patterns from the references and
+  families); ~~events re-published on the internal bus (the `BroadcastPlugin(100)`
+  lesson) for plugins/scripts~~ — **deferred to post-v1 (D-124)**: a plugin-author
+  API, not a lens enabler, with no consumer anywhere; if built, a per-event,
+  per-plugin subscriber model rather than a broadcast. Taxonomy + patterns from the references and
   recordings — no guessing.
 
   **The seam is already located:** `SessionController+LineProcessing.swift`'s
