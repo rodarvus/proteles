@@ -316,8 +316,12 @@ Before committing, ALL must pass (from repo root):
 `Sources/CLua`** (since the iOS port, #81):
 
 ```sh
-xcodebuild test -scheme MudCore-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild test -scheme MudCore-iOS -destination 'platform=iOS Simulator,name=iPhone 18 Pro'
 ```
+
+(A bare `name=` resolves against the *newest* installed iOS runtime only, so the
+device must exist there — Xcode 27's iOS 27 runtime renamed the flagship to
+`iPhone 18 Pro`; `iPhone 17 Pro` is 26.5-only and fails with exit 70.)
 
 `MudCore-iOS` is a **checked-in shared scheme**
 (`.swiftpm/xcode/xcshareddata/xcschemes/`, deliberately un-gitignored) holding

@@ -11,6 +11,14 @@
     /// produces a content-free summary (no game text or recording is ever
     /// included automatically). Plain `Section`s, embedded in Development's
     /// `Form`.
+    /// ``DiagnosticReport`` spelled so a file that also imports MetricKit can
+    /// name it. The macOS 27 SDK added `MetricKit.DiagnosticReport`, which
+    /// makes the bare name ambiguous in ``DiagnosticsController``, and the
+    /// module-qualified `MudCore.DiagnosticReport` resolves to MudCore's
+    /// namespace *enum* rather than the module. This file imports no MetricKit,
+    /// so the bare name here is unambiguously MudCore's.
+    typealias StoredDiagnosticReport = DiagnosticReport
+
     struct DiagnosticsSections: View {
         @AppStorage(DiagnosticsController.enabledKey) private var enabled = false
         @State private var reports: [DiagnosticReport] = []

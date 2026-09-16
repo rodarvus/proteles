@@ -51,11 +51,11 @@
 
         // MARK: UI helpers (read/manage stored reports)
 
-        func reports() -> [DiagnosticReport] {
+        func reports() -> [StoredDiagnosticReport] {
             store?.reports() ?? []
         }
 
-        func delete(_ report: DiagnosticReport) {
+        func delete(_ report: StoredDiagnosticReport) {
             store?.delete(report)
         }
 
@@ -63,14 +63,14 @@
             store?.deleteAll()
         }
 
-        func summaryText(for report: DiagnosticReport) -> String {
+        func summaryText(for report: StoredDiagnosticReport) -> String {
             store?.summaryText(for: report) ?? ""
         }
 
         /// The recording that was running when the diagnostic fired (a pointer
         /// only — we never auto-attach it; recordings carry MUD content + the
         /// autologin password and must be reviewed before sharing).
-        func correlatedRecording(for report: DiagnosticReport) -> String? {
+        func correlatedRecording(for report: StoredDiagnosticReport) -> String? {
             guard let store,
                   let recordings = try? SessionRecorder.defaultRecordingURL().deletingLastPathComponent()
             else { return nil }

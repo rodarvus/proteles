@@ -14,7 +14,7 @@
   platform-agnostic half of the package on its own. Run it with:
 
     xcodebuild test -scheme MudCore-iOS \
-      -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+      -destination 'platform=iOS Simulator,name=iPhone 18 Pro'
 
   Delete this and the iOS CI job has no way to run. See Sources/CLua/PROVENANCE.md
   for the companion C-level iOS fixes, and docs/plans/IOS_PORT_PLAN.md §1.1.
