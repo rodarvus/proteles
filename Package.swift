@@ -27,7 +27,7 @@ let package = Package(
         // byte-identical Package.resolved (verified), ending the churn. No target
         // links it, so `swift build` prints a benign "dependency 'sparkle' is not
         // used by any target" warning — the accepted cost (D-112).
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0")
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0")
     ],
     targets: [
         .systemLibrary(name: "CZlib"),

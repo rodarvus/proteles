@@ -15,7 +15,7 @@ seamless "update now" reconnect is Phase 2 (#42, shipped).
 - **App integration** (`apps/ProtelesApp_macOS/Sources/Updater.swift`): a Sparkle
   `SPUStandardUpdaterController` started at launch, a **App ▸ Check for Updates…**
   menu item, and `SUEnableAutomaticChecks` (background daily checks) on by default.
-- **Sparkle dependency**: `project.yml` (`Sparkle`, from 2.9.0); the framework is
+- **Sparkle dependency**: `project.yml` (`Sparkle`, from 2.10.0); the framework is
   embedded + signed by the build.
 - **Info.plist keys**: `SUFeedURL` (interim GitHub Pages URL — moves to
   `proteles.net` before 1.0), `SUPublicEDKey`, `SUScheduledCheckInterval` (daily),
