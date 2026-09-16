@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build-test:
     name: Build & Test
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          # Pick the newest Xcode 16+ available on the runner.
+          # Pick the newest Xcode available on the runner (macos-26: 26.6).
           XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
           if [ -n "$XCODE_PATH" ]; then
             sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
@@ -45,7 +45,7 @@ jobs:
 
       # The SessionController coroutine/timer tests drive an async timer loop on
       # a wall clock (wait.time fence/dequeue, autoreconnect, the unreachable-host
-      # timeout, …). On the few-core macos-15 runner those starve and flake (#26),
+      # timeout, …). On the few-core macOS runners those starve and flake (#26),
       # badly under `--parallel`. Mitigations: run serially (much lower flake
       # rate + deterministic), and retry the suite up to 3× so a residual flake
       # doesn't redden the build. Developers still use `swift test --parallel`
@@ -67,7 +67,7 @@ jobs:
     # caught only on a developer machine (#26). No signing on CI: the build
     # verifies compilation, not distribution.
     name: App Build (macOS)
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,6 +105,47 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
             build
 
+  app-build-xcode27:
+    # The release machine builds with Xcode 27 (macOS 27 SDK, Swift 6.4); the
+    # macos-26 image tops out at Xcode 26.6. That skew hid an SDK-27-only
+    # compile break (MetricKit.DiagnosticReport vs MudCore's, 2026-09-16) behind
+    # a green CI. This lane builds the app on GitHub's `xcode-27` image so the
+    # release toolchain is exercised on every push. The image is public preview,
+    # so the lane is allowed to fail: a red here is a signal to read, not a
+    # blocker. Promote it to required when the label goes GA.
+    name: App Build (Xcode 27, preview lane)
+    runs-on: xcode-27
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Select Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE_PATH" ]; then
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project + build app
+        run: |
+          set -euo pipefail
+          cd apps/ProtelesApp_macOS
+          xcodegen generate
+          xcodebuild \
+            -project ProtelesApp_macOS.xcodeproj \
+            -scheme ProtelesApp_macOS \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            build
+
   ios-test:
     # The iOS half of the port's safety net (GitHub #81, phase I0a). MudCore is
     # platform-agnostic and its suite is host-agnostic, so the same ~1,840 tests
@@ -118,7 +159,7 @@ jobs:
     # MudUI + MudOutputView_macOS (both AppKit-bound) into the build and fail.
     # See .swiftpm/xcode/xcshareddata/xcschemes/MudCore-iOS.xcscheme.
     name: iOS Tests (simulator)
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -186,7 +227,7 @@ jobs:
 
   lint:
     name: Lint & Format
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
