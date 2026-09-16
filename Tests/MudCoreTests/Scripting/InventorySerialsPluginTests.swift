@@ -31,7 +31,7 @@ struct InventorySerialsPluginTests {
         #expect(close.gag) // closing marker swallowed
         // The re-render is emitted as echo effects: a header + one grouped line.
         let echoes = close.effects.compactMap { effect -> String? in
-            if case .echoAard(let text) = effect { return text } else { return nil }
+            if case .echoAard(let text) = effect { text } else { nil }
         }
         #expect(echoes.first == "@wYou are carrying:")
         #expect(echoes.contains { $0.contains("a potion") && $0.contains("[1,2]") })
@@ -53,7 +53,7 @@ struct InventorySerialsPluginTests {
         #expect(plugin.onLine(line("9,K,a brass key,1,0,0,0,0")).gag)
         let close = plugin.onLine(line("{/keyring}"))
         let echoes = close.effects.compactMap { effect -> String? in
-            if case .echoAard(let text) = effect { return text } else { return nil }
+            if case .echoAard(let text) = effect { text } else { nil }
         }
         #expect(echoes.first == "@C** Items on Keyring **@w")
         #expect(echoes.contains { $0.contains("a brass key") })
@@ -85,7 +85,7 @@ struct InventorySerialsPluginTests {
         _ = restored.onLine(line("1,M,a wand,10,0,0,0,0"))
         let close = restored.onLine(line("{/invdata}"))
         let rendered = close.effects.compactMap { effect -> String? in
-            if case .echoAard(let text) = effect { return text } else { return nil }
+            if case .echoAard(let text) = effect { text } else { nil }
         }
         #expect(rendered.contains { $0.contains("@R") })
     }

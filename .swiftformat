@@ -12,5 +12,13 @@
 --ranges no-space
 --operatorfunc spaced
 
+# SwiftFormat 0.62 split wrapConditionalBodies into wrapIfStatementBodies /
+# wrapIfExpressionBodies / wrapGuardStatementBodies and enabled the first two by
+# default. This codebase deliberately uses one-line conditional bodies
+# (`if let x = y { return x }`, `case "a": if p { f() } else { g() }`); adopting
+# the rules would rewrite ~280 files for no gain. Disabled explicitly so the
+# house style survives linter upgrades (CI pins: 0.63.0 / swiftlint 0.65.1).
+--disable wrapIfStatementBodies,wrapIfExpressionBodies
+
 # Ignore vendored submodules and build outputs
 --exclude .build,.swiftpm,DerivedData,mushclient,mudlet,iterm2,aardwolfclientpackage,scripts

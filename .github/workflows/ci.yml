@@ -195,8 +195,8 @@ jobs:
 
       - name: Install pinned linters
         env:
-          SWIFTLINT_VERSION: "0.63.3"
-          SWIFTFORMAT_VERSION: "0.61.1"
+          SWIFTLINT_VERSION: "0.65.1"
+          SWIFTFORMAT_VERSION: "0.63.0"
         run: |
           set -euo pipefail
           # Pin to the versions developers run locally, so lint/format rules

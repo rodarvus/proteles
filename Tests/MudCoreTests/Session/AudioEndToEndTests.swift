@@ -131,7 +131,7 @@ struct AudioEndToEndTests {
         conn.injectLine("Eketra gossips 'spam'")
         try? await Task.sleep(for: .milliseconds(200))
         let spokenTexts = await requests.values.compactMap { request -> String? in
-            if case .speak(let text, _) = request { return text } else { return nil }
+            if case .speak(let text, _) = request { text } else { nil }
         }
         // The GMCP echo line displays (and may speak); the raw inline dupe is
         // gagged. At most one spoken copy, never two.
@@ -182,7 +182,7 @@ struct AudioEndToEndTests {
         }
         #expect(settled)
         let spoken = await requests.values.compactMap { request -> String? in
-            if case .speak(let text, _) = request { return text } else { return nil }
+            if case .speak(let text, _) = request { text } else { nil }
         }
         #expect(spoken == [
             "Text to speech on", // the tts on confirmation utterance

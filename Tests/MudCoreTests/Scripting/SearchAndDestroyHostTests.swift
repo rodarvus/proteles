@@ -101,9 +101,9 @@ struct SearchAndDestroyHostTests {
         let effects = try await host.run("search_rooms('SELECT uid, name, area FROM rooms', nil)")
         let text = effects.compactMap { effect -> String? in
             switch effect {
-            case .echo(let line): return line
-            case .colourNote(let segs): return segs.map(\.text).joined()
-            default: return nil
+            case .echo(let line): line
+            case .colourNote(let segs): segs.map(\.text).joined()
+            default: nil
             }
         }.joined(separator: "\n")
         #expect(text.contains("Town Square"))
