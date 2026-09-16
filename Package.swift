@@ -5,7 +5,11 @@ let package = Package(
     name: "Proteles",
     platforms: [
         .macOS(.v15),
-        .iOS(.v18)
+        // iOS floor is 26 (D-125): no iOS UI exists yet, so the floor costs
+        // nothing and buys the iOS 26 text/selection/observation APIs. Spelled
+        // as a string because `.v26` needs swift-tools-version 6.2, and this
+        // manifest stays at 6.0 so Xcode 16 can still build the macOS package.
+        .iOS("26.0")
     ],
     products: [
         .library(name: "MudCore", targets: ["MudCore"]),

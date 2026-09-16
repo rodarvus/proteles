@@ -33,7 +33,7 @@ conclusions:
 
 1. **The architecture is unusually well-prepared — now measured, not inferred.**
    `MudCore` is verifiably platform-agnostic (zero UI imports, zero `#if os` in
-   294 files), Package.swift already declares `.iOS(.v18)`, and a
+   294 files), Package.swift declares an iOS floor (`.iOS(.v18)` at the time; raised to `.iOS("26.0")` by D-125 on 2026-09-16), and a
    `URLSessionWebSocketTask` transport already exists ("the transport for iOS"
    per its own doc comment). **`MudCore` compiles for the iOS simulator and all
    1,842 tests pass there** given three small enumerated fixes (§1.1). The
