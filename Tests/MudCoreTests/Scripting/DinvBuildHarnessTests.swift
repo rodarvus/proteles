@@ -163,10 +163,8 @@ struct DinvBuildHarnessTests {
         #expect(sentAFence, "dinv never transmitted a fence echo")
     }
 
-    /// The real `wish list` output captured from a live session. dinv should
-    /// gag everything from the header through its `DINV wish list fence` marker
-    /// (its START trigger matches the header → enables the OmitFromOutput item
-    /// trigger; the fence line disables it). Anything after the fence is normal.
+    /// Captured report shapes are hidden by the narrow parser. Completion uses
+    /// the coordinator's unique fence; there is no second, fixed wish marker.
     private static let wishOutput: [String] = [
         "                                    Base Cost Adjustment Your Cost  Keyword",
         " ---------------------------------- --------- ---------- --------- -----------",
@@ -176,8 +174,7 @@ struct DinvBuildHarnessTests {
         "*Portal wear location                    6000        150        -- Portal     ",
         "Your total adjustment cost is: 3000",
         "Your quest points on hand are: 973",
-        "Refer to 'help wish' for a description of each wish.",
-        "DINV wish list fence"
+        "Refer to 'help wish' for a description of each wish."
     ]
 
     @Test("dinv gags the wish-list output through its fence")
@@ -199,7 +196,7 @@ struct DinvBuildHarnessTests {
         await driver.drive()
 
         // Arm the wish capture exactly as dbot.wish.get does before sending
-        // `wish list` (setupFn adds the header START trigger that enables the gag).
+        // `wish list` (setupFn enables the narrow report parser).
         // setupFn's AddTriggerEx is a registration effect — consume it as the
         // real timer/coroutine-resume path does, so the trigger goes live.
         let setupRaw = await engine.runInPluginEnvironment(
@@ -226,7 +223,7 @@ struct DinvBuildHarnessTests {
         let afterFence = await engine.process(line: "You are standing in a field.")
 
         #expect(!shown.isEmpty || !gagged.isEmpty, "no lines processed")
-        // The header + item rows + the fence marker should all be gagged.
+        // The header and recognized item rows should be gagged.
         #expect(
             gagged.contains { $0.contains("Base Cost") },
             "wish header was NOT gagged — shown: \(shown)"

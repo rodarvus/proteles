@@ -750,7 +750,7 @@ function inv.items.forget(query, endTag)
   inv.items.forgetPkg.query  = query or ""
   inv.items.forgetPkg.endTag = endTag
 
-  wait.make(inv.items.forgetCR)
+  inv.runtime.start(inv.items.forgetCR, inv.items, "forgetPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.forget
@@ -808,7 +808,7 @@ function inv.items.ignore(mode, container, endTag)
   inv.items.ignorePkg.container = container or ""
   inv.items.ignorePkg.endTag    = endTag
 
-  wait.make(inv.items.ignoreCR)
+  inv.runtime.start(inv.items.ignoreCR, inv.items, "ignorePkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.ignore
@@ -1097,74 +1097,22 @@ end -- inv.items.discoverCR
 
 drlInvDiscoveryTimeoutThresholdSec = 30 -- make this large enough to handle a speedwalk in the middle
 function inv.items.discoverLocation(location)
-  local retval
-  local containerId
-
-  -- Valid discovery locations are worn equipment, main inventory, the keyring, or a container
-  if (location ~= nil) then
-    containerId = tonumber(location)
-  end -- if
-  assert((location == invItemLocWorn) or (location == invItemLocInventory) or
-         (location == invItemLocKeyring) or (containerId ~= nil),
-         "inv.items.discoverLocation: invalid location parameter")
-
-  -- Only allow one discovery request at a time
-  if (inv.items.discoverPkg ~= nil) then
-    dbot.note("Skipping inventory discovery because another discovery is in progress")
-    return DRL_RET_BUSY
-  end -- if
-
-  inv.items.discoverPkg = {}
-
-  -- Start the discovery!!!
-  local command
-  if (location == invItemLocWorn) then
-    command = "eqdata"
-  elseif (location == invItemLocInventory) then
-    command = "invdata"
-  elseif (location == invItemLocKeyring) then
-    command = "keyring data"
-  else
-    command = "invdata " .. containerId
-  end -- if
-
-  local resultData = dbot.callback.new()
-  retval = dbot.execute.safe.command(command, inv.items.discoverSetupFn, nil,
-                                     dbot.callback.default, resultData)
-  if (retval ~= DRL_RET_SUCCESS) then
-    if (retval ~= DRL_RET_IN_COMBAT) then
-      dbot.warn("inv.items.discoverLocation: Failed to execute command \"@G" .. command .. "@W\": " ..
-                dbot.retval.getString(retval))
-    end -- if
-    inv.items.trigger.itemDataEnd() -- Call this to clean up any lingering state from the failed discovery
-    return retval
-  end -- if
-
-  -- Wait for the callback to confirm that the safe execution completed
-  retval = dbot.callback.wait(resultData, drlInvDiscoveryTimeoutThresholdSec)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.note("Inventory discovery did not complete: " .. dbot.retval.getString(retval) ..
-              ".  We'll try again later.")
-    inv.items.trigger.itemDataEnd() -- Call this to clean up any lingering state from the failed discovery
-  end -- if
-
-  -- Wait until the eqdata, invdata, keyring data triggers complete
-  if (retval == DRL_RET_SUCCESS) then
-    local timeout = 0
-    while (inv.items.discoverPkg ~= nil) do
-      wait.time(drlSpinnerPeriodDefault)
-      timeout = timeout + drlSpinnerPeriodDefault
-      if (timeout > 2) then -- use a short timeout since the callback.wait() call above already waited a while
-        dbot.note("Inventory discovery timed out -- maybe you were busy.  We'll try again later...")
-        inv.items.trigger.itemDataEnd() -- Call this to clean up any lingering state from the failed discovery
-        return DRL_RET_TIMEOUT
-      end -- if
-    end -- while
-  end -- if
-
-  return retval
+  if inv.items.discoverPkg then return DRL_RET_BUSY end
+  local command, dataType
+  if location == invItemLocWorn then command, dataType = "eqdata", "eqdata"
+  elseif location == invItemLocInventory then command, dataType = "invdata", "invdata"
+  elseif location == invItemLocKeyring then command, dataType = "keyring data", "keyring"
+  elseif tonumber(location) then command, dataType = "invdata " .. location, "invdata"
+  else return DRL_RET_INVALID_PARAM end
+  local result = dbot.callback.new()
+  local snapshot = { loc = location, dataType = dataType, rows = {} }
+  local rv, op = inv.commands.enqueue({command}, inv.items.snapshotSetup, snapshot,
+    dbot.callback.default, result, { framed = true, cleanup = inv.items.snapshotCleanup,
+      label = command, timeout = 30 })
+  if rv ~= DRL_RET_SUCCESS then return rv end
+  snapshot.operation = op
+  return dbot.callback.wait(result, 30)
 end -- inv.items.discoverLocation
-
 
 function inv.items.discoverSetupFn()
   EnableTrigger(inv.items.trigger.itemDataStartName, true)
@@ -1290,7 +1238,7 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
         else
           local timeout = 0
           while (resultData.isDone == false) do
-            wait.time(inv.items.timer.idTimeoutPeriodSec)
+            inv.runtime.sleep(inv.items.timer.idTimeoutPeriodSec)
             timeout = timeout + inv.items.timer.idTimeoutPeriodSec
             if (timeout > inv.items.timer.idTimeoutThresholdSec) then
               dbot.warn("inv.items.identifyCR: Basic identification timed out for item " .. objId  ..
@@ -1301,6 +1249,8 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
         end -- if
       end -- if
     end -- if
+
+    if retval ~= DRL_RET_SUCCESS then break end
 
     -- If the item is an instance of a frequently acquired item (potion, pill, etc.) add it
     -- to the "frequently acquired item" cache if it is not already in the cache.
@@ -1408,17 +1358,8 @@ function inv.items.identifyItem(objId, idCommand, resultData, commandArray)
     return DRL_RET_BUSY
   end -- if
 
-  -- Clear out fields that may be left over from a previous identification.  Otherwise, we may
-  -- be left with incorrect values if a temper or envenom added stats to the item previously.
-  inv.items.setStatField(objId, invStatFieldStr, 0)
-  inv.items.setStatField(objId, invStatFieldInt, 0)
-  inv.items.setStatField(objId, invStatFieldWis, 0)
-  inv.items.setStatField(objId, invStatFieldDex, 0)
-  inv.items.setStatField(objId, invStatFieldCon, 0)
-  inv.items.setStatField(objId, invStatFieldLuck, 0)
-
   -- Use globals to hold state for the identify triggers
-  inv.items.identifyPkg         = {}
+  inv.items.identifyPkg         = { lines = {} }
   inv.items.identifyPkg.objId   = objId
   inv.items.identifyPkg.objLoc  = objLoc
   inv.items.identifyPkg.command = idCommand
@@ -1616,6 +1557,8 @@ end -- inv.items.identifyItemSetupFn
 
 
 function inv.items.identifyAtomicSetup()
+  local op = inv.commands.active
+  if op then op.identification = inv.items.identifyPkg end
   EnableTrigger(inv.items.trigger.wearName,          true)
   EnableTrigger(inv.items.trigger.removeName,        true)
   EnableTrigger(inv.items.trigger.getName,           true)
@@ -1629,6 +1572,7 @@ end -- inv.items.identifyAtomicSetup
 
 
 function inv.items.identifyAtomicCleanup(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.wearName,        false)
   EnableTrigger(inv.items.trigger.removeName,      false)
   EnableTrigger(inv.items.trigger.getName,         false)
@@ -1637,7 +1581,12 @@ function inv.items.identifyAtomicCleanup(resultData, retval)
   EnableTrigger(inv.items.trigger.putKeyringName,  false)
   EnableTrigger(inv.items.trigger.wearSpecialName, false)
 
-  inv.items.trigger.itemIdEnd() -- clears itemIdStartName and others...
+  local op = resultData and resultData.operation
+  local identification = op and op.identification
+  if retval == DRL_RET_SUCCESS and identification then
+    retval = identification.retval or DRL_RET_TIMEOUT
+  end
+  inv.items.trigger.itemIdEnd(false)
 
   dbot.callback.default(resultData, retval)
 end -- inv.items.identifyAtomicCleanup
@@ -1727,7 +1676,7 @@ function inv.items.refresh(maxNumItems, refreshLocations, endTag, tagProxy)
       inv.items.refreshPkg.refreshLocations = invItemsRefreshLocAll
     end -- if
 
-    wait.make(inv.items.refreshCR)
+    inv.runtime.start(inv.items.refreshCR, inv.items, "refreshPkg")
     retval = DRL_RET_SUCCESS
   end -- if
 
@@ -1813,13 +1762,15 @@ function inv.items.refreshCR()
   -- inv.config doesn't need a save here -- the only config mutation that
   -- ever flows through this path is inv.items.build's isBuildExecuted flag,
   -- which is now persisted at its mutation site instead.
-  inv.items.save()
+  local saveResult = inv.items.save()
+  if saveResult ~= DRL_RET_SUCCESS then retval = saveResult end
 
   local refreshResultMessages = {
     [DRL_RET_SUCCESS]        = "SUCCESS! (Entire inventory is identified)",
     [DRL_RET_HALTED]         = "HALTED! (Some items may still need identification)",
     [DRL_RET_IN_COMBAT]      = "IN COMBAT! (Skipped identification because you were fighting!)",
-    [DRL_RET_TIMEOUT]        = "TIMEOUT! (Skipped identification because you were busy)",
+    [DRL_RET_TIMEOUT]        = "TIMEOUT! (Incomplete response; saved data retained)",
+    [DRL_RET_BUSY]           = "INTERRUPTED (Inventory will be synchronized on the next refresh)",
     [DRL_RET_NOT_ACTIVE]     = "NOT ACTIVE! (You were not ready for item identification)",
     [DRL_RET_UNINITIALIZED]  = "UNINITIALIZED! (The plugin is not initialized)",
   }
@@ -1868,14 +1819,10 @@ function inv.items.refreshAtTime(min, sec)
     return DRL_RET_UNINITIALIZED
   end -- if
 
-  -- We can't add the timer directly because we are in the function called by that timer.  Instead,
-  -- we use an intermediate timer to call back and start this timer again.  Yeah, it's a bit ugly...
-  DoAfterSpecial(0.1, -- start up in 100 ms
-                 string.format("AddTimer(%s, 0, %d, %d, \"\", %d, " ..
-                               "\"inv.items.refreshDefault\")",
-                               "inv.items.timer.refreshName", min, sec,
-                               timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot),
-                 sendto.script)
+  inv.runtime.removeTimer(inv.items.timer.refreshName)
+  if inv.runtime.enabled then
+    inv.items.timer.refreshName = inv.runtime.after(min * 60 + sec, inv.items.refreshDefault)
+  end
 
   return DRL_RET_SUCCESS
 end -- inv.items.refreshAtTime
@@ -2052,7 +1999,7 @@ function inv.items.get(queryString, endTag)
   inv.items.getPkg.queryString = queryString or ""
   inv.items.getPkg.endTag      = endTag
 
-  wait.make(inv.items.getCR)
+  inv.runtime.start(inv.items.getCR, inv.items, "getPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.get
@@ -2205,7 +2152,7 @@ function inv.items.getItem(objId, commandArray)
             break
           end -- if
 
-          wait.time(drlSpinnerPeriodDefault)
+          inv.runtime.sleep(drlSpinnerPeriodDefault)
           totTime = totTime + drlSpinnerPeriodDefault
         end -- while
       end -- if
@@ -2284,6 +2231,7 @@ end -- inv.items.getSetupFn
 
 
 function inv.items.getResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.getName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.getResultFn
@@ -2295,6 +2243,7 @@ end -- inv.items.getKeyringSetupFn
 
 
 function inv.items.getKeyringResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.getKeyringName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.getKeyringResultFn
@@ -2344,7 +2293,7 @@ function inv.items.put(container, queryString, endTag)
   inv.items.putPkg.queryString = queryString or ""
   inv.items.putPkg.endTag      = endTag
 
-  wait.make(inv.items.putCR)
+  inv.runtime.start(inv.items.putCR, inv.items, "putPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.put
@@ -2555,7 +2504,7 @@ function inv.items.putItem(objId, containerId, commandArray, doCheckLocation)
           break
         end -- if
 
-        wait.time(drlSpinnerPeriodDefault)
+        inv.runtime.sleep(drlSpinnerPeriodDefault)
         totTime = totTime + drlSpinnerPeriodDefault
       end -- while
     end -- if
@@ -2582,6 +2531,7 @@ end -- inv.items.putSetupFn
 
 
 function inv.items.putResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.putName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.putResultFn
@@ -2593,6 +2543,7 @@ end -- inv.items.putKeyringSetupFn
 
 
 function inv.items.putKeyringResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.putKeyringName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.putKeyringResultFn
@@ -2629,7 +2580,7 @@ function inv.items.store(queryString, endTag)
   inv.items.storePkg.queryString = queryString or ""
   inv.items.storePkg.endTag      = endTag
 
-  wait.make(inv.items.storeCR)
+  inv.runtime.start(inv.items.storeCR, inv.items, "storePkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.store(queryString)
@@ -2841,7 +2792,7 @@ function inv.items.wearItem(objId, targetLoc, commandArray, doCheckLocation)
         break
       end -- if
 
-      wait.time(drlSpinnerPeriodDefault)
+      inv.runtime.sleep(drlSpinnerPeriodDefault)
       totTime = totTime + drlSpinnerPeriodDefault
     end -- if
   end -- if
@@ -2856,6 +2807,7 @@ end -- inv.items.wearSetupFn
 
 
 function inv.items.wearResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.wearName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.wearResultFn
@@ -2992,7 +2944,7 @@ function inv.items.removeItem(objId, commandArray)
           break
         end -- if
 
-        wait.time(drlSpinnerPeriodDefault)
+        inv.runtime.sleep(drlSpinnerPeriodDefault)
         totTime = totTime + drlSpinnerPeriodDefault
       end -- while
     end -- if
@@ -3008,6 +2960,7 @@ end -- inv.items.removeSetupFn
 
 
 function inv.items.removeResultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(inv.items.trigger.removeName, false)
   dbot.callback.default(resultData, retval)
 end -- inv.items.removeResultFn
@@ -3054,7 +3007,7 @@ function inv.items.keyword(keyword, keywordOperation, queryString, useQuietMode,
   inv.items.keywordPkg.useQuietMode       = useQuietMode
   inv.items.keywordPkg.endTag             = endTag
 
-  wait.make(inv.items.keywordCR)
+  inv.runtime.start(inv.items.keywordCR, inv.items, "keywordPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.keyword
@@ -3907,7 +3860,7 @@ function inv.items.display(queryString, verbosity, endTag)
                                         { field = invStatFieldName,     isAscending = true } }
 
   -- Fire off the asynchronous co-routine to generate and display the results
-  wait.make(inv.items.displayCR)
+  inv.runtime.start(inv.items.displayCR, inv.items, "displayPkg")
 
   return retval
 end -- inv.items.display
@@ -4611,7 +4564,7 @@ function inv.items.organize.add(containerName, queryString, endTag)
   inv.items.organize.addPkg.query     = queryString
   inv.items.organize.addPkg.endTag    = endTag
 
-  wait.make(inv.items.organize.addCR)
+  inv.runtime.start(inv.items.organize.addCR, inv.items.organize, "addPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.organize.add
@@ -4676,7 +4629,7 @@ function inv.items.organize.clear(containerName, endTag)
   inv.items.organize.clearPkg.container = containerName
   inv.items.organize.clearPkg.endTag    = endTag
 
-  wait.make(inv.items.organize.clearCR)
+  inv.runtime.start(inv.items.organize.clearCR, inv.items.organize, "clearPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.organize.clear
@@ -4830,7 +4783,7 @@ function inv.items.organize.cleanup(queryString, endTag)
   inv.items.organize.cleanupPkg.query  = queryString
   inv.items.organize.cleanupPkg.endTag = endTag
 
-  wait.make(inv.items.organize.cleanupCR)
+  inv.runtime.start(inv.items.organize.cleanupCR, inv.items.organize, "cleanupPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.items.organize.cleanup
@@ -5120,7 +5073,6 @@ function inv.items.trigger.itemIdStart(line)
   -- Clear the ID level field.  If we detect a partial identification this time, we
   -- flag the item as having a partial ID.  If we don't detect a partial identification,
   -- we flag it as having a full ID when we hit the end trigger.
-  inv.items.setField(inv.items.identifyPkg.objId, invFieldIdentifyLevel, invIdLevelNone)
 
   -- Start watching for stat lines in the item description
   EnableTrigger(inv.items.trigger.itemIdStatsName, true)
@@ -5128,7 +5080,7 @@ function inv.items.trigger.itemIdStart(line)
   -- Watch for the end of the item description so that we can stop scanning
   AddTriggerEx(inv.items.trigger.itemIdEndName,
                "^" .. inv.items.identifyFence .. "$",
-               "inv.items.trigger.itemIdEnd()",
+               "inv.items.trigger.itemIdEnd(true)",
                drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
                custom_colour.Custom11, 0, "", "", sendto.script, 0)
 
@@ -5145,6 +5097,34 @@ inv.items.trigger.affectModsContinuation = false
 inv.items.trigger.keywordsContinuation   = false
 inv.items.trigger.nameContinuation       = false
 function inv.items.trigger.itemIdStats(line)
+  local package = inv.items.identifyPkg
+  if not package then return end
+  if #package.lines >= 200 then package.invalid = true; return end
+  package.lines[#package.lines + 1] = line
+  local id = line:match("Id%s+:%s+(%d+)%s+")
+  if id then
+    if package.observedId and package.observedId ~= id then package.invalid = true end
+    package.observedId = id
+  end
+  if line:match("Name%s+:") or line:match("Level%s+:") then package.sawDetails = true end
+end -- inv.items.trigger.itemIdStats
+
+function inv.items.trigger.itemIdEnd(completed)
+  local package = inv.items.identifyPkg
+  EnableTrigger(inv.items.trigger.itemIdStartName, false)
+  EnableTrigger(inv.items.trigger.itemIdStatsName, false)
+  EnableTrigger(inv.items.trigger.suppressWindsName, false)
+  DeleteTrigger(inv.items.trigger.itemIdEndName)
+  dbot.deleteTimer(inv.items.timer.idTimeoutName)
+  if not package then return DRL_RET_SUCCESS end
+  local retval = DRL_RET_TIMEOUT
+  if completed and not package.invalid then retval = inv.items.commitIdentification(package) end
+  package.retval = retval
+  inv.items.identifyPkg = nil
+  return retval
+end -- inv.items.trigger.itemIdEnd
+
+function inv.items.trigger.parseItemIdStats(line)
   local objId = inv.items.identifyPkg.objId
   dbot.debug("stats for item " .. objId .. ":\"" .. line .. "\"")
 
@@ -5407,10 +5387,10 @@ function inv.items.trigger.itemIdStats(line)
   parseStatModAsNum(":%s+dexterity [+-](%d+)",                        invStatFieldDex)
   parseStatModAsNum(":%s+constitution [+-](%d+)",                     invStatFieldCon)
 
-end -- inv.items.trigger.itemIdStats
+end -- inv.items.trigger.parseItemIdStats
 
 
-function inv.items.trigger.itemIdEnd()
+function inv.items.trigger.finishIdentification()
 
   -- We are at the end of the identification trigger process.  We no longer need the
   -- identification timeout timer and we don't want it going off later.  The deletion
@@ -5430,14 +5410,8 @@ function inv.items.trigger.itemIdEnd()
     return DRL_RET_INTERNAL_ERROR
   end -- if
 
-  -- Check if something interferred with the identification.  The "dbot.execute" package
-  -- guarantees that the user can't manually try to ID something at the same moment we
-  -- are doing our background identification.  In theory, there shouldn't be any potential
-  -- conflict here (i.e., we get back ID results for a different item).  However, it's
-  -- probably still helpful to check if the ID we get back matches what we expect.  I'd
-  -- rather find out what is happening the easy way than the hard way...
-  -- Note: Auctions and shop items are not ID'ed with their objId (we don't know the objID
-  --       until identification completes) so we don't worry about this check for those cases.
+  -- Verify the parsed identity before publishing. User input is allowed during
+  -- requests; interference cancels capture, and the captured ID must still match.
   local objId = inv.items.getStatField(inv.items.identifyPkg.objId, invStatFieldId)
   local objLoc = inv.items.getField(inv.items.identifyPkg.objId, invFieldObjLoc)
   if (objId ~= inv.items.identifyPkg.objId) and (objLoc ~= invItemLocAuction) and
@@ -5493,22 +5467,18 @@ function inv.items.trigger.itemIdEnd()
     inv.items.setStatField(inv.items.identifyPkg.objId, invItemEffectsHammerswing, 1)
   end -- if
 
-  -- Persist the just-identified row.  Most callers reach itemIdEnd through
-  -- inv.items.identifyCR's loop which saves at line 1340; the exception is
-  -- inv.items.timer.idTimeout, which fires itemIdEnd from a one-shot timer
-  -- and used to leave the freshly-set identifyLevel and affectMod pseudo-
-  -- stats in memory only -- next refresh would silently re-identify the
-  -- item.  Saving here covers the timeout path; for the identifyCR path
-  -- it is one extra write per item but the row content is unchanged.
+  -- Called only for a complete, validated capture inside its transaction.
   local idObjId = inv.items.identifyPkg.objId
+  local retval = DRL_RET_INTERNAL_ERROR
   if (idObjId ~= nil) and (inv.items.table[idObjId] ~= nil) then
-    dinv_db.saveItem(idObjId, inv.items.table[idObjId])
+    retval = dinv_db.saveItem(idObjId, inv.items.table[idObjId])
   end -- if
 
   -- The identification process is done!
   inv.items.identifyPkg = nil
+  return retval
 
-end -- inv.items.trigger.itemIdEnd
+end -- inv.items.trigger.finishIdentification
 
 
 inv.items.trigger.idItemName = "drlInvItemsTriggerIdItem"
@@ -5534,44 +5504,24 @@ inv.items.trigger.itemDataStatsName = "drlInvItemsTriggerItemDataStats"
 inv.items.trigger.itemDataEndName   = "drlInvItemsTriggerItemDataEnd"
 
 function inv.items.trigger.itemDataStart(dataType, containerId)
-  assert((inv.items.discoverPkg ~= nil), "Discovery start trigger executed when discovery is not in progress")
-
-  -- We are scanning worn items, main inventory items, keyring items, or a container
-  if (dataType == "eqdata") then
-    inv.items.discoverPkg.loc = invItemLocWorn
-
-  elseif (dataType == "invdata") then
-    containerIdNum = tonumber(containerId)
-    if (containerIdNum == nil) then
-      inv.items.discoverPkg.loc = invItemLocInventory
-    else
-      inv.items.discoverPkg.loc = containerId
-    end -- if
-
-  elseif (dataType == "keyring") then
-    inv.items.discoverPkg.loc = invItemLocKeyring
-
-  else
-    dbot.debug("inv.items.trigger.itemDataStart: Could not find target item")
-    inv.items.trigger.itemDataEnd() -- clean up state
-    return DRL_RET_MISSING_ENTRY
-  end -- if
-
-  -- Watch for the eqdata, invdata, or keyring end tag so that we can stop scanning
-  AddTriggerEx(inv.items.trigger.itemDataEndName,
-               "^{/(eqdata|invdata|keyring)}$",
-               "inv.items.trigger.itemDataEnd()",
-               drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
-               custom_colour.Custom11, 0, "", "", sendto.script, 0)
-
-  -- Start watching for eqdata or invdata stat lines in the item description
+  local snapshot = inv.items.discoverPkg
+  if not snapshot or not snapshot.operation or snapshot.operation.done then return end
+  local received = dataType == "eqdata" and invItemLocWorn or
+    dataType == "keyring" and invItemLocKeyring or tonumber(containerId) or invItemLocInventory
+  if snapshot.started or dataType ~= snapshot.dataType or tostring(received) ~= tostring(snapshot.loc) then
+    snapshot.invalid = true
+    inv.commands.cancel(snapshot.operation, DRL_RET_BUSY)
+    return
+  end
+  snapshot.started = true
+  check(AddTriggerEx(inv.items.trigger.itemDataEndName,
+    "^{/" .. snapshot.dataType .. "}$", "inv.items.trigger.itemDataEnd(true)",
+    drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
+    custom_colour.NoChange, 0, "", "", sendto.script, 0))
   EnableTrigger(inv.items.trigger.itemDataStatsName, true)
-
-  return DRL_RET_SUCCESS
 end -- inv.items.trigger.itemDataStart
 
-
-function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeField, unique, wearLoc,
+function inv.items.trigger.applyItemData(objId, flags, itemName, level, typeField, unique, wearLoc,
                                          timer, isInvItem)
   local retval = DRL_RET_SUCCESS
 
@@ -5665,9 +5615,11 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
       if (cachedEntry ~= nil) then
         cachedEntry.stats.id = objId
         retval = inv.items.setEntry(objId, cachedEntry)
-        dbot.note("Identified \"" .. (inv.items.getField(objId, invFieldColorName) or "Unidentified") ..
-                  "@W" .. DRL_ANSI_WHITE .. "\" (" .. objId .. ") from " ..
-                  (fromSql and "items table" or "frequent cache"))
+        local displayName = inv.items.getField(objId, invFieldColorName)
+        if not displayName or displayName == "" then displayName = inv.items.getStatField(objId, invStatFieldName) end
+        if not displayName or displayName == "" then displayName = "Item " .. objId end
+        dbot.debug("Identified \"" .. displayName .. "@W" .. DRL_ANSI_WHITE .. "\" (" .. objId ..
+                   ") from " .. (fromSql and "items table" or "frequent cache"))
 
         -- This item instance probably wasn't in the recent item cache because we don't cache
         -- items that are duplicated in the frequent item cache.  However, it's possible that
@@ -5756,22 +5708,40 @@ function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeFiel
 
   -- We're done!
   return retval
-end -- inv.items.trigger.itemDataStats
+end -- inv.items.trigger.applyItemData
 
 
-function inv.items.trigger.itemDataEnd()
-  -- We are done with the eqdata or invdata output
-  EnableTrigger(inv.items.trigger.itemDataStartName, false)
-  EnableTrigger(inv.items.trigger.itemDataStatsName, false)
-
-  inv.items.discoverPkg = nil
+function inv.items.trigger.itemDataEnd(completed)
+  local snapshot = inv.items.discoverPkg
+  if not snapshot then return end
+  if completed then
+    local retval = inv.items.snapshotCommit(snapshot)
+    inv.commands.complete(snapshot.operation, retval)
+  else
+    inv.commands.cancel(snapshot.operation, DRL_RET_TIMEOUT)
+  end
 end -- inv.items.trigger.itemDataEnd
 
+function inv.items.trigger.itemDataStats(objId, flags, itemName, level, typeField, unique, wearLoc, timer, isInvItem)
+  local row = {objId, flags, itemName, level, typeField, unique, wearLoc, timer, isInvItem}
+  if isInvItem then
+    if not inv.items.observeChange("invitem", row) then return end
+    return inv.items.trigger.applyItemData(unpack(row))
+  end
+  local snapshot = inv.items.discoverPkg
+  if not snapshot or not snapshot.started or snapshot.operation.done then return end
+  if #snapshot.rows >= 10000 then
+    inv.commands.cancel(snapshot.operation, DRL_RET_INTERNAL_ERROR)
+    return
+  end
+  snapshot.rows[#snapshot.rows + 1] = row
+end
 
 inv.items.trigger.invmonName  = "drlInvItemsTriggerInvmon"
 inv.items.trigger.invitemName = "drlInvItemsTriggerInvitem"
 
 function inv.items.trigger.invmon(action, objId, containerId, wearLoc)
+  if not inv.items.observeChange("invmon", {action, objId, containerId, wearLoc}) then return end
   local retval = DRL_RET_SUCCESS
 
   -- Verify the input params exist
@@ -6024,4 +5994,3 @@ function inv.items.timer.idTimeout()
   -- Clean up the identification request
   inv.items.trigger.itemIdEnd()
 end -- inv.items.timer.idTimeout
-

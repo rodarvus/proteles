@@ -59,7 +59,9 @@ public extension SessionController {
                 if delay > 0 {
                     try? await Task.sleep(for: .seconds(delay))
                 }
-                if Task.isCancelled { return }
+                if Task.isCancelled {
+                    return
+                }
                 await self?.applyDueTimers()
             }
         }
@@ -76,7 +78,12 @@ public extension SessionController {
     /// tests can drive timer firing deterministically without real sleeping.
     internal func applyDueTimers(at now: Date = Date()) async {
         if let scriptEngine {
-            await applyScriptEffects(scriptEngine.fireDueTimers(at: now))
+            // Apply lifecycle/control effects before running the next callback.
+            // Collecting the entire batch first lets an old plugin's send
+            // escape after ReloadPlugin has already replaced its environment.
+            for id in await scriptEngine.dueTimerIDs(at: now) {
+                await applyScriptEffects(scriptEngine.fireTimer(id: id, at: now))
+            }
             await rearmTimerLoopIfScriptScheduled()
         }
         if let searchAndDestroy {

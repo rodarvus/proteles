@@ -129,7 +129,7 @@ function inv.unused.display(priorityName, nokeep, endTag)
   inv.unused.displayPkg.label      = label
   inv.unused.displayPkg.endTag     = endTag
 
-  wait.make(inv.unused.displayCR)
+  inv.runtime.start(inv.unused.displayCR, inv.unused, "displayPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.unused.display

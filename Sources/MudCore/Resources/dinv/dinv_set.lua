@@ -252,7 +252,7 @@ function inv.set.create(priorityName, level, synchronous, intensity)
       inv.set.createPkg.bonusType = invStatBonusTypeCurrent
       inv.set.createPkg.waitForStatBonus = true
     end -- if
-    wait.make(inv.set.createCR)
+    inv.runtime.start(inv.set.createCR, inv.set, "createPkg")
   else
     dbot.warn("inv.set.create: Invalid synchronous parameter \"" .. (synchronous or "") .. "\"")
     retval = DRL_INVALID_PARAM
@@ -282,7 +282,7 @@ function inv.set.createCR()
     -- set and waiting a little while won't kill you.  Also, if the timer doesn't manage to
     -- run (which isn't likely) then the worst case scenario is that we pick up the stat bonuses
     -- from the previous set creation for the user's current level.
-    wait.time(1)
+    inv.runtime.sleep(1)
 
     local totTime = 0
     local timeout = 2
@@ -293,7 +293,7 @@ function inv.set.createCR()
         break
       end -- if
 
-      wait.time(drlSpinnerPeriodDefault)
+      inv.runtime.sleep(drlSpinnerPeriodDefault)
       totTime = totTime + drlSpinnerPeriodDefault
     end -- while
   end -- if
@@ -367,7 +367,7 @@ function inv.set.createCR()
 
     -- Yield periodically so we don't appear to hang the system
     if (numIters % 3 == 0) then
-      wait.time(0.1)
+      inv.runtime.sleep(0.1)
     end -- if
   until (score < (bestScore * 0.8)) -- Let things anneal a bit, but cut it off if we are < x% of previous best
 
@@ -745,7 +745,7 @@ function inv.set.display(priorityName, level, channel, endTag)
   inv.set.displayPkg.endTag    = endTag
 
   -- Kick off the display co-routine to display the set
-  wait.make(inv.set.displayCR)
+  inv.runtime.start(inv.set.displayCR, inv.set, "displayPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.set.display
@@ -777,7 +777,7 @@ function inv.set.displayCR()
   local waitForSetDisplayTimeout = 0
   local waitForSetDisplayThreshold = 10
   while (inv.set.createPkg ~= nil) do
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     waitForSetDisplayTimeout = waitForSetDisplayTimeout + drlSpinnerPeriodDefault
     if (waitForSetDisplayTimeout > waitForSetDisplayThreshold) then
       dbot.error("inv.set.displayCR: Failed to create set " .. priorityName .. "[" .. level .. "] within " ..
@@ -891,7 +891,7 @@ function inv.set.createAndWear(priorityName, level, intensity, endTag)
   inv.set.createAndWearPkg.intensity    = intensity
   inv.set.createAndWearPkg.endTag       = endTag
 
-  wait.make(inv.set.createAndWearCR)
+  inv.runtime.start(inv.set.createAndWearCR, inv.set, "createAndWearPkg")
 
   return retval
 end -- inv.set.createAndWear
@@ -931,7 +931,7 @@ function inv.set.createAndWearCR()
       return inv.tags.stop(invTagsSet, endTag, DRL_RET_TIMEOUT)
     end -- if
 
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     totTime = totTime + drlSpinnerPeriodDefault
   end -- while
 
@@ -952,6 +952,23 @@ end -- inv.set.createAndWearCR
 -- part of the process.
 -- Note: This must be called from within a co-routine
 function inv.set.wear(equipSet)
+  local context = {}
+  return inv.commands.exclusive(function() return inv.set.wearOwned(equipSet, context) end,
+    function(retval)
+      if context.started then
+        dbot.prompt.show()
+        EnableTrigger(inv.items.trigger.wearSpecialName, false)
+        if context.didDisableRefresh then inv.state = invStateIdle end
+        inv.items.save()
+      end
+      if context.mutated and retval ~= DRL_RET_SUCCESS then
+        dbot.warn("Equipment change interrupted; check equipment and retry the set.")
+      end
+    end)
+end -- inv.set.wear
+
+
+function inv.set.wearOwned(equipSet, context)
   local retval = DRL_RET_SUCCESS
   local commandArray = dbot.execute.new()
 
@@ -964,10 +981,9 @@ function inv.set.wear(equipSet)
   local itemInfo
 
   -- Disable refreshes while we are in the middle of wearing an equipment set
-  local didDisableRefresh = false
   if (inv.state == invStateIdle) then
     inv.state = invStatePaused
-    didDisableRefresh = true
+    context.didDisableRefresh = true
   elseif (inv.state == invStateRunning) then
     dbot.info("Skipping request to wear an inventory set: you are in the middle of an inventory refresh")
     return DRL_RET_BUSY
@@ -975,6 +991,7 @@ function inv.set.wear(equipSet)
 
   -- Suppress misc. unique messages for item slots and items (e.g., "You proudly pin Academy Graduation
   -- Medal to your chest.")
+  context.started = true
   EnableTrigger(inv.items.trigger.wearSpecialName, true)
 
   -- Disable the prompt to make the output look cleaner
@@ -1036,6 +1053,7 @@ function inv.set.wear(equipSet)
             if (retval ~= DRL_RET_SUCCESS) then
               dbot.debug("inv.set.wear: Failed to store item " .. objId .. ": " ..
                          dbot.retval.getString(retval))
+              return retval
             end -- if
           end -- if
         end -- if
@@ -1044,10 +1062,12 @@ function inv.set.wear(equipSet)
   end -- for
 
   -- Execute the command to store item types that aren't part of the equipment set
-  if (commandArray ~= nil) then
+  if (#commandArray > 0) then
+    context.mutated = true
     retval = dbot.execute.safe.blocking(commandArray, nil, nil, dbot.callback.default, 30)
     if (retval ~= DRL_RET_SUCCESS) then
       dbot.note("Skipping request to store unused item types: " .. dbot.retval.getString(retval))
+      return retval
     end -- if
     commandArray = dbot.execute.new()
   end -- if
@@ -1088,6 +1108,7 @@ function inv.set.wear(equipSet)
           if (retval ~= DRL_RET_SUCCESS) then
             dbot.note("Skipping request to store item " .. objId .. ": " ..
                        dbot.retval.getString(retval))
+            return retval
           end -- if
         end -- if
 
@@ -1098,10 +1119,12 @@ function inv.set.wear(equipSet)
   end -- for
 
   -- Execute the command to store old items
-  if (commandArray ~= nil) then
+  if (#commandArray > 0) then
+    context.mutated = true
     retval = dbot.execute.safe.blocking(commandArray, nil, nil, dbot.callback.default, 30)
     if (retval ~= DRL_RET_SUCCESS) then
       dbot.note("Skipping request to store old set: " .. dbot.retval.getString(retval))
+      return retval
     end -- if
     commandArray = dbot.execute.new()
   end -- if
@@ -1124,6 +1147,7 @@ function inv.set.wear(equipSet)
       if (retval ~= DRL_RET_SUCCESS) then
         dbot.debug("inv.set.wear: Failed to wear item " .. (objId or "nil") .. ": " ..
                    dbot.retval.getString(retval))
+        return retval
       else
         numNewWornItems = numNewWornItems + 1
       end -- if
@@ -1131,12 +1155,22 @@ function inv.set.wear(equipSet)
   end -- for
 
   -- Execute the command to wear new items
-  if (commandArray ~= nil) then
+  if (#commandArray > 0) then
+    context.mutated = true
     retval = dbot.execute.safe.blocking(commandArray, nil, nil, dbot.callback.default, 30)
     if (retval ~= DRL_RET_SUCCESS) then
       dbot.note("Skipping request to wear set: " .. dbot.retval.getString(retval))
+      return retval
     end -- if
   end -- if
+
+  -- Fences confirm ordering; invmon confirms the requested equipment outcome.
+  for location, item in pairs(equipSet) do
+    if inv.items.getField(item.id, invFieldObjLoc) ~= location then
+      dbot.warn("Equipment set incomplete at " .. location .. "; check equipment and retry the set.")
+      return DRL_RET_MISSING_ENTRY
+    end
+  end
 
   if (retval == DRL_RET_SUCCESS) then
     local suffix = ""
@@ -1146,21 +1180,8 @@ function inv.set.wear(equipSet)
     dbot.info("Wore " .. numNewWornItems .. " new item" .. suffix)
   end -- if
 
-  dbot.prompt.show()
-
-  -- Stop suppressing unique item or item slot wear messages (e.g., pinning a medal, aard gloves
-  -- snapping, etc.)
-  EnableTrigger(inv.items.trigger.wearSpecialName, false)
-
-  -- Re-enable refreshes if we disabled them to wear an equipment set
-  if (didDisableRefresh) then
-    inv.state = invStateIdle
-  end -- if
-
-  inv.items.save()
   return retval
-
-end -- inv.set.wear
+end -- inv.set.wearOwned
 
 
 function inv.set.diff(set1, set2, level)
@@ -1457,7 +1478,7 @@ function inv.set.compare(priorityName, relativeName, levelSkip, endTag)
   inv.set.comparePkg.levelSkip    = levelSkip
   inv.set.comparePkg.endTag       = endTag
 
-  wait.make(inv.set.compareCR)
+  inv.runtime.start(inv.set.compareCR, inv.set, "comparePkg")
 
   return DRL_RET_SUCCESS
 end -- inv.set.compare
@@ -1649,7 +1670,7 @@ function inv.set.covet(priorityName, auctionNum, levelSkip, endTag)
   inv.set.covetPkg.levelSkip    = levelSkip
   inv.set.covetPkg.endTag       = endTag
 
-  wait.make(inv.set.covetCR)
+  inv.runtime.start(inv.set.covetCR, inv.set, "covetPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.set.covet

@@ -79,19 +79,11 @@ extension SessionController {
             disposition.replacement ?? line,
             source: line
         )
-        let wishGag = PerformanceProbe.shared.measure(
-            "session.lines.wishprobe",
-            events: 1,
-            thresholdMS: 50
-        ) {
-            consumeWishProbeGag(line)
-        }
         let tagResult = measuredTagCleanLine(outLine)
         let shouldDisplay = !disposition.gag
             && !sndGag
             && !omitBlank
             && !richExitsGag
-            && !wishGag
             && !tagResult.gag
         if shouldDisplay {
             // Semantic effects (#82) apply only here: the line survived every
@@ -111,7 +103,6 @@ extension SessionController {
                 snd: sndGag,
                 richExits: richExitsGag,
                 blank: omitBlank,
-                wishProbe: wishGag,
                 tag: tagResult.gag
             )
         )
@@ -212,7 +203,6 @@ private struct LineGagReasons {
     let snd: Bool
     let richExits: Bool
     let blank: Bool
-    let wishProbe: Bool
     let tag: Bool
 
     var label: String {
@@ -221,7 +211,6 @@ private struct LineGagReasons {
             snd ? "snd" : nil,
             richExits ? "richexits" : nil,
             blank ? "blank" : nil,
-            wishProbe ? "wishprobe" : nil,
             tag ? "tag" : nil
         ].compactMap(\.self).joined(separator: "+")
     }

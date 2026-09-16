@@ -1651,7 +1651,7 @@ function inv.cli.analyze.fn(name, line, wildcards)
       inv.cli.analyzePkg.intensity    = inv.set.analyzeIntensity --TODO: let user specify this?
       inv.cli.analyzePkg.endTag       = endTag
 
-      wait.make(inv.cli.analyzeCR)
+      inv.runtime.start(inv.cli.analyzeCR, inv.cli, "analyzePkg")
     end -- if
 
   elseif (command == "delete") then

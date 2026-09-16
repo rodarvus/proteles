@@ -26,7 +26,7 @@ function inv.report.item(channel, name)
   inv.report.itemPkg.channel = channel
   inv.report.itemPkg.name    = name
 
-  wait.make(inv.report.itemCR)
+  inv.runtime.start(inv.report.itemCR, inv.report, "itemPkg")
 
   return DRL_RET_SUCCESS
 

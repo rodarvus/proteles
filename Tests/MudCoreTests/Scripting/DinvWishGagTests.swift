@@ -2,36 +2,13 @@ import Foundation
 @testable import MudCore
 import Testing
 
-/// Faithful, offline reproduction of dinv's `wish list` gag — driven through the
-/// **real** ``SessionController`` (its `OnPluginSend` bypass re-entrancy guard +
-/// async timer loop + inbound gag pipeline) over an ``InMemoryConnection``, NOT
-/// the bespoke ``ScriptEngine`` driver (which lacks the re-entrancy guard) and
-/// NOT a hand-call of `dbot.wish.setupFn` (which sidesteps the queue/fence
-/// coroutine `DinvBuildHarnessTests.wishListOutputIsGagged` so it can't catch a
-/// timing leak).
-///
-/// What this pins down (D-77): driving the real `dbot.wish.get` → `getCR`
-/// coroutine end to end — answering the `pagesize` probe, echoing both safe-exec
-/// fences and the wish fence, replaying the user's real `wish list` body — dinv's
-/// gag, *with intact triggers*, correctly omits the column header, every item
-/// row, the totals, and the fence (proven non-vacuous by a post-fence sentinel
-/// that must show). The live leak is a **timing race**: upstream dinv arms the
-/// omit-from-output item trigger only when its START trigger *matches the column
-/// header* (`dbot.wish.setupFn`), so if that header reaches output before the
-/// trigger is live — the post-login probe burst, or trigger teardown from a
-/// mid-probe reload — the gag never arms and the whole list prints. D-77 arms the
-/// item trigger up front in `setupFn` (before `wish list` is sent), closing the
-/// race; `wishBodyGaggedWhenHeaderUnmatched` proves it by replaying a header that
-/// can never match (gagged with the fix; reverting the one line leaks the lot).
-///
-/// Observation model: a gagged line is **dropped** from the scrollback; a shown
-/// line lands in it. So leakage == a wish line appearing in `scrollbackStore`.
+/// Offline wishlist replay through SessionController, its timer loop and inbound
+/// gag pipeline. The simulated server echoes only commands the plugin sends.
+/// Recognizable report lines are hidden; unrelated lines remain visible. A
+/// missing header must not publish incomplete wishes or overwrite saved wishes.
 @Suite("dinv — wish-list gag (real session)", .serialized)
 struct DinvWishGagTests {
-    /// The `wish list` column header + body as dinv's triggers expect it (the
-    /// header pattern is `Base…Cost…Adjustment…Your…Cost…Keyword`; item rows end
-    /// `-- <Keyword>`). From the header onward dinv gags every line through its
-    /// `DINV wish list fence`.
+    /// Recorded wish-list report (2026-06-01), also observed in September.
     private static let header =
         "                                    Base Cost Adjustment Your Cost  Keyword"
     /// The real `wish list` output (live capture, 2026-06-01). No pre-header line;
@@ -122,7 +99,7 @@ struct DinvWishGagTests {
             try? await engine.addTrigger(trigger)
         }
 
-        await driveDinvWishExchange(controller: controller, conn: conn, wishLines: wishLines)
+        await driveDinvWishExchange(controller: controller, engine: engine, conn: conn, wishLines: wishLines)
 
         let sent = conn.sentLines
         #expect(sent.contains("wish list"), "VACUOUS: dinv never sent `wish list`: \(sent)")
@@ -142,7 +119,7 @@ struct DinvWishGagTests {
         await controller.disconnect()
         // Scrollback text is ANSI-stripped, so compare against stripped wish lines.
         let strippedWishes = Set(wishLines.map(Self.stripANSI))
-        let leaked = shown.filter { strippedWishes.contains($0) || $0 == "DINV wish list fence" }
+        let leaked = shown.filter { strippedWishes.contains($0) }
         return (leaked: leaked, wishHasPortal: wishHasPortal)
     }
 
@@ -150,7 +127,7 @@ struct DinvWishGagTests {
     /// probes + fence echoes as the fake MUD would (split out of ``runWishFlow``
     /// to keep it within the function-length budget).
     /// Reply to a command dinv sent, the way the fake MUD would: echo its
-    /// safe-exec fences, replay the `wish list` body + wish fence + a non-vacuity
+    /// coordinator fences, replay the `wish list` body + a non-vacuity
     /// sentinel, and answer the `pagesize` probes. A command can be glued to a
     /// preceding GMCP subnegotiation in one flush, so match the *trailing* command.
     private static func answerProbe(_ line: String, conn: InMemoryConnection, wishLines: [String]) {
@@ -158,7 +135,6 @@ struct DinvWishGagTests {
             conn.injectLine(String(line[range.lowerBound...].dropFirst("echo ".count)))
         } else if line.hasSuffix("wish list") {
             wishLines.forEach { conn.injectLine($0) }
-            conn.injectLine("DINV wish list fence")
             conn.injectLine("PROTELES_SENTINEL_AFTER_FENCE")
         } else if line.hasSuffix("pagesize 0") {
             conn.injectLine("Paging disabled.")
@@ -171,13 +147,19 @@ struct DinvWishGagTests {
 
     /// Whether the post-fence sentinel has reached scrollback — i.e. the wish
     /// flow finished, so the drive loop can stop early.
-    private static func flowCompleted(_ controller: SessionController) async -> Bool {
-        await controller.scrollbackStore.snapshot()
-            .contains { $0.text.contains("PROTELES_SENTINEL_AFTER_FENCE") }
+    private static func flowCompleted(_ controller: SessionController, engine: ScriptEngine) async -> Bool {
+        guard await controller.scrollbackStore.snapshot()
+            .contains(where: { $0.text.contains("PROTELES_SENTINEL_AFTER_FENCE") }) else { return false }
+        let effects = await engine.runInPluginEnvironment(
+            DinvAssets.pluginID,
+            "if not dbot.wish.inProgress then proteles.note('WISH_FINISHED') end"
+        )
+        return effects.contains { if case .note("WISH_FINISHED", _, _) = $0 { true } else { false } }
     }
 
     private func driveDinvWishExchange(
         controller: SessionController,
+        engine: ScriptEngine,
         conn: InMemoryConnection,
         wishLines: [String]
     ) async {
@@ -191,7 +173,7 @@ struct DinvWishGagTests {
         while ContinuousClock.now < deadline {
             tick += 1
             // Done the moment the flow completes — fast locally, patient on CI.
-            if await Self.flowCompleted(controller) { break }
+            if await Self.flowCompleted(controller, engine: engine) { break }
             if tick % 25 == 0 {
                 await controller.dispatchGMCP(GMCPMessage(
                     package: "char.status", json: #"{"level":150,"state":3,"pos":"Standing"}"#
@@ -243,6 +225,16 @@ struct DinvWishGagTests {
         #expect(leaked.isEmpty, "wish-list body leaked to the user: \(leaked)")
     }
 
+    @Test("Unrelated output inside a wishlist remains visible in the real session", .timeLimit(.minutes(1)))
+    func unrelatedOutputDuringWish() async throws {
+        var interleaved = Self.body
+        let chat = "A friend tells you 'hello during the wishlist'."
+        interleaved.insert(chat, at: 4)
+        let result = try await runWishFlow(wishLines: interleaved)
+        #expect(result.leaked == [chat])
+        #expect(result.wishHasPortal)
+    }
+
     /// The REAL output is ANSI-coloured: owned (`*`) rows begin with a bold-red
     /// star (`ESC[0;1;31m*ESC[0;36m…`), non-owned rows don't. The live leak shows
     /// only the owned rows, so reproduce with the actual colour codes (a plain-text
@@ -284,20 +276,16 @@ struct DinvWishGagTests {
         #expect(leaked.isEmpty, "coloured wish rows leaked to the user: \(leaked)")
     }
 
-    /// The live leak's failure mode (D-70/D-77): the column header reaches output
-    /// before dinv's START trigger is live (post-login burst, or trigger teardown
-    /// from a mid-probe reload), so the header never matches and — with the old
-    /// header-gated approach — the omit-from-output item trigger never arms and the
-    /// whole list prints. Here the replayed header is deliberately mangled so it
-    /// can NEVER match `Base…Cost…Adjustment…Your…Cost…Keyword`; the gag must still
-    /// hold because `setupFn` now arms the item trigger up front (D-77). Pre-fix
-    /// this leaks the entire list.
-    @Test("dinv gags the wish-list even if the header never matches (race)", .timeLimit(.minutes(1)))
+    @Test(
+        "Missing wish header retains saved state and leaves unrelated text visible",
+        .timeLimit(.minutes(1))
+    )
     func wishBodyGaggedWhenHeaderUnmatched() async throws {
         var mangled = Self.body
-        mangled[0] = "  <<< some unexpected pre-header banner the start trigger can't match >>>"
-        let leaked = try await runWishFlow(wishLines: mangled).leaked
-        #expect(leaked.isEmpty, "wish-list leaked when header didn't match: \(leaked)")
+        mangled[0] = "  <<< an unrelated banner >>>"
+        let result = try await runWishFlow(wishLines: mangled)
+        #expect(result.leaked == [mangled[0]], "Recognizable wish rows must remain hidden")
+        #expect(!result.wishHasPortal, "Missing header must not publish a partial report")
     }
 
     /// END-TO-END proof for D-84 (portal-when-worn / Finding 1). The live failure:

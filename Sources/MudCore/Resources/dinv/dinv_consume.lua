@@ -181,7 +181,7 @@ function inv.consume.add(typeName, itemName)
   inv.consume.addPkg.level = nil  -- resolved during addCR from identified item
   inv.consume.addPkg.room  = nil  -- resolved during addCR from current room
 
-  wait.make(inv.consume.addCR)
+  inv.runtime.start(inv.consume.addCR, inv.consume, "addPkg")
 
   return DRL_RET_SUCCESS
 
@@ -471,7 +471,7 @@ function inv.consume.buy(typeName, numItems, containerName)
   inv.consume.buyPkg.numItems      = numItems
   inv.consume.buyPkg.containerName = containerName
 
-  wait.make(inv.consume.buyCR)
+  inv.runtime.start(inv.consume.buyCR, inv.consume, "buyPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.consume.buy
@@ -499,7 +499,7 @@ function inv.consume.buyCR()
   local totTime = 0
   local timeout = 10
   while (room ~= tonumber(dbot.gmcp.getRoomId())) do
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     totTime = totTime + drlSpinnerPeriodDefault
     if (totTime > timeout) then
       dbot.warn("inv.consume.buyCR: Timed out running to room " .. room)
@@ -617,7 +617,7 @@ function inv.consume.get(typeName, size, containerId)
 
       -- If we found a matching item instance, return it!
       if (finalId ~= nil) then
-        dbot.info("(" .. countColor .. count .. " available@W) " ..
+        dbot.debug("(" .. countColor .. count .. " available@W) " ..
                   "Consuming L" .. entry.level .. " \"@C" .. typeName .. "@W\" @Y" ..
                   (inv.items.getStatField(finalId, invStatFieldName) or "") .. "@W")
 
@@ -674,7 +674,7 @@ function inv.consume.use(typeName, size, numItems, containerName)
   inv.consume.usePkg.size      = size
   inv.consume.usePkg.container = containerName
 
-  wait.make(inv.consume.useCR)
+  inv.runtime.start(inv.consume.useCR, inv.consume, "usePkg")
 
   return DRL_RET_SUCCESS
 end -- inv.consume.use

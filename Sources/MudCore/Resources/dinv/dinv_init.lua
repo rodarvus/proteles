@@ -12,7 +12,6 @@ pluginId        = "731f94b0f2b54345f836bbaf"
 -- External dependencies
 ----------------------------------------------------------------------------------------------------
 
-require "wait"
 require "check"
 require "serialize"
 require "tprint"
@@ -102,6 +101,7 @@ end -- OnPluginInstall
 -- I'm leaving this here as a placeholder for now.  Maybe we could use it for something in the
 -- future.
 function OnPluginClose()
+  inv.runtime.cancelAll(DRL_RET_UNINITIALIZED)
   dbot.debug("OnPluginClose")
 end -- OnPluginClose
 
@@ -192,12 +192,19 @@ end -- OnPluginDisconnect
 
 
 function OnPluginEnable()
+  inv.runtime.enabled = true
+  if inv.init.initializedActive then
+    inv.runtime.after(1, inv.init.reconcile)
+    inv.runtime.scheduleBackground()
+  end
   dbot.debug("OnPluginEnable!")
   dbot.info("@GENABLED@W")
 end -- OnPluginEnable
 
 
 function OnPluginDisable()
+  inv.runtime.enabled = false
+  inv.runtime.cancelAll(DRL_RET_HALTED)
   dbot.debug("OnPluginDisable!")
   dbot.info("@RDISABLED@W:  You may type \"invmon\" to disable invmon tags if you no longer need them.")
 end -- OnPluginDisable
@@ -207,26 +214,25 @@ end -- OnPluginDisable
 -- some functionality of the gmcphelper plugin, but it provides backwards compatibility (mush r1825
 -- doesn't support GMCP config) and it also eliminates synchronization issues with the gmcphelper plugin.
 local drlTelnetTypeGMCP = 201
-function OnPluginTelnetSubnegotiation (msgType, data)
-  if msgType ~= drlTelnetTypeGMCP then
-    return
-  end -- if
-
-  if (data ~= nil) then
-    local mode, params = string.match (data, "([%a.]+)%s+(.*)")
-
-    if (mode == "config") then
-      local configKey, configValue = string.match(params, "{ \"([%w_]+)\" : \"([%w_]+)\" }")
-
-      if (configKey ~= nil) and (configValue ~= nil) then
-        dbot.debug("GMCP config: key=\"" .. configKey .. "\", value=\"" .. configValue .. "\"")
-        dbot.gmcp.currentState[configKey] = configValue
-      end -- if
-    end -- if
-  end -- if
-
+function OnPluginTelnetSubnegotiation(msgType, data)
+  if msgType ~= 201 or type(data) ~= "string" then return end
+  local mode, payload = data:match("^([%a.]+)%s+(.*)$")
+  if mode ~= "config" then return end
+  local ok, values = pcall(json.decode, payload)
+  if not ok or type(values) ~= "table" then return end
+  for key, value in pairs(values) do
+    if type(key) == "string" and (value == "YES" or value == "NO") then
+      dbot.gmcp.currentState[key:lower()] = value
+      if key:lower() == "prompt" then dbot.prompt.isEnabled = value == "YES" end
+      if key:lower() == "invmon" then
+        dbot.invmon.isEnabled = value == "YES"
+        if not dbot.invmon.isEnabled then
+          dbot.warn("Inventory monitoring is off; enable invmon to keep inventory current.")
+        end
+      end
+    end
+  end
 end -- OnPluginTelnetSubnegotiation
-
 
 function OnPluginTelnetOption(msg)
   if (msg == string.char(100, 1)) then
@@ -276,15 +282,21 @@ function OnPluginBroadcast(msg, pluginId, pluginName, text)
   -- a time as any for it to be safe for us to init things.  We manually kick GMCP by requesting the
   -- char.base info in the OnPluginInstall() function just to be sure that we are initialized.
   if (pluginId == gmcpPluginId) then
+    if text == "char.base" then dbot.gmcp.baseSeen = true end
+    if text == "char.status" and inv.commands then
+      inv.commands.stateChanged()
+    end
     dbot.debug("OnPluginBroadcast: pluginName = \"" .. (pluginName or "main script") .. "\", text = \"" ..
                text .. "\"")
 
     -- Once we know GMCP is alive, we allow accesses to it
-    if (dbot.gmcp.isInitialized == false) and (text == "char.base") then
+    local base = gmcp("char.base")
+    if (text == "char.base" or text == "char.status") and dbot.gmcp.baseSeen and
+       type(base) == "table" and type(base.name) == "string" and base.name ~= "" then
       dbot.debug("GMCP base broadcast detected: GMCP is initialized!")
       dbot.gmcp.isInitialized = true
 
-      if dbot.gmcp.stateIsActive() then
+      if not inv.init.initializedActive and (dbot.gmcp.stateIsActive() or dbot.gmcp.getState() == dbot.stateCombat) then
         retval = inv.init.atActive()
         if (retval ~= DRL_RET_SUCCESS) and (retval ~= DRL_RET_BUSY) then
           dbot.warn("OnPluginBroadcast: Failed to init \"at active\" inventory modules: " ..
@@ -339,85 +351,39 @@ drlLastCmdTime = os.time()
 drlIdleTime = 60 * 15 -- 15 minutes of no commands --> we are idle
 drlIsIdle = false
 function OnPluginSend(msg)
-
-  local baseCommand
-
-  -- Can this ever happen?  I guess it doesn't hurt to be paranoid...
-  if (msg == nil) then
+  if msg == nil then return false end
+  local prefix = dbot.execute.bypassPrefix
+  if msg:sub(1, #prefix) == prefix then
+    local command = msg:sub(#prefix + 1)
+    -- Proteles routes the deferred resend through this hook again. MUSHclient
+    -- suppresses recursive OnPluginSend calls while processing the original.
+    if proteles then
+      inv.commands.outbound[command] = (inv.commands.outbound[command] or 0) + 1
+    end
+    SendNoEcho(command)
     return false
-  end -- if
-
-  --dbot.note("@MOnPluginSend@W: Detected request to send \"@G" .. msg .. "@W\"")
-
-  -- If the command has a special "bypass" prefix appended to it, we strip off the prefix
-  -- and send it to the mud server immediately no questions asked.  In this case, we return
-  -- false because we don't want to send something with the prefix to the mud server.  The
-  -- server wouldn't know what to do with that.
-  _, _, baseCommand = string.find(msg, dbot.execute.bypassPrefix .. "(.*)")
-  if (baseCommand ~= nil) then
-    --dbot.note("@mBypass command = @W\"@G" .. (baseCommand or "nil") .. "@W\"")
-    -- It is helpful in some scenarios for us to know that something special is pending.  For
-    -- example, we might be sending a command to the mud to go AFK, or quit, or write a note.
-    setPending(baseCommand)
-
-    check (SendNoEcho(baseCommand))
-    return false
-  end -- if
-
-  -- We have a valid command entered by the user and not something that the plugin is running
-  -- in the background.  If we were in the idle state, drop out of idle and restart the statBonus
-  -- background thread.
+  end
+  if (inv.commands.outbound[msg] or 0) > 0 then
+    local remaining = inv.commands.outbound[msg] - 1
+    inv.commands.outbound[msg] = remaining > 0 and remaining or nil
+    return true
+  end
   drlLastCmdTime = dbot.getTime()
   if drlIsIdle then
-    check (AddTimer(inv.statBonus.timer.name, 0, inv.statBonus.timer.min, inv.statBonus.timer.sec, "",
-                    timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot,
-                    "inv.statBonus.set"))
-    dbot.debug("Restarting stat bonus thread.  We are out of idle!")
+    inv.statBonus.timer.update(inv.statBonus.timer.min, inv.statBonus.timer.sec)
     drlIsIdle = false
-  end -- if
-
-  -- If we are at this point, then we know that we don't have a "bypass" command.  This means
-  -- that we should either queue up the command if we are in a state where we are delaying
-  -- command execution, or we should allow the command to go through as normal.
-  if dbot.execute.doDelayCommands then
-    dbot.execute.queue.pushFast(msg)
-
-    -- We just added a new command to the command queue.  If we don't already have a
-    -- co-routine processing commands on that queue, start one now.
-    if (not dbot.execute.queue.isDequeueRunning) then
-      dbot.execute.queue.isDequeueRunning = true
-      wait.make(dbot.execute.queue.dequeueCR)
-    end -- if
-
-    return false -- Don't send the command right now
-
-  else
-    -- If the user is sending commands, they are not in note mode or quitting
-    if dbot.execute.noteIsPending then
-      dbot.execute.noteIsPending = false
-      dbot.deleteTrigger("drlNoteWriteConfirmationTrigger")
-    end
-    if dbot.execute.quitIsPending then
-      dbot.execute.quitIsPending = false
-      dbot.deleteTrigger("drlQuitCancelConfirmationTrigger")
-    end
-
-    -- It is helpful in some scenarios for us to know that something special is pending.  For
-    -- example, we might be sending a command to the mud to go AFK, or quit, or write a note.
-    setPending(msg)
-
-    return true  -- Allow the command to go to the mud server
-  end -- if
-
+  end
+  inv.commands.userInput(msg)
+  setPending(msg)
+  return true
 end -- OnPluginSend
-
 
 ----------------------------------------------------------------------------------------------------
 -- Top-level inventory functions
 --
 -- Functions
 --   inv.init.atInstall()    -- add triggers, timers, etc.
---   inv.init.atActive()     -- kick off inv.init.atActiveCR co-routine
+--   inv.init.atActive()     -- load saved state after fresh character data
 --   inv.init.atActiveCR()   -- load tables, etc.
 --   inv.fini(doSaveState)   -- remove triggers, save tables, etc.
 --   inv.reset(endTag)       -- Reset some or all of the inventory components / modules
@@ -498,98 +464,55 @@ function inv.init.atInstall()
 end -- inv.init.atInstall
 
 
--- This is only called when we know we are in the active state.  Many of the actions we take
--- at the "active" state involve waiting for results so we use a co-routine to handle all of
--- the "at active" operations.
+-- Load saved state synchronously once this connection identifies its character.
+-- Optional network probes and inventory reconciliation run separately.
 function inv.init.atActive()
-  local retval = DRL_RET_SUCCESS
-
-  if (not inv.init.activePending) then
-    inv.init.activePending = true
-    wait.make(inv.init.atActiveCR)
-  else
-    dbot.debug("inv.init.atActive: Another initialization is in progress")
-    retval = DRL_RET_BUSY
-  end -- if
-
+  if inv.init.initializedActive then return DRL_RET_SUCCESS end
+  if inv.init.activePending then return DRL_RET_BUSY end
+  local base = gmcp("char.base")
+  if not dbot.gmcp.isInitialized or not dbot.gmcp.baseSeen or type(base) ~= "table" or
+     type(base.name) ~= "string" or base.name == "" then return DRL_RET_UNINITIALIZED end
+  inv.init.activePending = true
+  -- All startup steps are local, non-yielding work. Optional probes run later.
+  local ok, retval = pcall(inv.init.atActiveCR)
+  inv.init.activePending = false
+  if not ok then
+    dbot.warn("Startup could not load saved data: " .. tostring(retval))
+    inv.runtime.cancelAll(DRL_RET_INTERNAL_ERROR)
+    return DRL_RET_INTERNAL_ERROR
+  end
   return retval
 end -- inv.init.atActive
 
-
 function inv.init.atActiveCR()
-  local retval = DRL_RET_SUCCESS
-
-  if (dbot.gmcp.isInitialized == false) then
-    dbot.error("inv.init.atActiveCR: GMCP is not initialized when we are active!?!")
-    inv.init.activePending = false
-    return DRL_RET_INTERNAL_ERROR
-  end -- if
-
-  -- Initialize all of the "at active" dbot modules (this is a common code framework for multiple plugins)
-  if (dbot.init.initializedActive == false) then
-    retval = dbot.init.atActive()
-    if (retval ~= DRL_RET_SUCCESS) then
-      dbot.warn("inv.init.atActiveCR: Failed to initialize \"at active\" dbot modules: " ..
-                dbot.retval.getString(retval))
-    else
-      dbot.debug("Initialized dbot \"at active\" modules")
-      dbot.init.initializedActive = true
-
-      -- Open SQLite database
-      if not dinv_db.open() then
-        dbot.error("inv.init.atActiveCR: Failed to open SQLite database. Plugin cannot initialize.")
-        inv.init.activePending = false
-        return DRL_RET_INTERNAL_ERROR
-      end
-    end -- if
-  end -- if
-
-  -- Initialize all of the "at active" inventory modules
-  retval = DRL_RET_SUCCESS
-  if (inv.init.initializedActive == false) then
-    for module in inv.modules:gmatch("%S+") do
-      if (inv[module].init.atActive ~= nil) then
-        local initVal = inv[module].init.atActive()
-        if (initVal ~= DRL_RET_SUCCESS) then
-          dbot.warn("inv.init.atActiveCR: Failed to initialize \"at active\" inv." .. module ..
-                    " module: " .. dbot.retval.getString(initVal))
-          retval = initVal
-        else
-          dbot.debug("Initialized \"at active\" module inv." .. module)
-        end -- if
-      end -- if
-    end -- for
-
-    if (retval == DRL_RET_SUCCESS) then
-      inv.init.initializedActive = true
-      local fullVer = string.format("%d.%04d", inv.version.pluginMajor, inv.version.pluginMinor)
-      dbot.info("Plugin version " .. fullVer .. " is fully initialized")
-
-      -- Kick off an immediate full inventory refresh so that we have an accurate view of what
-      -- the user has.  They may have logged in without using the plugin and moved things around
-      -- or added and removed items.  Ideally, we would do this at every login.  However, some
-      -- users may have refreshes disabled because they want to handle things manually.  That's
-      -- fine too.  If refreshes are disabled (their period is 0 minutes) then we skip this.
-      if (inv.items.refreshGetPeriods() > 0) then
-        dbot.info("Running initial full scan to check if your inventory was modified outside of this plugin")
-        dbot.info("Prompts will be disabled until the scan completes")
-        local endTag = inv.tags.new(nil, "Completed initial refresh full scan", nil, inv.tags.cleanup.timed)
-        retval = inv.items.refresh(0, invItemsRefreshLocAll, endTag, nil)
-        if (retval ~= DRL_RET_SUCCESS) and (retval ~= DRL_RET_UNINITIALIZED) then
-           dbot.info("Initial full inventory rescan could not complete: " .. dbot.retval.getString(retval))
-           dbot.info("Please run \"@Gdinv refresh all@W\" to ensure the plugin knows that you didn't do " ..
-                     "something evil like logging in via telnet to move items around :P")
-        end -- if
-      end -- if
-    end -- if
-  end -- if
-
-  -- Return success or the most recently encountered init error
-  inv.init.activePending = false
-  return retval
-
+  if not dinv_db.open() then return DRL_RET_INTERNAL_ERROR end
+  local retval = dbot.init.atActive()
+  if retval ~= DRL_RET_SUCCESS then return retval end
+  dbot.init.initializedActive = true
+  for module in inv.modules:gmatch("%S+") do
+    if inv[module].init.atActive then
+      retval = inv[module].init.atActive()
+      if retval ~= DRL_RET_SUCCESS then return retval end
+    end
+  end
+  inv.init.initializedActive = true
+  inv.state = invStateIdle
+  inv.items.replayEarlyEvents()
+  dbot.info("Plugin version " .. string.format("%d.%04d", inv.version.pluginMajor,
+    inv.version.pluginMinor) .. " ready; saved inventory loaded")
+  inv.runtime.after(1, inv.init.reconcile)
+  return DRL_RET_SUCCESS
 end -- inv.init.atActiveCR
 
+function inv.init.reconcile()
+  if not inv.runtime.enabled or not inv.init.initializedActive or inv.items.fullScanCompleted then return end
+  if not inv.config.table.isBuildExecuted or inv.items.refreshGetPeriods() <= 0 then return end
+  if inv.state == invStateIdle and dbot.gmcp.stateIsActive() then
+    inv.items.refresh(0, invItemsRefreshLocAll,
+      inv.tags.new(nil, "Initial inventory synchronization", nil, inv.tags.cleanup.timed))
+  end
+  if not inv.items.fullScanCompleted then inv.runtime.after(5, inv.init.reconcile) end
+end
 
 -- Force every module's in-memory state to SQLite WITHOUT de-initializing.
 -- Used by dbot.backup.create immediately before it closes the DB and copies
@@ -628,6 +551,8 @@ end
 function inv.fini(doSaveState)
   local retval = DRL_RET_SUCCESS
 
+  inv.runtime.cancelAll(DRL_RET_UNINITIALIZED)
+
   -- Stop automatic refreshes as we de-init things
   inv.state = invStateHalted
 
@@ -659,6 +584,7 @@ function inv.fini(doSaveState)
   inv.init.initializedInstall = false
   inv.init.initializedActive  = false
   inv.init.activePending      = false
+  dbot.gmcp.baseSeen          = false
   inv.state = nil
 
   -- Return success or the most recently encountered de-init error
@@ -826,33 +752,13 @@ inv.config.table     = {}
 
 
 function inv.config.init.atActive()
-  local retval = DRL_RET_SUCCESS
-
-  retval = inv.config.load()
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("inv.config.init.atActive: failed to load config data from storage: " ..
-              dbot.retval.getString(retval))
-  end -- if
-
-  -- It's possible that we previously disabled the prompt and could not re-enable it.  For example,
-  -- maybe the user closed mushclient in the middle of a refresh.  In that case, we wouldn't have the
-  -- opportunity to turn the prompt back on.  As a result, we keep track of the user's prompt state
-  -- and put it back to the last known value here if the current state doesn't match what we expect.
-  if (inv.config.table.isPromptEnabled ~= nil) and
-     (inv.config.table.isPromptEnabled ~= dbot.prompt.isEnabled) then
-    dbot.info("Prompt state does not match expected state: toggling prompt")
-
-    -- We don't use an execute.safe call here because we haven't finished initializing and the safe
-    -- execution framework requires us to be fully initialized.
-    dbot.execute.fast.command("prompt")
-    dbot.execute.queue.fence()
-  end -- if
-
+  local retval = inv.config.load()
+  if retval ~= DRL_RET_SUCCESS then return retval end
+  -- The current server setting belongs to the player. A saved preference or a
+  -- delayed configuration reply must never toggle it during startup.
   inv.regen.init()
-
-  return retval
+  return DRL_RET_SUCCESS
 end -- inv.config.init.atActive
-
 
 function inv.config.fini(doSaveState)
   local retval = DRL_RET_SUCCESS
@@ -1049,3 +955,7 @@ dofile(dinv_plugin_dir .. "dinv_migrate.lua")
 ----------------------------------------------------------------------------------------------------
 
 dofile(dinv_plugin_dir .. "dinv_dbot.lua")
+
+dofile(dinv_plugin_dir .. "dinv_runtime.lua")
+dofile(dinv_plugin_dir .. "dinv_commands.lua")
+dofile(dinv_plugin_dir .. "dinv_capture.lua")

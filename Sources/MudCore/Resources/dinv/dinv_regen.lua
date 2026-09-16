@@ -55,7 +55,7 @@ function inv.regen.onSleep(sleepLoc)
     else
       inv.regen.pkg = {}
       inv.regen.pkg.sleepCmd = sleepCmd
-      wait.make(inv.regen.onSleepCR)
+      inv.runtime.start(inv.regen.onSleepCR, inv.regen, "pkg")
     end -- if
 
   else
@@ -183,7 +183,7 @@ end -- inv.regen.onSleepCR
 
 
 function inv.regen.onWake()
-  wait.make(inv.regen.onWakeCR)
+  inv.runtime.start(inv.regen.onWakeCR)
 
   return DRL_RET_SUCCESS
 end -- inv.regen.onWake
@@ -205,7 +205,7 @@ function inv.regen.onWakeCR()
       retval = DRL_RET_SUCCESS
       break
     end -- if
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     totTime = totTime + drlSpinnerPeriodDefault
   end -- while
 
@@ -225,7 +225,7 @@ function inv.regen.onWakeCR()
       retval = DRL_RET_SUCCESS
       break
     end -- if
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     totTime = totTime + drlSpinnerPeriodDefault
   end -- while
 

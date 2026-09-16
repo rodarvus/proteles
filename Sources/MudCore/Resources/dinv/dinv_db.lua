@@ -56,7 +56,7 @@ function dinv_db.transaction(fn)
    local db = dinv_db.handle
    if not db then return fn() end
 
-   db:exec("BEGIN")
+   if db:exec("BEGIN") ~= sqlite3.OK then return DRL_RET_INTERNAL_ERROR end
    local ok, retval = pcall(fn)
    if not ok then
       db:exec("ROLLBACK")
@@ -65,7 +65,10 @@ function dinv_db.transaction(fn)
    if retval ~= DRL_RET_SUCCESS and retval ~= DRL_RET_UNINITIALIZED then
       db:exec("ROLLBACK")
    else
-      db:exec("COMMIT")
+      if db:exec("COMMIT") ~= sqlite3.OK then
+         db:exec("ROLLBACK")
+         return DRL_RET_INTERNAL_ERROR
+      end
    end
    return retval
 end
@@ -199,11 +202,12 @@ end
 -- Use this for individual item changes instead of rewriting the entire table.
 function dinv_db.saveItem(objId, entry)
   local db = dinv_db.handle
-  if not db or not entry then return end
+  if not db or not entry then return DRL_RET_UNINITIALIZED end
 
   local query = dinv_db.buildItemInsert("items", objId, entry)
-  db:exec(query)
-  dinv_db.dbcheck(db:errcode(), db:errmsg(), query)
+  local result = db:exec(query)
+  dinv_db.dbcheck(result, db:errmsg(), query)
+  return result == sqlite3.OK and DRL_RET_SUCCESS or DRL_RET_INTERNAL_ERROR
 end
 
 -- Delete a single item from the database.

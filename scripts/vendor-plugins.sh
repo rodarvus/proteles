@@ -37,6 +37,9 @@ regen() {
   local p=$1 dest=$2
   local res="$ROOT/Sources/MudCore/Resources/$p"
   local sub="$ROOT/plugins/$p"
+  # Test an uncommitted dinv checkout without changing its reference submodule.
+  # Omit the override for the normal pinned-source CI/release check.
+  if [ "$p" = "dinv" ] && [ -n "${DINV_SOURCE_DIR:-}" ]; then sub="$DINV_SOURCE_DIR"; fi
   [ -e "$sub/.git" ] || { echo "error: submodule $sub is not checked out (run: git submodule update --init plugins/$p)"; exit 2; }
   mkdir -p "$dest"
   # Allow-list = the committed runtime files (everything we ship except the
@@ -56,26 +59,32 @@ regen() {
 rc=0
 for p in $PLUGINS; do
   res="$ROOT/Sources/MudCore/Resources/$p"
-  sub_sha=$(git -C "$ROOT/plugins/$p" rev-parse --short HEAD 2>/dev/null || echo "?")
+  source_dir="$ROOT/plugins/$p"
+  source_label="plugins/$p"
+  if [ "$p" = "dinv" ] && [ -n "${DINV_SOURCE_DIR:-}" ]; then
+    source_dir="$DINV_SOURCE_DIR"
+    source_label="DINV_SOURCE_DIR (working tree)"
+  fi
+  sub_sha=$(git -C "$source_dir" rev-parse --short HEAD 2>/dev/null || echo "?")
   if [ "$CHECK" = 1 ]; then
     tmp=$(mktemp -d)
     regen "$p" "$tmp"
     for f in $(cd "$tmp" && ls -A); do
       if ! diff -q "$tmp/$f" "$res/$f" >/dev/null 2>&1; then
-        echo "DRIFT: Resources/$p/$f differs from plugins/$p@$sub_sha (+ patch)"
+        echo "DRIFT: Resources/$p/$f differs from $source_label@$sub_sha (+ patch)"
         rc=1
       fi
     done
     rm -rf "$tmp"
   else
     regen "$p" "$res"
-    echo "re-vendored $p from plugins/$p@$sub_sha"
+    echo "re-vendored $p from $source_label@$sub_sha"
   fi
 done
 
 if [ "$CHECK" = 1 ]; then
   if [ "$rc" = 0 ]; then
-    echo "OK: vendored plugin copies are in sync with the submodules + patches."
+    echo "OK: vendored plugin copies are in sync with the selected source checkouts + patches."
   else
     echo "Drift detected. Run: scripts/vendor-plugins.sh   (then update PROVENANCE.md and rebuild/test)."
   fi

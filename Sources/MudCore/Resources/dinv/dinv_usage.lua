@@ -34,7 +34,7 @@ function inv.usage.display(priorityName, query, endTag)
   inv.usage.displayPkg.query        = query
   inv.usage.displayPkg.endTag       = endTag
 
-  wait.make(inv.usage.displayCR)
+  inv.runtime.start(inv.usage.displayCR, inv.usage, "displayPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.usage.display

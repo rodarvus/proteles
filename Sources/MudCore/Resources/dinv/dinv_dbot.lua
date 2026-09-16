@@ -916,6 +916,7 @@ function dbot.gmcp.fini(doSaveState)
   local retval = DRL_RET_SUCCESS
 
   dbot.gmcp.isInitialized = false
+  dbot.gmcp.currentState = {}
 
   -- Note: we don't use doSaveState yet because this module doesn't have state to save
 
@@ -1148,50 +1149,13 @@ end -- dbot.gmcp.stateIsActive()
 dbot.gmcp.currentState = {}
 -- Returns boolean representing "YES" or "NO" values from the mud for the specified mode
 function dbot.gmcp.getConfig(configMode)
-  local retval = DRL_RET_SUCCESS
-  local configVal = false
-
-  if (configMode == nil) or (configMode == "") then
-    dbot.warn("dbot.gmcp.getConfig: Missing configMode")
-    return configVal, DRL_RET_INVALID_PARAM
-  end -- if
-
-  -- Clear out the current state and wait for a new value to arrive
-  dbot.gmcp.currentState.configMode = nil
-  check (Execute("sendgmcp config " .. configMode))
-
-  -- Spin until gmcp gives us the value
-  local totTime = 0
-  local timeout = 5
-  retval = DRL_RET_TIMEOUT
-  while (totTime <= timeout) do
-
-    local gmcpValue = dbot.gmcp.currentState[configMode]
-    if (gmcpValue == "YES") then
-      configVal = true
-      retval = DRL_RET_SUCCESS
-      break
-    elseif (gmcpValue == "NO") then
-      configVal = false
-      retval = DRL_RET_SUCCESS
-      break
-    end -- if
-
-    wait.time(drlSpinnerPeriodDefault)
-    totTime = totTime + drlSpinnerPeriodDefault
-  end -- while
-
-  if (retval == DRL_RET_TIMEOUT) then
-    dbot.warn("dbot.gmcp.getConfig: Timed out waiting for response from gmcp for config mode \"" ..
-              configMode .. "\"")
-  end -- if
-
-  return configVal, retval
-
+  if not configMode or configMode == "" then return nil, DRL_RET_INVALID_PARAM end
+  local value = dbot.gmcp.currentState[configMode]
+  if value == "YES" then return true, DRL_RET_SUCCESS end
+  if value == "NO" then return false, DRL_RET_SUCCESS end
+  Send_GMCP_Packet("config " .. configMode)
+  return nil, DRL_RET_UNINITIALIZED
 end -- dbot.gmcp.getConfig
-
-
-
 
 ----------------------------------------------------------------------------------------------------
 -- Module to handle backing up the SQLite database
@@ -1414,7 +1378,7 @@ function dbot.backup.restore(name, endTag)
   dbot.backup.restorePkg.name   = name
   dbot.backup.restorePkg.endTag = endTag
 
-  wait.make(dbot.backup.restoreCR)
+  inv.runtime.start(dbot.backup.restoreCR, dbot.backup, "restorePkg")
 
   return DRL_RET_SUCCESS
 end -- dbot.backup.restore
@@ -1585,7 +1549,7 @@ dbot.prompt.trigger = {}
 
 dbot.prompt.trigger.onToggleName      = "drlDbotPromptTriggerOnToggle"
 
-dbot.prompt.isEnabled = true -- by default, assume the prompt is enabled if we can't get the real status
+dbot.prompt.isEnabled = nil -- unknown until observed; never interpreted as off
 
 
 function dbot.prompt.init.atActive()
@@ -1611,7 +1575,7 @@ end -- dbot.prompt.init.atActive
 function dbot.prompt.fini(doSaveState)
   dbot.deleteTrigger(dbot.prompt.trigger.onToggleName)
 
-  dbot.prompt.isEnabled = true
+  dbot.prompt.isEnabled = nil
 
   -- NOTE: if we ever add persistent data to this module we should use the doSaveState param to determine
   -- if we need to save it
@@ -1621,84 +1585,39 @@ end -- dbot.prompt.fini
 
 
 function dbot.prompt.disable()
-  --dbot.debug("prompt disable: start statusEnables = " .. (dbot.prompt.statusEnables or "nil"))
-  if (dbot.prompt.statusEnables ~= nil) then
-    -- The moment we transition from having 1 enable to 0 enables, we disable the prompt.  Someone
-    -- could call multiple consecutive disables but we'd only do the disabling once.
-    dbot.prompt.statusEnables = dbot.prompt.statusEnables - 1
-    if (dbot.prompt.statusEnables == 0) then
-      Execute("sendgmcp config prompt off")
-    end -- if
-  end -- if
+  -- Presentation never changes server prompt configuration.
 end -- dbot.prompt.disable
 
-
 function dbot.prompt.enable()
-  --dbot.debug("prompt enable: start statusEnables = " .. (dbot.prompt.statusEnables or "nil"))
-  if (dbot.prompt.statusEnables ~= nil) then
-    dbot.prompt.statusEnables = dbot.prompt.statusEnables + 1
-    if (dbot.prompt.statusEnables == 1) then
-      Execute("sendgmcp config prompt on")
-    end -- if
-  end -- if
+  -- Presentation never changes server prompt configuration.
 end -- dbot.prompt.enable
-
 
 -- Disable the prompt and suppress empty lines
 function dbot.prompt.hide()
-  dbot.emptyLine.disable()
-  dbot.prompt.disable()
+  -- Presentation never changes server prompt configuration.
 end -- dbot.prompt.hide
 
-
 function dbot.prompt.show()
-  dbot.prompt.enable()
-
-  -- TODO: This is an awkward situation.  We want to stop suppressing empty lines (resulting
-  --       from some actions this plugin executes in the background) but we don't want to do
-  --       that until all of the commands queued up on the server are executed.  Yes, we could
-  --       do some extra synchronization to catch the end of the command queue, but that's
-  --       more work than I want to deal with for this minor issue.  In the meantime, there
-  --       might be one or two empty lines of output that show up near the end of a large
-  --       operation.
-  dbot.emptyLine.enable()
+  -- Presentation never changes server prompt configuration.
 end -- dbot.prompt.show
 
-
 function dbot.prompt.getStatusCR()
-  local retval
-
-  dbot.prompt.isEnabled, retval = dbot.gmcp.getConfig("prompt")
-  if (retval == DRL_RET_SUCCESS) then
-    if dbot.prompt.isEnabled then
-      dbot.debug("prompt is @GENABLED@W")
-      dbot.prompt.statusEnables = 1
-    else
-      dbot.debug("prompt is @RDISABLED@W")
-      dbot.prompt.statusEnables = 0
-    end -- if
-  else
-    dbot.warn("dbot.prompt.getStatusCR: Failed to get gmcpconfig response")
-  end -- if
-
-  -- Once we know the current state, we monitor when the user manually toggles the prompt so
-  -- that we can keep our state up-to-date
+  local value, retval = dbot.gmcp.getConfig("prompt")
+  dbot.prompt.isEnabled = value
   EnableTrigger(dbot.prompt.trigger.onToggleName, true)
-
   return retval
 end -- dbot.prompt.getStatusCR
-
 
 function dbot.prompt.trigger.onToggle(msg)
 
   if (msg == "You will no longer see prompts") then
     dbot.debug("dbot.prompt.trigger.onToggle: user manually turned the prompt off")
-    dbot.prompt.statusEnables = 0
+    dbot.prompt.isEnabled = false
     inv.config.table.isPromptEnabled = false
 
   elseif (msg == "You will now see prompts") then
     dbot.debug("dbot.prompt.trigger.onToggle: user manually turned the prompt on")
-    dbot.prompt.statusEnables = 1
+    dbot.prompt.isEnabled = true
     inv.config.table.isPromptEnabled = true
 
   else
@@ -1781,28 +1700,11 @@ end -- dbot.invmon.fini
 
 
 function dbot.invmon.getStatusCR()
-
-  local isInvmonEnabled, retval = dbot.gmcp.getConfig("invmon")
-  if (retval == DRL_RET_SUCCESS) then
-    if isInvmonEnabled then
-      dbot.debug("invmon is @GENABLED@W")
-      dbot.invmon.statusEnables = 1
-    else
-      dbot.debug("invmon is @RDISABLED@W")
-      dbot.invmon.statusEnables = 0
-      dbot.warn("The " .. pluginNameAbbr .. " plugin requires invmon.  Please type \"invmon\" to enable it.")
-    end -- if
-  else
-    dbot.warn("dbot.invmon.getStatusCR: Failed to get gmcpconfig response")
-  end -- if
-
-  -- Once we know the current state, we monitor when the user manually toggles invmon so
-  -- that we can keep our state up-to-date
+  local value, retval = dbot.gmcp.getConfig("invmon")
+  dbot.invmon.isEnabled = value
   EnableTrigger(dbot.invmon.trigger.onToggleName, true)
-
   return retval
 end -- dbot.invmon.getStatusCR
-
 
 function dbot.invmon.trigger.onToggle(msg)
   if (msg == "You will no longer see inventory update tags.") then
@@ -2062,7 +1964,10 @@ function dbot.wish.init.atActive()
 
   -- Trigger on the output of "wish list" and watch for a fence message to tell us we are done
   check (AddTriggerEx(dbot.wish.trigger.itemName,
-                      "^(.*)$",
+                      "^(\\s*Base Cost\\s+Adjustment\\s+Your Cost\\s+Keyword|" ..
+                      "\\s*[- ]{10,}|\\s*\\*?.+\\s+[0-9]+\\s+[0-9]+\\s+(?:--|[0-9]+)\\s+[^ ]+\\s*|" ..
+                      "Your total adjustment cost is: [0-9]+|Your quest points on hand are: [0-9]+|" ..
+                      "Refer to 'help wish' for a description of each wish\\.)$",
                       "dbot.wish.trigger.fn(\"%1\")",
                       drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
                       custom_colour.Custom11,
@@ -2070,16 +1975,7 @@ function dbot.wish.init.atActive()
 
   check (EnableTrigger(dbot.wish.trigger.itemName, false)) -- default to off
 
-  -- Kick off a timer to update the wishes.  It would be convenient to just run dbot.wish.get()
-  -- right here instead of scheduling it to run 1 second from now.  However, there are cases where
-  -- we our telnet options code detects that we are out of AFK causing us to run this init routine
-  -- before GMCP notices that our state changed.  If that happens, no real harm is done and we simply
-  -- reschedule the wish detection to try again later.  However, we can (probably) avoid that extra
-  -- overhead if we simply give GMCP a chance to detect the state change so we are willing to wait
-  -- an extra second here to give it that chance.
-  check (AddTimer(dbot.wish.timer.name, 0, 0, 1, "",
-                  timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot,
-                  "dbot.wish.get"))
+  dbot.wish.timer.name = inv.runtime.after(1, dbot.wish.get)
 
   return retval
 end -- dbot.wish.init.atActive
@@ -2172,34 +2068,35 @@ end -- dbot.wish.reset
 
 dbot.wish.inProgress = false
 function dbot.wish.get()
+  if not inv.runtime.enabled then return DRL_RET_HALTED end
   if (dbot.wish.inProgress == true) then
-    dbot.info("Skipping request to get list of active wishes: another request is in progress")
+    dbot.debug("Wish request already in progress")
     return DRL_RET_BUSY
   end -- if
 
   dbot.wish.inProgress = true
 
-  wait.make(dbot.wish.getCR)
+  inv.runtime.start(dbot.wish.getCR, nil, nil, function() dbot.wish.inProgress = false end)
 
   return DRL_RET_SUCCESS
 end -- dbot.wish.get
 
 
-dbot.wish.fenceMsg = "DINV wish list fence"
 function dbot.wish.getCR()
   local retval = DRL_RET_SUCCESS
   local charState = dbot.gmcp.getState()
-  local pageLines, retval = dbot.pagesize.get()
+  local pageLines
+  if inv.commands.backgroundReady() then pageLines, retval = dbot.pagesize.get() end
 
   -- If we are not in the active state (i.e., AFK, sleeping, running, writing a note, etc.) then
   -- we can't get the list of wishes and we need to try again later
-  if (charState ~= dbot.stateActive) then
-    dbot.note("Skipping request to get list of active wishes: you are in the state \"" ..
+  if not inv.commands.backgroundReady() then
+    dbot.debug("Skipping request to get list of active wishes: you are in the state \"" ..
               dbot.gmcp.getStateString(charState) .. "\"")
     retval = DRL_RET_NOT_ACTIVE
 
   -- We are in the active state and can execute commands on the server side
-  elseif (pageLines ~= nil) then
+  elseif (pageLines ~= nil) and retval == DRL_RET_SUCCESS then
 
     -- Execute the "wish list" command
     -- TODO: Doh!  I just found the pagesize option in the "help telnet" helpfile.  This is in
@@ -2209,17 +2106,17 @@ function dbot.wish.getCR()
 
     if (pageLines == 0) then
       table.insert(commandArray, "wish list")
-      table.insert(commandArray, "echo " .. dbot.wish.fenceMsg)
     else
       table.insert(commandArray, "pagesize 0")
       table.insert(commandArray, "wish list")
-      table.insert(commandArray, "echo " .. dbot.wish.fenceMsg)
       table.insert(commandArray, "pagesize " .. pageLines)
     end -- if
 
     local resultData = dbot.callback.new()
     retval = dbot.execute.safe.commands(commandArray, dbot.wish.setupFn, nil,
-                                        dbot.wish.resultFn, resultData)
+                                        dbot.wish.resultFn, resultData,
+      {conflicts = {wish = true, pagesize = true},
+       captureComplete = function() return dbot.wish.captureCompleted end})
     if (retval ~= DRL_RET_SUCCESS) then
       dbot.warn("dbot.wish.getCR: Failed to safely execute \"@Gwish list@W\": " ..
                 dbot.retval.getString(retval))
@@ -2227,38 +2124,26 @@ function dbot.wish.getCR()
       -- Wait for confirmation that the "wish list" safe execution command completed
       retval = dbot.callback.wait(resultData, 30)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.note("Skipping \"wish list\" request: " .. dbot.retval.getString(retval))
+        inv.commands.probeNote(retval, "Skipping \"wish list\" request: " .. dbot.retval.getString(retval))
       end -- if
 
-      -- Wait for the wish trigger to complete
-      local totTime = 0
-      local timeout = 5
-      while (dbot.wish.inProgress == true) do
-        if (totTime > timeout) then
-          dbot.debug("dbot.wish.getCR: Timed out getting list of wishes")
-          retval = DRL_RET_TIMEOUT
-          break
-        end -- if
+      if retval == DRL_RET_SUCCESS and not dbot.wish.captureCompleted then
+        retval = DRL_RET_TIMEOUT
+      end
 
-        wait.time(drlSpinnerPeriodDefault)
-        totTime = totTime + drlSpinnerPeriodDefault
-      end -- while
     end -- if
 
   else
-    dbot.warn("Failed to detect # of lines in the page size: " .. dbot.retval.getString(retval))
+    if retval == DRL_RET_SUCCESS then retval = DRL_RET_TIMEOUT end
   end -- if
 
   dbot.wish.inProgress = false
 
   -- If we weren't able to snag the list of wishes, try again later
   if (retval ~= DRL_RET_SUCCESS) then
-    -- We can't add the timer directly because we are in the function called by that timer.  Instead,
-    -- we use an intermediate timer to call back and start this timer again.  Yeah, it's a bit ugly...
-    DoAfterSpecial(0.1,
-                   "AddTimer(dbot.wish.timer.name, 0, dbot.wish.timer.min, dbot.wish.timer.sec, \"\", " ..
-                   "timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot, \"dbot.wish.get\")",
-                   sendto.script)
+    inv.runtime.removeTimer(dbot.wish.timer.name)
+    dbot.wish.timer.name = inv.runtime.after(dbot.wish.timer.min * 60 + dbot.wish.timer.sec,
+      dbot.wish.get)
   else
     -- We found the wishes.  Save them!
     dbot.debug("dbot.wish.getCR: detected purchased wishes!")
@@ -2270,19 +2155,15 @@ end -- dbot.wish.getCR
 
 
 function dbot.wish.trigger.fn(line)
-  local wishName = string.match(line, ".*[-][-] ([^ -]+)[ ]*$")
-
-  -- We send a fence after checking with wishes to confirm that the wishes are done
-  if (line == dbot.wish.fenceMsg) then
+  if line:match("^%s*Base Cost%s+Adjustment%s+Your Cost%s+Keyword$") then
+    dbot.wish.sawHeader = true
+  elseif line == "Refer to 'help wish' for a description of each wish." then
+    dbot.wish.captureCompleted = dbot.wish.sawHeader == true
     EnableTrigger(dbot.wish.trigger.itemName, false)
-    dbot.wish.inProgress = false
-  end -- if
-
-  if (wishName ~= nil) then
-    dbot.wish.table[wishName] = true
-    dbot.debug("Found wish name \"" .. wishName .. "\"")
-  end -- if
-
+  elseif dbot.wish.sawHeader and dbot.wish.pending then
+    local wishName = line:match("%-%- ([^ -]+)%s*$")
+    if wishName then dbot.wish.pending[wishName] = true end
+  end
 end -- dbot.wish.trigger.fn
 
 
@@ -2297,33 +2178,22 @@ end -- dbot.wish.has
 
 
 function dbot.wish.setupFn()
-  -- Add a trigger to watch for the start of the "wish list" output
-  check (AddTriggerEx(dbot.wish.trigger.startName,
-                      "^.*Base.*Cost.*Adjustment.*Your.*Cost.*Keyword.*$",
-                      "EnableTrigger(dbot.wish.trigger.itemName, true)",
-                      drlTriggerFlagsBaseline + trigger_flag.OneShot + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11,
-                      0, "", "", sendto.script, 0))
-
+  dbot.wish.pending = {}
+  dbot.wish.captureCompleted, dbot.wish.sawHeader = false, false
+  EnableTrigger(dbot.wish.trigger.itemName, true)
   dbot.pagesize.hide()
-
-  -- Proteles local edit (D-77): arm the omit-from-output item trigger NOW, before
-  -- "wish list" is sent, rather than relying on the start trigger above to enable
-  -- it only once the column header arrives. The header-match approach leaves a
-  -- race: if the header reaches output before the start trigger is live (e.g. the
-  -- post-login burst, or trigger teardown from a mid-probe reload), the gag never
-  -- arms and the whole list prints. setupFn runs inside the safe-exec critical
-  -- section just before the command goes to the mud, so enabling here gags every
-  -- wish line; the fence (dbot.wish.fenceMsg) still disables it, so it can't
-  -- over-gag. The start trigger is kept as a harmless belt-and-suspenders.
-  check (EnableTrigger(dbot.wish.trigger.itemName, true))
-
 end -- dbot.wish.setupFn
 
-
 function dbot.wish.resultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
+  EnableTrigger(dbot.wish.trigger.itemName, false)
   dbot.pagesize.show()
-
+  if retval == DRL_RET_SUCCESS then
+    if dbot.wish.captureCompleted and dbot.wish.pending then
+      dbot.wish.table = dbot.wish.pending
+    else retval = DRL_RET_TIMEOUT end
+  end
+  dbot.wish.pending = nil
   dbot.callback.default(resultData, retval)
 end -- dbot.wish.resultFn
 
@@ -2402,14 +2272,16 @@ function dbot.pagesize.get()
   local retval = DRL_RET_SUCCESS
   local commandArray = { "pagesize" }
 
-  retval = dbot.execute.safe.blocking({"pagesize"}, dbot.pagesize.setupFn, nil, dbot.pagesize.resultFn, 10)
+  retval = dbot.execute.safe.blocking({"pagesize"}, dbot.pagesize.setupFn, nil, dbot.pagesize.resultFn, 10,
+    {conflicts = {pagesize = true}})
   if (retval ~= DRL_RET_SUCCESS) then
-    dbot.note("Skipped getting \"@Gpagesize@W\": " ..
+    inv.commands.probeNote(retval, "Skipped getting \"@Gpagesize@W\": " ..
               dbot.retval.getString(retval))
   else
     dbot.debug("Read current page size: " .. (dbot.pagesize.lines or "nil"))
   end -- if
 
+  if retval ~= DRL_RET_SUCCESS then return nil, retval end
   return dbot.pagesize.lines, retval
 end -- dbot.pagesize.get
 
@@ -2430,22 +2302,29 @@ function dbot.pagesize.trigger.fn(msg)
   lines = tonumber(lines or "")
 
   if (msg == "You do not page long messages.") then
-    dbot.pagesize.lines = 0
+    dbot.pagesize.pending = 0
 
   elseif (lines ~= nil) then
-    dbot.pagesize.lines = lines
+    dbot.pagesize.pending = lines
 
   end -- if
 end -- dbot.pagesize.trigger.fn
 
 
 function dbot.pagesize.setupFn(setupData)
+  dbot.pagesize.pending = nil
   EnableTrigger(dbot.pagesize.trigger.getName, true)
 end -- dbot.pagesize.setupFn
 
 
 function dbot.pagesize.resultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
   EnableTrigger(dbot.pagesize.trigger.getName, false)
+  if retval == DRL_RET_SUCCESS then
+    if dbot.pagesize.pending ~= nil then dbot.pagesize.lines = dbot.pagesize.pending
+    else retval = DRL_RET_TIMEOUT end
+  end
+  dbot.pagesize.pending = nil
   dbot.callback.default(resultData, retval)
 end -- dbot.pagesize.resultFn
 
@@ -2454,546 +2333,72 @@ end -- dbot.pagesize.resultFn
 --
 -- Module to execute one more commands on the mud server side
 --
--- Commands come in two flavors:
---  1) "Fast": these are non-atomic and can be interrupted at any time.  There are no guarantees that
---     we will know when "fast" commands execute which means that we can't know for certain if triggers
---     are matching on any particular command output.
---  2) "Safe": safe commands guarantee that there will be no contention with any commands sent by the
---     user.  Safe commands run atomically on the mud at a time when we guarantee that no other commands
---     can execute on the mud server.  We do this by halting any new commands (via the OnPluginSend()
---     callback) and queuing up those commands to run after our atomic critical section completes.  We
---     guarantee that no user commands are lost and they will execute in the same order as they were
---     sent.  We also guarantee that user-supplied setup and cleanup callbacks will be executed during
---     the critical section without any contention from commands the user enters.  This allows us to
---     set up and clean up triggers and know that if a trigger goes off that it is triggering on the
---     output we want -- not something that the user entered at the command line.  Safe commands are
---     very convenient because they also let us cleanly handle cases where the user sleeps, enters
---     combat, or goes AFK unexpectedly.  Knowing that these state changes can't occur during one of
---     our "safe" critical sections greatly simplifies the code.
---
--- Here are the steps to safely run a background command without interference
---   1) Spin until we are in the "active" state (e.g., not AFK, sleeping, etc.)
---   2) Prevent new commands from going to the mud by watching for them in OnPluginSend() and queuing
---      them up for future execution
---   3) Add a one-shot trigger to catch a unique prefix message we will echo to the mud
---   4) Echo a unique prefix message to the mud
---   5) Wait for the trigger to hit and tell us that our unique prefix message was executed by
---      the mud.  No other commands can be pending at the mud's server side at this point.
---   6) Send the command(s) we want to run atomically
---   7) Execute any user-supplied setup callback to configure triggers
---   8) Capture the output (either success or failure) with user-supplied triggers
---   9) Add a one-shot trigger to catch a unique suffix message we will echo to the mud
---  10) Send a unique suffix message to the mud
---  11) Wait until our trigger detects that the mud echoed our suffix
---  12) If the caller provided us a cleanup/result callback function, execute it now to let the caller
---      know that we are done and to tell the caller the result status
---  13) Send any pending commands that we queued up during the safe critical section
---  14) Unblock the OnPluginSend() callback so that new commands from the user go straight to the mud again
---
--- Functions:
---
--- dbot.execute.init.atActive()
--- dbot.execute.fini(doSaveState)
---
--- dbot.execute.fast.command(commandString)
--- dbot.execute.fast.commands(commandArray)
---
--- dbot.execute.safe.command(commandString, setupFn, setupData, resultFn, resultData)
--- dbot.execute.safe.commands(commandArray, setupFn, setupData, resultFn, resultData)
--- dbot.execute.safe.commandsCR()
--- dbot.execute.safe.blocking(commandArray, setupFn, setupData, resultFn, timeout)
---
--- dbot.execute.queue.enable()
--- dbot.execute.queue.disable()
--- dbot.execute.queue.pushFast(command)
--- dbot.execute.queue.pushSafe(commandArray, setupFn, setupData, resultFn, resultData)
--- dbot.execute.queue.pop()
--- dbot.execute.queue.fence()
--- dbot.execute.queue.bypass(command)
--- dbot.execute.queue.dequeueCR()
--- dbot.execute.queue.getCommandString(commandArray)
--- dbot.execute.new()
---
--- Data:
---   dbot.execute.table
---
+-- Fast commands keep the existing immediate Execute contract. Safe commands
+-- are owned requests: one request acquires response parsers, with one deadline
+-- covering queueing and execution. The coordinator completes on a protocol tag
+-- or a unique fence. Interfering user input cancels capture and passes through.
+-- See dinv_commands.lua; this API remains for existing domain workflows.
 ----------------------------------------------------------------------------------------------------
 
-dbot.execute                    = {}
-dbot.execute.table              = {}
-dbot.execute.queue              = {}
-dbot.execute.init               = {}
-dbot.execute.fast               = {}
-dbot.execute.safe               = {}
-
-dbot.execute.doDelayCommands    = false
-dbot.execute.isDequeueRunning   = false
-dbot.execute.afkIsPending       = false
-dbot.execute.quitIsPending      = false
-dbot.execute.noteIsPending      = false
-dbot.execute.fenceIsDetected    = false
-dbot.execute.bypassPrefix       = "DINV_BYPASS "
-
-dbot.execute.trigger            = {}
-dbot.execute.trigger.fenceName  = "drlDbotExecuteFenceTrigger"
-
-drlDbotExecuteTypeFast = "fast"
-drlDbotExecuteTypeSafe = "safe"
-
+dbot.execute = { init = {}, fast = {}, safe = {}, queue = {},
+  bypassPrefix = "DINV_BYPASS ", afkIsPending = false,
+  quitIsPending = false, noteIsPending = false }
 
 function dbot.execute.init.atActive()
-  -- Placeholder: nothing to do here yet
   return DRL_RET_SUCCESS
 end -- dbot.execute.init.atActive
 
-
 function dbot.execute.fini(doSaveState)
-  -- These are one-shot triggers and shouldn't exist here, but it doesn't hurt to verify
-  -- that they are gone
-  dbot.deleteTrigger(dbot.execute.trigger.fenceName)
-
-  dbot.execute.doDelayCommands  = false
-  dbot.execute.isDequeueRunning = false
-  dbot.execute.afkIsPending     = false
-  dbot.execute.quitIsPending    = false
-  dbot.execute.noteIsPending    = false
-
-  if (doSaveState) then
-    -- Placeholder: If we ever add state to the execute module we should save it here
-  end -- if
-
+  inv.commands.cancelAll(DRL_RET_UNINITIALIZED)
+  dbot.execute.afkIsPending, dbot.execute.quitIsPending, dbot.execute.noteIsPending = false, false, false
   return DRL_RET_SUCCESS
 end -- dbot.execute.fini
 
-
-function dbot.execute.fast.command(commandString)
-  local origEchoInput = GetEchoInput()
-
-  SetEchoInput(false)
-  check (Execute(commandString))
-  SetEchoInput(origEchoInput)
-
-  return DRL_RET_SUCCESS
+function dbot.execute.fast.command(command)
+  return dbot.execute.fast.commands({command})
 end -- dbot.execute.fast.command
 
-
--- This function simply pushes the commands in the command array to the mud server.  It doesn't
--- do any type of error checking or handling for the commands that are sent.  It does not require
--- a co-routine because it executes all in one shot and never yields.
-function dbot.execute.fast.commands(commandArray)
-  local retval = DRL_RET_SUCCESS
-
-  if (commandArray == nil) then
-    dbot.warn("dbot.execute.fast.commands: Missing command array parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  -- We don't want all of our commands to echo to the client.  Remember what the original echo
-  -- state is so that we can restore that state when we are done.
-  local origEchoInput = GetEchoInput()
-  SetEchoInput(false)
-
-  for _, command in ipairs(commandArray) do
-    if (command ~= nil) and (command ~= "") then
-      check (Execute(command))
-    end -- if
-  end -- for
-
-  -- Restore the echo state before we return
-  SetEchoInput(origEchoInput)
-
-  return retval
+function dbot.execute.fast.commands(commands)
+  if not commands then return DRL_RET_INVALID_PARAM end
+  for _, command in ipairs(commands) do Execute(command) end
+  return DRL_RET_SUCCESS
 end -- dbot.execute.fast.commands
 
-
--- This is a special case for the dbot.execute.safe.commands() call which uses just a
--- single command string.  The command is run atomically with nothing else in the mud's
--- command queue to interfere with it.
-function dbot.execute.safe.command(commandString, setupFn, setupData, resultFn, resultData)
-  local commandArray = {}
-  table.insert(commandArray, commandString)
-
-  return dbot.execute.safe.commands(commandArray, setupFn, setupData, resultFn, resultData)
+function dbot.execute.safe.command(command, setupFn, setupData, resultFn, resultData)
+  return dbot.execute.safe.commands({command}, setupFn, setupData, resultFn, resultData)
 end -- dbot.execute.safe.command
 
-
-function dbot.execute.safe.commands(commandArray, setupFn, setupData, resultFn, resultData)
-  local retval
-
-  -- Enter a critical section if one isn't already in progress
-  dbot.execute.queue.enable()
-
-  -- Push the current request onto the end of the command queue
-  retval = dbot.execute.queue.pushSafe(commandArray, setupFn, setupData, resultFn, resultData)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("dbot.execute.safe.commads: Failed to push request onto queue: " ..
-              dbot.retval.getString(retval))
-  else
-    -- We just added a new command to the command queue.  If we don't already have a
-    -- co-routine processing commands on that queue, start one now.
-    if (not dbot.execute.queue.isDequeueRunning) then
-      dbot.execute.queue.isDequeueRunning = true
-      wait.make(dbot.execute.queue.dequeueCR)
-    end -- if
-  end -- if
-
-  return retval
+function dbot.execute.safe.commands(commands, setupFn, setupData, resultFn, resultData, options)
+  if not commands then return DRL_RET_INVALID_PARAM end
+  local identification
+  if setupFn == inv.items.identifyAtomicSetup or setupFn == inv.items.identifyItemSetupFn then
+    identification = inv.items.identifyPkg
+  end
+  local requestOptions = {}
+  for key, value in pairs(options or {}) do requestOptions[key] = value end
+  requestOptions.cleanup, requestOptions.identification = inv.items.cleanupRequest, identification
+  return inv.commands.enqueue(commands, setupFn, setupData, resultFn, resultData, requestOptions)
 end -- dbot.execute.safe.commands
 
-
-function dbot.execute.safe.blocking(commandArray, setupFn, setupData, resultFn, timeout)
-
-  if (commandArray == nil) then
-    dbot.warn("dbot.execute.safe.blocking: Missing command array parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  timeout = tonumber(timeout or "")
-  if (timeout == nil) then
-    dbot.warn("dbot.execute.safe.blocking: Missing timeout parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  -- If there is nothing to do, do it successfully :)
-  if (#commandArray < 1) then
-    return DRL_RET_SUCCESS
-  end -- if
-
-  local resultData = dbot.callback.new()
-
-  local retval = dbot.execute.safe.commands(commandArray, setupFn, setupData, resultFn, resultData)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.debug("dbot.execute.safe.blocking: Failed to execute command array: " ..
-               dbot.retval.getString(retval))
-  else
-    -- Wait for the callback to confirm that the safe execution completed
-    retval = dbot.callback.wait(resultData, timeout)
-  end -- if
-
-  return retval
+function dbot.execute.safe.blocking(commands, setupFn, setupData, resultFn, timeout, options)
+  local result = dbot.callback.new()
+  local retval = dbot.execute.safe.commands(commands, setupFn, setupData, resultFn, result, options)
+  if retval ~= DRL_RET_SUCCESS then return retval end
+  return dbot.callback.wait(result, timeout)
 end -- dbot.execute.safe.blocking
 
-
-function dbot.execute.queue.enable()
-  dbot.execute.doDelayCommands = true
-end -- dbot.execute.queue.get
-
-
-function dbot.execute.queue.disable()
-  dbot.execute.doDelayCommands = false
-end -- dbot.execute.queue.get
-
-
--- command table format:
---   { commandType  = drlDbotExecuteTypeFast,  -- or drlDbotExecuteTypeSafe
---     commands     = { "command 1",
---                      "command 2",
---                      ...
---                      "command N"
---                    }
---     setupFn      = mySetupFunctionCallback
---     setupData    = mySetupDataParameter
---     resultFn     = myResultFunctionCallback
---     resultData   = myResultDataParameter
---   }
-function dbot.execute.queue.pushFast(command)
-  local commandEntry
-
-  if (command == nil) then
-    dbot.warn("dbot.execute.queue.pushFast: command is missing")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  commandEntry              = {}
-  commandEntry.commandType  = drlDbotExecuteTypeFast
-  commandEntry.commands     = { command }
-  commandEntry.setupFn      = nil
-  commandEntry.setupData    = nil
-  commandEntry.resultFn     = nil
-  commandEntry.resultData   = nil
-
-  table.insert(dbot.execute.table, commandEntry)
-
-  dbot.debug("Queued fast command: \"@G" .. command .. "@W\"")
-
-  return DRL_RET_SUCCESS
-end -- dbot.execute.queue.pushFast
-
-
-function dbot.execute.queue.pushSafe(commandArray, setupFn, setupData, resultFn, resultData)
-  local commandEntry
-
-  if (commandArray == nil) then
-    dbot.warn("dbot.execute.queue.pushSafe: command array is missing")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  commandEntry              = {}
-  commandEntry.commandType  = drlDbotExecuteTypeSafe
-  commandEntry.commands     = commandArray
-  commandEntry.setupFn      = setupFn
-  commandEntry.setupData    = setupData
-  commandEntry.resultFn     = resultFn
-  commandEntry.resultData   = resultData
-
-  table.insert(dbot.execute.table, commandEntry)
-
-  local commandString = dbot.execute.queue.getCommandString(commandArray)
-  dbot.debug("Queued safe commands: \"@G" .. commandString .. "@W\"")
-
-  return DRL_RET_SUCCESS
-end -- dbot.execute.queue.pushSafe
-
-
-function dbot.execute.queue.pop()
-  local commandEntry = table.remove(dbot.execute.table, 1)
-
-  return commandEntry
-end -- dbot.execute.queue.pop
-
-
--- We need a unique prefix to attach to a fence command so that we don't confuse one fence
--- with another.  The simplest way to do that is to simply count fence commands and prepend
--- the count to the fence name.
-dbot.execute.queue.fenceCounter = 1
-
--- The fence call sends an echo command to the mud server and blocks until the echo is detected.
--- This is very useful in conjuction with our OnPluginSend() code that queues up and delays user
--- commands.  If we delay new commands from going to the mud and we detect our fence output, then
--- we know that no other commands are pending on the mud server and there won't be interference
--- on what we send next.
---
--- We only call fence() from within a critical section where we have checked that we are in a
--- user state that allows the fence to proceed.  We don't need to worry about being AFK here.
-function dbot.execute.queue.fence()
-
-  local uniqueString = "{ DINV fence " .. dbot.execute.queue.fenceCounter .. " }"
-
-  -- We will spin on this until we match the fence command in our trigger
-  dbot.execute.fenceIsDetected = false
-
-  -- Add a one-shot trigger to catch the fence message that we will echo to the mud
-  check (AddTriggerEx(dbot.execute.trigger.fenceName,
-                      "^" .. uniqueString .. "$",
-                      "dbot.execute.fenceIsDetected = true",
-                      drlTriggerFlagsBaseline + trigger_flag.OneShot + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-
-  -- If we are blocking new commands, we must explicitly bypass that protection in order to send
-  -- a command to the mud server.
-  local retval = dbot.execute.queue.bypass("echo " .. uniqueString)
-  if (retval ~= DRL_RET_SUCCESS) then
-    dbot.warn("dbot.execute.queue.fence: Failed to bypass command: " .. dbot.retval.getString(retval))
-    return retval
-  end -- if
-
-  -- Spin until we have confirmation that the mud received the fence message or until we detect
-  -- that we are in a state that will prevent the message from completing
-  local totTime = 0
-  local timeout = 30 -- wait a while since we there might be a lot of stuff queued up on the server
-  while (dbot.execute.fenceIsDetected == false) do
-    local charState = dbot.gmcp.getState()
-
-    if (inv.state == invStateHalted) then
-      dbot.note("Skipping fence request: plugin is halted!")
-      retval = DRL_RET_UNINITIALIZED
-      break
-
-    elseif (totTime > timeout) then
-      dbot.note("Skipping fence request: fence message timed out")
-      retval = DRL_RET_TIMEOUT
-      break
-
-    elseif ((charState ~= dbot.stateActive) and
-            (charState ~= dbot.stateCombat) and
-            (charState ~= dbot.stateSleeping) and
-            (charState ~= dbot.stateRunning)) then
-      dbot.note("Skipping fence request: you are in the \"@C" .. dbot.gmcp.getStateString(charState) ..
-                "@W\" state")
-      retval = DRL_RET_NOT_ACTIVE
-      break
-    end -- if
-
-    wait.time(drlSpinnerPeriodDefault)
-    totTime = totTime + drlSpinnerPeriodDefault
-  end -- while
-
-  -- Note: You might think that we'd want to delete the fence trigger if there was an error
-  --       and the trigger is still pending.  However, there is a chance that the fence echo
-  --       is still pending on the server side so we'd like to keep the trigger around as long
-  --       as possible to suppress the fence echo -- just in case.  It won't hurt anything
-  --       because the next fence will overwrite the previous fence trigger.
-
-  dbot.execute.queue.fenceCounter = dbot.execute.queue.fenceCounter + 1
-
-  return retval
-end -- dbot.execute.queue.fence
-
-
 function dbot.execute.queue.bypass(command)
-  if (command == nil) then
-    dbot.warn("dbot.execute.queue.bypass: missing command parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  --dbot.note("Bypassing command \"@G" .. command .. "@W\"")
-  check (SendNoEcho(dbot.execute.bypassPrefix .. command))
-
+  inv.commands.send(command)
   return DRL_RET_SUCCESS
 end -- dbot.execute.queue.bypass
 
-
-function dbot.execute.queue.dequeueCR()
-  local retval = DRL_RET_SUCCESS
-
-  while (#dbot.execute.table > 0) do
-    local charState = dbot.gmcp.getState()
-
-    -- Get the next command (or array of commands) from the queue
-    local commandEntry = dbot.execute.queue.pop()
-    if (commandEntry == nil) then
-      dbot.warn("dbot.execute.queue.dequeueCR: Popped a nil entry off of a non-empty queue")
-      break
-    end -- if
-
-    -- Creating a string that concatenates all of the commands is helpful for debugging and notifications
-    local commandString = dbot.execute.queue.getCommandString(commandEntry.commands)
-
-    -- If we have a "fast" command, send it directly to the mud.  Easy peasy.
-    if (commandEntry.commandType == drlDbotExecuteTypeFast) then
-      if (commandEntry.commands ~= nil) then
-        for _, command in ipairs(commandEntry.commands) do
-          dbot.debug("Executing queued fast command \"@G" .. command .. "@W\"")
-          retval = dbot.execute.queue.bypass(command)
-        end -- for
-      end -- if
-
-    elseif (commandEntry.commandType == drlDbotExecuteTypeSafe) then
-
-      -- If we are in the running state, wait for a while until we get out of that state.
-      -- The char can't run forever :)  We could also wait if we are in another state that
-      -- prevents us from executing, but the odds of someone coming out of AFK or sleeping
-      -- at just the right moment are low.  We know that a run will end relatively soon so
-      -- we handle that case a little differently to reduce the odds of aborting a request.
-      local totTime = 0
-      local timeout = 20
-      while (totTime < timeout) do
-        charState = dbot.gmcp.getState()
-        if (charState ~= dbot.stateRunning) then
-          break
-        end -- if
-
-        wait.time(drlSpinnerPeriodDefault)
-        totTime = totTime + drlSpinnerPeriodDefault
-      end -- while
-
-      -- We can only run safe execution commands when we are either active or in combat
-      --
-      -- If a safe execution command cannot run because the user is too busy or if the user
-      -- is in the wrong state (AFK, sleeping, note, etc.) we let the caller know via the
-      -- callback parameter's return value field.  It is up to the caller to resubmit the
-      -- request if they really want it to run.  We do not try to re-queue the request here.
-      -- Yes, we could re-queue the request and set a timer to attempt to run it later, but
-      -- that's a lot of complexity for low odds of success.  If the user really is AFK or
-      -- sleeping, the calling function will almost certainly time out before the state is
-      -- what we need so we make it our policy to leave everything in the caller's hands.
-      if (charState ~= dbot.stateActive) and (charState ~= dbot.stateCombat) then
-        dbot.note("Skipping queued safe commands: \"@G" .. commandString .. "@W\": you are in state \"@C" ..
-                  dbot.gmcp.getStateString(charState) .. "@W\"")
-        retval = DRL_RET_NOT_ACTIVE
-
-      elseif dbot.execute.quitIsPending then
-        dbot.note("Skipping queued safe commands: \"@G" .. commandString ..
-                  "@W\": a request to quit is pending on the mud server")
-        retval = DRL_RET_UNINITIALIZED
-
-      elseif dbot.execute.afkIsPending then
-        dbot.note("Skipping queued safe commands: \"@G" .. commandString ..
-                  "@W\": a request to go AFK is pending on the mud server")
-        retval = DRL_RET_NOT_ACTIVE
-
-      elseif dbot.execute.noteIsPending then
-        dbot.note("Skipping queued safe commands: \"@G" .. commandString ..
-                  "@W\": a request to start a note is pending on the mud server")
-        retval = DRL_RET_NOT_ACTIVE
-
-      else
-        retval = dbot.execute.queue.fence()
-        if (retval ~= DRL_RET_SUCCESS) then
-          dbot.debug("dbot.execute.queue.dequeueCR: Failed to execute prefix fence: " ..
-                    dbot.retval.getString(retval))
-        else
-          if (commandEntry.setupFn ~= nil) then
-            commandEntry.setupFn(commandEntry.setupData)
-          end -- if
-
-          dbot.prompt.hide()
-
-          if (commandEntry.commands ~= nil) then
-            for _, command in ipairs(commandEntry.commands) do
-              dbot.debug("Executing queued safe command \"@G" .. command .. "@W\"")
-              dbot.execute.queue.bypass(command)
-            end -- for
-          else
-            dbot.warn("dbot.execute.queue.dequeueCR: commands array is nil!!!")
-          end -- if
-
-          retval = dbot.execute.queue.fence()
-          if (retval ~= DRL_RET_SUCCESS) then
-            dbot.warn("dbot.execute.queue.dequeueCR: Failed to execute suffix fence: " ..
-                      dbot.retval.getString(retval))
-          end -- if
-
-          dbot.prompt.show()
-        end -- if
-      end -- if
-
-    else
-      dbot.warn("dbot.execute.queue.dequeueCR: invalid commandType field \"@R" ..
-                (commandEntry.commandType or "nil") .. "@W\"")
-      retval = DRL_RET_INTERNAL_ERROR
-    end -- if
-
-    if (commandEntry.resultFn ~= nil) then
-      commandEntry.resultFn(commandEntry.resultData, retval)
-    end -- if
-
-  end -- while
-
-  dbot.execute.queue.isDequeueRunning = false
-  dbot.execute.queue.disable()
-
-end -- dbot.execute.queue.dequeueCR
-
-
--- Build up a command string containing all commands in the command array delimited by semicolons.
--- This is useful for notification messages and debugging.
-function dbot.execute.queue.getCommandString(commandArray)
-  local commandString = ""
-
-  if (commandArray ~= nil) and (#commandArray > 0) then
-    for _, command in ipairs(commandArray) do
-      if (command ~= "") then
-        if (commandString == nil) or (commandString == "") then
-          commandString = command
-        else
-          commandString = commandString .. "; " .. command
-        end -- if
-      end -- if
-    end -- for
-  end -- if
-
-  return commandString
-end -- dbot.execute.queue.getCommandString
-
+function dbot.execute.queue.fence()
+  return dbot.execute.safe.blocking({}, nil, nil, dbot.callback.default, 30)
+end -- dbot.execute.queue.fence
 
 function dbot.execute.new()
-  if (not inv.inSafeMode) then
-    return {}
-  end -- if
-
-  return nil
-end -- dbot.execute.newCommands
+  return {}
+end -- dbot.execute.new
 
 
 ----------------------------------------------------------------------------------------------------
@@ -3053,56 +2458,13 @@ end -- dbot.callback.isDone
 
 
 function dbot.callback.default(resultData, retval)
-  if (resultData ~= nil) then
-    if (retval ~= nil) then
-      dbot.callback.setReturn(resultData, retval)
-    end -- if
-
-    resultData.isDone = true
-  end -- if
+  inv.runtime.resolve(resultData, retval or DRL_RET_INTERNAL_ERROR)
 end -- dbot.callback.default
 
-
 function dbot.callback.wait(resultData, timeout, period)
-  local retval = DRL_RET_SUCCESS
-  local totTime = 0
-
-  if (resultData == nil) then
-    dbot.warn("dbot.callback.wait: missing callback parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  timeout = tonumber(timeout or "")
-  if (timeout == nil) then
-    dbot.warn("dbot.callback.wait: missing timeout parameter")
-    return DRL_RET_INVALID_PARAM
-  end -- if
-
-  -- The period is optional.  If it isn't provided, use the default value.
-  if (period == nil) then
-    period = drlSpinnerPeriodDefault
-  end -- if
-
-  while (dbot.callback.isDone(resultData) == false) do
-    if (totTime > timeout) then
-      dbot.debug("dbot.callback.wait: timed out waiting for a callback to complete")
-      retval = DRL_RET_TIMEOUT
-      break
-    end -- if
-
-    wait.time(period)
-    totTime = totTime + period
-  end -- while
-
-  -- If there was a problem accessing the callback, return an error corresponding to the problem
-  -- we hit.  Otherwise, return the return value for the operation executed by the callback.
-  if (retval ~= DRL_RET_SUCCESS) then
-    return retval
-  else
-    return dbot.callback.getReturn(resultData)
-  end -- if
+  if type(resultData) ~= "table" or not tonumber(timeout) then return DRL_RET_INVALID_PARAM end
+  return inv.runtime.await(resultData, tonumber(timeout))
 end -- dbot.callback.wait
-
 
 ----------------------------------------------------------------------------------------------------
 -- Module to retrieve remote files
@@ -3141,7 +2503,7 @@ function dbot.remote.get(url, protocol)
   dbot.remote.getPkg.protocol = protocol
   dbot.remote.getPkg.isDone   = false
 
-  wait.make(dbot.remote.getCR)
+  inv.runtime.start(dbot.remote.getCR, dbot.remote, "getPkg")
 
   local timeout = 10
   local totTime = 0
@@ -3151,7 +2513,7 @@ function dbot.remote.get(url, protocol)
       break
     end -- if
 
-    wait.time(drlSpinnerPeriodDefault)
+    inv.runtime.sleep(drlSpinnerPeriodDefault)
     totTime = totTime + drlSpinnerPeriodDefault
   end -- while
 
@@ -3204,7 +2566,7 @@ function dbot.remote.getCR()
         break
       end -- if
 
-      wait.time(drlSpinnerPeriodDefault)
+      inv.runtime.sleep(drlSpinnerPeriodDefault)
       totTime = totTime + drlSpinnerPeriodDefault
     end -- while
 
@@ -3295,7 +2657,7 @@ function dbot.version.changelog.get(minVersion, endTag)
   dbot.version.changelog.pkg.minVersion = minVersion or 0
   dbot.version.changelog.pkg.endTag     = endTag
 
-  wait.make(dbot.version.changelog.getCR)
+  inv.runtime.start(dbot.version.changelog.getCR, dbot.version.changelog, "pkg")
 
   return DRL_RET_SUCCESS
 end -- dbot.version.changelog.get
@@ -3393,7 +2755,7 @@ function dbot.version.update.release(mode, endTag)
   dbot.version.update.pkg.mode     = mode
   dbot.version.update.pkg.endTag   = endTag
 
-  wait.make(dbot.version.update.releaseCR)
+  inv.runtime.start(dbot.version.update.releaseCR, dbot.version.update, "pkg")
 
   return retval
 end -- dbot.version.update.release
@@ -3715,5 +3077,3 @@ function dbot.version.update.releaseCR()
 
   return inv.tags.stop(invTagsVersion, endTag, retval)
 end -- dbot.version.update.releaseCR
-
-

@@ -290,6 +290,9 @@ function inv.tags.stop(moduleName, endTag, retval)
     return retval
   end -- if
 
+  if endTag.completed then return retval end
+  endTag.completed = true
+
   -- Run the end tag's cleanup callback function (if one exists).  Otherwise run the default
   -- cleanup callback function.
   if (endTag.cleanupFn ~= nil) then

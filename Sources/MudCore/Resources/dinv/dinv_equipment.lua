@@ -404,7 +404,7 @@ function inv.snapshot.wear(snapshotName, endTag)
   inv.snapshot.wearPkg.snapshotName = snapshotName
   inv.snapshot.wearPkg.endTag       = endTag
 
-  wait.make(inv.snapshot.wearCR)
+  inv.runtime.start(inv.snapshot.wearCR, inv.snapshot, "wearPkg")
 
   return retval
 end -- inv.snapshot.wear

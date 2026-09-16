@@ -91,8 +91,8 @@ public struct TimerFiring: Sendable, Equatable {
 /// machine sleep and clock changes. When a recurring timer is overdue (the
 /// app slept, or many ticks were missed), it fires **once** and rebases to
 /// `now + interval` rather than replaying every missed tick — MUSHclient's
-/// behaviour, without its snapshot-and-relookup contortions (the value-type
-/// model and the actor host make re-entrancy a non-issue).
+/// behaviour. The host snapshots due IDs, then rechecks each timer before it
+/// fires: an earlier callback can delete, disable or reset a later timer.
 public struct TimerEngine {
     public enum TimerError: Error, Equatable {
         case invalidSchedule(String)
@@ -166,11 +166,10 @@ public struct TimerEngine {
         }.min()
     }
 
-    /// The timers due at `now`, earliest-scheduled first. Each due timer
-    /// fires at most once per call (overdue recurring timers coalesce).
-    /// Recurring timers are rescheduled; one-shots are removed.
-    public mutating func due(at now: Date) -> [TimerFiring] {
-        let dueTimers = timers
+    /// Snapshot the due IDs without consuming their actions. New timers wait
+    /// until the next tick; deleted/reset timers can be skipped before firing.
+    func dueIDs(at now: Date) -> [UUID] {
+        timers
             .compactMap { timer -> (MudTimer, Date)? in
                 guard isActive(timer), let fire = nextFire[timer.id], fire <= now else {
                     return nil
@@ -178,30 +177,39 @@ public struct TimerEngine {
                 return (timer, fire)
             }
             .sorted { $0.1 < $1.1 }
+            .map(\.0.id)
+    }
 
-        var firings: [TimerFiring] = []
-        var oneShotsToRemove: [UUID] = []
-        for (timer, fire) in dueTimers {
-            firings.append(TimerFiring(
-                timerID: timer.id,
-                send: timer.action.sendText,
-                script: timer.action.scriptText
-            ))
-            switch timer.schedule {
-            case .after:
-                oneShotsToRemove.append(timer.id)
-            case .every(let interval, _):
-                var next = fire.addingTimeInterval(interval)
-                if next <= now { next = now.addingTimeInterval(interval) }
-                nextFire[timer.id] = next
-            case .atTimeOfDay(let hour, let minute, let second):
-                nextFire[timer.id] = nextTimeOfDay(
-                    hour: hour, minute: minute, second: second, after: now
-                )
-            }
-        }
-        for id in oneShotsToRemove {
+    /// Recheck liveness and consume just one due timer. The host applies its
+    /// effects before requesting the next ID from the snapshot.
+    mutating func fire(id: UUID, at now: Date) -> TimerFiring? {
+        guard let timer = timers.first(where: { $0.id == id }), isActive(timer),
+              let fire = nextFire[id], fire <= now else { return nil }
+        switch timer.schedule {
+        case .after:
             remove(id: id)
+        case .every(let interval, _):
+            var next = fire.addingTimeInterval(interval)
+            if next <= now {
+                next = now.addingTimeInterval(interval)
+            }
+            nextFire[id] = next
+        case .atTimeOfDay(let hour, let minute, let second):
+            nextFire[id] = nextTimeOfDay(hour: hour, minute: minute, second: second, after: now)
+        }
+        return TimerFiring(timerID: id, send: timer.action.sendText, script: timer.action.scriptText)
+    }
+
+    /// The timers due at `now`, earliest-scheduled first. Each due timer
+    /// fires at most once per call (overdue recurring timers coalesce).
+    /// Recurring timers are rescheduled; one-shots are removed. Hosts that run
+    /// callbacks between firings use `dueIDs` and `fire` instead.
+    public mutating func due(at now: Date) -> [TimerFiring] {
+        var firings: [TimerFiring] = []
+        for id in dueIDs(at: now) {
+            if let firing = fire(id: id, at: now) {
+                firings.append(firing)
+            }
         }
         return firings
     }

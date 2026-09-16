@@ -2,6 +2,13 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0127] =
+{
+  { change = drlDbotChangeLogTypeMisc,
+    desc = [[Replace polling command queues with owned requests and event-driven completion. Load saved inventory before optional startup probes; retain server prompt settings. Stage inventory and identification responses before publication. Add dinv status and dinv cancel. Reserve complete equipment and portal workflows, wait through temporary Running state within existing deadlines, and verify final equipment locations. Use narrow stats/wish/pagesize captures that tolerate unrelated play and retain exact canceled-fence suppression. Remove redundant report echoes and skip empty equipment batches. Keep consumption summaries while moving item/cache detail to debug output. Live validation of the latest corrections is pending.]]
+  }
+}
+
 dbot.changelog[3.0126] =
 {
   { change = drlDbotChangeLogTypeFix,
@@ -2393,4 +2400,3 @@ dbot.changelog[0.1] =
     desc   = "Initial code base"
   }
 }
-

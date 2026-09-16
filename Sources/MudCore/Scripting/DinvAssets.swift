@@ -3,7 +3,7 @@ import Foundation
 /// Accessors for the vendored **dinv** inventory-manager plugin (bundled with
 /// MudCore; see `Resources/dinv/PROVENANCE.md`). dinv runs verbatim through the
 /// MUSHclient compatibility shim: its `dinv.xml` bootstrap `dofile`s
-/// `dinv_init.lua`, which in turn `dofile`s 20 modules and `require`s the
+/// `dinv_init.lua`, which loads its Lua modules and `require`s the
 /// standard helpers (all provided by the shim, including an inert `async`).
 ///
 /// We register dinv's modules with the runtime's module loader keyed by
@@ -25,7 +25,7 @@ public enum DinvAssets {
         "dinv_data", "dinv_cache", "dinv_priority", "dinv_score", "dinv_set",
         "dinv_equipment", "dinv_statbonus", "dinv_analyze", "dinv_usage",
         "dinv_unused", "dinv_tags", "dinv_consume", "dinv_portal", "dinv_regen",
-        "dinv_migrate", "dinv_dbot"
+        "dinv_migrate", "dinv_dbot", "dinv_runtime", "dinv_commands", "dinv_capture"
     ]
 
     /// A vendored Lua module's source by basename, or `nil` if missing.

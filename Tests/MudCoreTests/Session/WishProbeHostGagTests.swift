@@ -2,14 +2,9 @@ import Foundation
 @testable import MudCore
 import Testing
 
-/// Host-side gag of dinv's background `wish list` probe (D-79). dinv runs
-/// `wish list` as a hidden safe-exec probe and is *supposed* to gag the output
-/// with its own omit-from-output trigger, but that gag proved unreliable under
-/// the live multi-plugin set (the owned `*` rows leaked to the main window). Since
-/// dinv re-sends `wish list` through its bypass — `pluginProcessingSend` true —
-/// the host gags the probe's output itself, deterministically, and crucially can
-/// tell it apart from a user typing `wish list` (which must still show).
-@Suite("wish-probe host gag", .serialized)
+/// The host must not infer capture ownership from a bypassed command. The
+/// bundled plugin's narrow parser owns suppression; no generic 80-line gag.
+@Suite("wish-probe host boundary", .serialized)
 struct WishProbeHostGagTests {
     /// A plugin that, like dinv, re-sends `wish list` from *inside* `OnPluginSend`
     /// (the bypass path) — but registers NO gag trigger of its own, so the gag
@@ -39,25 +34,20 @@ struct WishProbeHostGagTests {
         "*Very fast spell-up time                 6000        250        -- Spellup    ",
         " No hunger or thirst                     3000          0      3000 Nohunger  ",
         "*Add +1 bypass (all classes)             6000        250        -- Bypass     ",
-        "DINV wish list fence"
+        "Refer to 'help wish' for a description of each wish."
     ]
 
-    @Test("the host gags a bypassed wish-list probe even with no gag trigger")
-    func hostGagsBypassedProbe() async throws {
+    @Test("A bypassed wish command does not arm a host-wide output gag")
+    func bypassDoesNotCaptureOutput() async throws {
         let (controller, _) = try await connectedController(plugin: probePlugin)
-        // `probe` → plugin re-sends `wish list` from inside OnPluginSend → arms.
         try await controller.send("probe")
         for text in wishOutput + ["You say 'hello'."] {
             await controller.appendLineThroughScripts(Line(id: LineID(0), text: text))
         }
         let shown = await controller.scrollbackStore.snapshot().map(\.text)
-        // No wish row (owned `*` included) reaches the window.
-        #expect(!shown.contains { $0.contains("Spellup") }, "owned wish leaked: \(shown)")
-        #expect(!shown.contains { $0.contains("Nohunger") }, "unowned wish leaked: \(shown)")
-        #expect(!shown.contains { $0.contains("Base Cost") }, "header leaked: \(shown)")
-        // The fence is gagged, and the normal line after it shows again.
-        #expect(!shown.contains("DINV wish list fence"), "fence leaked: \(shown)")
-        #expect(shown.contains("You say 'hello'."), "post-fence line was gagged: \(shown)")
+        #expect(shown.contains { $0.contains("Spellup") })
+        #expect(shown.contains { $0.contains("Nohunger") })
+        #expect(shown.contains("You say 'hello'."))
         await controller.disconnect()
     }
 

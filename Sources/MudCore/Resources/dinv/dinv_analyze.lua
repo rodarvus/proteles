@@ -42,7 +42,7 @@ function inv.analyze.sets(priorityName, minLevel, skipLevel, resultData, intensi
   inv.analyze.setsPkg.intensity     = intensity
   inv.analyze.setsPkg.resultData    = resultData
 
-  wait.make(inv.analyze.setsCR)
+  inv.runtime.start(inv.analyze.setsCR, inv.analyze, "setsPkg")
 
   return DRL_RET_SUCCESS
 end -- inv.analyze.sets
@@ -129,7 +129,7 @@ function inv.analyze.setsCR()
         dbot.print("@W\nPreparing analysis report (this can take up to a minute)...")
       end -- if
 
-      wait.time(0.1)
+      inv.runtime.sleep(0.1)
     end -- if
 
     -- Wait for createCR to finish (signaled by inv.set.createPkg becoming
@@ -139,7 +139,7 @@ function inv.analyze.setsCR()
     local totTime = 0
     local timeout = 10
     while (inv.set.createPkg ~= nil) do
-      wait.time(drlSpinnerPeriodDefault)
+      inv.runtime.sleep(drlSpinnerPeriodDefault)
       totTime = totTime + drlSpinnerPeriodDefault
       if (totTime > timeout) then
         dbot.error("inv.analyze.setsCR: Failed to analyze \"" .. inv.analyze.setsPkg.priorityName ..

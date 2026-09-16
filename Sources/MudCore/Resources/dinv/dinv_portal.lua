@@ -10,25 +10,12 @@
 
 inv.portal = {}
 
--- A portal hop is a SEQUENTIAL operation, not an async one.  In a MUD commands
--- are sequential; dinv's old design split a hop into time-separated pieces (a
--- fenced get/hold burst, a delayed DoAfterSpecial swap-back, and a gated enter),
--- so a SECOND hop's pieces could interleave with the first's -- and an enter
--- could fire after the first hop's swap-back had restored the (possibly lethal)
--- worn portal.  That is the portal-death bug.  We now run ONE hop to completion
--- -- burst -> verified enter -> swap-back -> release -- before another can start.
--- A use() that arrives while a hop is in flight is dropped (it is redundant
--- mapper churn: the recall is already happening).
---
--- The lock is a deadline timestamp, not a bool, so a broken resultFn chain can
--- never wedge portals forever: it self-expires after ``maxHopSeconds``.  A normal
--- hop releases it early (in the swap-back result).
+-- A hop reserves the coordinator through hold, verified entry and restoration.
+-- Duplicate navigation requests are dropped while the owned task is alive.
+-- Queue admission and every phase have deadlines; task cleanup releases the lock.
 inv.portal.busyUntil = 0
+inv.portal.inProgress = false
 inv.portal.maxHopSeconds = 15
-
-local function portalNow()
-  return tonumber(os.time()) or 0
-end -- portalNow
 
 -- True when the inventory cache shows portalId resting in the slot we enter a
 -- portal from (the "portal" slot with the Portal wish, otherwise hold/second).
@@ -40,15 +27,31 @@ function inv.portal.isAtTargetSlot(portalId, portalWish)
   return (loc == inv.wearLoc[invWearableLocHold]) or (loc == inv.wearLoc[invWearableLocSecond])
 end -- inv.portal.isAtTargetSlot
 
--- resultFn after the entry burst -- the SINGLE gate on `enter`.  The suffix fence
--- has completed, so the server has processed the burst and dinv has applied the
--- resulting {invmon}: the cache is authoritative (and reliable now, because the
--- hop is serialised -- nothing else is touching the portal slot).  Enter ONLY if
--- the portal is genuinely at the target slot, then run the swap-back, still
--- inside the locked window so the next hop waits for it.  ``hop`` carries what the
--- swap-back must restore: { id, wish, origId?, origLoc?, putContainer? }.
-function inv.portal.afterHold(hop, retval)
-  if (hop == nil) then inv.portal.busyUntil = 0; return end
+-- Recheck after the finish request's opening fence, immediately before its
+-- commands are sent. Other input may have changed equipment since the hold phase.
+-- A failed hold may still restore an empty slot or the original item, but must
+-- never enter or overwrite a different item equipped in the meantime.
+function inv.portal.beforeFinish(hop)
+  if hop.origId and inv.items.getField(hop.origId, invFieldObjLoc) ~= hop.restoreFrom then
+    dbot.warn("Portal restoration item moved before entry; check equipment and retry navigation.")
+    return DRL_RET_BUSY
+  end
+  if inv.portal.isAtTargetSlot(hop.id, hop.wish) then return DRL_RET_SUCCESS end
+  local changed = hop.enter
+  for objId in pairs(inv.items.table) do
+    if objId ~= hop.origId and inv.portal.isAtTargetSlot(objId, hop.wish) then changed = true end
+  end
+  if changed then
+    dbot.warn("inv.portal.use: portal slot changed before entry; leaving equipment as it is.")
+    return DRL_RET_BUSY
+  end
+  return DRL_RET_SUCCESS
+end -- inv.portal.beforeFinish
+
+-- The hold's suffix fence confirms its invmon updates were processed. Prepare
+-- entry and restoration under the hop lock, then recheck the slot at dispatch.
+-- ``hop`` retains { id, wish, origId?, origLoc?, putContainer?, enter? }.
+function inv.portal.finish(hop)
 
   -- Build ONE ordered burst: the verified `enter` FIRST, then the swap-back.  They
   -- MUST travel the same channel: dinv sends fence-queue bursts via DINV_BYPASS
@@ -57,7 +60,8 @@ function inv.portal.afterHold(hop, retval)
   -- restored worn portal.  Putting both in one safe.commands burst guarantees the
   -- enter reaches the MUD before the wear/put that restore the worn portal.
   local finish = {}
-  if inv.portal.isAtTargetSlot(hop.id, hop.wish) then
+  hop.enter = inv.portal.isAtTargetSlot(hop.id, hop.wish)
+  if hop.enter then
     table.insert(finish, "enter")
   else
     dbot.warn("inv.portal.use: portal " .. tostring(hop.id) ..
@@ -69,23 +73,30 @@ function inv.portal.afterHold(hop, retval)
   -- enter in the same burst, and BEFORE the lock releases so a churned duplicate
   -- can't slip in mid-swap.
   if (hop.origId ~= nil) then
+    hop.restoreFrom = inv.items.getField(hop.origId, invFieldObjLoc)
+    if hop.restoreFrom ~= invItemLocInventory then
+      if not tonumber(hop.restoreFrom) then return DRL_RET_BUSY end
+      table.insert(finish, "get " .. hop.origId .. " " .. hop.restoreFrom)
+    end
     table.insert(finish, "wear " .. hop.origId .. " " .. hop.origLoc)
   end -- if
   if (hop.putContainer ~= nil) then
+    if not hop.origId and hop.enter then table.insert(finish, "remove " .. hop.id) end
     table.insert(finish, "put " .. hop.id .. " " .. hop.putContainer)
   end -- if
 
-  if (#finish > 0) then
-    dbot.execute.safe.commands(finish, nil, nil, inv.portal.afterSwapback, true)
-  else
-    inv.portal.busyUntil = 0
-  end -- if
-end -- inv.portal.afterHold
-
--- resultFn after the swap-back: the hop is complete, release the lock.
-function inv.portal.afterSwapback(resultData, retval)
-  inv.portal.busyUntil = 0
-end -- inv.portal.afterSwapback
+  local retval = dbot.execute.safe.blocking(finish, nil, nil, dbot.callback.default,
+    inv.portal.maxHopSeconds, {beforeDispatch = function() return inv.portal.beforeFinish(hop) end})
+  if retval ~= DRL_RET_SUCCESS then return retval end
+  if hop.origId and inv.items.getField(hop.origId, invFieldObjLoc) ~= hop.origLoc then
+    return DRL_RET_MISSING_ENTRY
+  end
+  local location = inv.items.getField(hop.id, invFieldObjLoc)
+  if hop.putContainer and tonumber(location) ~= tonumber(hop.putContainer) then
+    return DRL_RET_MISSING_ENTRY
+  end
+  return DRL_RET_SUCCESS
+end -- inv.portal.finish
 
 function inv.portal.use(portalQuery)
   if (portalQuery == nil) then
@@ -128,17 +139,27 @@ function inv.portal.use(portalQuery)
 
   end -- if
 
-  -- Serialise: drop a hop that arrives while one is already in flight.  It is
-  -- redundant mapper churn (the recall is already happening), and letting it run
-  -- is exactly how two hops' swap-backs interleaved into a lethal fall-through.
-  -- The lock self-expires (``maxHopSeconds``) so a broken chain can't wedge it.
-  if (portalNow() < inv.portal.busyUntil) then
-    dbot.debug("inv.portal.use: a portal hop is in flight; dropping duplicate request for " ..
-               tostring(portalId))
+  if inv.portal.inProgress then
+    dbot.debug("Portal hop already in progress; ignoring duplicate request.")
     return DRL_RET_SUCCESS
-  end -- if
-  inv.portal.busyUntil = portalNow() + inv.portal.maxHopSeconds
+  end
+  if not inv.runtime.enabled or not inv.init.initializedActive then return DRL_RET_UNINITIALIZED end
+  inv.portal.inProgress = true
+  inv.portal.busyUntil = inv.runtime.now() + 30 + inv.portal.maxHopSeconds
+  local context = {}
+  inv.runtime.start(function()
+    return inv.commands.exclusive(function() return inv.portal.useOwned(portalId, context) end,
+      nil, inv.portal.maxHopSeconds)
+  end, nil, nil, function(retval)
+    inv.portal.inProgress, inv.portal.busyUntil = false, 0
+    if context.started and retval ~= DRL_RET_SUCCESS then
+      dbot.warn("Portal operation interrupted or restoration unconfirmed; check equipment before retrying.")
+    end
+  end)
+  return DRL_RET_SUCCESS
+end -- inv.portal.use
 
+function inv.portal.useOwned(portalId, context)
   local origId, origLoc
   local portalWish = dbot.wish.has("Portal")
 
@@ -166,15 +187,15 @@ function inv.portal.use(portalQuery)
   --  * The portal is NOT already believed at the target slot -> swap it in:
   --    displace whatever is there, get the portal from its container (if it lives
   --    in one), and hold it.  ``hop`` records the original equipment + the portal's
-  --    container so ``afterHold`` can restore them once we've entered.
+  --    container so `finish` can restore them once we've entered.
   --
   --  * The portal IS already believed at the target slot (origId == portalId) ->
   --    no swap, EMPTY burst.  We don't blindly `enter`; the empty burst's fences
   --    cost one round-trip that flushes any in-flight {invmon} so the cache is
-  --    authoritative, then ``afterHold`` verifies the portal is really there.
+  --    authoritative, then `finish` verifies the portal is really there.
   --
-  -- Either way the SAME burst+resultFn chain runs (burst -> afterHold -> enter +
-  -- swap-back -> afterSwapback -> release), all under the lock taken above.
+  -- Either way the SAME burst+resultFn chain runs (burst -> verified enter +
+  -- swap-back -> verification -> release), all under the lock taken above.
   local commands = {}
   local hop = { id = portalId, wish = portalWish }
 
@@ -197,8 +218,12 @@ function inv.portal.use(portalQuery)
     table.insert(commands, "hold " .. portalId)
   end -- if
 
-  return dbot.execute.safe.commands(commands, nil, nil, inv.portal.afterHold, hop)
-end -- inv.portal.use
+  context.started = true
+  local retval = dbot.execute.safe.blocking(commands, nil, nil, dbot.callback.default,
+    inv.portal.maxHopSeconds)
+  if retval ~= DRL_RET_SUCCESS then return retval end
+  return inv.portal.finish(hop)
+end -- inv.portal.useOwned
 
 
 ----------------------------------------------------------------------------------------------------
@@ -253,5 +278,4 @@ function inv.pass.use(passNameOrId, useTimeSec)
 
   return retval
 end -- inv.pass.use
-
 

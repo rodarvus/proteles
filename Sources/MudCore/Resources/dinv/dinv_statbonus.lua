@@ -39,7 +39,6 @@
 
 inv.statBonus              = {}
 inv.statBonus.init         = {}
-inv.statBonus.closingMsg   = "{ \\dinv inv.statBonus }"
 inv.statBonus.currentBonus = { int = 0, luck = 0, wis = 0, str = 0, dex = 0, con = 0 }
 
 
@@ -48,7 +47,10 @@ function inv.statBonus.init.atInstall()
 
   -- Trigger on a call to "stats" to determine how many stat bonuses currently are available to equipment
   check (AddTriggerEx(inv.statBonus.trigger.getName,
-                     "^(.*)$",
+                     "^(\\s*Str\\s+Int\\s+Wis\\s+Dex\\s+Con\\s+Luck\\s+Total|" ..
+                     "[- ]{10,}|(?:Natural|Class Bonus|Equip Bonus|Spells Bonus|Totals)\\s*:[ 0-9]+|" ..
+                     "\\s*:[ 0-9]+|\\* Totals may not balance due to max stats and max bonus\\.|" ..
+                     "\\* See 'help maxstats' for details on limits\\.|You are flagged as remorting.*)$",
                       "inv.statBonus.trigger.get(\"%1\")",
                       drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
                       custom_colour.Custom11,
@@ -175,9 +177,8 @@ function inv.statBonus.load()
   -- inv.statBonus.timer.update() function here.  Unfortunately, that function relies on mushclient
   -- components that may not be available when we load right at the start.  Instead, we simply
   -- kick off the timer manually and then let it self-perpetuate once it is going.
-  check (AddTimer(inv.statBonus.timer.name, 0, inv.statBonus.timer.min, inv.statBonus.timer.sec, "",
-                  timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot,
-                  "inv.statBonus.set"))
+  inv.statBonus.timer.name = inv.runtime.after(inv.statBonus.timer.min * 60 + inv.statBonus.timer.sec,
+    inv.statBonus.set)
 
   return DRL_RET_SUCCESS
 end -- inv.statBonus.load()
@@ -550,7 +551,14 @@ end -- inv.statBonus.get
 
 
 function inv.statBonus.set()
-  wait.make(inv.statBonus.setCR)
+  if not inv.runtime.enabled or inv.statBonus.bonusInProgress then return DRL_RET_BUSY end
+  if not inv.commands.backgroundReady() then
+    inv.statBonus.timer.update(0, 30)
+    return DRL_RET_BUSY
+  end
+  inv.runtime.start(inv.statBonus.setCR, nil, nil, function()
+    inv.statBonus.bonusInProgress = false
+  end)
 end -- inv.statBonus.set
 
 
@@ -572,9 +580,9 @@ function inv.statBonus.setCR()
     local resultData = dbot.callback.new()
     local commandArray = {}
     table.insert(commandArray, "stats")
-    table.insert(commandArray, "echo " .. inv.statBonus.closingMsg)
     retval = dbot.execute.safe.commands(commandArray, inv.statBonus.setSetupFn, nil,
-                                        dbot.callback.default, resultData)
+                                        inv.statBonus.resultFn, resultData,
+      {conflicts = {stats = true}, captureComplete = function() return inv.statBonus.pending ~= nil end})
     if (retval ~= DRL_RET_SUCCESS) then
       dbot.warn("inv.statBonus.setCR: Failed to safely execute \"@Gstats@W\": " ..
                 dbot.retval.getString(retval))
@@ -583,25 +591,10 @@ function inv.statBonus.setCR()
       -- Wait for the callback to confirm that the safe execution completed
       retval = dbot.callback.wait(resultData, 10)
       if (retval ~= DRL_RET_SUCCESS) then
-        dbot.note("Skipping statBonus \"stats\" request: " .. dbot.retval.getString(retval))
+        inv.commands.probeNote(retval, "Skipping statBonus \"stats\" request: " .. dbot.retval.getString(retval))
       end -- if
 
-      -- Wait for the trigger to fill in the stat bonuses due to spells that are active right now.
-      -- We've already allocated quite a bit of time to handle the callback above.  As a result,
-      -- the trigger should have already kicked off at this point.  We allow it just a little more
-      -- time though just to be paranoid...
-      local totTime = 0
-      local timeout = 2
-      while (inv.statBonus.bonusInProgress == true) do
-        wait.time(drlSpinnerPeriodDefault)
-        totTime = totTime + drlSpinnerPeriodDefault
-        if (totTime > timeout) then
-          dbot.debug("inv.statBonus.setCR: Failed to get spell stat bonus information: timed out")
-          dbot.deleteTrigger(inv.statBonus.trigger.startName)
-          retval = DRL_RET_TIMEOUT
-          break
-        end -- if
-      end -- while
+
     end -- if
 
     dbot.prompt.show()
@@ -650,6 +643,7 @@ function inv.statBonus.setCR()
     inv.statBonus.save()
   end -- if
 
+  inv.statBonus.bonusInProgress = false
   inv.statBonus.timer.update(inv.statBonus.timer.min, inv.statBonus.timer.sec)
 
   return retval
@@ -657,23 +651,20 @@ end -- inv.statBonus.setCR
 
 
 function inv.statBonus.setSetupFn()
-  -- Run the "stats" command and pick off the current spell bonuses
-  check (AddTriggerEx(inv.statBonus.trigger.startName,
-                      "^(.*Str.*Int.*Wis.*Dex.*Con.*Luck.*Total|You are flagged as remorting).*$",
-                      "inv.statBonus.checkRemort(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OneShot + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11,
-                      0, "", "", sendto.script, 0))
+  inv.statBonus.pending, inv.statBonus.sawHeader = nil, false
+  EnableTrigger(inv.statBonus.trigger.getName, true)
 end -- inv.statBonus.setSetupFn
 
-
-function inv.statBonus.checkRemort(line)
-  if (line == "You are flagged as remorting") then
-    dbot.note("Skipping stat bonus check -- You are remorting and the \"stats\" command is not available")
-  else
-    EnableTrigger(inv.statBonus.trigger.getName, true)
-  end -- if
-end -- inv.statBonus.checkRemort
+function inv.statBonus.resultFn(resultData, retval)
+  if not inv.commands.ownsResponse(resultData) then return dbot.callback.default(resultData, retval) end
+  EnableTrigger(inv.statBonus.trigger.getName, false)
+  if retval == DRL_RET_SUCCESS then
+    if inv.statBonus.pending then inv.statBonus.currentBonus = inv.statBonus.pending
+    else retval = DRL_RET_TIMEOUT end
+  end
+  inv.statBonus.pending = nil
+  dbot.callback.default(resultData, retval)
+end -- inv.statBonus.resultFn
 
 
 inv.statBonus.timer      = {}
@@ -698,9 +689,10 @@ function inv.statBonus.timer.update(min, sec)
     dbot.debug("Halting statBonus thread.  We are idle!")
     drlIsIdle = true
   else
-    check (AddTimer(inv.statBonus.timer.name, 0, min, sec, "",
-                    timer_flag.Enabled + timer_flag.Replace + timer_flag.OneShot,
-                    "inv.statBonus.set"))
+    inv.runtime.removeTimer(inv.statBonus.timer.name)
+    if inv.runtime.enabled then
+      inv.statBonus.timer.name = inv.runtime.after(min * 60 + sec, inv.statBonus.set)
+    end
   end -- if
 
 end -- inv.statBonus.timer.update
@@ -712,30 +704,14 @@ inv.statBonus.trigger.getName   = "drlInvStatBonusTriggerGet"
 inv.statBonus.trigger.startName = "drlInvStatBonusTriggerStart"
 
 function inv.statBonus.trigger.get(line)
-
-  -- Look for the current spells bonus
-  local matchStart, matchEnd, eqStr, eqInt, eqWis, eqDex, eqCon, eqLuck =
-    string.find(line, "Spells Bonus%s+:%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+.*$")
-
-  if (matchStart ~= nil) then
-    inv.statBonus.currentBonus.str  = tonumber(eqStr)
-    inv.statBonus.currentBonus.int  = tonumber(eqInt)
-    inv.statBonus.currentBonus.wis  = tonumber(eqWis)
-    inv.statBonus.currentBonus.dex  = tonumber(eqDex)
-    inv.statBonus.currentBonus.con  = tonumber(eqCon)
-    inv.statBonus.currentBonus.luck = tonumber(eqLuck)
-
-    inv.statBonus.bonusInProgress = false
-
-    dbot.debug("Spells bonus: str=" .. eqStr .. ", int=" .. eqInt .. ", wis=" .. eqWis ..
-               ", dex=" .. eqDex .. ", con=" .. eqCon .. ", luck=" .. eqLuck)
-  end -- if
-
-  -- Shut off the trigger if we hit the end of the stats output
-  if (line == inv.statBonus.closingMsg) then
-    EnableTrigger(inv.statBonus.trigger.getName, false)
-  end -- if
-
+  if line:match("^%s*Str%s+Int%s+Wis%s+Dex%s+Con%s+Luck%s+Total$") then
+    inv.statBonus.sawHeader = true
+  elseif inv.statBonus.sawHeader and not inv.statBonus.pending then
+    local str, int, wis, dex, con, luck = line:match(
+      "^Spells Bonus%s+:%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+%d+%s*$")
+    if str then
+      inv.statBonus.pending = {str=tonumber(str), int=tonumber(int), wis=tonumber(wis),
+        dex=tonumber(dex), con=tonumber(con), luck=tonumber(luck)}
+    end
+  end
 end -- inv.statBonus.trigger.get
-
-

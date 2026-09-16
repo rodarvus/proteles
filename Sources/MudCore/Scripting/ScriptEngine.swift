@@ -168,22 +168,13 @@ public actor ScriptEngine {
         timers.nextDeadline()
     }
 
-    /// Fire every timer due at `now`, returning the effects in order
-    /// (sends + script effects). Recurring timers reschedule; one-shots are
-    /// removed. Script errors surface as red notes.
+    /// Fire every timer due at `now`, collecting effects for engine-only callers.
+    /// SessionController applies each timer separately so lifecycle effects
+    /// take effect before the next callback runs.
     public func fireDueTimers(at now: Date = Date()) async -> [ScriptEffect] {
-        // While suspended (Note mode), timers don't fire.
-        if suspended { return [] }
         var effects: [ScriptEffect] = []
-        for firing in timers.due(at: now) {
-            if let send = firing.send, !send.isEmpty {
-                effects.append(.send(send))
-            }
-            if let script = firing.script {
-                await effects.append(contentsOf: runOwnedScript(
-                    script, owner: automationOwners[firing.timerID], matches: [], named: [:]
-                ))
-            }
+        for id in dueTimerIDs(at: now) {
+            await effects.append(contentsOf: fireTimer(id: id, at: now))
         }
         return effects
     }
@@ -287,7 +278,9 @@ public actor ScriptEngine {
         // plugins print it on install and concat-crash on a nil otherwise).
         resolved.version = plugin.version
         resolved.pluginDescription = plugin.pluginDescription
-        if resolved.pluginName.isEmpty { resolved.pluginName = plugin.name }
+        if resolved.pluginName.isEmpty {
+            resolved.pluginName = plugin.name
+        }
         await runtime.createPluginEnvironment(plugin.id)
         await runtime.setPluginContext(resolved)
         try? await runtime.loadCompatShim()
@@ -301,19 +294,27 @@ public actor ScriptEngine {
         for trigger in plugin.triggers {
             try? triggers.add(trigger)
             automationOwners[trigger.id] = plugin.id
-            if let name = trigger.name { triggerIDsByName[name] = trigger.id }
+            if let name = trigger.name {
+                triggerIDsByName[name] = trigger.id
+            }
         }
         for alias in plugin.aliases {
             try? aliases.add(alias)
             automationOwners[alias.id] = plugin.id
-            if let name = alias.name { aliasIDsByName[name] = alias.id }
+            if let name = alias.name {
+                aliasIDsByName[name] = alias.id
+            }
         }
         for timer in plugin.timers {
             _ = try? timers.add(timer)
             automationOwners[timer.id] = plugin.id
-            if let name = timer.label { timerIDsByName[name] = timer.id }
+            if let name = timer.label {
+                timerIDsByName[name] = timer.id
+            }
         }
-        if !loadedPluginIDs.contains(plugin.id) { loadedPluginIDs.append(plugin.id) }
+        if !loadedPluginIDs.contains(plugin.id) {
+            loadedPluginIDs.append(plugin.id)
+        }
         pluginNames[plugin.id] = resolved.pluginName
         // The XML-declared triggers/aliases/timers above register directly (not
         // via applyAutomationEffect), so flag the introspection mirror stale.
@@ -397,12 +398,16 @@ public actor ScriptEngine {
     /// applied by the session.
     public func expandInputForDispatch(_ input: String) async -> ScriptInputExpansion {
         // While suspended (Note mode), input goes straight to the MUD.
-        if suspended { return .passthrough(input) }
+        if suspended {
+            return .passthrough(input)
+        }
         let firings = aliases.match(input)
         guard !firings.isEmpty else {
             // No user alias matched — offer the command to native plugins
             // before sending it verbatim.
-            if let effects = nativePlugins.handleCommand(input) { return .effects(effects) }
+            if let effects = nativePlugins.handleCommand(input) {
+                return .effects(effects)
+            }
             return .passthrough(input)
         }
 
@@ -481,7 +486,9 @@ public actor ScriptEngine {
         for id in loadedPluginIDs {
             let (raw, allow) = await runtime.callPluginSend(id, text)
             effects.append(contentsOf: consumeRegistrations(raw, owner: id))
-            if !allow { blocked = true }
+            if !allow {
+                blocked = true
+            }
         }
         return (blocked, effects)
     }

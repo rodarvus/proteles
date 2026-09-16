@@ -166,6 +166,26 @@ struct TimerEngineTests {
 
     // MARK: - validation
 
+    @Test("A due snapshot rechecks deletion, disabling and reset before each firing")
+    func snapshotRechecksTimerState() throws {
+        var engine = TimerEngine()
+        let removed = try engine.add(MudTimer(schedule: .after(1), action: .send("removed")), now: base)
+        let disabled = try engine.add(MudTimer(schedule: .after(2), action: .send("disabled")), now: base)
+        let reset = try engine.add(MudTimer(schedule: .after(3), action: .send("reset")), now: base)
+        let recurring = try engine.add(MudTimer(schedule: .every(4), action: .send("kept")), now: base)
+        let now = base.addingTimeInterval(10)
+        let snapshot = engine.dueIDs(at: now)
+        #expect(snapshot == [removed, disabled, reset, recurring])
+        engine.remove(id: removed)
+        engine.setEnabled(false, id: disabled)
+        engine.reset(id: reset, now: now)
+        let nextTick = try engine.add(MudTimer(schedule: .after(0), action: .send("next tick")), now: now)
+        let fired = snapshot.compactMap { engine.fire(id: $0, at: now) }
+        #expect(fired.map(\.send) == ["kept"])
+        #expect(engine.fire(id: recurring, at: now) == nil)
+        #expect(engine.dueIDs(at: now) == [nextTick])
+    }
+
     @Test("Invalid schedules are rejected")
     func invalidSchedulesThrow() {
         var engine = TimerEngine()

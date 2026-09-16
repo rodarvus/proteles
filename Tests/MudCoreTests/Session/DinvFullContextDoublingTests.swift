@@ -2,14 +2,9 @@ import Foundation
 @testable import MudCore
 import Testing
 
-/// Non-vacuous reproduction of the live "every dinv bypass send goes out twice"
-/// defect. Earlier dinv "real session" tests were *vacuous*: dinv spins ~5s per
-/// `getConfig` (we never deliver the `config` GMCP to its telnet-sub callback,
-/// so each times out), so within a 4s budget it never reached its fence stage
-/// and no `echo { DINV fence N }` was ever sent — the doubling assertion passed
-/// trivially. This gives dinv the ~15s it needs to time through config and run
-/// its real fence loop, with the app's native plugins registered, then counts
-/// each distinct fence send. Live every such send doubled.
+/// Run real dinv through the session and co-loaded native plugins, then assert
+/// each fence reaches the simulated wire once. Supply a complete character
+/// identity: startup must not proceed from an empty char.base table.
 @Suite("dinv — full-context doubling repro", .serialized)
 struct DinvFullContextDoublingTests {
     init() {
@@ -73,12 +68,14 @@ struct DinvFullContextDoublingTests {
         await controller.dispatchGMCP(GMCPMessage(
             package: "char.status", json: #"{"level":150,"state":3,"pos":"Standing"}"#
         ))
+        await controller.dispatchGMCP(GMCPMessage(
+            package: "char.base", json: #"{"name":"Tester","class":"Mage"}"#
+        ))
         await controller.armBundledDinv(stateDirectory: dir.path)
         await controller.loadPendingDinv()
 
-        // Drive dinv to (and through) its fence loop: keep the active state warm,
-        // auto-reply to each fence echo like the MUD, and give it ~16s to time
-        // through the two config getters and start fencing.
+        // Answer fences through the real timer/send pipeline while the other
+        // plugins' startup timers run. A missing fence must fail the test.
         var answered = Set<String>()
         let deadline = ContinuousClock.now.advanced(by: .seconds(18))
         var tick = 0
@@ -91,7 +88,9 @@ struct DinvFullContextDoublingTests {
             }
             for line in conn.sentLines where line.hasPrefix("echo ") {
                 let reply = String(line.dropFirst("echo ".count))
-                if answered.insert(line).inserted { conn.injectLine(reply) }
+                if answered.insert(line).inserted {
+                    conn.injectLine(reply)
+                }
             }
             try? await Task.sleep(for: .milliseconds(20))
         }

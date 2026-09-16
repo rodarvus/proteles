@@ -5,7 +5,14 @@ verbatim and run through Proteles' MUSHclient compatibility shim (D-32).
 
 - **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin),
   tracked as the repo submodule at `plugins/dinv`.
-- **Vendored version:** 3.0126 (submodule commit `ee45156`; see `dinv.manifest`).
+- **Vendored version:** 3.0127, vendored from the dinv working tree on top of
+  `ee45156` (3.0126) and **accepted in live play on 2026-09-16** (Release build,
+  macOS 27). The `plugins/dinv` submodule is still pinned at `ee45156` because
+  3.0127 has not yet been committed upstream: until it is, regenerate/check this
+  copy with `DINV_SOURCE_DIR` pointing at that checkout, and expect the default
+  pinned-source check (the CI `vendor-check` job) to report drift. Once 3.0127
+  is committed and pushed, bump the submodule pin and replace this paragraph
+  with the usual one-line version + commit.
 - **License:** MIT (see `LICENSE`) — author: Durel (original `aard_inventory`),
   Rodarvus (the v3.x SQLite/modular fork). Bundling is unambiguous: MIT, and the
   Proteles author is the fork maintainer.
@@ -19,7 +26,7 @@ new release: bump the submodule, re-run the script (re-derive the patch if a hun
 no longer applies), update the version/commit above, then rebuild + test.
 
 dinv is a fork of Durel's `aard_inventory`, modernized with a modular Lua
-codebase (`dinv.xml` bootstraps `dinv_init.lua`, which `dofile`s 20 modules),
+codebase (`dinv.xml` bootstraps `dinv_init.lua`, which loads its Lua modules),
 SQLite-backed per-character storage, and a manifest-based updater.
 
 ## How Proteles runs it
@@ -29,7 +36,7 @@ dinv is loaded **verbatim** through the existing 3rd-party compat shim
 miniwindow** (pure text output), so no SwiftUI panel bridge is needed (contrast
 Search-and-Destroy, D-28/D-30). Its modules are registered with the runtime's
 module loader by basename so `dofile(dir .. "dinv_X.lua")` resolves from the
-bundle; its `require`s (wait/check/serialize/tprint/gmcphelper/json) and the
+bundle; its `require`s (check/serialize/tprint/gmcphelper/json) and the
 inert `async` stub are already provided by the shim.
 
 The GitHub self-updater (`dbot.remote`, the only `async`/`io` user) is inert:
@@ -43,7 +50,7 @@ captured in **`scripts/vendor-patches/dinv.patch`** (applied by
 `scripts/vendor-plugins.sh`), so re-syncing a new upstream release is mechanical:
 re-run the script, and re-derive the patch only if a hunk no longer applies. The
 edits are a small set of removed user-command **aliases** in `dinv.xml` (the
-underlying Lua handlers are left untouched) plus two `dinv_dbot.lua` tweaks. (The
+underlying Lua handlers are left untouched) plus one `dinv_dbot.lua` tweak. (The
 flat per-character DB path via `proteles.databaseDir()` is **no longer a local
 edit** — upstream adopted it natively as of this version.)
 
@@ -54,7 +61,7 @@ Removed aliases (`dinv.xml`):
   and in-client self-update isn't a Proteles flow (the app ships dinv).
 - **`dinv backup`** (list / create / delete / restore) — removed. Manual
   backup/restore is an admin flow we don't surface. The *automatic* pre-build
-  backup (`dbot.backup.preBuild`) is internal and still runs.
+  backup (`dbot.backup.preBuild`) is also disabled below.
 - **`dinv migrate`** (confirm) — removed. DB-format migration is an admin flow
   we don't surface.
 
@@ -62,22 +69,8 @@ Removed aliases (`dinv.xml`):
 shim's `DoAfterSpecial(…, sendto.script)`, which the host routes to a clean
 unload + reload of the bundled plugin.
 
-Two more local edits, in `dinv_dbot.lua`:
+The remaining local Lua edit is in `dinv_dbot.lua`:
 
-- **`dbot.wish.setupFn()`** (D-77) — one added line: `EnableTrigger(dbot.wish.
-  trigger.itemName, true)`. Upstream arms the omit-from-output wish-item gag only
-  when its START trigger matches the `wish list` column header
-  (`Base…Cost…Adjustment…Your…Cost…Keyword`). If that header reaches output before
-  the START trigger is live — the post-login probe burst, or trigger teardown from
-  a mid-probe reload — the gag never arms and the whole list prints (the live
-  "wish output ungagged" report). `setupFn` runs inside the safe-exec critical
-  section immediately before the command is sent to the mud, so enabling the item
-  trigger there gags every wish line regardless of header timing; the fence
-  (`dbot.wish.fenceMsg`) still disables it, so it can't over-gag. The START
-  trigger is kept as a harmless belt-and-suspenders, so re-syncing upstream is just
-  deleting this one line. Proven by `DinvWishGagTests.wishBodyGaggedWhenHeaderUnmatched`
-  (with a deliberately non-matching header, the list still gags; reverting the line
-  leaks the whole list).
 - **`dbot.backup.preBuild()`** — neutralized to a no-op. It otherwise creates an
   automatic pre-build backup by copying the SQLite DB file via Lua `io`
   (`copyFile`), but the sandbox excludes `io`, so once the DB has items the
@@ -85,3 +78,15 @@ Two more local edits, in `dinv_dbot.lua`:
   anyway (the `dinv backup` command is removed), so skipping is consistent. The
   other `io` users in dinv (the GitHub version-updater and `dinv_migrate`) sit
   behind the removed `version`/`migrate` commands and aren't reached.
+
+The earlier D-77 wish-parser patch is superseded by upstream's narrow report
+parser, armed before dispatch. It suppresses recognized report lines while
+leaving unrelated output visible, and publishes wishes only after a valid
+header/footer and the coordinator's unique completion fence. No fixed wishlist
+or stat-bonus echo is sent. The September 16 development snapshot also reserves
+complete equipment/portal workflows and retains exact canceled-fence gags.
+
+The accompanying Proteles host change removes the old 80-line wishlist gag that
+waited for `DINV wish list fence`. It must ship together with these resources;
+the real-session tests verify the plugin's parser and unrelated output without
+that host fallback.
