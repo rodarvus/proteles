@@ -51,6 +51,31 @@ struct JSONSerializeHelpersTests {
         #expect(effects == [.echo("1x")])
     }
 
+    @Test("serialize round-trips every Lua keyword as a nested string key")
+    func serializeReservedKeys() async throws {
+        let lua = try await shimmed()
+        let effects = try await lua.run("""
+        require "serialize"
+        local value = { ordinary = "kept", [1] = "number", [false] = "boolean", ["two words"] = "spaced" }
+        local words = "and break do else elseif end false for function if in local nil not or " ..
+                      "repeat return then true until while"
+        for key in words:gmatch("%S+") do value[key] = { [key] = key } end
+        local simple = assert(loadstring("return " .. serialize.save_simple(value)))()
+        assert(loadstring(serialize.save("restored", value)))()
+        for _, result in ipairs({simple, restored}) do
+          assert(result.ordinary == "kept" and result[1] == "number")
+          assert(result[false] == "boolean" and result["two words"] == "spaced")
+          local count = 0
+          for key in words:gmatch("%S+") do
+            assert(result[key][key] == key)
+            count = count + 1
+          end
+          proteles.echo(tostring(count))
+        end
+        """)
+        #expect(effects == [.echo("21"), .echo("21")])
+    }
+
     @Test("json.decode parses into a Lua table")
     func jsonDecode() async throws {
         let lua = try await shimmed()

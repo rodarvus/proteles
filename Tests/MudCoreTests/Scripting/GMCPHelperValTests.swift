@@ -23,6 +23,59 @@ struct GMCPHelperValTests {
         return lua
     }
 
+    @Test("CallPlugin gmcpval returns unquoted scalar values and an empty missing field")
+    func pluginScalarValues() async throws {
+        let lua = try await shimmedPlugin()
+        await lua.applyGMCP(package: "room.info", json: roomInfo)
+        await lua.applyGMCP(package: "char.base", json: #"{"name":"Example"}"#)
+        await lua.applyGMCP(package: "char.status", json: #"{"state":3,"enabled":false}"#)
+        let effects = await lua.runPluginScript("""
+        local id = "3e7dedbe37e44942dd46d264"
+        for _, path in ipairs({"char.status.state", "room.info.zone", "char.base.name",
+                              "char.status.enabled", "char.status.missing"}) do
+          local status, value = CallPlugin(id, "gmcpval", path)
+          assert(status == 0 and type(value) == "string")
+          proteles.send("[" .. value .. "]")
+        end
+        """, pluginID: "p")
+        #expect(effects == [
+            .send("[3]"),
+            .send("[partroxis]"),
+            .send("[Example]"),
+            .send("[false]"),
+            .send("[]")
+        ])
+    }
+
+    @Test("gmcpdata_as_string keeps scalar literals and both plugin accessors serialize tables")
+    func pluginSerializedValues() async throws {
+        let lua = try await shimmedPlugin()
+        await lua.applyGMCP(package: "room.info", json: roomInfo)
+        let effects = await lua.runPluginScript("""
+        local id = "3e7dedbe37e44942dd46d264"
+        for _, path in ipairs({"room.info.num", "room.info.zone", "room.info.missing"}) do
+          local status, literal = CallPlugin(id, "gmcpdata_as_string", path)
+          assert(status == 0)
+          local value = assert(loadstring("return " .. literal))()
+          assert(type(value) == "string")
+          proteles.send("[" .. value .. "]")
+        end
+        for _, fn in ipairs({"gmcpval", "gmcpdata_as_string"}) do
+          local status, literal = CallPlugin(id, fn, "room.info")
+          assert(status == 0)
+          local value = assert(loadstring("return " .. literal))()
+          proteles.send(value.num .. ":" .. value.zone)
+        end
+        """, pluginID: "p")
+        #expect(effects == [
+            .send("[5764]"),
+            .send("[partroxis]"),
+            .send("[]"),
+            .send("5764:partroxis"),
+            .send("5764:partroxis")
+        ])
+    }
+
     @Test("the Partroxis idiom: CallPlugin → gmcpdata → gmcpval(\"num\") is the room id")
     func gmcpvalResolvesAgainstGmcpdata() async throws {
         let lua = try await shimmedPlugin()

@@ -519,14 +519,17 @@ public extension LuaRuntime {
       if id == "b6eae87ccedd84f510b74714" then
         proteles.mapperCall(fn, ...); return error_code.eOK
       end
-      -- Aardwolf GMCP handler: gmcpval/gmcpdata_as_string(path) return a
-      -- Lua-literal string of the GMCP subtree (the reference handler does
-      -- `serialize.save_simple(gmcpdata_at_level(path) or "")`). Bridge to our
-      -- live gmcp() accessor so plugins that fetch GMCP via CallPlugin work.
+      -- The handler's gmcpval returns scalar strings directly, serializing
+      -- only tables. gmcpdata_as_string always returns a Lua literal.
+      -- Quoting scalar gmcpval results breaks state/name/zone comparisons.
       if id == "3e7dedbe37e44942dd46d264" and (fn == "gmcpval" or fn == "gmcpdata_as_string") then
         require "gmcphelper" -- ensure gmcp() is defined
         local args = {...}
-        return error_code.eOK, __toLuaLiteral(gmcp(args[1]))
+        local value = gmcp(args[1])
+        if fn == "gmcpval" and type(value) ~= "table" then
+          return error_code.eOK, value
+        end
+        return error_code.eOK, __toLuaLiteral(value)
       end
       -- Search & Destroy runs natively on its own host runtime. Its read
       -- accessors answer SYNCHRONOUSLY from `__snd_state` — the snapshot the

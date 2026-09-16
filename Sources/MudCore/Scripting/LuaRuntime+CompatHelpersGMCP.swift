@@ -8,9 +8,9 @@ import Foundation
 /// things.
 ///
 ///  1. `CallPlugin("3e7dedbe…", "gmcpval", path)` — a *plugin* entry point on
-///     the GMCP handler. It serialises the subtree at an **absolute** dotted
-///     path (`"room.info"`). Proteles bridges it in
-///     `LuaRuntime+CompatShim.swift`; it is not defined here.
+///     the GMCP handler. It resolves an **absolute** dotted path, returning
+///     scalar strings directly or serialising tables (`"room.info"`). Proteles
+///     bridges it in `LuaRuntime+CompatShim.swift`; it is not defined here.
 ///  2. `gmcpval(fieldname)` — the *global* from `gmcphelper.lua`. It looks a
 ///     field up **relative to the caller's `gmcpdata` global**, which the
 ///     plugin is expected to have just populated from (1).

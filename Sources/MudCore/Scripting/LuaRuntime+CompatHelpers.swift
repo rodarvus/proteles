@@ -321,8 +321,15 @@ extension LuaRuntime {
     /// with `loadstring(...)()`. No cycle handling (matches `save_simple`'s
     /// contract; sufficient for the flat state tables plugins persist).
     private static let serializeSource = """
+    -- Lua keywords require bracketed keys even when they look like identifiers.
+    local reserved = {}
+    for word in string.gmatch(
+      "and break do else elseif end false for function if in local nil not or " ..
+      "repeat return then true until while",
+      "%S+"
+    ) do reserved[word] = true end
     local function isIdentifier(key)
-      return type(key) == "string" and key:match("^[%a_][%w_]*$") ~= nil
+      return type(key) == "string" and not reserved[key] and key:match("^[%a_][%w_]*$") ~= nil
     end
     local function literal(value)
       local t = type(value)
