@@ -1,384 +1,255 @@
-# Proteles — Claude working notes
+# Proteles — working notes for Claude
 
-Proteles is a native macOS MUD client focused exclusively on **Aardwolf**.
-Swift 6, strict concurrency. The technical design doc is **ARCHITECTURE.md**
-(read it first); the append-only decision log is **docs/DECISIONS.md**, where
-every decision is recorded as **D-NN** (those IDs are referenced across the
-codebase). This file is the operating manual: how to work in the repo, the hard
-rules, and the gotchas.
+Proteles is a native macOS MUD client for **Aardwolf** only — Swift 6, strict
+concurrency — with an iOS port in progress. Read **ARCHITECTURE.md** first (the
+design, and §0 for what works today). Decisions are recorded as **D-NN** in
+**docs/DECISIONS.md** (append-only; the IDs are cited across the code). This
+file covers how to work in the repo: the rules, the workflow, and the traps.
 
-## Current status
+## Where things stand
 
-**Feature-complete for 1.0. Shipped `v0.8.5`** (build 53; tag + GitHub release,
-**notarized Developer-ID build**; `scripts/release.sh` runs the
-build→sign→notarize→staple→verify flow). The build-out phases are **done**; the
-work now is **UI/UX polish + live-play debugging** ahead of tagging 1.0. Everything
-in the planned 1.0 scope ships: the MUSHclient import (D-101), the native mapper,
-Search-and-Destroy + dinv, the Plugin Library, the six-bar HUD, the native
-soundpack (#10, D-109 — bundled CC0 cues, `Settings/soundpack.json`), and
-text-to-speech (#9, D-110 — `Settings/speech.json`, Settings ▸ Audio). The
-`v0.7.x` line has been a scrollback/render/resume-correctness arc: the TextKit
-document is bounded at 10k lines independently of the store (#65), resume fills
-panels in one batch (#42), and chat intake reverted to direct-append (#57). The
-`v0.8.x` line adds client identification (TTYPE/MTTS/NAWS), the per-character
-mapper DB split (D-111), pending group invitations, a ground-up command input
-rewrite on `NSTextView` (#71), a broad MUSHclient plugin-compatibility expansion
-(`rex`/PCRE, the `Database*` SQLite API, trigger/alias/timer introspection +
-group-delete, `OpenBrowser`), a custom colour theme editor, and a public
-per-plugin compatibility reference (`docs/PLUGIN_COMPATIBILITY.md`, from the
-AardCentral community-plugin sweep). ~1836 tests, four gates green. See
-**ARCHITECTURE.md §0** for what works and **docs/DECISIONS.md** for history.
+- **macOS:** feature-complete for 1.0; the latest release is the newest `v*` tag
+  (`gh release list`). The remaining 1.0 gate is UI/UX polish against
+  **docs/DESIGN.md** (the UX north-star; `ux` label) plus live-play debugging.
+- **Current arc: the iOS port** — governed by **docs/plans/IOS_PORT_PLAN.md**
+  (decisions D-116–D-125). It opens with the macOS-side **Semantic Core arc**:
+  S0a (semantic events, #82), S0b (actionable state, #84), S1 (sound on the event
+  layer, #83). These ship as ordinary macOS releases before the iOS UI phases.
+  Read the plan's **§1.5** before changing the arc's shape. Accessibility work is
+  deferred (D-120), but the iOS output view must still expose a per-line
+  accessibility tree.
 
-**Current work (from 2026-08-21): the iOS port.**
-`docs/plans/IOS_PORT_PLAN.md` (v0.4) is the governing plan; D-116/D-117/D-118/
-D-119/**D-120** are its decisions. It opens with a macOS-side **Semantic Core
-arc** — **S0** (a `SemanticEvent` layer consolidating the three independent
-line-matchers) then **S1** (sound rebuilt on it) — which ship as ordinary macOS
-releases *before* the iOS UI phases, preceded by **I0a** (the iOS package/CI
-slice). Accessibility work is **deferred** (D-120 — no VI users); read the plan's
-**§1.5** for *why* the arc exists before changing its shape. macOS UI/UX polish
-toward 1.0 continues alongside.
+## Rules that are not negotiable
 
-## Backlog — GitHub Issues are the source of truth
+1. **Propose before you design.** Approval of a goal is not approval of a
+   design, and "go ahead" approves only the next step. Before writing code that
+   adds an abstraction, changes a contract, moves work between layers, or
+   changes user-visible behaviour, write a proposal and wait (see *Proposing
+   work*). This applies to plumbing and foundations too, and to every
+   Aardwolf-package plugin port.
+2. **No guessing on the mapper, Search-and-Destroy, or game output.** Read the
+   reference implementation and the live databases; if it is still ambiguous,
+   ask. A wrong guess costs the user a live-test round-trip; a question costs
+   one message.
+3. **Never launch the app.** Build, install to `~/Applications`, clear
+   quarantine (`xattr -dr com.apple.quarantine`). The user launches and
+   live-tests. Anything you hand over is a **Release** build.
+4. **Reference submodules are read-only** (`submodules/`, `plugins/`). Read them
+   freely; never modify them.
+5. **Commit to `main`; pushes are user-gated.** No feature branches.
 
-**All pending work — bugs, follow-ups, deferred features, the 1.0 gate — lives
-in GitHub Issues** (`gh issue list`), not in the docs. When you finish something
-tracked there, close its issue (`gh issue close <n>`); when you discover new
-deferred work, **open an issue** rather than burying it in a plan doc (that's
-how items got silently dropped in a past rewrite). Use `gh issue create` with a
-clear body + a source-doc pointer; labels in use: `bug`, `enhancement`,
-`mapper`, `accessibility`, `tech-debt`, `qa`, `1.0`, `documentation`.
+## Proposing work
 
-- **ARCHITECTURE.md** keeps the *narrative* (architecture, what's built); the
-  *decision log* (D-NN) is **docs/DECISIONS.md**. Neither enumerates the
-  backlog — they point here.
-- **`docs/DESIGN.md`** is the **UI/UX north-star** (what Proteles should feel
-  like, ranked design principles, per-surface intent). UI/UX is the primary
-  remaining gate to 1.0; design/polish work is checked against it and tracked
-  under the GitHub `ux` label.
-- **`docs/KNOWN_ISSUES.md`** is a historical record (the stub audit, resolved
-  items); its actionable entries were migrated to Issues. Don't add new backlog
-  there.
-- **`docs/plans/*`** hold the *detailed design* for a feature; the *tracking* is
-  the Issue that links to the plan.
+Start a stage by quoting its scope **verbatim** from the D-NN entry and
+confirming your reading matches the user's. Then propose:
 
-## Reference submodules — ALWAYS research them first
+- **What** changes — files, types, seams, call paths.
+- **What does not** change — stated explicitly, so silence isn't read as scope.
+- **Options and trade-offs**, including the rejected one and why.
+- **Impact** — behaviour, performance, what could regress.
 
-The repo vendors reference clients + plugins as git submodules — reference clients
-under **`submodules/`**, reference plugins under **`plugins/`**. **Reference-only;
-never modify.** You have standing approval to read/search them at any time.
-- `submodules/mushclient/` — Nick Gammon's MUSHclient (the Aardwolf community's
-  client; the Lua world-API reference, `MUSHclient.cpp`).
-- `submodules/mudlet/` — Mudlet (`src/ctelnet.cpp` for telnet/GMCP/copyover, the
-  engines).
-- `submodules/aardwolfclientpackage/` — Aardwolf's MUSHclient plugin package
-  (channels, GMCP handler, mapper, soundpack, …).
-  `lua/{gmcphelper,aardwolf_colors,mapper}.lua`.
-- `plugins/search-and-destroy/` — the canonical S&D (the version the user runs +
-  we vendored). Ignore `Search-and-Destroy-V2`/`WinkleGold_*` under
-  `MUSHclient-live-from-windows/` — the user does NOT run those.
-- `plugins/dinv/` — the inventory manager (~26k LOC; multi-file `dofile`/`require`,
-  lsqlite3, no miniwindows).
-- `plugins/leveldb/` — the leveling-DB plugin (the Levels window reads it).
+If you disagree with a ratified decision, ask about it, quoting the D-NN text.
+Don't propose a quiet re-scope.
 
-**Aardwolf data feeds — read before parsing ANY game output.**
-`docs/AARDWOLF_DATA_FEEDS.md` is the measured map of which information is
-structural (GMCP), which is structural-but-opt-in (tags), and which is
-**player-configurable prose** that must not be pattern-matched casually —
-`damage 0–6` alone gives seven different combat output shapes, `shortflags`
-changes aura rendering, `spamreduce` deletes whole message classes, and the
-prompt is user-composed. Ordering rule: **GMCP > tags > line patterns**. It also
-records which tag families anything actually enables (very few), and that
-enabling tags disables the game's scroll/paging.
+The S-phases are deliberately an enablement gate built **ahead of** their
+consumers; the frameworks are platform-independent and the recordings corpus
+proves them. "It has no consumer yet" is therefore not a reason to cut or defer
+a ratified S-phase item. D-120's derive-from-a-named-consumer rule guards
+against inventing speculative *shapes*, not against building ratified *scope*.
+Build each item small and well.
 
-**iOS-port references** (vendored 2026-07 for the iOS port,
-`docs/plans/IOS_PORT_PLAN.md`; same research-first rule applies to all
-iOS/mobile work):
-- `submodules/swiftterm/` — SwiftTerm (MIT): native Swift terminal view with
-  split UIKit/AppKit front-ends — the architectural template for
-  `MudOutputView_iOS` (selection, CoreText metrics, keyboard handling).
-- `submodules/mudrammer/` — MUDRammer (MIT): the canonical shipped iOS MUD
-  client (telnet/ANSI pipeline, world/trigger UI, VoiceOver patterns).
-- `submodules/blowtorch/` — BlowTorch (MIT): Aardwolf's official Android
-  client; Lua/plugin/miniwindow model + the button-set/long-press touch UX.
-- `submodules/blink/` — Blink Shell (**GPL-3 — study only, NEVER copy code**;
-  same rule as `mudlet`): iOS keyboard handling (SmartKeys), hardware-keyboard
-  remap, session-resilience patterns, multi-scene lifecycle.
-- `submodules/mudslinger/` — Mudslinger (MIT): the websocket→telnet proxy
-  architecture (browser client + `telnet_proxy/`), from an Aardwolf-family
-  developer — the reference for the later session-proxy phase.
+## Evidence and verification
 
-(`iterm2/` was removed — it was never used.) When implementing, designing, or
-fixing any Aardwolf/MUD feature, investigate how these handle it **first** — they
-encode years of protocol quirks and UX. The same applies to iOS/mobile work:
-validate output-view, input, lifecycle, and proxy designs against the iOS-port
-references above before inventing behaviour.
+A green test suite shows the code agrees with itself. It is not evidence about
+live behaviour.
 
-## NO GUESSING on the mapper & Search-and-Destroy (hard rule)
+- **Recordings are the ground truth.** Every connect writes a human-readable
+  `.log` (RECV/SEND/INPUT/NOTE/GMCP, plus `GAG` with the withheld line and
+  reason) beside a raw `.jsonl`, under `~/Documents/Proteles/Recordings/`. When
+  live behaviour diverges from a test, read a transcript first.
+- **No behavioural claim without recording evidence.** If a change is said to
+  fix something the user experiences, show the instances in the recordings. If
+  you can't, say "structural only, no observed instances".
+- **Reproduce first.** A bug-fix test must fail without the fix; a test that
+  encodes your own hypothesis proves nothing.
+- **Confirm the binary has the change** before handing it over — with `nm` on
+  a symbol (or the dSYM for Release), not `strings`: Swift inlines string
+  literals ≤15 bytes, so `strings` gives false negatives.
+- Transcript times are UTC (`…Z`); `stat` times are local. Don't compare them
+  raw.
+- For byte-level telnet/MCCP2 inspection (option negotiation, outbound replies
+  you can't see directly), see **docs/RECORDINGS.md**.
 
-Do **not** invent behaviour, regexes, command semantics, schema, or query shapes
-from intuition. The user has forbidden guessing here.
-1. **Read the reference** for the exact behaviour — mapper:
-   `submodules/aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
-   `worlds/plugins/aard_GMCP_mapper.xml` (room/area search uses FTS
-   `rooms_lookup*` — don't reinvent `find`/`where`); S&D: the
-   `plugins/search-and-destroy/` submodule; world-API: `submodules/mushclient/`.
-2. **Use the live DBs the user provided** (`MUSHclient-live-from-windows/Aardwolf.db`,
-   `SnDdb.db`) — query with `sqlite3` to confirm real schema/columns/shapes before
-   writing code or tests.
-3. **If ambiguous — ASK.** A wrong guess wastes a live-test round-trip; a question
-   costs one message.
+### Game output: GMCP > tags > line patterns
 
-This generalises to all live-debugging: **verify against a captured recording,
-not a passing isolated test.** Every connect auto-writes a timestamped
-human-readable `.log` (`SessionTranscript`) beside the binary `.jsonl`, under
-`~/Documents/Proteles/Recordings/`, logging RECV/SEND/INPUT/NOTE/GMCP + a `GAG`
-category (withheld line + reason). When live behaviour diverges from a green unit
-test, **read a transcript first.** A passing isolated test that encodes your own
-hypothesis proves nothing — reproduce the bug so the test **fails without the
-fix**, and after a code change **build + install + confirm the binary contains
-it** before asking the user to test. (Don't compare a UTC `…Z` transcript time
-against a local `stat` time — that hour mismatch once invented a phantom "the
-recording predates the build".)
+Read **docs/AARDWOLF_DATA_FEEDS.md** before parsing any game output. Much of
+Aardwolf's text is player-configurable (`damage 0–6` alone gives seven combat
+shapes; `shortflags`, `spamreduce`, and the user-composed prompt all change
+output), so prefer GMCP, then tags, and match prose only when nothing
+structural exists. Enabling tag families disables the game's paging.
 
-**Inspecting telnet/MCCP2 at the byte level** (e.g. terminal-type/option
-negotiation): the human `.log` holds only decoded text — no telnet control bytes
-— and the `.jsonl` holds **inbound raw wire only** (per-record base64 `bytes`;
-*outbound is not recorded*, so you can never see our replies, only what the
-server sent). After MCCP2 activates the inbound stream is **zlib-compressed**, so
-a raw byte search finds nothing past that point — you must **decompress**: find
-the marker `FF FA 56 FF F0` (`IAC SB COMPRESS2 IAC SE`), `zlib`-inflate
-everything after it, and prepend the plaintext preamble. Then search the
-combined buffer for negotiation (`FF FD/FE/FB/FC <opt>`, `FF FA <opt> … FF F0`).
-A server `SB TTYPE SEND` appearing in the decompressed stream *proves* we replied
-`WILL TTYPE` (the server only sends it after our `WILL`) — that's how you confirm
-an outbound reply you can't see directly.
+### Mapper and S&D references
 
-```python
-import json, base64, zlib
-raw = b"".join(base64.b64decode(json.loads(l)["bytes"]) for l in open(PATH) if '"bytes"' in l)
-i = raw.find(bytes([0xFF,0xFA,0x56,0xFF,0xF0]))
-full = raw[:i] + zlib.decompressobj().decompress(raw[i+5:])   # plaintext preamble + inflated
-```
+- Mapper: `submodules/aardwolfclientpackage/MUSHclient/lua/mapper.lua` +
+  `worlds/plugins/aard_GMCP_mapper.xml`. Room/area search uses the FTS
+  `rooms_lookup*` tables — don't reinvent `find`/`where`.
+- S&D: `plugins/search-and-destroy/` (the version the user runs). Ignore
+  `Search-and-Destroy-V2` and `WinkleGold_*` under
+  `MUSHclient-live-from-windows/`.
+- World API: `submodules/mushclient/`.
+- Live data: `MUSHclient-live-from-windows/Aardwolf.db` and `SnDdb.db` — query
+  them with `sqlite3` to confirm schema and shapes before writing code or tests.
 
-**`nm`, not `strings`, to confirm a Swift change is in a binary.** Swift inlines
-string literals ≤15 UTF-8 bytes (small-string optimisation), so `strings | grep
-"ANSI-TRUECOLOR"` returns nothing even when the code is present — a false
-negative that once led to a wrong "the build is missing the change". Grep `nm`
-for the **symbol** (e.g. a function name like `terminalTypeReply`) instead.
+### Performance and hot paths
 
-## Architecture (SwiftPM, one `Package.swift`)
+Anything that runs per inbound line, per GMCP packet, or per frame needs a
+measurement plan agreed **before** implementing.
 
-The pattern that keeps it testable: **pure, value-type engines in MudCore**
-(`TriggerEngine`/`AliasEngine`/`TimerEngine`/`SubstitutionEngine`/`MapLayout`/
-`Pathfinder`/`PatternMatcher`/parsers) *decide*; **actors** (`ScriptEngine` over
-the Lua runtime; `SearchAndDestroyHost` over a *second, dedicated* runtime;
-`Mapper`) *orchestrate* and emit `ScriptEffect` values; **`SessionController`**
-(actor) *applies* effects (sends, scrollback, published models). So logic stays
-unit-testable without UI/network/Lua.
+- Measure A/B against a **same-day control build** (the previous commit,
+  Release, identified by the transcript's `build:` line). Historical figures
+  drift (#86) and can't serve as a baseline.
+- **Normalise per event** (per kill), not per burst; burst counts move with
+  script latency.
+- Bursts are where regressions show (the ~7–9 lines after a kill). Probes:
+  `render: … arrival→paint`, `perf:`/`perf-burst:` phase timings, bucketed
+  near-kill vs elsewhere.
+- Traps: moving work ahead of the guard that used to skip it, and adding an
+  actor hop per line into a contended actor.
+- **Never compare Debug against Release.** Debug is ~2.3× slower per line;
+  that gap once read as a code regression for three days. Debug is for gate
+  runs and crash-chasing only.
 
-- **MudCore** — platform-agnostic core (networking, telnet, ANSI, MCCP2,
-  pipeline, session, GMCP, scripting + Lua runtime, mapper, S&D host). No UI.
-- **MudUI** — SwiftUI views (`#if os(macOS)` for macOS bits). Depends on MudCore.
-- **MudOutputView_macOS** — AppKit/TextKit 2 output view. Depends on MudCore.
-- C targets: `CLua` (Lua 5.1.5), `CZlib` (MCCP2), `CLSQLite3` (lsqlite3).
-- App: `apps/ProtelesApp_macOS/` — XcodeGen-generated (`project.yml`).
+## Handover
 
-Plugin layering: **S&D runs on its OWN dedicated runtime with curated bindings**
-(NOT the generic shim); **dinv runs verbatim through the generic `mush.lua` shim**
-(it has no miniwindow); arbitrary 3rd-party plugins use the shim; the load-bearing
-package plugins are **native ports** (`NativePlugin`). The native mapper is
-read-compatible with the MUSHclient `Aardwolf.db`.
-
-## Gotchas to remember
-- **600-line file budget** (swiftlint `file_length` → `--strict` error). When a
-  file crosses 600, **split it** (a new `Type+Feature.swift` extension) or refactor
-  a function — **do NOT compact/delete doc comments to squeak under** (the "why"
-  is the point; split files instead). `SessionController.swift` + its extensions
-  ride the edge — prefer a new `SessionController+Feature.swift` for new logic.
-  (Stored properties can't live in an extension; methods can.)
-- **swiftformat ↔ swiftlint** occasionally disagree (e.g. a multiline `for…where`
-  or `while` puts `{` on its own line, which swiftlint's `opening_brace` rejects) —
-  rewrite the code (collapse the condition / extract a predicate) so both pass,
-  never disable a rule.
-- **New app-target files need `xcodegen generate`** before `xcodebuild` (the
-  `.xcodeproj` is generated + gitignored). New MudCore/MudUI files don't (SwiftPM).
-- **Actor `init` can't call isolated methods** — inline the work or use a
-  `nonisolated static` helper.
-- Build test/release apps to `/tmp/proteles-build/...`, **never** into the repo
-  tree (swiftformat/swiftlint would scan the build output).
-
-## Local code signing (one-time)
-
-The app signs with a stable self-signed dev identity **`Proteles Dev`**. Run once
-on a new machine: `./scripts/create-dev-signing-cert.sh`. Without it, `xcodebuild`
-falls back to ad-hoc signing (no stable code identity), so macOS re-prompts for
-Keychain access on every build. Releases use a real **Developer ID Application**
-cert (since `v0.4.5`) via `scripts/release.sh`. (CI only runs `swift build`/`swift
-test`, so it never needs either cert.)
-
-## Staged work — PROPOSE, then implement (hard rule)
-
-**"Go ahead" is tactical approval for the immediate next step. It is NEVER
-latitude to make architectural decisions.** Approval of a *goal* is not approval
-of a *design*. Before writing code that introduces an abstraction, changes an
-existing contract, moves work between layers, or alters behaviour the user can
-observe, put a written proposal in front of the user and wait:
-
-- **What** specifically will change — files, types, seams, call paths.
-- **What will NOT change** — stated explicitly, so silence isn't read as scope.
-- **Trade-offs and options**, including the one not chosen and why.
-- **Impact**: behaviour, performance, and what could regress.
-
-This applies to **all** work, not only plugin ports — cross-cutting foundations
-and plumbing are exactly where unreviewed design decisions do the most damage.
-
-### Start every stage by quoting the ratified scope
-
-**Before proposing anything for a stage, quote its scope verbatim from the
-`D-NN` entry, and confirm that reading matches the user's.** Only then propose.
-
-**If you disagree with a ratified decision, raise it as a question — never as a
-proposal that quietly changes scope.** The plan is the user's; a disagreement is
-input to their decision, not grounds to re-scope on your own authority.
-
-This exists because of a specific, repeated failure mode: generating a plausible
-local frame and then acting on it as though it were the agreed frame. It has
-produced (a) a "fix" for a bug that had never occurred, justified by an invented
-benefit nobody checked against the corpus; (b) a performance "regression"
-measured by comparing a Debug build against a Release baseline; and (c) a
-proposal to defer three of S0's four remaining items on a "no consumer" argument,
-when D-118 names all four as scope and the exit criterion names notifications as
-a consumer. Each was caught by the user, not by the model.
-
-Note especially (c): **S0–S3 are deliberately a platform/framework enablement
-gate.** They are built *ahead* of their consumers on purpose — the frameworks are
-platform-independent, and the recordings corpus is what informs their design and
-proves them correct. "It has no consumer yet" is therefore not an argument
-against building an S-phase item; it is a restatement of what the arc is for.
-Derive-from-a-named-consumer (D-120) guards against inventing *speculative
-shapes* — it does not license shrinking a ratified phase.
-
-### Evidence rules
-
-- **No behavioural claim without recording evidence.** If a change is said to fix
-  something the user experiences, show the instances in
-  `~/Documents/Proteles/Recordings` first. If they can't be shown, say
-  **"structural only, no observed instances"** — never present an architectural
-  tidy-up as a user-facing fix. (This is not hypothetical: a "gagged lines no
-  longer make noise" fix was shipped for review after zero of 593,246 gagged
-  lines across four sessions would have fired a sound.)
-- **A green test suite is not evidence about live behaviour.** It shows the code
-  agrees with itself.
-
-### Hot-path changes need a measurement plan agreed up front
-
-Anything running per inbound/displayed line, per GMCP packet, or per render
-frame: agree the before/after measurement *before* implementing. Compare against
-recordings, not intuition — and note that **burst behaviour is where regressions
-show**. A per-line cost is invisible in ordinary output and obvious in the ~7–9
-line burst after a kill. Useful probes: `render: … arrival→paint`, and the
-`perf:`/`perf-burst:` phase timings, bucketed near-kill versus elsewhere.
-
-Two traps found the hard way: putting work **before** the guard that used to
-skip it (a muted soundpack did zero regex work; moving classification ahead of
-the mute check made it unconditional), and adding an **extra actor hop** per
-line into an already-contended actor.
-
-Two more, from the same arc. **Baselines drift:** plugin-script execution slowed
-~10 % per week over two weeks on an unchanged `v0.8.8` binary (#86), so a pass
-condition of "within noise of last month's figure" is unfalsifiable — it fails a
-correct change or passes a broken one depending on the calendar. Measure a
-hot-path change **A/B against a same-day control build** (the previous commit,
-Release, identified by the `build:` transcript line), never against a
-historical number. And **normalise per event (per kill), not per burst**: the
-burst count itself moves with script latency, which once turned a 10 % change
-into a phantom 3×.
-
-### Handover format
-
-Every hand-off states these four separately, and never blurs them:
+Every hand-off states these four separately:
 
 1. **What changed** (and what did not)
-2. **What I verified** — with the command and result
-3. **What I did NOT verify** — especially anything only the user can see
+2. **What I verified** — command and result
+3. **What I did not verify** — especially anything only the user can see
 4. **What could regress**
 
-## Definition of done — the four gates
+## Architecture
 
-Before committing, ALL must pass (from repo root):
-1. `swift build`
-2. `swift test --parallel`
-3. `swiftformat --lint .`
-4. `swiftlint --strict`
+One SwiftPM `Package.swift`. **Pure value-type engines in MudCore decide**
+(`TriggerEngine`, `AliasEngine`, `TimerEngine`, `SubstitutionEngine`,
+`MapLayout`, `Pathfinder`, `PatternMatcher`, parsers, `Semantic/`);
+**actors orchestrate** and emit `ScriptEffect` values (`ScriptEngine` over the
+Lua runtime, `SearchAndDestroyHost` over a second dedicated runtime, `Mapper`);
+**`SessionController` applies** effects. Logic stays testable without UI,
+network, or Lua.
 
-**Plus the iOS gate when the change touches MudCore, `Package.swift`, or
-`Sources/CLua`** (since the iOS port, #81):
+- **MudCore** — platform-agnostic core; builds for macOS and iOS. No UI.
+- **MudUI** — SwiftUI (`#if os(macOS)` for macOS-only parts).
+- **MudOutputView_macOS** — AppKit/TextKit 2 output view.
+- C targets: `CLua` (Lua 5.1.5), `CZlib` (MCCP2), `CLSQLite3` (lsqlite3).
+- App: `apps/ProtelesApp_macOS/`, generated by XcodeGen from `project.yml`.
+
+**Plugins:** S&D runs on its own runtime with curated bindings. dinv and
+arbitrary third-party plugins run through the generic MUSHclient compat shim
+(`Sources/MudCore/Scripting/LuaRuntime+CompatShim*.swift`). The load-bearing
+Aardwolf-package plugins are native ports (`NativePlugin`). The native mapper
+reads the MUSHclient `Aardwolf.db`.
+
+**Vendored plugins** (dinv, leveldb) ship from `Sources/MudCore/Resources/<p>/`
+and are generated from the `plugins/<p>` submodule plus
+`scripts/vendor-patches/<p>.patch` by `scripts/vendor-plugins.sh`. CI runs
+`--check`. To update: move the submodule, re-run the script, update that
+plugin's `PROVENANCE.md`.
+
+## Reference submodules — research them first
+
+When implementing or fixing any Aardwolf/MUD or iOS feature, check how these
+handle it first; they encode years of protocol quirks and UX.
+
+- `submodules/mushclient/` — MUSHclient; the Lua world-API reference.
+- `submodules/mudlet/` — Mudlet; `src/ctelnet.cpp` for telnet/GMCP/copyover.
+  **GPL — study only, never copy code.**
+- `submodules/aardwolfclientpackage/` — Aardwolf's MUSHclient plugin package
+  (`lua/{gmcphelper,aardwolf_colors,mapper}.lua`).
+- `plugins/search-and-destroy/`, `plugins/dinv/`, `plugins/leveldb/` — the
+  plugins Proteles runs or reads.
+- iOS: `submodules/swiftterm/` (output-view template), `submodules/mudrammer/`
+  (shipped iOS MUD client), `submodules/blowtorch/` (Aardwolf's Android client,
+  touch UX), `submodules/mudslinger/` (websocket→telnet proxy),
+  `submodules/blink/` (keyboard/lifecycle; **GPL-3 — study only, never copy**).
+
+## Definition of done
+
+From the repo root, all must pass before committing:
+
+```sh
+swift build
+swift test --parallel
+swiftformat --lint .
+swiftlint --strict
+```
+
+When the change touches MudCore, `Package.swift`, or `Sources/CLua`, also:
 
 ```sh
 xcodebuild test -scheme MudCore-iOS -destination 'platform=iOS Simulator,name=iPhone 18 Pro'
 ```
 
-(A bare `name=` resolves against the *newest* installed iOS runtime only, so the
-device must exist there — Xcode 27's iOS 27 runtime renamed the flagship to
-`iPhone 18 Pro`; `iPhone 17 Pro` is 26.5-only and fails with exit 70.)
+`MudCore-iOS` is a checked-in shared scheme containing only MudCore +
+MudCoreTests. Don't use the package-wide scheme: it drags in the macOS-only
+targets and `-only-testing:` doesn't prune the build. A bare `name=` resolves
+against the newest installed iOS runtime, so the device must exist there.
 
-`MudCore-iOS` is a **checked-in shared scheme**
-(`.swiftpm/xcode/xcshareddata/xcschemes/`, deliberately un-gitignored) holding
-only MudCore + MudCoreTests. Don't substitute the package-wide scheme: SwiftPM
-cannot exclude a target per-platform, so it drags in MudUI +
-MudOutputView_macOS and fails on any iOS destination — and `-only-testing:`
-does *not* prune the build. CI runs this as the `iOS Tests (simulator)` job.
-`Sources/CLua/PROVENANCE.md` documents the per-platform Lua C flags and the one
-vendored-source patch iOS needs.
+Don't run the iOS gate concurrently with `swift test`: the TextKit timing
+spike tests (P99 < 16 ms) fail under CPU contention.
 
-## Workflow conventions
-- **Porting an Aardwolf-package plugin** (ARCHITECTURE.md §7/§10): for every plugin —
-  native *feature* or native *plugin* — **PROPOSE a plan first (analysis,
-  trade-offs, options) and wait for approval.** Do NOT port directly. None run
-  through the generic shim (that stays for arbitrary 3rd-party plugins).
-  Cross-cutting foundations and app/UI plumbing are **not** exempt — see
-  **Staged work** above; they need a proposal too.
-- New logic gets thorough tests; prefer pure value-type models in MudCore.
-- Commit straight to `main` (no feature branches); **pushes are user-gated.**
-  Logical commits with detailed *why* messages; co-author trailer
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- **Never launch the app** — build only, install to `~/Applications`, clear
-  quarantine (`xattr -dr com.apple.quarantine`); the user launches + live-tests.
-- **Hand over RELEASE builds, always.** `-configuration Release`, never Debug.
-  **Debug is 2.30x slower** (measured: 34.2µs vs 14.9µs per line through the
-  classifier), which is enough to make ordinary play feel wrong and enough to
-  fake a convincing performance regression. Handing over a Debug build cost
-  three days once: kill-burst paint latency went 437ms → 765ms purely from the
-  build configuration, and the difference was attributed to a code change.
-  Debug is for *my* gate runs (`swift build`/`swift test` are Debug already) and
-  for chasing a crash or an assertion — never for anything the user launches,
-  and never for anything measured.
-- **Never compare performance across builds without knowing their configuration.**
-  Recordings do not record it today (see
-  `docs/plans/BURST_INSTRUMENTATION_PROPOSAL.md` §1).
+## Gotchas
 
-### Release flow
-1. Bump `apps/ProtelesApp_macOS/project.yml` — **both** the marketing version
-   (`CFBundleShortVersionString` + `MARKETING_VERSION`) **and the build number**
-   (`CFBundleVersion` + `CURRENT_PROJECT_VERSION`, must strictly increase).
-   Sparkle compares the *build number*, so forgetting it ships an un-updatable
-   release (this bit `v0.5.0` build 40 == `v0.4.12`). `release.sh` now aborts if
-   the build isn't greater than the latest published.
-2. Run **`scripts/release.sh`** (`PROTELES_SIGN_IDENTITY` + `PROTELES_NOTARY_PROFILE`;
-   it runs `xcodegen` itself): clean Release build → Developer-ID sign (hardened
-   runtime + secure timestamp) → `notarytool submit --wait` → staple → `spctl`
-   verify → zipped artifact. It does **not** tag/publish — it prints the next steps.
-3. `git tag -a v<ver>` + push; `gh release create v<ver> <zip> --latest`.
-4. **`./scripts/publish-appcast.sh <zip>`** — generate + EdDSA-sign the appcast and
-   publish it (+ zip + deltas) to `gh-pages`. **A release is not done without this**
-   — it's what makes installed copies auto-update. See `docs/SPARKLE_SETUP.md`.
-5. **`./scripts/check-release.sh`** — assert the release is published, not a draft.
-   **Gotcha:** never delete/move the `v<ver>` tag after creating the release —
-   GitHub orphans it into an untagged **draft** (this stranded `v0.5.0`); re-cuts
-   need `gh release edit v<ver> --draft=false --latest`.
+- **600-line file limit** (`file_length`, an error under `--strict`). Split into
+  a `Type+Feature.swift` extension or refactor; never trim doc comments to fit.
+  `SessionController` rides the edge — put new logic in a new
+  `SessionController+Feature.swift`. Stored properties can't live in
+  extensions.
+- **swiftformat vs swiftlint** sometimes disagree (e.g. a multi-line `for…where`
+  brace). Rewrite the code so both pass; never disable a rule.
+- **Lua inside Swift `"""` strings**: the compat shim is a non-raw string, so a
+  Lua `"\n"` must be written `"\\n"` — including in Lua comments, where a real
+  newline ends the comment and breaks the whole shim. The shim is several Lua
+  chunks; a `local` in one is invisible in another.
+- **New app-target files need `xcodegen generate`** before `xcodebuild`. New
+  SwiftPM-target files don't.
+- **Actor `init` can't call isolated methods** — inline, or use a
+  `nonisolated static` helper.
+- **Build output goes to `/tmp/proteles-build/…`**, never the repo tree (the
+  linters would scan it).
 
-**Releases ship a notarized Developer-ID build** (since `v0.4.5`);
-`docs/NOTARIZATION.md` + `docs/SPARKLE_SETUP.md` document the flow. The signing
-cert, `proteles-notary` keychain profile, and the Sparkle **EdDSA private key**
-live only on the release machine — never commit them.
+## Workflow
+
+- New logic gets thorough tests; prefer pure value types in MudCore.
+- Commits: conventional style (`fix(area):`, `feat(area):`, `docs:`, `chore:`)
+  with a message that explains *why*. End with the attribution trailer the
+  harness supplies.
+- **Backlog lives in GitHub Issues** (`gh issue list`), not docs. Close an issue
+  when its work lands; open one for any new deferred work. Labels: `bug`,
+  `enhancement`, `ux`, `ios`, `mapper`, `accessibility`, `tech-debt`, `qa`,
+  `1.0`, `documentation`. `docs/plans/*` hold detailed designs (the Issue links
+  to them); `docs/KNOWN_ISSUES.md` is historical — don't add to it.
+- **Code signing:** dev builds sign with the self-signed `Proteles Dev`
+  identity (one-time `./scripts/create-dev-signing-cert.sh`; without it macOS
+  re-prompts for Keychain access every build). Releases use Developer ID.
+
+## Releasing
+
+1. Bump `apps/ProtelesApp_macOS/project.yml`: the marketing version
+   (`CFBundleShortVersionString` + `MARKETING_VERSION`) **and** the build number
+   (`CFBundleVersion` + `CURRENT_PROJECT_VERSION`). Sparkle compares build
+   numbers, so it must strictly increase; `release.sh` aborts otherwise.
+2. `scripts/release.sh` (needs `PROTELES_SIGN_IDENTITY`,
+   `PROTELES_NOTARY_PROFILE`): clean Release build → sign → notarize → staple →
+   verify → zip. It does not tag or publish.
+3. `git tag -a v<ver>`, push the tag, `gh release create v<ver> <zip> --latest`.
+4. `./scripts/publish-appcast.sh <zip>` — without this, installed copies never
+   auto-update. A release isn't done until this runs.
+5. `./scripts/check-release.sh` — asserts the release is published, not a draft.
+
+Never delete or move a `v<ver>` tag after creating its release: GitHub turns the
+release into an untagged draft (fix with
+`gh release edit v<ver> --draft=false --latest`). Details:
+`docs/NOTARIZATION.md`, `docs/SPARKLE_SETUP.md`. The signing cert, notary
+profile, and Sparkle EdDSA key live only on the release machine — never commit
+them.
