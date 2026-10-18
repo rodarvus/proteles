@@ -617,7 +617,7 @@ function inv.consume.get(typeName, size, containerId)
 
       -- If we found a matching item instance, return it!
       if (finalId ~= nil) then
-        dbot.debug("(" .. countColor .. count .. " available@W) " ..
+        dbot.info("(" .. countColor .. count .. " available@W) " ..
                   "Consuming L" .. entry.level .. " \"@C" .. typeName .. "@W\" @Y" ..
                   (inv.items.getStatField(finalId, invStatFieldName) or "") .. "@W")
 

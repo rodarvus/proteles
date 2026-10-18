@@ -14,7 +14,7 @@
 
 inv.analyze                  = {}
 inv.analyze.setsPkg          = nil
-inv.analyze.timeoutThreshold = 60
+inv.analyze.timeoutThreshold = 300
 
 
 function inv.analyze.sets(priorityName, minLevel, skipLevel, resultData, intensity)

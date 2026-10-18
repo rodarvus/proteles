@@ -5,14 +5,7 @@ verbatim and run through Proteles' MUSHclient compatibility shim (D-32).
 
 - **Upstream:** https://github.com/rodarvus/dinv (the author's own plugin),
   tracked as the repo submodule at `plugins/dinv`.
-- **Vendored version:** 3.0127, vendored from the dinv working tree on top of
-  `ee45156` (3.0126) and **accepted in live play on 2026-09-16** (Release build,
-  macOS 27). The `plugins/dinv` submodule is still pinned at `ee45156` because
-  3.0127 has not yet been committed upstream: until it is, regenerate/check this
-  copy with `DINV_SOURCE_DIR` pointing at that checkout, and expect the default
-  pinned-source check (the CI `vendor-check` job) to report drift. Once 3.0127
-  is committed and pushed, bump the submodule pin and replace this paragraph
-  with the usual one-line version + commit.
+- **Vendored version:** 3.0130 (`d752b73`).
 - **License:** MIT (see `LICENSE`) — author: Durel (original `aard_inventory`),
   Rodarvus (the v3.x SQLite/modular fork). Bundling is unambiguous: MIT, and the
   Proteles author is the fork maintainer.

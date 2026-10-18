@@ -2,10 +2,31 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0130] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc = [[Identification: let an already-dispatched response finish when later commands are sent. If input arrives before dispatch, establish a fresh opening fence within the original deadline. Retain identity validation, state checks and cancellation cleanup.]]
+  }
+}
+
+dbot.changelog[3.0129] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc = [[Allow five minutes for equipment analysis. Preserve explicit missing-item responses and continue refreshing other items; retain full-scan reconciliation and abort on other errors. Restore the available-item count to informational consumption output.]]
+  }
+}
+
+dbot.changelog[3.0128] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc = [[Portal: admit initialized requests during the temporary Running state so the existing coordinator can wait for actions to be allowed. Retain initialization checks, other state restrictions, deadlines, cancellation, and equipment restoration checks.]]
+  }
+}
+
 dbot.changelog[3.0127] =
 {
   { change = drlDbotChangeLogTypeMisc,
-    desc = [[Replace polling command queues with owned requests and event-driven completion. Load saved inventory before optional startup probes; retain server prompt settings. Stage inventory and identification responses before publication. Add dinv status and dinv cancel. Reserve complete equipment and portal workflows, wait through temporary Running state within existing deadlines, and verify final equipment locations. Use narrow stats/wish/pagesize captures that tolerate unrelated play and retain exact canceled-fence suppression. Remove redundant report echoes and skip empty equipment batches. Keep consumption summaries while moving item/cache detail to debug output. Live validation of the latest corrections is pending.]]
+    desc = [[Replace polling command queues with owned requests and event-driven completion. Load saved inventory before optional startup probes; retain server prompt settings. Stage inventory and identification responses before publication. Add dinv status and dinv cancel. Reserve complete equipment and portal workflows, wait through temporary Running state within existing deadlines, and verify final equipment locations. Use narrow stats/wish/pagesize captures that tolerate unrelated play and retain exact canceled-fence suppression. Remove redundant report echoes and skip empty equipment batches. Keep consumption summaries while moving item/cache detail to debug output.]]
   }
 }
 

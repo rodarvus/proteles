@@ -147,6 +147,13 @@ function inv.commands.dispatch(op)
     inv.commands.cancel(op, DRL_RET_NOT_ACTIVE)
     return
   end
+  -- Input sent after the opening echo belongs before identification. Wait for
+  -- a new boundary, including input received between that echo and this turn.
+  if op.identification and op.refreshPrefix then
+    op.refreshPrefix = nil
+    inv.commands.armMarker(op, "prefix")
+    return
+  end
   if op.beforeDispatch then
     local ok, retval = pcall(op.beforeDispatch, op)
     if not ok then dbot.warn("Request precondition: " .. tostring(retval)) end
@@ -301,6 +308,12 @@ function inv.commands.userInput(command)
   if rawSnapshot then inv.commands.needsBoundary = true end
   local op = inv.commands.active
   if not op or op.done then return end
+  if op.identification then
+    -- After dispatch, later commands follow the already-sent closing fence.
+    -- Before dispatch, move the opening boundary past the intervening input.
+    if not op.setupStarted then op.refreshPrefix = true end
+    return
+  end
   -- Only reports capture unrelated text. Pure command bursts need a unique
   -- acknowledgement, so ordinary output cannot corrupt them. Framed inventory
   -- reports only conflict with raw requests, which have no protocol request ID.

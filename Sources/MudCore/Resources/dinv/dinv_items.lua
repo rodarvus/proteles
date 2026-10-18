@@ -1250,67 +1250,73 @@ function inv.items.identifyCR(maxNumItems, refreshLocations)
       end -- if
     end -- if
 
-    if retval ~= DRL_RET_SUCCESS then break end
+    if (retval == DRL_RET_MISSING_ENTRY) then
+      -- Inventory can change between discovery and identification. Leave missing
+      -- entries for full-refresh reconciliation after all containers are scanned.
+      retval = DRL_RET_SUCCESS
+    elseif (retval ~= DRL_RET_SUCCESS) then
+      break
+    else
+      -- If the item is an instance of a frequently acquired item (potion, pill, etc.) add it
+      -- to the "frequently acquired item" cache if it is not already in the cache.
+      -- Grab the latest name because it may have been filled in during the ID
+      name = inv.items.getStatField(objId, invStatFieldName)
+      if (name ~= nil) then
 
-    -- If the item is an instance of a frequently acquired item (potion, pill, etc.) add it
-    -- to the "frequently acquired item" cache if it is not already in the cache.
-    -- Grab the latest name because it may have been filled in during the ID
-    name = inv.items.getStatField(objId, invStatFieldName)
-    if (name ~= nil) then
+        -- invdata strips out commas in the names of items.  As a result, we won't find items in
+        -- the cache unless we also store them in a form without commas.
+        name = string.gsub(name, ",", "")
 
-      -- invdata strips out commas in the names of items.  As a result, we won't find items in
-      -- the cache unless we also store them in a form without commas.
-      name = string.gsub(name, ",", "")
+        local cacheEntry = inv.cache.get(inv.cache.frequent.table, name)
+        if (cacheEntry == nil) then
 
-      local cacheEntry = inv.cache.get(inv.cache.frequent.table, name)
-      if (cacheEntry == nil) then
+          -- NOTE: Wands and staves may not be completely identical.  The # charges can vary.  Also,
+          --       in some game-load cases, they can vary in level.  Nevertheless, the advantages of
+          --       treating wands/staves as being identical so that they can be in the frequent cache
+          --       outweigh the disadvantages.  If you buy 100 starburst staves, you really don't want
+          --       to manually identify each one :p
+          itemType = inv.items.getStatField(objId, invStatFieldType)
+          if (itemType == invmon.typeStr[invmonTypePotion]) or
+             (itemType == invmon.typeStr[invmonTypePill])   or
+             (itemType == invmon.typeStr[invmonTypeFood])   or
+             (itemType == invmon.typeStr[invmonTypeWand])   or
+             (itemType == invmon.typeStr[invmonTypeStaff])  or
+             (itemType == invmon.typeStr[invmonTypeScroll]) then
 
-        -- NOTE: Wands and staves may not be completely identical.  The # charges can vary.  Also,
-        --       in some game-load cases, they can vary in level.  Nevertheless, the advantages of
-        --       treating wands/staves as being identical so that they can be in the frequent cache
-        --       outweigh the disadvantages.  If you buy 100 starburst staves, you really don't want
-        --       to manually identify each one :p
-        itemType = inv.items.getStatField(objId, invStatFieldType)
-        if (itemType == invmon.typeStr[invmonTypePotion]) or
-           (itemType == invmon.typeStr[invmonTypePill])   or
-           (itemType == invmon.typeStr[invmonTypeFood])   or
-           (itemType == invmon.typeStr[invmonTypeWand])   or
-           (itemType == invmon.typeStr[invmonTypeStaff])  or
-           (itemType == invmon.typeStr[invmonTypeScroll]) then
-
-          colorName = inv.items.getField(objId, invFieldColorName)
-          retval = inv.cache.add(inv.cache.frequent.table, objId)
-          if (retval ~= DRL_RET_SUCCESS) then
-            dbot.warn("inv.items.identifyCR: Failed to add \"" .. (colorName or name or "Unidentified") ..
-                      "@W\" to frequent item cache: " .. dbot.retval.getString(retval))
-          else
-            dbot.note("Added \"" .. (colorName or "Unidentified") .. "@W\" to frequent item cache")
+            colorName = inv.items.getField(objId, invFieldColorName)
+            retval = inv.cache.add(inv.cache.frequent.table, objId)
+            if (retval ~= DRL_RET_SUCCESS) then
+              dbot.warn("inv.items.identifyCR: Failed to add \"" .. (colorName or name or "Unidentified") ..
+                        "@W\" to frequent item cache: " .. dbot.retval.getString(retval))
+            else
+              dbot.note("Added \"" .. (colorName or "Unidentified") .. "@W\" to frequent item cache")
+            end -- if
           end -- if
         end -- if
       end -- if
-    end -- if
 
-    -- Check if the custom cache has additional details for this item.  For example, we might have
-    -- custom keywords or an organize query for the item.
-    local cachedEntry = inv.cache.get(inv.cache.custom.table, objId)
-    if (cachedEntry ~= nil) then
-      -- Merge any cached keywords into the item's keywords field
-      if (cachedEntry.keywords ~= nil) and (cachedEntry.keywords ~= "") then
-        local oldKeywords = inv.items.getStatField(objId, invStatFieldKeywords) or ""
-        local mergedKeywords = dbot.mergeFields(cachedEntry.keywords, oldKeywords) or cachedEntry.keywords
-        inv.items.setStatField(objId, invStatFieldKeywords, mergedKeywords)
-        dbot.debug("Merged cached keywords = \"" .. mergedKeywords .. "\"")
+      -- Check if the custom cache has additional details for this item.  For example, we might have
+      -- custom keywords or an organize query for the item.
+      local cachedEntry = inv.cache.get(inv.cache.custom.table, objId)
+      if (cachedEntry ~= nil) then
+        -- Merge any cached keywords into the item's keywords field
+        if (cachedEntry.keywords ~= nil) and (cachedEntry.keywords ~= "") then
+          local oldKeywords = inv.items.getStatField(objId, invStatFieldKeywords) or ""
+          local mergedKeywords = dbot.mergeFields(cachedEntry.keywords, oldKeywords) or cachedEntry.keywords
+          inv.items.setStatField(objId, invStatFieldKeywords, mergedKeywords)
+          dbot.debug("Merged cached keywords = \"" .. mergedKeywords .. "\"")
+        end -- if
+
+        -- Use any cached organize queries that exist
+        if (cachedEntry.organize ~= nil) and (cachedEntry.organize ~= "") then
+          inv.items.setStatField(objId, invQueryKeyOrganize, cachedEntry.organize)
+          dbot.debug("Cached organize queries = \"" .. cachedEntry.organize .. "\"")
+        end -- if
       end -- if
 
-      -- Use any cached organize queries that exist
-      if (cachedEntry.organize ~= nil) and (cachedEntry.organize ~= "") then
-        inv.items.setStatField(objId, invQueryKeyOrganize, cachedEntry.organize)
-        dbot.debug("Cached organize queries = \"" .. cachedEntry.organize .. "\"")
-      end -- if
+      -- Save this item incrementally so identification progress survives a crash
+      dinv_db.saveItem(objId, inv.items.table[objId])
     end -- if
-
-    -- Save this item incrementally so identification progress survives a crash
-    dinv_db.saveItem(objId, inv.items.table[objId])
 
   end -- for objId,_ in pairs
 
@@ -5062,7 +5068,7 @@ function inv.items.trigger.itemIdStart(line)
     string.find(line, "There is no auction item with that id") or
     string.find(line, "There is no marketplace item with that id") or
     string.find(line, "does not have that item for sale") then
-    inv.items.trigger.itemIdEnd()
+    inv.items.trigger.itemIdEnd(false, DRL_RET_MISSING_ENTRY)
     return DRL_RET_MISSING_ENTRY
   end -- if
 
@@ -5109,7 +5115,7 @@ function inv.items.trigger.itemIdStats(line)
   if line:match("Name%s+:") or line:match("Level%s+:") then package.sawDetails = true end
 end -- inv.items.trigger.itemIdStats
 
-function inv.items.trigger.itemIdEnd(completed)
+function inv.items.trigger.itemIdEnd(completed, failure)
   local package = inv.items.identifyPkg
   EnableTrigger(inv.items.trigger.itemIdStartName, false)
   EnableTrigger(inv.items.trigger.itemIdStatsName, false)
@@ -5117,7 +5123,7 @@ function inv.items.trigger.itemIdEnd(completed)
   DeleteTrigger(inv.items.trigger.itemIdEndName)
   dbot.deleteTimer(inv.items.timer.idTimeoutName)
   if not package then return DRL_RET_SUCCESS end
-  local retval = DRL_RET_TIMEOUT
+  local retval = failure or DRL_RET_TIMEOUT
   if completed and not package.invalid then retval = inv.items.commitIdentification(package) end
   package.retval = retval
   inv.items.identifyPkg = nil
