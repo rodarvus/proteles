@@ -76,9 +76,9 @@ public struct SessionReplayer: Sendable {
     }
 
     /// Replay every chunk through `pipeline`, collecting all emitted
-    /// `Line`s and any negotiation responses the pipeline produced.
-    /// `pipeline.flush()` is called once at the end so a trailing
-    /// partial line is not silently lost.
+    /// `Line`s, decoded GMCP messages, and any negotiation responses the
+    /// pipeline produced. `pipeline.flush()` is called once at the end so a
+    /// trailing partial line is not silently lost.
     public func replay(
         into pipeline: inout LinePipeline
     ) throws -> ReplayOutput {
@@ -86,6 +86,7 @@ public struct SessionReplayer: Sendable {
         for chunk in chunks {
             let output = try pipeline.consume(Array(chunk.bytes))
             result.lines.append(contentsOf: output.lines)
+            result.gmcp.append(contentsOf: output.gmcp)
             result.responses.append(contentsOf: output.responses)
             if output.activatedCompression {
                 result.compressionActivations += 1
@@ -99,6 +100,11 @@ public struct SessionReplayer: Sendable {
     /// Aggregate output across an entire replay.
     public struct ReplayOutput: Sendable, Equatable {
         public var lines: [Line] = []
+        /// Every GMCP message the pipeline decoded, in arrival order. The
+        /// pipeline always produced these; until S0a item 7 the replayer
+        /// dropped them, which made `comm.quest`/`comm.repop`/channel events
+        /// unreplayable (`docs/plans/S0A_ITEM7_PROPOSAL.md` §3.1).
+        public var gmcp: [GMCPMessage] = []
         public var responses: [[UInt8]] = []
         public var compressionActivations: Int = 0
     }

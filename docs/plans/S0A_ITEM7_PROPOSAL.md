@@ -1,8 +1,10 @@
 # S0a item 7 — transcript-driven replay tests
 
-> **Status: design proposal. No code written.** Tracking: **#82**. Shape
-> agreed 2026-09-16 after review: **local corpus replay, nothing uploaded**,
-> with **invariants plus pin-and-diff** ("B with (iii)").
+> **Status: approved 2026-10-19 (§6 answered yes, yes, yes); implemented the
+> same day; first pin run (§7) reviewed and accepted; committed. S0a complete.**
+> Tracking: **#82**. Shape agreed 2026-09-16 after
+> review: **local corpus replay, nothing uploaded**, with **invariants plus
+> pin-and-diff** ("B with (iii)"). Implementation notes in §8.
 
 ## 1. The ratified scope, verbatim
 
@@ -151,6 +153,70 @@ goes in §7. Per-session progress is printed so a long run is visibly alive.
 4. After approval: I implement, run the first pin, and hand you the summary
    to review before item 7 is called done.
 
-## 7. First run (to be filled in)
+## 7. First run (2026-10-19)
 
-Sessions, lines, GMCP messages, events by name and tier, wall-clock time.
+`PROTELES_REPLAY=1 swift test --filter CorpusReplay`, Debug, on the whole
+local corpus:
+
+| | |
+|---|---|
+| Sessions | 410 (all pinned; 305 carry spellup tags, 105 do not) |
+| Lines decoded | 49,348,057 |
+| GMCP messages | 4,374,598 |
+| Invariant violations | **0** |
+| Wall clock | 4,007 s (66.8 min); the largest session is 935k lines |
+| Baseline on disk | 410 files, 53 MB, under `~/Documents/Proteles/Diagnostics/replay-baseline/` |
+
+Events by tier (the full list is in the run log; the baselines hold every
+event with its line index):
+
+| Tier | Events | The large ones |
+|---|---|---|
+| tag | 341,899 | `affect_on` 152,475 · `affect_off` 152,271 · `cast_failed` 18,382 · `skill_gain` 16,828 · `recovery_on`/`off` 972/971 |
+| gmcp | 67,837 | `clantalk` 24,924 · `zone_repop` 6,631 · `auction` 6,329 · `claninfo` 5,110 · `gossip` 3,893 · quest lifecycle ~5,000 |
+| pattern | 54,706 | `cp_mob_dead` 22,424 · `sh_powerup` 12,089 · `info` 7,980 · `level_up` 5,996 · `quest_target_found` 1,912 · `bonus_item` 1,243 |
+| **all** | **464,442** | |
+
+Three things worth the reviewer's eye, none a defect:
+
+- **On/off pairs balance.** `affect_on` 152,475 vs `affect_off` 152,271;
+  `recovery_on` 972 vs `recovery_off` 971. The gaps are affects still
+  running at session end.
+- **Two events exist at two tiers.** `quest_warning` fires 88 times from
+  `comm.quest` and 14 from the prose rule (`QUEST: You have run out of
+  time…`); `gtell` 498 from GMCP and 21 from the group-invite prose rules the
+  reference maps to that name. Both are the GMCP > pattern ordering rule
+  showing: the layer emits both, and a consumer prefers the durable tier by
+  `Source.durability`. S1 decides whether to dedupe at the cue.
+- **The disabled path held.** All 105 sessions without spellup tags yielded
+  zero affect events.
+
+The 66 minutes is Debug and single-threaded by design (one pass, one
+session in memory at a time). It is a deliberate, occasional run, not a
+gate; if it ever needs to be routine, a Release test build and per-session
+parallelism are the two obvious levers, neither needed now.
+
+## 8. Implementation notes (2026-10-19)
+
+Built as specified in §3, with four notes:
+
+- **One pass, two suites.** The invariants and the pin-and-diff are separate
+  suites for separate failure messages, but a 658 MB replay must not run
+  twice per `swift test`. `CorpusReplayRun.shared` runs the corpus once,
+  lock-guarded, and both suites read its result. Each session's lines are
+  released before the next is read, so memory stays at one session.
+- **Independent recognisers, on purpose.** The invariants restate the six
+  event tags, their field counts, and the `comm.quest` action table in the
+  test file rather than calling the router or the classifier for the
+  expectation. A recogniser that shares code with the thing it checks can
+  only agree with it. A self-test feeds the invariants a deliberately wrong
+  session (dropped tag event, stray tag event, mislabelled category, missing
+  repop) and requires all five violations.
+- **Event position.** A GMCP event takes the index of the first line emitted
+  after it. The pipeline does not preserve interleaving inside a chunk, so
+  this is "near here", good enough to find the moment in the `.log`.
+- **The corpus grew** from 194 recordings / 244 MB at proposal time to 410 /
+  658 MB at first run. §2's figures stand as written; §7 has the real ones.
+
+Gates: build, 2,152 tests across the three targets, swiftformat, swiftlint,
+and the iOS simulator gate (run after the corpus pass, not alongside it).
