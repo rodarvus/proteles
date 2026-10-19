@@ -509,7 +509,9 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   are out of scope.
 
   *Exit:* the layer classifies real recorded sessions correctly under test;
-  sound/speech/notifications consume it with zero behaviour regressions.
+  sound/notifications consume it with zero behaviour regressions. (Speech
+  consuming the layer, placed here by D-122, is deferred with the accessibility
+  work by **D-126**; the existing TTS stays as-is.)
 
 - **S1 — Sound as a real feature.** Event→cue map as data (per-event +
   per-category volumes under a master, pan, variants); a `sound` action on GUI
