@@ -1,20 +1,25 @@
 import AppKit
 import AVFoundation
 import MudCore
+import MudUI
 import SwiftUI
 
-/// Settings ▸ Audio (#10 + #9): the soundpack's master controls and the
-/// text-to-speech preferences. Both edit their hand-editable Settings JSON
-/// (`soundpack.json` / `speech.json`) and ask the session to reload the
-/// owning native plugin, so changes land live — the same state the `spset`
-/// and `tts` console commands mutate. Per-event sound tuning stays on the
-/// command surface (`spset` — 69 events don't belong in a window).
+/// Settings ▸ Audio (#10 + #9): the soundpack's master controls, its
+/// per-category volume caps with a preview of every event (S1 step 6), and
+/// the text-to-speech preferences. Both edit their hand-editable Settings
+/// JSON (`soundpack.json` / `speech.json`) and ask the session to reload the
+/// owning native plugin, so changes land live — the same state the `spset`,
+/// `spcat` and `tts` console commands mutate. Per-event volume, pan and
+/// files stay on the command surface (`spset`; D-122: no per-event controls).
 struct AudioSettingsView: View {
     let session: SessionController
 
     @State private var soundpack = SoundpackConfig.load(from: try? SoundpackConfig.defaultURL())
     @State private var speech = SpeechConfig.load(from: try? SpeechConfig.defaultURL())
     @State private var voiceOverRunning = NSWorkspace.shared.isVoiceOverEnabled
+    /// Plays previews: its own player, so a preview sounds even while event
+    /// sounds are off, resolved exactly as the session's cues are.
+    @State private var previewPlayer = CuePlayerController()
 
     var body: some View {
         Form {
@@ -22,7 +27,8 @@ struct AudioSettingsView: View {
                 Toggle("Play event sounds", isOn: soundsEnabled)
                 Text("Cues for tells, channels, quest events, level-ups and more — the Aardwolf "
                     + "soundpack. Your own files in Sounds/ override the built-in set; tune "
-                    + "individual events with `spset`.")
+                    + "individual events with `spset`. Notification sounds play even when this "
+                    + "is off.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 LabeledContent("Volume") {
@@ -41,6 +47,14 @@ struct AudioSettingsView: View {
                     }
                 }
             }
+            SoundCategoriesSection(
+                config: $soundpack,
+                onCommit: {
+                    saveSoundpack()
+                    reloadSoundpack()
+                },
+                preview: { previewPlayer.play($0) }
+            )
             Section("Speech") {
                 Picker("Speak", selection: speechMode) {
                     Text("Nothing").tag(SpeechMode.off)

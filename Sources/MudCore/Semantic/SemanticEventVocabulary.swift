@@ -63,6 +63,12 @@ public enum SemanticEventVocabulary {
         categories[event]
     }
 
+    /// The events in `category`, by name — what Settings ▸ Audio lists under
+    /// each category (S1 step 6).
+    public static func events(in category: SemanticEvent.Category) -> [String] {
+        categories.filter { $0.value == category }.map(\.key).sorted()
+    }
+
     // MARK: - The groupings
 
     /// Channels, tells, says and socials — anything another *person* sent.
