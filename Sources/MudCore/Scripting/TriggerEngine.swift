@@ -207,6 +207,10 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
     public var script: String?
     /// Restyle the line on match (D-105) — nil leaves the MUD's colours alone.
     public var highlight: TriggerHighlight?
+    /// Play a sound on match (S1 step 4): emits an event into the semantic
+    /// layer, whether or not the line is displayed — as MUSHclient plays a
+    /// trigger's sound for an omitted line.
+    public var sound: TriggerSound?
 
     public init(
         id: UUID = UUID(),
@@ -222,7 +226,8 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         sendText: String? = nil,
         sendTo: TriggerTarget = .world,
         script: String? = nil,
-        highlight: TriggerHighlight? = nil
+        highlight: TriggerHighlight? = nil,
+        sound: TriggerSound? = nil
     ) {
         self.id = id
         self.name = name
@@ -238,11 +243,12 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         self.sendTo = sendTo
         self.script = script
         self.highlight = highlight
+        self.sound = sound
     }
 
-    /// Tolerant decode: ``sendTo`` (D-105) and ``highlight`` are additions —
-    /// triggers stored before them decode with the old behaviour (send to
-    /// the MUD, no restyle).
+    /// Tolerant decode: ``sendTo`` (D-105), ``highlight`` and ``sound`` are
+    /// additions — triggers stored before them decode with the old behaviour
+    /// (send to the MUD, no restyle, silent).
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -259,6 +265,7 @@ public struct Trigger: Sendable, Identifiable, Equatable, Codable {
         sendTo = try container.decodeIfPresent(TriggerTarget.self, forKey: .sendTo) ?? .world
         script = try container.decodeIfPresent(String.self, forKey: .script)
         highlight = try container.decodeIfPresent(TriggerHighlight.self, forKey: .highlight)
+        sound = try container.decodeIfPresent(TriggerSound.self, forKey: .sound)
     }
 }
 
@@ -277,6 +284,10 @@ public struct TriggerFiring: Sendable, Equatable {
     public let gag: Bool
     /// Restyle to apply to the displayed line (D-105), if any.
     public let highlight: TriggerHighlight?
+    /// The sound to emit (S1 step 4), if any.
+    public let sound: TriggerSound?
+    /// The trigger's name, for the emitted event's source.
+    public let triggerName: String?
 }
 
 /// Matches incoming lines against a sorted set of triggers (ARCHITECTURE.md §8.6).
@@ -374,7 +385,9 @@ public struct TriggerEngine {
                 target: trigger.sendTo,
                 script: trigger.script,
                 gag: trigger.gag,
-                highlight: trigger.highlight
+                highlight: trigger.highlight,
+                sound: trigger.sound,
+                triggerName: trigger.name
             ))
             if trigger.oneShot { oneShotsToRemove.append(trigger.id) }
             if !trigger.continueEvaluation { break }

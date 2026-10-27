@@ -149,6 +149,22 @@ public struct SoundpackConfig: SettingsFileBacked, Equatable {
         return (cue, pick)
     }
 
+    /// The cue a trigger's file sound plays (S1 step 4): its own file, at
+    /// ``TriggerSound/triggerSoundEvent``'s effective volume and pan — so
+    /// `spcat custom` and `spset trigger_sound volume` both cap it. Nil at
+    /// volume 0.
+    public func triggerCue(file: String) -> SoundCue? {
+        let event = TriggerSound.triggerSoundEvent
+        let percent = effectiveVolume(for: event)
+        guard !file.isEmpty, percent > 0 else { return nil }
+        return SoundCue(
+            file: file,
+            volume: SoundVolume.linearGain(forPercent: Double(percent)),
+            pan: SoundVolume.pan(forMushPan: Double(pan(for: event))),
+            event: event
+        )
+    }
+
     /// An index in `0..<count`, never `avoiding` when there is a choice.
     static func pick(count: Int, avoiding previous: Int?, random: (Int) -> Int) -> Int {
         guard count > 1 else { return 0 }

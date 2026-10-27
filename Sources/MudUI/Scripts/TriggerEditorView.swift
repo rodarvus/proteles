@@ -49,6 +49,8 @@ struct TriggerEditorView: View {
                 }
             }
 
+            TriggerSoundSection(sound: $trigger.sound)
+
             Section("Test") {
                 PatternTestView(pattern: trigger.pattern, caseSensitive: trigger.caseSensitive)
             }

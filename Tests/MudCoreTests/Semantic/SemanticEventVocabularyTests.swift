@@ -37,12 +37,14 @@ struct SemanticEventVocabularyTests {
     }
 
     /// The reverse direction: a category entry naming an event no built-in
-    /// source produces is dead weight, and usually a typo. Two sources today:
-    /// the soundpack's prose pack and the tag-family router.
+    /// source produces is dead weight, and usually a typo. Three sources
+    /// today: the soundpack's prose pack, the tag-family router, and a
+    /// trigger's file sound (S1 step 4).
     @Test("No category entry names an unknown event")
     func vocabularyHasNoStrays() {
         let strays = SemanticEventVocabulary.categories.keys
             .filter { SoundEventClassifier.defaults[$0] == nil && !AardwolfTags.eventNames.contains($0) }
+            .filter { $0 != TriggerSound.triggerSoundEvent }
             .sorted()
         #expect(strays.isEmpty, "categorised events nothing built-in fires: \(strays)")
     }
@@ -59,7 +61,8 @@ struct SemanticEventVocabularyTests {
             ("affect", SemanticEventVocabulary.affect),
             ("inventory", SemanticEventVocabulary.inventory),
             ("group", SemanticEventVocabulary.group),
-            ("system", SemanticEventVocabulary.system)
+            ("system", SemanticEventVocabulary.system),
+            ("custom", SemanticEventVocabulary.custom)
         ]
         for (indexA, (nameA, setA)) in groups.enumerated() {
             for (nameB, setB) in groups.dropFirst(indexA + 1) {

@@ -48,6 +48,9 @@ public enum SemanticEventVocabulary {
         for name in system {
             table[name] = .system
         }
+        for name in custom {
+            table[name] = .custom
+        }
         return table
     }()
 
@@ -120,5 +123,11 @@ public enum SemanticEventVocabulary {
     /// rather than by a person.
     static let system: Set<String> = [
         "info", "restore", "manor_doorbell", "scry"
+    ]
+
+    /// Proteles's own, not the reference's: the one event a trigger's file
+    /// sound plays as (S1 step 4, D-127 (3)).
+    static let custom: Set<String> = [
+        TriggerSound.triggerSoundEvent
     ]
 }

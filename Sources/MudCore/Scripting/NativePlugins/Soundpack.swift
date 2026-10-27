@@ -98,9 +98,16 @@ public struct Soundpack: NativePlugin {
     }
 
     /// Any source: GMCP, tag or pattern. An event with no cue in the table
-    /// (the tag-sourced `affect_on`, `skill_gain` …) plays nothing.
+    /// (the tag-sourced `affect_on`, `skill_gain` …) plays nothing. A
+    /// trigger's file sound carries its file in the payload (S1 step 4).
     public mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect] {
         guard !config.muted else { return [] }
+        if event.name == TriggerSound.triggerSoundEvent {
+            guard let file = event.payload[TriggerSound.filePayloadKey],
+                  let cue = config.triggerCue(file: file)
+            else { return [] }
+            return [.playSound(cue)]
+        }
         return cueEffects(for: event.name)
     }
 

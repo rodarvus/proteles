@@ -96,7 +96,8 @@ public enum MUSHclientScriptMapping {
                 continueEvaluation: rule.keepEvaluating,
                 sendText: isScript || send.isEmpty ? nil : send,
                 sendTo: target,
-                script: isScript && !send.isEmpty ? send : nil
+                script: isScript && !send.isEmpty ? send : nil,
+                sound: TriggerSound.imported(rule.sound)
             )
         }
     }

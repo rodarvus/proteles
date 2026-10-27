@@ -69,6 +69,11 @@ public extension ScriptEngine {
                 // D-105: route the expanded send per the trigger's target.
                 disposition.effects.append(Self.sendEffect(send, target: firing.target))
             }
+            // S1 step 4: a trigger's sound is an event into the layer, applied
+            // like its sends — whether or not the line is displayed.
+            if let event = firing.sound?.event(for: firing.triggerName ?? firing.triggerID.uuidString) {
+                disposition.effects.append(contentsOf: nativePlugins.onSemanticEvent(event))
+            }
             if let script = firing.script {
                 let owner = automationOwners[firing.triggerID]
                 // Plugin triggers: %1/%0/%<name> in the body are substituted with

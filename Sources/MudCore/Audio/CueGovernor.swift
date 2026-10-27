@@ -46,9 +46,14 @@ public struct CueGovernor: Sendable {
     public init() {}
 
     /// The key a cue is rate-limited on: its event, or its file when a
-    /// plugin played it directly.
+    /// plugin played it directly. Every trigger file sound shares one event
+    /// (`trigger_sound`), so those key on their file: two different files are
+    /// two things happening (S1 step 4).
     static func key(for cue: SoundCue) -> String {
-        cue.event ?? "file:" + cue.file
+        guard let event = cue.event, event != TriggerSound.triggerSoundEvent else {
+            return "file:" + cue.file
+        }
+        return event
     }
 
     /// Decide on `cue` arriving at `time` (seconds, any monotonic clock). On

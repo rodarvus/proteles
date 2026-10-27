@@ -22,7 +22,8 @@ enum PluginMapping {
             continueEvaluation: attributes["keep_evaluating"] == "y",
             gag: attributes["omit_from_output"] == "y",
             sendText: sendText,
-            script: script
+            script: script,
+            sound: TriggerSound.imported(attributes["sound"])
         )
     }
 

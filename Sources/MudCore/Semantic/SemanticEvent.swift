@@ -53,6 +53,11 @@ public struct SemanticEvent: Sendable, Equatable {
         /// Server broadcasts addressed to everyone rather than to the player:
         /// `INFO:`, restores, auctions, market, notes.
         case system
+        /// Something the player's own trigger matched, with a sound file
+        /// attached (S1 step 4, D-127 (3)). The layer can't know what a
+        /// user's pattern means, so it doesn't guess; the category exists so
+        /// those sounds have their own volume cap.
+        case custom
     }
 
     /// Where the classification came from, in the tiering

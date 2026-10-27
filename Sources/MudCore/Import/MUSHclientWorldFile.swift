@@ -147,6 +147,8 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
         public var keepEvaluating: Bool
         public var group: String?
         public var name: String?
+        /// `sound` — a trigger's sound file path, as MUSHclient stored it.
+        public var sound: String?
 
         public init(
             match: String = "",
@@ -158,7 +160,8 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
             ignoreCase: Bool = false,
             keepEvaluating: Bool = false,
             group: String? = nil,
-            name: String? = nil
+            name: String? = nil,
+            sound: String? = nil
         ) {
             self.match = match
             self.send = send
@@ -170,6 +173,7 @@ public struct MUSHclientWorldFile: Sendable, Equatable {
             self.keepEvaluating = keepEvaluating
             self.group = group
             self.name = name
+            self.sound = sound
         }
     }
 
@@ -255,7 +259,8 @@ public enum MUSHclientWorldParser {
                 ignoreCase: attrs["ignore_case"]?.lowercased() == "y",
                 keepEvaluating: attrs["keep_evaluating"]?.lowercased() == "y",
                 group: attrs["group"].flatMap { $0.isEmpty ? nil : $0 },
-                name: attrs["name"].flatMap { $0.isEmpty ? nil : $0 }
+                name: attrs["name"].flatMap { $0.isEmpty ? nil : $0 },
+                sound: attrs["sound"]
             )
         }
 
