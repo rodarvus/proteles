@@ -86,13 +86,14 @@ extension SessionController {
             && !richExitsGag
             && !tagResult.gag
         if shouldDisplay {
-            // Semantic effects (#82) apply only here: the line survived every
-            // gag, so it is what the player actually saw. A gagged line drops
-            // them below, which is why they are held separately from
-            // `disposition.effects`.
+            // Prose semantic effects (#82) apply only here: the line survived
+            // every gag, so it is what the player actually saw. A gagged line
+            // drops them below, which is why they are held separately from
+            // `disposition.effects`. Tag-sourced (structural) effects apply on
+            // both paths (D-128).
             return await finishDisplayedLine(
                 tagResult.line,
-                effects: disposition.effects + disposition.semanticEffects
+                effects: disposition.effects + disposition.semanticEffects + disposition.structuralEffects
             )
         }
         return await finishGaggedLine(
@@ -176,8 +177,11 @@ extension SessionController {
         reasons: LineGagReasons
     ) async -> LineProcessingSummary {
         logTranscript(.gag, "[\(reasons.label)] \(line.text)")
-        await applyMeasuredEffects(disposition.effects)
-        return LineProcessingSummary(gagged: 1, effects: disposition.effects.count)
+        // Prose semantic effects are dropped with the line; tag-sourced ones
+        // still apply, since a hidden tag line still happened (D-128).
+        let effects = disposition.effects + disposition.structuralEffects
+        await applyMeasuredEffects(effects)
+        return LineProcessingSummary(gagged: 1, effects: effects.count)
     }
 
     private func applyMeasuredEffects(_ effects: [ScriptEffect]) async {

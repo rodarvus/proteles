@@ -38,7 +38,9 @@ public extension ScriptEngine {
         if native.gag { result.disposition.gag = true }
         result.disposition.effects.append(contentsOf: native.effects)
         result.disposition.replacement = native.replacement
-        result.disposition.semanticEffects = semanticEffects(for: line)
+        let semantic = semanticEffects(for: line)
+        result.disposition.semanticEffects = semantic.prose
+        result.disposition.structuralEffects = semantic.structural
         // Trigger highlights (D-105) restyle whatever will be displayed.
         return measureScriptPhase(
             "session.script.highlights",
@@ -165,19 +167,31 @@ public extension ScriptEngine {
     /// — a muted soundpack) this returns before any regex runs, which is what
     /// the previous attempt got wrong.
     ///
-    /// The caller decides whether these effects are *applied*: they are held
-    /// separately on the disposition and dropped unless the line survives every
-    /// gag, so a gagged line never publishes.
-    private func semanticEffects(for line: Line) -> [ScriptEffect] {
-        guard nativePlugins.wantsSemanticEvents else { return [] }
+    /// The caller decides whether these effects are *applied*, so they come
+    /// back split by the event's source (D-128): `prose` (pattern-sourced) is
+    /// dropped unless the line survives every gag, so a gagged prose line never
+    /// publishes; `structural` (tag-sourced) is applied whether or not the line
+    /// is displayed, because hiding a tag line is the norm.
+    private func semanticEffects(for line: Line) -> (prose: [ScriptEffect], structural: [ScriptEffect]) {
+        guard nativePlugins.wantsSemanticEvents else { return ([], []) }
         let events = SemanticClassifier.events(forDisplayed: line)
-        guard !events.isEmpty else { return [] }
+        guard !events.isEmpty else { return ([], []) }
         return measureScriptPhase(
             "session.script.semantic",
             events: events.count,
             thresholdMS: 50
         ) {
-            events.flatMap { nativePlugins.onSemanticEvent($0) }
+            var prose: [ScriptEffect] = []
+            var structural: [ScriptEffect] = []
+            for event in events {
+                let effects = nativePlugins.onSemanticEvent(event)
+                if case .tag = event.source {
+                    structural += effects
+                } else {
+                    prose += effects
+                }
+            }
+            return (prose, structural)
         }
     }
 

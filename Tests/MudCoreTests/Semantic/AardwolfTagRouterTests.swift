@@ -245,17 +245,22 @@ struct AardwolfTagRouterWiringTests {
         let engine = try ScriptEngine()
         let disposition = await engine.process(line: "{affoff}259")
         #expect(disposition.semanticEffects.isEmpty)
+        #expect(disposition.structuralEffects.isEmpty)
     }
 
     /// With a listener, the event arrives tag-sourced through the existing
-    /// disposition — no new seam, no new hop.
+    /// disposition — no new seam, no new hop. Its effects ride in
+    /// `structuralEffects`, applied whether or not the line is shown (D-128);
+    /// prose stays in `semanticEffects`.
     @Test("With a listener a tag line's event reaches the plugin, tag-sourced")
     func listenerReceivesTagEvent() async throws {
         let engine = try ScriptEngine()
         await engine.registerNativePlugin(Listener())
         let disposition = await engine.process(line: "{sfail}104,0,2,-1")
-        #expect(disposition.semanticEffects == [.echo("event:cast_failed:spellups")])
+        #expect(disposition.structuralEffects == [.echo("event:cast_failed:spellups")])
+        #expect(disposition.semanticEffects.isEmpty)
         let prose = await engine.process(line: "You raise a level! You are now level 100.")
         #expect(prose.semanticEffects == [.echo("event:level_up:")])
+        #expect(prose.structuralEffects.isEmpty)
     }
 }

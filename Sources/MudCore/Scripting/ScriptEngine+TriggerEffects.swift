@@ -27,17 +27,26 @@ extension ScriptEngine {
         /// displayed seam added a round-trip per line — measurably so in a kill
         /// burst (#85, and the regression recorded in S0A_WIRING_PROPOSAL.md).
         public var semanticEffects: [ScriptEffect]
+        /// Effects of the line's **tag-sourced** events, applied whether or
+        /// not the line is displayed (D-128). A tag line is machine data whose
+        /// hiding is the norm — the tag-hide preference, and plugins'
+        /// `omit_from_output` — so whether the player saw it says nothing about
+        /// whether the event happened. The displayed-only rule above stays for
+        /// prose, which is what D-118's displayed-path rule protects.
+        public var structuralEffects: [ScriptEffect]
 
         public init(
             gag: Bool = false,
             effects: [ScriptEffect] = [],
             replacement: Line? = nil,
-            semanticEffects: [ScriptEffect] = []
+            semanticEffects: [ScriptEffect] = [],
+            structuralEffects: [ScriptEffect] = []
         ) {
             self.gag = gag
             self.effects = effects
             self.replacement = replacement
             self.semanticEffects = semanticEffects
+            self.structuralEffects = structuralEffects
         }
     }
 

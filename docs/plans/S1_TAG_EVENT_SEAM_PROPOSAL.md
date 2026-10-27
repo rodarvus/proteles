@@ -1,6 +1,7 @@
 # Tag-sourced events are dropped at the gag seam — proposal
 
-> **Status: proposed 2026-10-27, awaiting approval.** Found while
+> **Status: implemented and committed 2026-10-27 (option A, D-128);
+> live-confirmed by the user in `session-20261027-100407`.** Found while
 > live-testing S1 step 2 (`docs/plans/S1_ITEM2_PROPOSAL.md` §10). Tracking:
 > **#83** (the consumer) and **#82** (the seam it corrects).
 
