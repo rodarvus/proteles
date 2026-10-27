@@ -557,7 +557,7 @@ D-120's derive-from-a-named-consumer rule guards against speculative
   D-123's rule (tags only for data GMCP does not carry). *Next step:* a
   checklist for #84, starting from a verbatim quote of D-121.
 
-- **S1 — Sound as a real feature.** Event→cue map as data (per-event +
+- **S1 — Sound as a real feature. Complete (2026-10-27; #83 closed).** Event→cue map as data (per-event +
   per-category volumes under a master, pan, variants); a `sound` action on GUI
   triggers emitting named events into the pipeline rather than playing files
   directly; notification-rule sounds unified onto the pipeline; playback
@@ -587,19 +587,25 @@ D-120's derive-from-a-named-consumer rule guards against speculative
   1. GMCP-sourced events enter the layer — **done** (`fde0ef1c`).
   2. The event→cue map as data — **done** (`898641b8`), with the D-128 seam
      fix that lets tag-sourced events reach it (`fbd9b655`).
-  3. Cues carry their event; playback discipline (concurrency cap, rate
-     limits), with defaults measured from the recordings — *next*. Moved
+  3. Cues carry their event; playback discipline — **done** (`4baf2aaf`): a
+     run of repeats of one event plays once (0.25 s of quiet before it plays
+     again) and at most 5 cues play at once, the oldest replaced. Moved
      ahead because D-128 made tag-event bursts possible (a spellup recast is
-     a dozen `{affon}` lines), and trigger sounds add another source.
-  4. The trigger `sound` action.
-  5. Notification-rule sounds through the pipeline.
-  6. Settings ▸ Audio: preview and per-category controls.
+     sixty `{affon}` lines), and trigger sounds add another source.
+  4. The trigger `sound` action — **done** (`6961a9ba`): a vocabulary event,
+     or a file played as `trigger_sound` in a new `custom` category.
+  5. Notification sounds through the pipeline — **done** (`4bcb4190`): every
+     notification's sound is a cue in a new `notification` category, played
+     when the banner posts; the banner is silent.
+  6. Settings ▸ Audio: preview and per-category controls — **done**
+     (`2fff6fb0`), the section in MudUI for the iOS Settings phase.
 
   `spset` and the other `sp*` commands stay the console surface throughout;
   step 2 added `spset … wav add|remove` and `spcat`.
 
   *Exit:* the user (sighted, macOS) declares sound a feature they actually use;
-  a GUI trigger can play a sound with category volume applied.
+  a GUI trigger can play a sound with category volume applied. **Met
+  2026-10-27**: each step was live-tested, and the user declared the exit.
 
 - **S2 — Dropped as a phase (D-120).** Speech re-plumbing, the caret-mode output
   review surface, the Alt+1–0 review-buffer grammar, and the macOS VO-queue spike
@@ -822,7 +828,8 @@ the script → feedback issues filed → next phase.
 
 **Resolved (2026-08-25 → 2026-10-27, D-121–D-128):**
 - ~~Is S0 one phase?~~ → **no: S0a (events) and S0b (actionable state)**
-  (D-121); S0a complete 2026-10-19, S0b not started. S2/S3 features dropped
+  (D-121); S0a complete 2026-10-19, S1 complete 2026-10-27, S0b not
+  started. S2/S3 features dropped
   but their framework pieces kept (D-122). Tag families only for data GMCP
   does not carry (D-123). The plugin event bus deferred to post-v1 (D-124).
   iOS floor raised to 26 (D-125). Speech on the layer deferred with the
