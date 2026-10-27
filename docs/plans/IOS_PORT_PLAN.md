@@ -1,4 +1,4 @@
-# Proteles on iOS — port plan (v0.4 — build started)
+# Proteles on iOS — port plan (v0.5 — build started)
 
 > **Status: build started 2026-08-21, after the `0.8.8` release.** This is the
 > iOS port plan: what the research found, the product shape, and a
@@ -15,6 +15,14 @@
 > the arc, recovered from the archived planning session, because D-118 preserved
 > the decision but not its reasoning. §1.1 now carries **measured** iOS build
 > results in place of the original audit inference.
+>
+> **v0.5 changes (2026-10-27):** §4 brought up to date with decisions made
+> since v0.4. S0 is split into **S0a** (events, done) and **S0b** (actionable
+> state) by **D-121**; S1's internal order is recorded, with its progress;
+> **D-126** (speech on the layer deferred), **D-127** (S1 design answers) and
+> **D-128** (tag-sourced events publish regardless of display) are folded in;
+> and §4a S2 restores D-122's announcement-queue seam, which v0.4 had called
+> moot.
 >
 > Remaining contested calls are marked **⚖︎** and collected in §6.
 
@@ -354,7 +362,12 @@ semantic event layer built in S0**, before the iOS UI phases. The lens system an
 a real sound feature need the same substrate, so it is built once, on macOS,
 transcript-tested, and consumed everywhere. **v0.4 (D-120): lenses are now S0's
 *primary* named consumer** — with accessibility deferred (§1.6), the lens set is
-what sizes the taxonomy, so a paper design of the lenses opens S0 (§4a):
+what sizes the taxonomy, so a paper design of the lenses opens S0 (§4a).
+**D-121 (2026-08-25): lenses need state as well as events.** The journey
+decomposition (`LENS_DESIGN.md`) found lenses are interaction surfaces, and
+every journey is verb-shaped (attack, target, get, cast, goto) — so they need
+durable entity state, a different shape from events. S0 therefore split:
+**S0a** is the event layer below, **S0b** the actionable-state model (§4a).
 
 - **GMCP already carries the structured half** (vitals, room, area, group,
   comms → `GMCPStateStore`/`ChatStore`/`Mapper`) — those lenses are mostly
@@ -371,10 +384,11 @@ what sizes the taxonomy, so a paper design of the lenses opens S0 (§4a):
 - Lenses are *views over* the scrollback store, never destructive — "the
   output is sacred" carries over.
 
-Phasing: S0 builds and proves the engine on macOS (it immediately powers
-sound, speech curation, and review buffers there); I6 becomes the *lens UI*
-experiment on the iPhone layout, iterated live once real play has taught us
-which lenses matter.
+Phasing: S0a and S0b build and prove the engine on macOS (S0a immediately
+powers sound and notifications there; speech curation and review buffers were
+dropped with D-120/D-122, and speech on the layer is deferred by D-126); I6
+becomes the *lens UI* experiment on the iPhone layout, iterated live once real
+play has taught us which lenses matter.
 
 ### 2.4 Scripting & plugins on iOS
 
@@ -462,13 +476,18 @@ which lenses matter.
 
 ## 4. Phases
 
-Two arcs: the macOS-side **Semantic Core arc `S0…S1`** (§4a, re-scoped from
-D-118's `S0…S3` by **D-120**), then the iOS arc `I0…I10` (§4b). Hard ordering
-constraints — and the only ones: **S0 before anything consuming semantic events**
-(the sound rebuild, the lens UI); **S1 after S0**; **`MudOutputView_iOS` exposes a
-per-line accessibility element tree from its first commit** (§4a S2, replacing
-D-118's VO-queue-abstraction constraint); and **I0's package/CI slice runs first**,
-independent of the S-arc. Each phase is independently shippable
+Two arcs: the macOS-side **Semantic Core arc `S0a`, `S0b`, `S1`** (§4a,
+re-scoped from D-118's `S0…S3` by **D-120**, S0 split by **D-121**), then the
+iOS arc `I0…I10` (§4b). Hard ordering constraints — and the only ones:
+
+- **S0a before S1**: sound consumes events (D-121).
+- **S0b before I6**: the lens UI consumes state (D-121).
+- **I0's package/CI slice runs first**, independent of the S-arc (done).
+- **Before `MudOutputView_iOS`:** it exposes a per-line accessibility element
+  tree from its first commit (D-120), and the announcement-queue seam is
+  designed first (D-122). See §4a S2.
+
+S0b and S1 do not depend on each other and may run in parallel (D-121). Each phase is independently shippable
 (macOS release / TestFlight build), ends with a **manual test script** for
 live verification, and lands with tests across the board (pure engines → unit
 tests; lifecycle → integration tests against the `InMemoryConnection` seam;
@@ -476,12 +495,20 @@ views → focused UI tests where they pay).
 
 ### 4a. The Semantic Core arc (S-phases, macOS-side, pre-iOS-UI)
 
-**Re-scoped by D-120 to S0 + S1.** These land on `main` as normal macOS releases,
-live-verified in daily play. The arc's justification is now §1.5's structural
-argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
+**Re-scoped by D-120 to S0 + S1; S0 split into S0a and S0b by D-121.** These
+land on `main` as normal macOS releases, live-verified in daily play. The arc's
+justification is now §1.5's structural argument plus sound and the lenses; the
+accessibility framing of D-118 is deferred per §1.6.
 
-- **S0 — The semantic event layer** (MudCore, pure, transcript-tested).
-  `SemanticEvent` taxonomy (category, severity, captured payload, source);
+**The S-phases are an enablement gate built ahead of their consumers**
+(D-121): "it has no consumer yet" is not a reason to cut a ratified item.
+D-120's derive-from-a-named-consumer rule guards against speculative
+*shapes*, not against building ratified *scope*.
+
+- **S0a — The semantic event layer** (MudCore, pure, transcript-tested;
+  #82, **complete 2026-10-19**). What D-118 called S0, all of it (D-121).
+  `SemanticEvent` taxonomy (category, captured payload, source — *severity was
+  left out: its only readers were the deferred speech tiers*);
   `SoundEventClassifier` demoted to the built-in Aardwolf vocabulary pack
   behind it and moved to the **displayed**-line path (closing the raw-vs-
   displayed asymmetry); `NotificationMatcher` generalized as the
@@ -495,11 +522,14 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   per-plugin subscriber model rather than a broadcast. Taxonomy + patterns from the references and
   recordings — no guessing.
 
-  **The seam is already located:** `SessionController+LineProcessing.swift`'s
-  `finishDisplayedLine` already calls `notifyForOutput`/`speakForOutput` on the
-  displayed line, while `Soundpack` fires from `scriptEngine.process(line)` on
-  the raw pre-gag line. That function is where the single classification point
-  belongs, and moving sound onto it *is* the raw-vs-displayed fix.
+  **The seam, as built:** classification runs once inside the existing
+  `ScriptEngine.process` pass (no extra actor hop — the first wiring attempt's
+  measured regression, `S0A_WIRING_PROPOSAL.md`), and its effects are applied
+  by `SessionController` according to the line's fate. **Prose events publish
+  only from displayed lines**, which closes the raw-vs-displayed asymmetry;
+  **tag-sourced events publish whether or not their line is displayed**,
+  because hiding a tag line is the norm (**D-128**). GMCP-sourced events enter
+  through the native-plugin GMCP dispatch (S1 step 1).
 
   **Design constraint (D-120, from §1.5's counterweight):** the taxonomy is
   derived from **named consumers**, never invented ahead of them. S0 therefore
@@ -511,7 +541,21 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   *Exit:* the layer classifies real recorded sessions correctly under test;
   sound/notifications consume it with zero behaviour regressions. (Speech
   consuming the layer, placed here by D-122, is deferred with the accessibility
-  work by **D-126**; the existing TTS stays as-is.)
+  work by **D-126**; the existing TTS stays as-is.) *Met 2026-10-19:* 410
+  recorded sessions classified with zero invariant violations; item 6 (the
+  plugin event bus) deferred to post-v1 by **D-124** (#89).
+
+- **S0b — Actionable state** (#84, **not started**). The durable, replaceable
+  entity state the lens journeys act on — occupants, exits, floor items,
+  inventory/worn/bags/portals, spells and cooldowns, quest targets, vitals —
+  a different shape from S0a's ephemeral events (D-121; journeys in
+  `LENS_DESIGN.md`). Mostly *promotion* of feeds that already exist behind
+  single private consumers: `{roomchars}` and the `gmkw` keyword port inside
+  `ConsiderFeature`, Search-and-Destroy's target list (bridged only to Lua),
+  and `invdata` parsed by `InventorySerials` with its `type` column
+  discarded. The tag-family router extends to the entity families under
+  D-123's rule (tags only for data GMCP does not carry). *Next step:* a
+  checklist for #84, starting from a verbatim quote of D-121.
 
 - **S1 — Sound as a real feature.** Event→cue map as data (per-event +
   per-category volumes under a master, pan, variants); a `sound` action on GUI
@@ -529,6 +573,31 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   (`speechWillStart`/`speechDidEnd`) and the unmute onboarding moment** move out
   of S1, since they exist to serve a speech path that is no longer being built.
 
+  **Design answers (D-127):** event routing is generic and sound is one
+  consumer; a category volume is a cap, so a cue plays at
+  `min(event, category, master)`; a trigger's sound names a vocabulary event
+  or plays a file as one fixed first-party event; notification sounds get
+  their own category, which the soundpack mute does not silence; variants
+  are built, with a one-time conversion of `soundpack.json`.
+
+  **Order of work** (#83's tasks, re-sequenced so the safety net lands before
+  the features that add new sound sources). Each step has its own proposal
+  under `docs/plans/S1_*`:
+
+  1. GMCP-sourced events enter the layer — **done** (`fde0ef1c`).
+  2. The event→cue map as data — **done** (`898641b8`), with the D-128 seam
+     fix that lets tag-sourced events reach it (`fbd9b655`).
+  3. Cues carry their event; playback discipline (concurrency cap, rate
+     limits), with defaults measured from the recordings — *next*. Moved
+     ahead because D-128 made tag-event bursts possible (a spellup recast is
+     a dozen `{affon}` lines), and trigger sounds add another source.
+  4. The trigger `sound` action.
+  5. Notification-rule sounds through the pipeline.
+  6. Settings ▸ Audio: preview and per-category controls.
+
+  `spset` and the other `sp*` commands stay the console surface throughout;
+  step 2 added `spset … wav add|remove` and `spcat`.
+
   *Exit:* the user (sighted, macOS) declares sound a feature they actually use;
   a GUI trigger can play a sound with category volume applied.
 
@@ -541,9 +610,14 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   expose a **real per-line accessibility element tree** from its first commit,
   rather than presenting as an opaque text blob. This costs about a day while
   writing a view we are writing regardless; retrofitting it later is precisely
-  the multi-year Mudlet mistake §1.5 describes. It replaces D-118's "VO-queue
-  abstraction before `MudOutputView_iOS`" ordering constraint, which is moot
-  now that no VO queue is being built.
+  the multi-year Mudlet mistake §1.5 describes.
+
+  **A second constraint, restored by D-122:** the **announcement-queue seam**
+  — a send→confirm→next abstraction that `MudOutputView_iOS` can implement
+  closed-loop where the platform supports it — is *designed* before
+  `MudOutputView_iOS` is architected. It is not implemented on macOS. (v0.4
+  called D-118's VO-queue ordering constraint moot; D-122 kept the seam as
+  framework while dropping the queue as a feature.)
 
   If a VI player appears, S2 re-opens as written in v0.3 — the research behind it
   (§1.4) remains valid and is deliberately left intact.
@@ -556,12 +630,11 @@ argument plus sound; the accessibility framing of D-118 is deferred per §1.6.
   without committing to it now. `performAccessibilityAudit` smoke tests come with
   the iOS views, not as a retrofit pass over macOS.
 
-**Ordering after the re-scope.** Only one hard constraint remains: **S0 before
-anything that consumes semantic events** (sound rebuild, lens UI). S1 follows S0.
-**I0's package/CI slice may go first and should** (§4b) — it is measured at about
-a day (§1.1) and it puts the iOS regression net in place *before* S0 lands the
-largest new MudCore subsystem in months, so every S0 commit is checked against
-iOS from day one.
+**Ordering after the re-scope.** S0a before S1 (sound consumes events); S0b
+before I6 (lenses consume state); S0b and S1 otherwise independent (D-121).
+**I0's package/CI slice went first** (§4b): it put the iOS regression net in
+place before S0a landed the largest new MudCore subsystem in months, so every
+S0a commit was checked against iOS.
 
 ### 4b. The iOS arc
 
@@ -617,8 +690,9 @@ the script → feedback issues filed → next phase.
   *Exit:* daily-drivable on iPad; iPhone good for a commute session.
 
 - **I6 — Lenses (the semantic-stream UI experiment).**
-  *Re-scoped by D-118:* the engine already exists (S0) — this phase is the
-  **lens UI** on the iPhone layout: lens configuration model, chips/cards over
+  *Re-scoped by D-118:* the engine already exists (S0a events, S0b state —
+  D-121 makes S0b a prerequisite) — this phase is the **lens UI** on the
+  iPhone layout: lens configuration model, chips/cards over
   the stream, raw stream always one gesture away. Explicitly experimental:
   ships behind a toggle, iterated live.
   *Exit:* the user can play a CP through lenses and judge the idea.
@@ -745,6 +819,15 @@ the script → feedback issues filed → next phase.
   archived planning session. D-118 preserved the decision but not the argument,
   which forced a re-derivation; the rationale is now tracked so it cannot be
   lost again.
+
+**Resolved (2026-08-25 → 2026-10-27, D-121–D-128):**
+- ~~Is S0 one phase?~~ → **no: S0a (events) and S0b (actionable state)**
+  (D-121); S0a complete 2026-10-19, S0b not started. S2/S3 features dropped
+  but their framework pieces kept (D-122). Tag families only for data GMCP
+  does not carry (D-123). The plugin event bus deferred to post-v1 (D-124).
+  iOS floor raised to 26 (D-125). Speech on the layer deferred with the
+  accessibility work (D-126). S1's design answers (D-127). Tag-sourced events
+  publish regardless of display (D-128). §4 carries the current state.
 - ~~Is MudCore really portable as-is?~~ → **verified by building, not audited**
   (§1.1): it compiles for iOS and its full suite passes on the simulator, given
   three small, enumerated fixes. I0 is split accordingly into I0a (do now) and
