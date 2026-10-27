@@ -30,6 +30,20 @@ private struct LineWatcherPlugin: NativePlugin {
     }
 }
 
+/// Listens to the semantic layer and echoes what it hears, with no sound in
+/// sight: the stand-in for any consumer (a lens) that reads the layer.
+private struct LayerListenerPlugin: NativePlugin {
+    let metadata = NativePluginMetadata(id: "test.layer", name: "Layer")
+    var wantsSemanticEvents: Bool {
+        true
+    }
+
+    func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect] {
+        guard case .gmcp(let package) = event.source else { return [] }
+        return [.echo("\(event.name) from \(package)")]
+    }
+}
+
 @Suite("NativePluginRegistry — folding native plugins")
 struct NativePluginRegistryTests {
     @Test("A registered command plugin handles its command; others pass through")
@@ -51,6 +65,26 @@ struct NativePluginRegistryTests {
 
     private func line(_ text: String) -> Line {
         Line(id: LineID(0), text: text)
+    }
+
+    @Test("A GMCP packet reaches layer listeners as a GMCP-sourced semantic event")
+    func gmcpEventsReachTheLayer() {
+        var registry = NativePluginRegistry()
+        registry.register(LayerListenerPlugin())
+        #expect(registry.onGMCP(package: "comm.quest", json: #"{"action":"ready"}"#)
+            == [.echo("quest_ready from comm.quest")])
+        #expect(registry.onGMCP(package: "comm.repop", json: #"{"zone":"aylor"}"#)
+            == [.echo("zone_repop from comm.repop")])
+        #expect(registry.onGMCP(package: "char.vitals", json: "{}").isEmpty)
+    }
+
+    @Test("Nobody listening: a GMCP packet classifies to nothing")
+    func gmcpWithoutListenersIsQuiet() {
+        var registry = NativePluginRegistry()
+        registry.register(LayerListenerPlugin(), enabled: false)
+        registry.register(PingPlugin())
+        #expect(!registry.wantsSemanticEvents)
+        #expect(registry.onGMCP(package: "comm.quest", json: #"{"action":"ready"}"#).isEmpty)
     }
 
     @Test("Disabling a plugin stops it handling commands; re-enabling restores it")

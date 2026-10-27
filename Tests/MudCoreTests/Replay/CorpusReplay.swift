@@ -54,6 +54,9 @@ enum CorpusReplay {
         let session: Session
         let lineTexts: [String]
         let gmcp: [GMCPMessage]
+        /// Sound cues an unmuted soundpack played over the session, by file —
+        /// see `CorpusReplay+Cues.swift`. Pinned separately from ``session``.
+        let cues: [String: Int]
     }
 
     struct Diff: Equatable {
@@ -81,8 +84,10 @@ enum CorpusReplay {
         var texts: [String] = []
         var gmcp: [GMCPMessage] = []
         var events: [Event] = []
+        var cues = CueCounter()
         func classify(_ line: Line) {
             for event in SemanticClassifier.events(forDisplayed: line) {
+                cues.observe(event)
                 events.append(Event(
                     index: texts.count,
                     name: event.name,
@@ -97,6 +102,7 @@ enum CorpusReplay {
             let output = try pipeline.consume(Array(chunk.bytes))
             for message in output.gmcp {
                 gmcp.append(message)
+                cues.observe(gmcp: message)
                 for event in SemanticClassifier.events(forGMCP: message.package, json: message.json) {
                     events.append(Event(
                         index: texts.count,
@@ -120,7 +126,7 @@ enum CorpusReplay {
             gmcp: gmcp.count,
             events: events
         )
-        return Replayed(session: session, lineTexts: texts, gmcp: gmcp)
+        return Replayed(session: session, lineTexts: texts, gmcp: gmcp, cues: cues.counts)
     }
 
     /// Counts by `name/tier` — `affect_on/tag`, `quest_ready/gmcp`, …
@@ -383,6 +389,8 @@ final class CorpusReplayRun: @unchecked Sendable {
         var totals: [String: Int] = [:]
         var violations: [String] = []
         var diffReports: [String] = []
+        var cueDiffReports: [String] = []
+        var cueTotals: [String: Int] = [:]
         var elapsed: Duration = .zero
     }
 
@@ -422,6 +430,11 @@ final class CorpusReplayRun: @unchecked Sendable {
                 result.pinned += 1
                 status = "pinned"
             }
+            if let report = try CorpusReplay.checkCues(replayed) {
+                result.cueDiffReports.append(report)
+                status += " CUES DIFF"
+            }
+            result.cueTotals.merge(replayed.cues, uniquingKeysWith: +)
             result.sessions += 1
             result.lines += session.lines
             result.gmcp += session.gmcp
@@ -437,6 +450,9 @@ final class CorpusReplayRun: @unchecked Sendable {
             + "\(result.pinned) pinned, \(result.withSpellupTags) with spellup tags, \(result.elapsed)")
         for (key, count) in result.totals.sorted(by: { $0.value > $1.value }) {
             print("replay:   \(key) \(count)")
+        }
+        for (file, count) in result.cueTotals.sorted(by: { $0.value > $1.value }) {
+            print("replay:   cue \(file) \(count)")
         }
         return result
     }

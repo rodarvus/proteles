@@ -351,6 +351,12 @@ public struct NativePluginRegistry: Sendable {
     /// Fan a GMCP update to every enabled plugin, concatenating effects. The
     /// dispatch context is pre-answered once (cross-plugin facts — see
     /// ``GMCPDispatchContext``) and handed to every plugin.
+    ///
+    /// Then, if anything listens, the packet is classified once and its events
+    /// fanned through ``onSemanticEvent(_:)`` — the GMCP half of the layer's
+    /// single input, beside the displayed-line half in `ScriptEngine.process`
+    /// (S1 step 1, D-127). The Chat Echo verdict from the context keeps a muted
+    /// speaker's channel line from producing an event at all.
     public mutating func onGMCP(package: String, json: String) -> [ScriptEffect] {
         let context = dispatchContext(package: package, json: json)
         var effects: [ScriptEffect] = []
@@ -359,6 +365,13 @@ public struct NativePluginRegistry: Sendable {
                 contentsOf: entries[index].plugin
                     .onGMCP(package: package, json: json, context: context)
             )
+        }
+        guard wantsSemanticEvents else { return effects }
+        let events = context.communication.map {
+            SemanticClassifier.events(forChannel: $0, speakerMuted: context.speakerMuted)
+        } ?? SemanticClassifier.events(forGMCP: package, json: json, speakerMuted: context.speakerMuted)
+        for event in events {
+            effects.append(contentsOf: onSemanticEvent(event))
         }
         return effects
     }

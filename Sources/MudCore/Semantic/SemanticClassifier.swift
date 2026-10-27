@@ -74,18 +74,9 @@ public enum SemanticClassifier {
     ) -> [SemanticEvent] {
         switch package.lowercased() {
         case "comm.channel":
-            guard !speakerMuted,
-                  let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8)),
-                  let name = SoundEventClassifier.channelEvent(chan: comm.chan)
+            guard let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8))
             else { return [] }
-            return [
-                SemanticEvent(
-                    category: SemanticEventVocabulary.category(for: name) ?? .communication,
-                    name: name,
-                    source: .gmcp(package: "comm.channel"),
-                    payload: payload(for: comm)
-                )
-            ]
+            return events(forChannel: comm, speakerMuted: speakerMuted)
 
         case "comm.quest":
             guard let data = try? JSONSerialization.jsonObject(with: Data(json.utf8)),
@@ -114,6 +105,21 @@ public enum SemanticClassifier {
         default:
             return []
         }
+    }
+
+    /// The events for an already-decoded `comm.channel` message, so a caller
+    /// that has decoded it once (the native-plugin dispatch context) does not
+    /// pay for a second decode per packet.
+    public static func events(forChannel comm: CommChannel, speakerMuted: Bool = false) -> [SemanticEvent] {
+        guard !speakerMuted, let name = SoundEventClassifier.channelEvent(chan: comm.chan) else { return [] }
+        return [
+            SemanticEvent(
+                category: SemanticEventVocabulary.category(for: name) ?? .communication,
+                name: name,
+                source: .gmcp(package: "comm.channel"),
+                payload: payload(for: comm)
+            )
+        ]
     }
 
     /// Channel payload a consumer might key on — the channel and who spoke.

@@ -69,6 +69,8 @@ struct CorpusReplayHarnessTests {
         #expect(CorpusReplay.summary(replayed.session) == [
             "zone_repop/gmcp": 1, "affect_off/tag": 1, "level_up/pattern": 1
         ])
+        // One cue per GMCP and prose event; the tag event has no cue.
+        #expect(replayed.cues == ["zone_repop.wav": 1, "level_up.wav": 1])
     }
 
     /// The invariants must catch a layer that is wrong, not only bless one
@@ -103,7 +105,7 @@ struct CorpusReplayHarnessTests {
             )
             // and no zone_repop for the repop packet
         ])
-        let replayed = CorpusReplay.Replayed(session: wrong, lineTexts: texts, gmcp: gmcp)
+        let replayed = CorpusReplay.Replayed(session: wrong, lineTexts: texts, gmcp: gmcp, cues: [:])
         let violations = CorpusReplay.violations(in: replayed)
         #expect(violations.count == 5, "\(violations)")
         #expect(violations.contains { $0.contains("expected [affect_off] got []") })
@@ -214,5 +216,18 @@ struct CorpusReplayBaselineTests {
             result.diffReports.isEmpty,
             "\(count) sessions differ (re-pin with PROTELES_REPLAY_PIN=1 after review):\n\n\(reports)"
         )
+    }
+}
+
+@Suite("CorpusReplay — cue pin and diff", .serialized, .enabled(if: CorpusReplay.isEnabled))
+struct CorpusReplayCueBaselineTests {
+    @Test("Every session plays the cues of its reviewed baseline")
+    func corpusCuesMatchBaseline() throws {
+        let result = try CorpusReplayRun.shared.result()
+        try #require(result.sessions > 0, "no recordings found under \(CorpusReplay.corpusDirectory.path)")
+        let reports = result.cueDiffReports.joined(separator: "\n\n")
+        let count = result.cueDiffReports.count
+        let rePin = "re-pin with PROTELES_REPLAY_PIN=1 after review"
+        #expect(result.cueDiffReports.isEmpty, "\(count) sessions cue differently (\(rePin)):\n\n\(reports)")
     }
 }

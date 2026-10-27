@@ -1,6 +1,7 @@
 # S1 step 1 — GMCP-sourced events enter the layer
 
-> **Status: proposed 2026-10-23, awaiting approval.** Tracking: **#83**.
+> **Status: implemented and committed 2026-10-27; corpus re-run and §6 A/B
+> passed.** Notes in §8, results in §9. Tracking: **#83**.
 > Design answers this builds on: **D-127**.
 
 ## 1. The ratified scope, verbatim
@@ -129,3 +130,66 @@ for an agreed plan, and "none" is an answer you can give.
 - **Files:** `NativePlugin.swift` (watch the 600-line limit; split into
   `NativePluginSet+Semantic.swift` if needed), `Soundpack.swift`, and new
   tests. No app-target changes.
+
+## 8. Implementation notes (2026-10-23)
+
+- **Name correction.** The type this document calls `NativePluginSet` is
+  `NativePluginRegistry`; the change is where §2 says it is.
+- **No added decode.** The registry's dispatch context already decodes
+  `comm.channel` once. A new
+  `SemanticClassifier.events(forChannel:speakerMuted:)` takes that decoded
+  value, and `events(forGMCP:)` now calls it. The soundpack's inline `!!SOUND`
+  reuses the same decoded value. So §6's "moved work, not added" holds.
+- **Effect order.** The channel cue now comes after *every* plugin's `onGMCP`
+  effects for that packet, not only after the soundpack's own inline cue.
+  Within one packet's effects, a cue and a chat echo land together, so this
+  is not expected to be audible. It is recorded because it is a change.
+- **Corpus pin.** `CorpusReplay+Cues.swift` counts the cues an unmuted
+  soundpack (registered beside Chat Echo, unmuted *through* the registry,
+  since `register` re-runs `install()`) plays per session. They are pinned
+  under `~/Documents/Proteles/Diagnostics/replay-cue-baseline/` on `46700a06`,
+  before the change, with a new gated test that diffs them. Pinned: 426
+  sessions. The same run showed one event diff, in
+  `session-20261019-071420`: +2125 −0 events. That session was still being
+  recorded when the event baseline was pinned on 2026-10-19, so it only grew.
+  Its event pin was dropped and re-pins on the next run.
+- **Tests.** `NativePluginRegistryTests` has a non-sound listener receiving
+  `.gmcp`-sourced events; it fails without the change. There is also a guard
+  for "nobody listening". `SoundpackPluginTests` route their GMCP cases
+  through the production order, and a new registry test checks that one
+  channel packet gives exactly one channel cue.
+
+## 9. Results (2026-10-27)
+
+**Corpus re-run.** 425 of 426 sessions match their event and cue pins
+exactly. The one that differs was being recorded during both runs. It grew
+from 376,036 to 389,299 lines, with events +124 −0, and every cue change
+matches a new event one for one. Its pins were dropped so they are
+recaptured on the next run.
+
+**A/B.** Same-day Release builds of `46700a06`: the control is clean, the
+candidate is the same plus this change. One session each, soundpack
+unmuted. The candidate was unmuted for 22 minutes of its session; its
+earlier muted stretch gives a second baseline from the same build. The
+figures come from `burst:` phase sums and `render:` lines, with "near a
+kill" meaning within 3 s of an experience award.
+
+| | Control, unmuted | Candidate, unmuted | Candidate, muted |
+|---|---|---|---|
+| GMCP packets / kills | 2,099 / 80 | 2,773 / 152 | 2,007 / 244 |
+| `gmcp.script-apply` per 1,000 packets | 1,362 ms | 858 ms | 1,285 ms |
+| `gmcp.dispatch` per 1,000 packets | 3,368 ms | 2,290 ms | 3,643 ms |
+| paint p50 / p99, near a kill | 14 / 206 ms | 13 / 143 ms | 21 / 280 ms |
+| paint p50 / p99, elsewhere | 14 / 83 ms | 13 / 79 ms | 20 / 274 ms |
+
+The candidate is no worse than the control on any measure, which is the
+pass condition. **What this can resolve:** the added work per packet is a
+`lowercased()` and a switch, microseconds at most. The probes are
+millisecond sums over bursts and vary with what the player is doing. So
+this rules out a visible regression; it does not measure the change's own
+cost.
+
+**Not exercised live:** neither session had a tell, an inline `!!SOUND`,
+or a Chat Echo-muted speaker. Those paths are covered by the unit tests
+only. The channel cues heard were mostly auction, gossip, say and clan
+channels, plus quest cues; no repop came up in the control session.

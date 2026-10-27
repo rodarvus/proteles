@@ -77,10 +77,10 @@ public struct Soundpack: NativePlugin {
 
     // MARK: - Event sources
 
-    /// Line cues come from ``onSemanticEvent(_:)`` now (#82); this hook no
-    /// longer classifies. GMCP cues still arrive via
-    /// ``onGMCP(package:json:context:)``, which also carries the inline
-    /// `!!SOUND` handling and the Chat Echo mute check.
+    /// Every cue comes from ``onSemanticEvent(_:)``: line cues since #82, GMCP
+    /// cues since S1 step 1 (D-127). This hook no longer classifies, and
+    /// ``onGMCP(package:json:context:)`` keeps only what is not
+    /// classification — the own-name tracking and the inline `!!SOUND`.
     public mutating func onLine(_: Line) -> ScriptEngine.LineDisposition {
         .init()
     }
@@ -92,8 +92,10 @@ public struct Soundpack: NativePlugin {
         !config.muted
     }
 
+    /// Any source: GMCP, tag or pattern. An event with no cue in the table
+    /// (the tag-sourced `affect_on`, `skill_gain` …) plays nothing.
     public mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect] {
-        guard !config.muted, case .pattern = event.source else { return [] }
+        guard !config.muted else { return [] }
         return cueEffects(for: event.name)
     }
 
@@ -110,27 +112,15 @@ public struct Soundpack: NativePlugin {
             if let name = Self.baseName(in: json) { selfName = name }
             return []
         case "comm.channel":
-            // A Chat Echo-muted speaker plays nothing — neither the channel
-            // cue nor an inline !!SOUND — exactly the reference's early
-            // return after `CallPlugin(chat, "checkIfMuted", player)` (#55).
+            // A Chat Echo-muted speaker plays nothing — neither the inline
+            // !!SOUND here nor the channel cue, which the layer withholds for
+            // a muted speaker — exactly the reference's early return after
+            // `CallPlugin(chat, "checkIfMuted", player)` (#55).
             guard !config.muted, !context.speakerMuted,
-                  let comm = try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8))
+                  let comm = context.communication
+                  ?? (try? JSONDecoder().decode(CommChannel.self, from: Data(json.utf8)))
             else { return [] }
-            var effects = inlineSoundEffects(in: comm)
-            if let event = SoundEventClassifier.channelEvent(chan: comm.chan) {
-                effects.append(contentsOf: cueEffects(for: event))
-            }
-            return effects
-        case "comm.quest":
-            guard !config.muted,
-                  let data = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-                  let action = data["action"] as? String,
-                  let event = SoundEventClassifier.questEvent(action: action)
-            else { return [] }
-            return cueEffects(for: event)
-        case "comm.repop":
-            guard !config.muted else { return [] }
-            return cueEffects(for: SoundEventClassifier.zoneRepopEvent)
+            return inlineSoundEffects(in: comm)
         default:
             return []
         }
