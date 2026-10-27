@@ -17,6 +17,11 @@ public protocol SettingsFileBacked: Codable, Sendable {
     init()
     /// The file's name under `Settings/`, e.g. `"soundpack.json"`.
     static var settingsFileName: String { get }
+    /// A one-time format upgrade: given the file's bytes, the bytes rewritten
+    /// in the current format, or `nil` when no upgrade applies (the default).
+    /// ``load(from:)`` decodes the upgraded bytes and writes them back, so
+    /// the upgrade runs once per file whichever reader loads it first.
+    static func migrated(_ data: Data) -> Data?
 }
 
 public extension SettingsFileBacked {
@@ -25,12 +30,20 @@ public extension SettingsFileBacked {
         try ProtelesPaths.settingsDirectory().appendingPathComponent(settingsFileName)
     }
 
+    static func migrated(_: Data) -> Data? {
+        nil
+    }
+
     /// Load from `url`; a missing or malformed file (or a `nil` URL) is the
-    /// defaults.
+    /// defaults. A file in an older format is upgraded (``migrated(_:)``)
+    /// and written back before decoding.
     static func load(from url: URL?) -> Self {
-        guard let url, let data = FileManager.default.contents(atPath: url.path),
-              let decoded = try? JSONDecoder().decode(Self.self, from: data)
-        else { return Self() }
+        guard let url, var data = FileManager.default.contents(atPath: url.path) else { return Self() }
+        if let upgraded = migrated(data) {
+            data = upgraded
+            try? upgraded.write(to: url, options: .atomic)
+        }
+        guard let decoded = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
         return decoded
     }
 

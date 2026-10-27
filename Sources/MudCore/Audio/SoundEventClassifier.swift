@@ -178,10 +178,6 @@ public enum SoundEventClassifier {
         try? PatternMatcher(pattern: .regex($0.pattern), caseSensitive: true)
     }
 
-    /// Event names sorted for listing (`spset` shows them alphabetically,
-    /// like the reference's `orderedPairs`).
-    public static let orderedEventNames: [String] = defaults.keys.sorted()
-
     /// The 69-event default table from the reference (`soundEvents`): event →
     /// default wav + description. Volume 100 / pan 0 everywhere.
     public static let defaults: [String: EventDefault] = [

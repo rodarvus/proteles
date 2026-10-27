@@ -43,8 +43,10 @@ public struct Soundpack: NativePlugin {
                 .init(syntax: "spset <event> volume <0-100>", summary: "Set event volume (0 disables)"),
                 .init(syntax: "spset <event> panning <-100..100>", summary: "Set stereo pan"),
                 .init(syntax: "spset <event> wav <file|default>", summary: "Set or reset the cue file"),
+                .init(syntax: "spset <event> wav add|remove <file>", summary: "Add or remove a variant"),
                 .init(syntax: "sptog <event>|all", summary: "Toggle event(s) on/off"),
                 .init(syntax: "spvol [0-100]", summary: "Show or set the global volume cap"),
+                .init(syntax: "spcat [category] [0-100]", summary: "Show or set category volume caps"),
                 .init(syntax: "spmute", summary: "Toggle the whole soundpack on/off"),
                 .init(syntax: "spdebug", summary: "Toggle event-fire debug notes"),
                 .init(syntax: "sphelp", summary: "Show soundpack help")
@@ -60,6 +62,9 @@ public struct Soundpack: NativePlugin {
     /// Own character name (from `char.base`), so a `!!SOUND` we sent isn't
     /// replayed to ourselves off the channel echo (reference behaviour).
     var selfName = ""
+    /// The file index each event last played, so an event with variants never
+    /// plays the same file twice in a row. Session state, not persisted.
+    var lastPicks: [String: Int] = [:]
 
     public init(configURL: URL? = try? SoundpackConfig.defaultURL()) {
         self.configURL = configURL
@@ -129,23 +134,19 @@ public struct Soundpack: NativePlugin {
     // MARK: - Cue math (the reference's TriggerEvent)
 
     /// The `.playSound` (+ optional debug note) for one fired event, or
-    /// nothing when the event is disabled / unknown. Volume = per-event
-    /// percent capped by the global, through the percent→dB→linear curve.
-    func cueEffects(for event: String) -> [ScriptEffect] {
-        let volume = config.volume(for: event)
-        guard volume > 0, let file = config.file(for: event) else {
-            return config.debug && config.volume(for: event) == 0
-                ? [Self.debugNote("Event \(event) has fired, but event volume is set to 0. Ignoring.")]
+    /// nothing when the event has no files or plays at volume 0. The map
+    /// decides file, volume and pan (``SoundpackConfig/cue(for:previousPick:random:)``):
+    /// `min(event, category, master)` through the percent→dB→linear curve.
+    mutating func cueEffects(for event: String) -> [ScriptEffect] {
+        guard let (cue, pick) = config.cue(for: event, previousPick: lastPicks[event]) else {
+            return config.debug && config.effectiveVolume(for: event) == 0
+                ? [Self.debugNote("Event \(event) has fired, but its volume is 0. Ignoring.")]
                 : []
         }
-        let effective = min(volume, config.globalVolume)
+        lastPicks[event] = pick
         var effects: [ScriptEffect] = []
         if config.debug { effects.append(Self.debugNote("Event \(event) has fired!")) }
-        effects.append(.playSound(
-            file: file,
-            volume: SoundVolume.linearGain(forPercent: Double(effective)),
-            pan: SoundVolume.pan(forMushPan: Double(config.pan(for: event)))
-        ))
+        effects.append(.playSound(file: cue.file, volume: cue.volume, pan: cue.pan))
         return effects
     }
 
@@ -165,7 +166,8 @@ public struct Soundpack: NativePlugin {
     /// it's local (the cue player resolves it; missing files are silent).
     /// URLs are dropped — the reference's HTTP download is a security
     /// non-starter — and our own sends are skipped (we already played them
-    /// on the way out). Gated by the `remote_sound` event volume.
+    /// on the way out). Gated by `remote_sound`'s effective volume (its own,
+    /// the communication category's, and the master).
     func inlineSoundEffects(in comm: CommChannel) -> [ScriptEffect] {
         guard comm.player != selfName,
               let name = Self.inlineSoundName(in: AardwolfColor.stripped(comm.msg))
@@ -177,9 +179,8 @@ public struct Soundpack: NativePlugin {
                     .debugNote("Ignoring remote !!SOUND URL from \(comm.player) (downloads not supported).")]
                 : []
         }
-        let volume = config.volume(for: "remote_sound")
-        guard volume > 0 else { return [] }
-        let effective = min(volume, config.globalVolume)
+        let effective = config.effectiveVolume(for: "remote_sound")
+        guard effective > 0 else { return [] }
         return [.playSound(
             file: name,
             volume: SoundVolume.linearGain(forPercent: Double(effective)),

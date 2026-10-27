@@ -2,7 +2,9 @@ import Foundation
 
 /// The soundpack's `sp*` command surface (its own file for the length
 /// budget) — console-faithful to the reference's aliases: `spset` (list /
-/// show / set), `sptog`, `spvol`, `spmute`, `spdebug`, `sphelp`. The
+/// show / set), `sptog`, `spvol`, `spmute`, `spdebug`, `sphelp` — plus what
+/// the cue map adds (S1 step 2): `spset … wav add|remove` for variants and
+/// `spcat` for category volumes. The
 /// reference's `spsetvol` opened a GUI input box; `spset <event> volume N`
 /// covers it. `spallow`/`spdeny`/`savesound` are gone with the remote-sound
 /// download.
@@ -14,6 +16,7 @@ public extension Soundpack {
         case "spset": return handleSpset(Array(parts.dropFirst()))
         case "sptog": return handleSptog(Array(parts.dropFirst()))
         case "spvol": return handleSpvol(Array(parts.dropFirst()))
+        case "spcat": return handleSpcat(Array(parts.dropFirst()))
         case "spmute" where parts.count == 1: return handleSpmute()
         case "spdebug" where parts.count == 1: return handleSpdebug()
         case "sphelp" where parts.count == 1: return handleSphelp()
@@ -29,7 +32,7 @@ public extension Soundpack {
     /// its same-room target cue here. Always consumed (never reaches the
     /// MUD); unknown events are silently ignored like the reference.
     private mutating func handleSpfire(_ event: String) -> [ScriptEffect] {
-        guard !config.muted, SoundEventClassifier.defaults[event] != nil else { return [] }
+        guard !config.muted, SoundpackConfig.isKnown(event) else { return [] }
         return cueEffects(for: event)
     }
 
@@ -43,6 +46,8 @@ public extension Soundpack {
             showEvent(args[0].lowercased())
         case 3:
             setEvent(args[0].lowercased(), setting: args[1].lowercased(), value: args[2])
+        case 4 where args[1].lowercased() == "wav":
+            editVariants(args[0].lowercased(), action: args[2].lowercased(), file: args[3])
         default:
             [Self.errorNote("Usage: spset [event] [volume|panning|wav] [value] — see sphelp.")]
         }
@@ -62,7 +67,7 @@ public extension Soundpack {
                 text: String(repeating: "-", count: 90), foreground: "#4682B4"
             )])
         ]
-        for event in SoundEventClassifier.orderedEventNames {
+        for event in SoundpackConfig.eventNames {
             let volume = config.volume(for: event)
             let volumeColor = volume > 70 ? "#32CD32" : (volume > 30 ? "#FFFF00" : "#FF0000")
             var segments = [
@@ -77,12 +82,13 @@ public extension Soundpack {
                     link: LineLink(actionString: "spset \(event)", hint: "Show settings: \(event)")
                 ),
                 NoteSegment(
-                    text: Self.pad(SoundEventClassifier.defaults[event]?.description ?? "", 42),
+                    text: Self.pad(Self.description(of: event), 42),
                     foreground: "#4682B4"
                 )
             ]
-            if let custom = config.events[event]?.file {
-                segments.append(NoteSegment(text: custom, foreground: "#3CB371"))
+            if let custom = config.events[event]?.files, let first = custom.first {
+                let label = custom.count > 1 ? "\(first) +\(custom.count - 1)" : first
+                segments.append(NoteSegment(text: label, foreground: "#3CB371"))
             }
             effects.append(.colourNote(segments))
         }
@@ -90,21 +96,27 @@ public extension Soundpack {
     }
 
     private func showEvent(_ event: String) -> [ScriptEffect] {
-        guard let defaults = SoundEventClassifier.defaults[event] else {
+        guard SoundpackConfig.isKnown(event) else {
             return [Self.errorNote("Invalid event: \(event)")]
         }
         var effects = [Self.note(
             "Event: \(event)\nVolume: \(config.volume(for: event)), "
-                + "Panning: \(config.pan(for: event)) Desc: \(defaults.description)"
+                + "Panning: \(config.pan(for: event)) Desc: \(Self.description(of: event))"
         )]
-        if let custom = config.events[event]?.file {
-            effects.append(Self.note("Custom wav file set to: \(custom)"))
+        if let custom = config.events[event]?.files {
+            effects.append(Self.note("Custom wav files set to: \(custom.joined(separator: ", "))"))
         }
         return effects
     }
 
+    /// The reference's description, or a marker for a vocabulary event the
+    /// reference has no sound for (the tag-sourced events).
+    private static func description(of event: String) -> String {
+        SoundEventClassifier.defaults[event]?.description ?? "(no default sound)"
+    }
+
     private mutating func setEvent(_ event: String, setting: String, value: String) -> [ScriptEffect] {
-        guard SoundEventClassifier.defaults[event] != nil else {
+        guard SoundpackConfig.isKnown(event) else {
             return [Self.errorNote("Invalid event: \(event)")]
         }
         switch setting {
@@ -124,22 +136,98 @@ public extension Soundpack {
             return [Self.note("\(event) panning setting has been set to: \(pan)"), confirmationCue()]
         case "wav":
             if value.lowercased() == "default" {
-                config.updateOverride(for: event) { $0.file = nil }
+                config.updateOverride(for: event) { $0.files = nil }
                 saveConfig()
                 return [Self.note("\(event) wav setting has been reset to default."), confirmationCue()]
             }
-            config.updateOverride(for: event) { $0.file = value }
+            config.updateOverride(for: event) { $0.files = [value] }
             saveConfig()
-            var effects = [Self.note("\(event) wav setting has been set to: \(value)")]
-            if Self.isMissingFromSoundsFolder(value) {
-                effects.append(Self.note(
-                    "(\(value) isn't in your Sounds folder yet — a fallback cue plays until it is.)"
-                ))
-            }
-            effects.append(confirmationCue())
-            return effects
+            return fileConfirmation("\(event) wav setting has been set to: \(value)", file: value)
         default:
             return [Self.errorNote("Unknown setting \"\(setting)\" — use volume, panning or wav.")]
+        }
+    }
+
+    /// `spset <event> wav add|remove <file>`: edit the event's variant list.
+    /// Adding starts from the event's current files, so the first `add` on a
+    /// default event keeps the default as one of the variants.
+    private mutating func editVariants(_ event: String, action: String, file: String) -> [ScriptEffect] {
+        guard SoundpackConfig.isKnown(event) else {
+            return [Self.errorNote("Invalid event: \(event)")]
+        }
+        var files = config.files(for: event)
+        switch action {
+        case "add":
+            guard !files.contains(file) else {
+                return [Self.errorNote("\(event) already plays \(file).")]
+            }
+            files.append(file)
+            config.updateOverride(for: event) { $0.files = files }
+            lastPicks[event] = nil
+            saveConfig()
+            return fileConfirmation("\(event) now plays one of: \(files.joined(separator: ", "))", file: file)
+        case "remove":
+            guard let index = files.firstIndex(of: file) else {
+                return [Self.errorNote("\(event) doesn't play \(file).")]
+            }
+            // One way to silence an event (volume 0), not two: an empty list
+            // would also be indistinguishable from "no override" on disk.
+            guard files.count > 1 else {
+                return [Self.errorNote(
+                    "\(file) is \(event)'s only file — use \"spset \(event) wav default\" "
+                        + "to restore the default, or \"sptog \(event)\" to silence it."
+                )]
+            }
+            files.remove(at: index)
+            config.updateOverride(for: event) { $0.files = files }
+            lastPicks[event] = nil
+            saveConfig()
+            return [Self.note("\(event) now plays: \(files.joined(separator: ", "))"), confirmationCue()]
+        default:
+            return [Self.errorNote("Usage: spset <event> wav add|remove <file>")]
+        }
+    }
+
+    /// A file-setting confirmation, with the missing-file courtesy note.
+    private func fileConfirmation(_ message: String, file: String) -> [ScriptEffect] {
+        var effects = [Self.note(message)]
+        if Self.isMissingFromSoundsFolder(file) {
+            effects.append(Self.note(
+                "(\(file) isn't in your Sounds folder yet — a fallback cue plays until it is.)"
+            ))
+        }
+        effects.append(confirmationCue())
+        return effects
+    }
+
+    // MARK: - spcat
+
+    /// `spcat` lists the category volumes; `spcat <category> <0-100>` sets
+    /// one. A category caps every event in it, under the master (D-127).
+    private mutating func handleSpcat(_ args: [String]) -> [ScriptEffect]? {
+        switch args.count {
+        case 0:
+            var effects = [Self.note("Category volumes (each caps its events, under the global volume)")]
+            for category in SemanticEvent.Category.allCases {
+                effects.append(.colourNote([
+                    NoteSegment(text: "  " + Self.pad(category.rawValue, 16), foreground: "#20B2AA"),
+                    NoteSegment(text: "\(config.volume(for: category))%", foreground: "#4682B4")
+                ]))
+            }
+            return effects
+        case 2:
+            guard let category = SemanticEvent.Category(rawValue: args[0].lowercased()) else {
+                let names = SemanticEvent.Category.allCases.map(\.rawValue).joined(separator: ", ")
+                return [Self.errorNote("Unknown category \"\(args[0])\" — use one of: \(names).")]
+            }
+            guard let volume = Int(args[1]), (0...100).contains(volume) else {
+                return [Self.errorNote("Invalid value \"\(args[1])\" for volume — use 0-100.")]
+            }
+            config.setVolume(volume, for: category)
+            saveConfig()
+            return [Self.note("\(category.rawValue) volume has been set to: \(volume)"), confirmationCue()]
+        default:
+            return [Self.errorNote("Usage: spcat [category] [0-100]")]
         }
     }
 
@@ -151,15 +239,16 @@ public extension Soundpack {
         }
         let target = args[0].lowercased()
         if target == "all" {
-            // Reference behaviour: every event flips independently.
-            for event in SoundEventClassifier.orderedEventNames {
+            // Reference behaviour: every event flips independently — every
+            // event that has a sound, so silent vocabulary events stay put.
+            for event in SoundpackConfig.eventNames where !config.files(for: event).isEmpty {
                 let current = config.volume(for: event)
                 config.updateOverride(for: event) { $0.volume = current == 0 ? nil : 0 }
             }
             saveConfig()
             return [Self.note("All events have been toggled."), confirmationCue()]
         }
-        guard SoundEventClassifier.defaults[target] != nil else {
+        guard SoundpackConfig.isKnown(target) else {
             return [Self.errorNote("Invalid event. Type \"spset\" to see a list of events.")]
         }
         if config.volume(for: target) == 0 {

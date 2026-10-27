@@ -1,6 +1,7 @@
 # S1 step 2 — the event→cue map as data
 
-> **Status: proposed 2026-10-27, awaiting approval.** Tracking: **#83**.
+> **Status: implemented and committed 2026-10-27; live-tested by the user.**
+> Notes in §9, results in §10. Tracking: **#83**.
 > Builds on step 1 (`fde0ef1c`, every cue now comes from `onSemanticEvent`)
 > and the design answers in **D-127**.
 
@@ -177,3 +178,56 @@ reference's default table out of Swift into a resource file (§4, option B).
   `Soundpack.swift`, `Soundpack+Commands.swift` (242 lines, room to grow),
   and tests. No app-target changes; `AudioSettingsView` keeps compiling
   against the same property names.
+
+## 9. Implementation notes (2026-10-27)
+
+- **Migration hook.** `SettingsFileBacked` gains one requirement with a
+  default: `static func migrated(_ data: Data) -> Data?`, returning `nil`
+  for every other settings file. `load(from:)` decodes the upgraded bytes
+  and writes them back. That puts the conversion on the one path every
+  reader takes: whichever loads the file first converts it, the plugin or
+  Settings ▸ Audio, which reads and writes `muted`/`globalVolume`. A
+  version-1 file decoded without conversion would lose its custom `file`
+  the first time the app saved. The converter itself is
+  `SoundpackConfig+Migration.swift`.
+- **The last variant can't be removed.** `spset <event> wav remove` refuses
+  an event's only file and points to `wav default` (restore) or `sptog`
+  (silence). An empty list would have meant either "no sound" or "use the
+  default", and the test caught it meaning the second. There is one way to
+  silence an event, volume 0.
+- **Inline `!!SOUND`** is now capped like any cue: `remote_sound`'s own
+  volume, the communication category, and the master. Before, it was
+  `min(remote_sound, master)`.
+- **`spset` listing** shows all 75 vocabulary events alphabetically: the
+  reference's 69 plus the six tag-sourced ones, which are listed as
+  "(no default sound)". `SoundEventClassifier.orderedEventNames` had no
+  remaining reader and was removed.
+- **Tests:** `SoundpackCueMapTests`, 16 tests: version-1 load and rewrite,
+  tolerant loading, round trip, the cap, zero at each level, inline-sound
+  cap, no-repeat over 1,000 draws, injected-draw skipping, add/alternate,
+  remove/refuse/default, tag-event cue, unknown names, `sptog all`, and
+  `spcat` list/set/validate. Existing soundpack tests pass unchanged.
+
+## 10. Results (2026-10-27)
+
+**Live test** (`session-20261027-090604`, build `702c996c` dirty):
+
+- The version-1 `soundpack.json` was rewritten as version 2 on first load.
+- `spset` listed 75 events.
+- `spset gossip wav add tell.wav` alternated the two files.
+- `spcat communication 30` lowered the channel cues and left the others
+  alone.
+- `wav default` restored gossip.
+
+**One expected cue did not play:** `spset affect_off wav channel_on.wav`
+and a real wear-off (`{affoff}91`, Indestructible Aura). The cause is not
+in this step. The session publishes semantic effects only for a line that
+survives every gag (`SessionController+LineProcessing.swift`). A `{affoff}`
+line is hidden by the tag-line display preference, and in this session
+also by a plugin's gag, so its event is dropped before any consumer sees
+it. That contradicts S0a item 5's confirmed rule that "a hidden
+`{affoff}58` still yields its event". Nothing consumed tag events until
+step 1, so the gap was not visible before. The fix is proposed separately.
+
+**Corpus re-run:** in progress at commit time; 233 sessions replayed with
+no cue or event diffs.
