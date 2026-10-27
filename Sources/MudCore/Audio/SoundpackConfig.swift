@@ -143,7 +143,8 @@ public struct SoundpackConfig: SettingsFileBacked, Equatable {
         let cue = SoundCue(
             file: files[pick],
             volume: SoundVolume.linearGain(forPercent: Double(percent)),
-            pan: SoundVolume.pan(forMushPan: Double(pan(for: event)))
+            pan: SoundVolume.pan(forMushPan: Double(pan(for: event))),
+            event: event
         )
         return (cue, pick)
     }

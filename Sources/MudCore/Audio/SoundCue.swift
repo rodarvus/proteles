@@ -15,11 +15,16 @@ public struct SoundCue: Sendable, Equatable {
     public let volume: Double
     /// Stereo pan: −1 full left … +1 full right.
     public let pan: Double
+    /// The semantic event this cue plays for (`tell`, `level_up`, …), set by
+    /// the soundpack; `nil` for a plugin's direct `PlaySound`. Playback
+    /// discipline keys on it (``CueGovernor``, S1 step 3).
+    public let event: String?
 
-    public init(file: String, volume: Double, pan: Double) {
+    public init(file: String, volume: Double, pan: Double, event: String? = nil) {
         self.file = file
         self.volume = volume
         self.pan = pan
+        self.event = event
     }
 }
 

@@ -347,13 +347,13 @@ struct AudioEndToEndTests {
         }
         try await session.connect(to: .init(host: "test.invalid", port: 23))
         // Muted by default: a direct .playSound (S&D's PlaySound path) is gated.
-        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        await session.applyScriptEffects([.playSound(SoundCue(file: "target_nearby.wav", volume: 1, pan: 0))])
         try? await Task.sleep(for: .milliseconds(100))
         #expect(await cues.values.isEmpty, "a direct cue escaped the default mute")
 
         // Unmute → the same cue plays; the spmute confirmation also played.
         try await session.send("spmute")
-        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        await session.applyScriptEffects([.playSound(SoundCue(file: "target_nearby.wav", volume: 1, pan: 0))])
         let played = await SessionTestSupport.poll {
             await cues.values.contains { $0.file == "target_nearby.wav" }
         }
@@ -369,7 +369,7 @@ struct AudioEndToEndTests {
         let afterMute = await cues.values
         #expect(afterMute.count == beforeMute + 1, "expected exactly the disable confirmation")
         #expect(afterMute.last?.file == "channel_on.wav")
-        await session.applyScriptEffects([.playSound(file: "target_nearby.wav", volume: 1, pan: 0)])
+        await session.applyScriptEffects([.playSound(SoundCue(file: "target_nearby.wav", volume: 1, pan: 0))])
         try? await Task.sleep(for: .milliseconds(100))
         #expect(await cues.values.count == afterMute.count, "a cue escaped after re-mute")
         pump.cancel()

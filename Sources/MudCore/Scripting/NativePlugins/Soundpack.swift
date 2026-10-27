@@ -146,18 +146,18 @@ public struct Soundpack: NativePlugin {
         lastPicks[event] = pick
         var effects: [ScriptEffect] = []
         if config.debug { effects.append(Self.debugNote("Event \(event) has fired!")) }
-        effects.append(.playSound(file: cue.file, volume: cue.volume, pan: cue.pan))
+        effects.append(.playSound(cue))
         return effects
     }
 
     /// A settings-change confirmation cue (the reference's
     /// `PlaySettingChanged`): `channel_on.wav` at the global volume.
     func confirmationCue() -> ScriptEffect {
-        .playSound(
+        .playSound(SoundCue(
             file: "channel_on.wav",
             volume: SoundVolume.linearGain(forPercent: Double(config.globalVolume)),
             pan: 0
-        )
+        ))
     }
 
     // MARK: - !!SOUND (local-file-only)
@@ -181,11 +181,12 @@ public struct Soundpack: NativePlugin {
         }
         let effective = config.effectiveVolume(for: "remote_sound")
         guard effective > 0 else { return [] }
-        return [.playSound(
+        return [.playSound(SoundCue(
             file: name,
             volume: SoundVolume.linearGain(forPercent: Double(effective)),
-            pan: 0
-        )]
+            pan: 0,
+            event: "remote_sound"
+        ))]
     }
 
     /// The character name in a `char.base` payload, if present.

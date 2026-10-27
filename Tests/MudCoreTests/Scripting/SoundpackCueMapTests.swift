@@ -15,13 +15,13 @@ struct SoundpackCueMapTests {
 
     private func files(_ effects: [ScriptEffect]) -> [String] {
         effects.compactMap {
-            if case .playSound(let file, _, _) = $0 { file } else { nil }
+            if case .playSound(let cue) = $0 { cue.file } else { nil }
         }
     }
 
     private func gains(_ effects: [ScriptEffect]) -> [Double] {
         effects.compactMap {
-            if case .playSound(_, let volume, _) = $0 { volume } else { nil }
+            if case .playSound(let cue) = $0 { cue.volume } else { nil }
         }
     }
 

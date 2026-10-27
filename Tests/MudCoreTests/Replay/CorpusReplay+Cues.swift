@@ -34,7 +34,7 @@ struct CueCounter {
 
     private mutating func count(_ effects: [ScriptEffect]) {
         for effect in effects {
-            if case .playSound(let file, _, _) = effect { counts[file, default: 0] += 1 }
+            if case .playSound(let cue) = effect { counts[cue.file, default: 0] += 1 }
         }
     }
 }

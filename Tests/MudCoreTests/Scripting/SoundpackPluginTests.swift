@@ -15,12 +15,32 @@ struct SoundpackPluginTests {
         return plugin
     }
 
+    /// The cues, with the event stripped so expectations compare file,
+    /// volume and pan; ``cuesCarryTheirEvent`` checks the event itself.
     private func cues(_ effects: [ScriptEffect]) -> [SoundCue] {
         effects.compactMap {
-            if case .playSound(let file, let volume, let pan) = $0 {
-                SoundCue(file: file, volume: volume, pan: pan)
+            if case .playSound(let cue) = $0 {
+                SoundCue(file: cue.file, volume: cue.volume, pan: cue.pan)
             } else { nil }
         }
+    }
+
+    @Test("a cue carries its event; confirmation cues and inline !!SOUND say what they are")
+    func cuesCarryTheirEvent() {
+        var plugin = unmuted()
+        let events = (plugin.handleCommand("spfire level_up") ?? []).compactMap {
+            if case .playSound(let cue) = $0 { cue.event } else { nil }
+        }
+        #expect(events == ["level_up"])
+        let confirmation = (plugin.handleCommand("spvol 90") ?? []).compactMap {
+            if case .playSound(let cue) = $0 { cue } else { nil }
+        }
+        #expect(confirmation.map(\.event) == [nil])
+        let inline = plugin.onGMCP(
+            package: "comm.channel",
+            json: #"{"chan":"gossip","msg":"!!SOUND(fanfare.wav)","player":"Eketra"}"#
+        ).compactMap { if case .playSound(let cue) = $0 { cue.event } else { nil } }
+        #expect(inline == ["remote_sound"])
     }
 
     private func line(_ text: String) -> Line {

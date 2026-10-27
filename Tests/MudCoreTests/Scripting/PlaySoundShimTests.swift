@@ -51,20 +51,21 @@ struct PlaySoundShimTests {
         let lua = try await shimmed()
         let effects = try await lua.run("PlaySound(0, 'tell.wav', false, -20, 50)")
         #expect(effects.count == 1)
-        guard case .playSound(let file, let volume, let pan) = effects[0] else {
+        guard case .playSound(let cue) = effects[0] else {
             Issue.record("expected .playSound, got \(effects)")
             return
         }
-        #expect(file == "tell.wav")
-        #expect(abs(volume - 0.1) < 1e-12)
-        #expect(pan == 0.5)
+        #expect(cue.file == "tell.wav")
+        #expect(abs(cue.volume - 0.1) < 1e-12)
+        #expect(cue.pan == 0.5)
+        #expect(cue.event == nil) // a plugin's direct PlaySound names no event
     }
 
     @Test("shim Sound(file) plays at full volume, centered")
     func shimSound() async throws {
         let lua = try await shimmed()
         let effects = try await lua.run("Sound('beep-01.wav')")
-        #expect(effects == [.playSound(file: "beep-01.wav", volume: 1, pan: 0)])
+        #expect(effects == [.playSound(SoundCue(file: "beep-01.wav", volume: 1, pan: 0))])
     }
 
     @Test("shim PlaySound with an empty filename returns eBadParameter, no effect")
@@ -136,9 +137,7 @@ struct PlaySoundShimTests {
             "PlaySound(0, GetInfo(74) .. 'target_nearby.wav', false, 100, 0)"
         )
         let cues = effects.compactMap { effect -> SoundCue? in
-            if case .playSound(let file, let volume, let pan) = effect {
-                SoundCue(file: file, volume: volume, pan: pan)
-            } else { nil }
+            if case .playSound(let cue) = effect { cue } else { nil }
         }
         #expect(cues.count == 1)
         #expect(cues.first?.file.hasSuffix("target_nearby.wav") == true)

@@ -1,6 +1,8 @@
 # S1 step 3 — cues carry their event; playback discipline
 
-> **Status: proposed 2026-10-27, awaiting approval.** Tracking: **#83**.
+> **Status: approved 2026-10-27; implemented and live-checked, with the
+> rate limit changed after the first live test to "a run of repeats plays
+> once" (§8).** Tracking: **#83**.
 > Order of work: `IOS_PORT_PLAN.md` §4a S1 (v0.5).
 
 ## 1. The ratified scope, verbatim
@@ -90,7 +92,8 @@ rate limit.
   - `finished(id)` for the player to report when a sound ends.
   - **Rate limit:** the same key within **0.25 s** is dropped. The key is
     the cue's event, or its file when there is no event, so a Lua plugin
-    repeating one file is limited too.
+    repeating one file is limited too. (As built, the gap is measured from
+    the key's last *arrival*, not its last play: see §8.)
   - **Concurrency cap: 5** (MUSHclient's number). At the cap, the oldest
     playing sound is stopped and the new one plays: the newest cue is the
     current news, and this is the closest equivalent of MUSHclient's
@@ -171,3 +174,63 @@ rate limit.
   `ScriptTypes.swift`, `LuaRuntime+HostDispatch.swift`, `Soundpack.swift`,
   `SessionController+Scripting.swift`, `CuePlayerController.swift`
   (app), and tests.
+
+## 8. Implementation notes (2026-10-27)
+
+- **Inline `!!SOUND` cues** carry the event `remote_sound`, the event that
+  gates them, so two inline sounds inside 0.25 s collapse into one. The
+  settings-change confirmation (`channel_on.wav`) carries no event and is
+  limited by its file.
+- **The player's bookkeeping.** `AVAudioPlayer.stop()` sends no finish
+  callback, so a replaced cue is removed from the player's tables when it
+  is stopped. A system-alert fallback (`NSSound`) holds its slot for 1 s.
+  A cue whose file turns out to be unplayable never takes a slot.
+- **Rate-limit clock:** `ProcessInfo.systemUptime`, which is monotonic.
+- **Tests:** `CueGovernorTests` has 7 tests: gap, exact gap, a run of
+  repeats playing once, different events, event-less cues keyed by file,
+  cap replacing the oldest with `finished` freeing a slot, and repeated or
+  unknown `finished`. `SoundpackPluginTests` checks the event on soundpack,
+  confirmation and inline cues; `PlaySoundShimTests` checks that a Lua
+  `PlaySound` cue names no event.
+  `runPlaysOnce` replays the recorded recast's timing: 70 arrivals 0.113 s
+  apart play once, and a full-gap pause plays again.
+
+### 8.1 The rate limit, after the first live test
+
+**As approved, "one cue per gap"** (the gap measured from the last cue
+that *played*) held for short bursts: three identical `spfire`s played
+once. A spellup recast with a sound on `affect_on` still sounded like
+every spell. The recording (`session-20261027-122534`) has 64 `{affon}`
+lines over 7.88 s, a median 0.113 s apart, so a quarter-second gap from
+the last play let 23 of them through.
+
+**Changed to "a run of repeats plays once":** every arrival of a key
+restarts its gap, whether it played or not, so a run plays at its start
+and not again until it pauses for 0.25 s. The recorded recast plays 3
+cues under this rule instead of 23.
+
+**October re-simulated** (112 sessions, the real governor, the player's
+file lengths):
+
+| | Default map | With tag-event sounds |
+|---|---|---|
+| Cues | 50,020 | 171,076 |
+| Dropped | 1,047 (2.1 %) | 39,289 (23 %) |
+| Densest second | 4 | 6 |
+| Most at once | 4 | 5 |
+| Cap triggered | never | never |
+
+The default map barely moves (2.1 % against 2.0 %): its bursts are
+short, and both rules treat them alike. Most dropped by default:
+`market` 440, `quest_target_found` 272, `clantalk` 117, `say` 104.
+Channel events share one gap per channel, so two messages on one
+channel inside a quarter second play one cue.
+
+**Live check** (`session-20261027-143101`): a full recast played twice.
+The recording shows why: the server paused 0.78 s mid-recast (spells 4
+to 104, then a pause, then 112 to 444, never more than 0.22 s apart), so
+two runs, one cue each, as designed.
+
+Left open, not built: staggering *different* events that arrive together
+(they play back to back), and writing cue plays and drops into the
+transcript (the player is app-side, away from the recorder).

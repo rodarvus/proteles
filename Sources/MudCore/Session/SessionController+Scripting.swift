@@ -222,13 +222,13 @@ public extension SessionController {
     /// Returns true when handled.
     private func applyAudioEffect(_ effect: ScriptEffect) async -> Bool {
         switch effect {
-        case .playSound(let file, let volume, let pan):
+        case .playSound(let cue):
             // The soundpack's mute gates every cue source (its own events
             // already self-gate; this catches S&D's direct PlaySound and
             // shim plugins) — except the soundpack's own settings-change
             // confirmation, which it orders BEFORE the mute flag flips.
             if !soundCuesMuted {
-                soundCuesContinuation.yield(SoundCue(file: file, volume: volume, pan: pan))
+                soundCuesContinuation.yield(cue)
             }
         case .setSoundCuesMuted(let muted):
             soundCuesMuted = muted

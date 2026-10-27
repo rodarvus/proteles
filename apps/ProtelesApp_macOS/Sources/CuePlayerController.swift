@@ -18,18 +18,43 @@ import os
 /// 4. A mapped macOS system alert (`NSSound(named:)`) for known default cue
 ///    names, when `soundpack.json` has `systemSoundFallback` on.
 /// 5. Silence + an os_log debug line (a missing file must never error-spam).
+///
+/// Before any of that, every cue passes the ``CueGovernor`` (S1 step 3): the
+/// same event inside 0.25 s is dropped, and at five sounds playing the oldest
+/// is stopped for the new one. The policy is MudCore's; this player only
+/// reports what starts and finishes.
 @MainActor
 final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
     private static let log = Logger(subsystem: "com.proteles", category: "CuePlayer")
 
     /// Players retained until they report finished (AVAudioPlayer stops when
-    /// released, so fire-and-forget needs the strong reference).
-    private var active: [ObjectIdentifier: AVAudioPlayer] = [:]
+    /// released, so fire-and-forget needs the strong reference), keyed by the
+    /// governor's playback ID.
+    private var active: [CueGovernor.PlaybackID: AVAudioPlayer] = [:]
+    /// Player → playback ID, for the finish callback.
+    private var playbackIDs: [ObjectIdentifier: CueGovernor.PlaybackID] = [:]
+    private var governor = CueGovernor()
+    private var nextPlaybackID: CueGovernor.PlaybackID = 0
+
+    /// How long a system-alert fallback holds its slot: `NSSound` has no
+    /// finish callback here, and the alerts are short.
+    private static let systemAlertSlot: Duration = .seconds(1)
 
     func play(_ cue: SoundCue) {
         guard cue.volume > 0 else { return }
+        switch governor.admit(cue, at: ProcessInfo.processInfo.systemUptime) {
+        case .drop:
+            Self.log.debug("cue \(cue.event ?? cue.file, privacy: .public) dropped: repeated inside the gap")
+            return
+        case .playReplacing(let oldest):
+            stop(oldest)
+        case .play:
+            break
+        }
+        let id = nextPlaybackID
+        nextPlaybackID += 1
         guard let url = Self.resolve(cue.file) else {
-            playSystemFallback(for: cue.file)
+            if playSystemFallback(for: cue.file) { holdSlot(id, for: Self.systemAlertSlot) }
             return
         }
         guard let player = try? AVAudioPlayer(contentsOf: url) else {
@@ -39,14 +64,35 @@ final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
         player.volume = Float(cue.volume)
         player.pan = Float(cue.pan)
         player.delegate = self
-        active[ObjectIdentifier(player)] = player
+        active[id] = player
+        playbackIDs[ObjectIdentifier(player)] = id
+        governor.started(id)
         player.play()
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully _: Bool) {
-        let id = ObjectIdentifier(player) // Sendable; the player itself must not hop actors
+    /// Stop a playing cue the governor chose to replace. `stop()` sends no
+    /// finish callback, so the bookkeeping is done here.
+    private func stop(_ id: CueGovernor.PlaybackID) {
+        guard let player = active.removeValue(forKey: id) else { return }
+        playbackIDs[ObjectIdentifier(player)] = nil
+        player.stop()
+    }
+
+    /// Count a sound with no finish callback as playing for `duration`.
+    private func holdSlot(_ id: CueGovernor.PlaybackID, for duration: Duration) {
+        governor.started(id)
         Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            self.governor.finished(id)
+        }
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully _: Bool) {
+        let key = ObjectIdentifier(player) // Sendable; the player itself must not hop actors
+        Task { @MainActor in
+            guard let id = self.playbackIDs.removeValue(forKey: key) else { return }
             self.active[id] = nil
+            self.governor.finished(id)
         }
     }
 
@@ -78,7 +124,9 @@ final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
     /// the (rare) miss path, so re-reading the config is cheap and always
     /// current. Unknown names (a user's custom file that went missing) stay
     /// silent by design.
-    private func playSystemFallback(for file: String) {
+    /// Returns whether an alert played.
+    @discardableResult
+    private func playSystemFallback(for file: String) -> Bool {
         guard SoundpackConfig.load(from: try? SoundpackConfig.defaultURL()).systemSoundFallback,
               let soundName = Self.systemSoundNames[
                   ((file as NSString).lastPathComponent as NSString).deletingPathExtension
@@ -86,9 +134,9 @@ final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
               let sound = NSSound(named: soundName)
         else {
             Self.log.debug("cue \(file, privacy: .public) not found; no fallback played")
-            return
+            return false
         }
-        sound.play()
+        return sound.play()
     }
 
     /// Default cue stem → macOS system alert (`/System/Library/Sounds`),

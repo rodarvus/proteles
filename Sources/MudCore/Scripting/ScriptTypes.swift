@@ -459,10 +459,12 @@ public enum ScriptEffect: Sendable, Equatable {
     case httpRequest(HTTPRequest)
     /// Play a one-shot sound cue (#10): the native Soundpack plugin's events,
     /// the compat shim's `PlaySound`, and the S&D host's target-nearby cues
-    /// all land here. `volume` is *linear* gain 0–1 (the MUSHclient dB curve
-    /// already applied — see ``SoundVolume``); `pan` is −1…1. The session
-    /// re-publishes onto ``SessionController/soundCues`` for the app's player.
-    case playSound(file: String, volume: Double, pan: Double)
+    /// all land here. The cue's `volume` is *linear* gain 0–1 (the MUSHclient
+    /// dB curve already applied — see ``SoundVolume``), its `pan` −1…1, and its
+    /// `event` set when the soundpack plays it for a semantic event. The
+    /// session re-publishes it onto ``SessionController/soundCues`` for the
+    /// app's player.
+    case playSound(SoundCue)
     /// Speak `text` aloud (#9) — `tts say`, `proteles.speak`, or the
     /// TextToSpeech plugin. `interrupt` cuts off the current utterance.
     /// Re-published onto ``SessionController/speechRequests``.

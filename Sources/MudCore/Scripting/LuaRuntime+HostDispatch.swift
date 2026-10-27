@@ -387,11 +387,11 @@ extension LuaRuntime {
             // MUSHclient `PlaySound` units: volume in dB (0 = full; out of
             // range coerces to full), pan −100…100. Converted here so the
             // effect carries player-ready linear gain (#10).
-            effects.append(.playSound(
+            effects.append(.playSound(SoundCue(
                 file: Self.argString(arguments, 0),
                 volume: SoundVolume.playSoundGain(volumeDb: Self.argDouble(arguments, 1)),
                 pan: SoundVolume.playSoundPan(mushPan: Self.argDouble(arguments, 2))
-            ))
+            )))
         case .sndCall:
             effects.append(.callSearchAndDestroy(
                 function: Self.argString(arguments, 0),
