@@ -199,11 +199,11 @@ struct NotificationMatcherTests {
         )
         let note = NotificationMatcher(rules: [rule]).outputNotification(for: "Lord Vyll arrives")
         #expect(note?.title == "Boss sighted")
-        #expect(note?.playSound == true)
-        #expect(note?.soundName == "Glass")
+        #expect(note?.sound == .glass)
+        #expect(note?.soundCueEvent?.payload[TriggerSound.filePayloadKey] == "Glass.aiff")
         // A silent rule plays no sound.
         let silent = NotificationRule(trigger: .keyword("x"), sound: .silent)
-        #expect(NotificationMatcher(rules: [silent]).outputNotification(for: "x")?.playSound == false)
+        #expect(NotificationMatcher(rules: [silent]).outputNotification(for: "x")?.soundCueEvent == nil)
     }
 
     @Test("hpBelow is edge-triggered: fires on crossing below, not while already below")

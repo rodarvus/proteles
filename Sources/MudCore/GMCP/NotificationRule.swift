@@ -34,15 +34,19 @@ public struct NotificationRule: Sendable, Equatable, Codable, Identifiable {
             }
         }
 
-        /// The macOS system sound name (e.g. "Glass"), or nil for default/silent.
-        public var systemName: String? {
+        /// The file this choice plays as a cue (S1 step 5), or nil for
+        /// silent. The named choices are macOS's own sounds (the macOS player
+        /// resolves them in `/System/Library/Sounds/`); `default` is the
+        /// user's alert sound, ``SoundCue/systemAlertFile``.
+        public var cueFile: String? {
             switch self {
-            case .default, .silent: nil
-            case .glass: "Glass"
-            case .ping: "Ping"
-            case .submarine: "Submarine"
-            case .hero: "Hero"
-            case .funk: "Funk"
+            case .default: SoundCue.systemAlertFile
+            case .silent: nil
+            case .glass: "Glass.aiff"
+            case .ping: "Ping.aiff"
+            case .submarine: "Submarine.aiff"
+            case .hero: "Hero.aiff"
+            case .funk: "Funk.aiff"
             }
         }
     }

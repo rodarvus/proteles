@@ -58,6 +58,10 @@ public struct SemanticEvent: Sendable, Equatable {
         /// user's pattern means, so it doesn't guess; the category exists so
         /// those sounds have their own volume cap.
         case custom
+        /// A notification banner's sound (S1 step 5, D-127 (4)) — its own
+        /// category so it has its own cap, and the one the soundpack's mute
+        /// does not silence.
+        case notification
     }
 
     /// Where the classification came from, in the tiering

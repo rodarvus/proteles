@@ -72,7 +72,7 @@ public extension ScriptEngine {
             // S1 step 4: a trigger's sound is an event into the layer, applied
             // like its sends — whether or not the line is displayed.
             if let event = firing.sound?.event(for: firing.triggerName ?? firing.triggerID.uuidString) {
-                disposition.effects.append(contentsOf: nativePlugins.onSemanticEvent(event))
+                disposition.effects.append(contentsOf: nativePlugins.emit(event))
             }
             if let script = firing.script {
                 let owner = automationOwners[firing.triggerID]
@@ -198,6 +198,12 @@ public extension ScriptEngine {
             }
             return (prose, structural)
         }
+    }
+
+    /// Deliver an emitted event (a notification's sound, S1 step 5) to every
+    /// enabled native plugin, returning their effects for the caller to use.
+    func emit(_ event: SemanticEvent) -> [ScriptEffect] {
+        nativePlugins.emit(event)
     }
 
     private func recordTriggerBurst(_ firings: [TriggerFiring]) {

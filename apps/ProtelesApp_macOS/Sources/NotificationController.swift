@@ -32,9 +32,10 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     ) {
         let title = notification.request.content.title
         Task { @MainActor in
-            self.onDeliveryOutcome?("'\(title)' presenting while frontmost (banner+sound)")
+            self.onDeliveryOutcome?("'\(title)' presenting while frontmost (banner)")
         }
-        completionHandler([.banner, .list, .sound])
+        // No `.sound`: the banner carries none — its cue already played (S1 step 5).
+        completionHandler([.banner, .list])
     }
 
     /// When true, post notifications even while Proteles is frontmost (the user
@@ -51,13 +52,18 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
 
     /// Reports each delivery outcome (posted / suppressed / OS error) so the
     /// session can transcript-log it — a silently dropped banner is otherwise
-    /// undiagnosable. Set by ``consume(from:)``.
+    /// undiagnosable. Set by ``consume(from:playCue:)``.
     var onDeliveryOutcome: (@Sendable (String) -> Void)?
+
+    /// Plays a posted notification's cue on the app's cue player (S1 step 5).
+    private var playCue: (SoundCue) -> Void = { _ in }
 
     /// Drain the session's notification stream, posting each banner and wiring
     /// delivery outcomes back into the session transcript (NOTIF category).
-    /// Runs for the life of the app's notification task.
-    func consume(from session: SessionController) async {
+    /// `playCue` plays a posted banner's sound. Runs for the life of the app's
+    /// notification task.
+    func consume(from session: SessionController, playCue: @escaping (SoundCue) -> Void) async {
+        self.playCue = playCue
         onDeliveryOutcome = { [weak session] outcome in
             guard let session else { return }
             Task { await session.logNotificationDelivery(outcome) }
@@ -68,7 +74,10 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// Post a notification, honouring suppress-when-focused.
+    /// Post a notification, honouring suppress-when-focused. The banner is
+    /// silent: its sound is the notification's cue, played here when — and
+    /// only when — the banner posts (S1 step 5, Q3 (a)), so it obeys the cue
+    /// map's caps and playback discipline instead of being a second path.
     func post(_ note: ProtelesNotification) {
         if note.suppressWhenFocused, NSApp.isActive, !notifyWhenFocused {
             onDeliveryOutcome?("'\(note.title)' suppressed (app focused, notifyWhenFocused off)")
@@ -77,12 +86,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         let content = UNMutableNotificationContent()
         content.title = note.title
         content.body = note.body
-        if note.playSound {
-            // A named system sound (e.g. "Glass") if the rule chose one, else the
-            // default notification sound.
-            content.sound = note.soundName.map { UNNotificationSound(named: UNNotificationSoundName($0)) }
-                ?? .default
-        }
+        if let cue = note.cue { playCue(cue) }
         let request = UNNotificationRequest(
             identifier: UUID().uuidString, content: content, trigger: nil
         )

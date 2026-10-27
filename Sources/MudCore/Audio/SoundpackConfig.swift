@@ -149,12 +149,11 @@ public struct SoundpackConfig: SettingsFileBacked, Equatable {
         return (cue, pick)
     }
 
-    /// The cue a trigger's file sound plays (S1 step 4): its own file, at
-    /// ``TriggerSound/triggerSoundEvent``'s effective volume and pan — so
-    /// `spcat custom` and `spset trigger_sound volume` both cap it. Nil at
-    /// volume 0.
-    public func triggerCue(file: String) -> SoundCue? {
-        let event = TriggerSound.triggerSoundEvent
+    /// The cue for an event that names its own file — a trigger's file sound
+    /// (`trigger_sound`, S1 step 4) or a notification's (`notification`,
+    /// step 5): that file, at the event's effective volume and pan, so its
+    /// category cap and `spset <event> volume` both apply. Nil at volume 0.
+    public func fileCue(for event: String, file: String) -> SoundCue? {
         let percent = effectiveVolume(for: event)
         guard !file.isEmpty, percent > 0 else { return nil }
         return SoundCue(

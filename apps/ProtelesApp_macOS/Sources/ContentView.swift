@@ -276,7 +276,8 @@ struct ContentView: View {
             notifications.notifyWhenFocused = notifyWhenFocused
         }
         .task {
-            await notifications.consume(from: session)
+            // A banner's sound is a cue (S1 step 5): the same player as the soundpack.
+            await notifications.consume(from: session) { cuePlayer.play($0) }
         }
         .task {
             // Render soundpack/plugin cues (#10) — AVAudioPlayer one-shots.

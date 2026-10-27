@@ -20,6 +20,10 @@ public struct SoundCue: Sendable, Equatable {
     /// discipline keys on it (``CueGovernor``, S1 step 3).
     public let event: String?
 
+    /// Not a file: the user's system alert sound, which the platform player
+    /// resolves itself — a notification's `Default` sound (S1 step 5).
+    public static let systemAlertFile = "system-alert"
+
     public init(file: String, volume: Double, pan: Double, event: String? = nil) {
         self.file = file
         self.volume = volume

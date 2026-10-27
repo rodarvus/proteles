@@ -6,26 +6,45 @@ import Foundation
 public struct ProtelesNotification: Sendable, Equatable {
     public let title: String
     public let body: String
-    /// Play a sound (false = silent).
-    public let playSound: Bool
-    /// A macOS system sound name (e.g. "Glass"); `nil` = the default sound.
-    public let soundName: String?
+    /// The sound chosen for it — a rule's choice, else the default.
+    public let sound: NotificationRule.Sound
+    /// The cue the app plays when it posts the banner (S1 step 5): made by
+    /// the cue map from ``sound`` when the session publishes, so category
+    /// caps and playback discipline apply. Nil for a silent one. The banner
+    /// itself carries no sound.
+    public var cue: SoundCue?
     /// Suppress this notification while Proteles is the frontmost app (the app
     /// layer checks focus). Critical alerts can set this false to always notify.
     public let suppressWhenFocused: Bool
 
+    /// The one event every notification's sound plays as (D-127 (4)).
+    public static let soundEvent = "notification"
+
     public init(
         title: String,
         body: String,
-        playSound: Bool = true,
-        soundName: String? = nil,
+        sound: NotificationRule.Sound = .default,
+        cue: SoundCue? = nil,
         suppressWhenFocused: Bool = true
     ) {
         self.title = title
         self.body = body
-        self.playSound = playSound
-        self.soundName = soundName
+        self.sound = sound
+        self.cue = cue
         self.suppressWhenFocused = suppressWhenFocused
+    }
+
+    /// The event this notification's sound emits, or nil when it is silent.
+    /// Its payload names the file, as a trigger's file sound does.
+    public var soundCueEvent: SemanticEvent? {
+        sound.cueFile.map { file in
+            SemanticEvent(
+                category: .notification,
+                name: Self.soundEvent,
+                source: .pattern(rule: "notification"),
+                payload: [TriggerSound.filePayloadKey: file]
+            )
+        }
     }
 }
 
@@ -190,8 +209,7 @@ public struct NotificationMatcher: Sendable, Equatable {
         return ProtelesNotification(
             title: title,
             body: rule.bodyTemplate.isEmpty ? defaultBody : Self.fill(rule.bodyTemplate, tokens),
-            playSound: rule.sound != .silent,
-            soundName: rule.sound.systemName
+            sound: rule.sound
         )
     }
 

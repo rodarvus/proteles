@@ -1,4 +1,5 @@
 import AppKit
+import AudioToolbox
 import AVFoundation
 import MudCore
 import os
@@ -15,9 +16,16 @@ import os
 ///    MUSHclient import or manual drops) always win.
 /// 3. The bundled `DefaultSounds/<name>.wav` — the CC0 out-of-the-box set,
 ///    named after the MUSHclient defaults (see PROVENANCE.md).
-/// 4. A mapped macOS system alert (`NSSound(named:)`) for known default cue
+/// 4. `/System/Library/Sounds/<file>` — macOS's own sounds, which a
+///    notification rule names (`Glass.aiff`, S1 step 5).
+/// 5. A mapped macOS system alert (`NSSound(named:)`) for known default cue
 ///    names, when `soundpack.json` has `systemSoundFallback` on.
-/// 5. Silence + an os_log debug line (a missing file must never error-spam).
+/// 6. Silence + an os_log debug line (a missing file must never error-spam).
+///
+/// ``SoundCue/systemAlertFile`` is not a file: it is the user's alert sound,
+/// a notification's `Default`. When System Settings ▸ Sound names one, it
+/// plays as an ordinary cue; when none is stored (the system default), macOS
+/// plays it itself — still governed, but at its own alert volume.
 ///
 /// Before any of that, every cue passes the ``CueGovernor`` (S1 step 3): the
 /// same event inside 0.25 s is dropped, and at five sounds playing the oldest
@@ -53,8 +61,14 @@ final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
         }
         let id = nextPlaybackID
         nextPlaybackID += 1
-        guard let url = Self.resolve(cue.file) else {
-            if playSystemFallback(for: cue.file) { holdSlot(id, for: Self.systemAlertSlot) }
+        let isAlert = cue.file == SoundCue.systemAlertFile
+        guard let url = isAlert ? Self.userAlertSoundURL() : Self.resolve(cue.file) else {
+            if isAlert {
+                AudioServicesPlayAlertSound(kSystemSoundID_UserPreferredAlert)
+                holdSlot(id, for: Self.systemAlertSlot)
+            } else if playSystemFallback(for: cue.file) {
+                holdSlot(id, for: Self.systemAlertSlot)
+            }
             return
         }
         guard let player = try? AVAudioPlayer(contentsOf: url) else {
@@ -117,7 +131,21 @@ final class CuePlayerController: NSObject, AVAudioPlayerDelegate {
             if fileManager.fileExists(atPath: candidate.path) { return candidate }
         }
         let stem = (name as NSString).deletingPathExtension
-        return Bundle.main.url(forResource: stem, withExtension: "wav", subdirectory: "DefaultSounds")
+        let defaults = "DefaultSounds"
+        if let bundled = Bundle.main.url(forResource: stem, withExtension: "wav", subdirectory: defaults) {
+            return bundled
+        }
+        let system = URL(fileURLWithPath: "/System/Library/Sounds").appendingPathComponent(name)
+        return fileManager.fileExists(atPath: system.path) ? system : nil
+    }
+
+    /// The alert sound System Settings ▸ Sound has stored, if any. Unset means
+    /// the system default, whose file isn't named anywhere to read.
+    static func userAlertSoundURL() -> URL? {
+        guard let path = UserDefaults.standard.string(forKey: "com.apple.sound.beep.sound"),
+              FileManager.default.fileExists(atPath: path)
+        else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     /// Tier 4: a mapped system alert for a known default cue name — gated by

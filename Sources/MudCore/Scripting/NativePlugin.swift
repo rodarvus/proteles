@@ -348,6 +348,20 @@ public struct NativePluginRegistry: Sendable {
         return effects
     }
 
+    /// Deliver an *emitted* event — one a trigger or a notification raised,
+    /// not one classified from the stream — to **every** enabled plugin
+    /// (S1 step 5). ``wantsSemanticEvents`` is a cost guard in front of
+    /// classification (D-127 (1)), not routing: a muted soundpack doesn't
+    /// want the stream classified, but must still hear a notification's
+    /// sound (D-127 (4)). Each plugin applies its own policy, mute included.
+    public mutating func emit(_ event: SemanticEvent) -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for index in entries.indices where entries[index].enabled {
+            effects.append(contentsOf: entries[index].plugin.onSemanticEvent(event))
+        }
+        return effects
+    }
+
     /// Fan a GMCP update to every enabled plugin, concatenating effects. The
     /// dispatch context is pre-answered once (cross-plugin facts — see
     /// ``GMCPDispatchContext``) and handed to every plugin.

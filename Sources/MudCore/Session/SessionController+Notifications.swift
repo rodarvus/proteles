@@ -28,14 +28,32 @@ public extension SessionController {
     }
 
     /// The single publish gate: drop a recent duplicate (coalescing), else yield
-    /// the notification for the app to post.
+    /// the notification for the app to post — with its sound's cue attached
+    /// (S1 step 5). The cue map lives on the script engine, so the cue costs
+    /// one hop; it is fetched in a task so this stays synchronous for the
+    /// per-line keyword path (`notifyForOutput`).
     func publishNotification(_ note: ProtelesNotification) {
         guard notificationCoalescer.shouldShow(note) else {
             logTranscript(.notif, "publish '\(note.title)' → coalesced (duplicate within window)")
             return
         }
+        guard let event = note.soundCueEvent, let engine = scriptEngine else {
+            yieldNotification(note)
+            return
+        }
+        Task {
+            var withCue = note
+            withCue.cue = await engine.emit(event).lazy.compactMap { effect -> SoundCue? in
+                if case .playSound(let cue) = effect { cue } else { nil }
+            }.first
+            yieldNotification(withCue)
+        }
+    }
+
+    private func yieldNotification(_ note: ProtelesNotification) {
         let result = notificationsContinuation.yield(note)
-        logTranscript(.notif, "publish '\(note.title)' → yielded to app (\(result))")
+        let sound = note.cue.map { "cue \($0.file)" } ?? "no cue"
+        logTranscript(.notif, "publish '\(note.title)' → yielded to app with \(sound) (\(result))")
     }
 
     /// App-layer delivery outcomes (posted / focus-suppressed / OS error) written

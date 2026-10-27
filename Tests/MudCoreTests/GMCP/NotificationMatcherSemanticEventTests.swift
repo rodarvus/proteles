@@ -78,7 +78,7 @@ struct NotificationMatcherSemanticEventTests {
         )
         let matcher = NotificationMatcher(rules: [rule])
         let expected = ProtelesNotification(
-            title: "Now 100", body: "saw: \(realLevelUp)", playSound: true, soundName: "Glass"
+            title: "Now 100", body: "saw: \(realLevelUp)", sound: .glass
         )
         #expect(matcher.outputNotification(for: realLevelUp) == expected)
         let event = try #require(matcher.events(forDisplayed: realLevelUp).first)

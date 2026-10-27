@@ -51,6 +51,9 @@ public enum SemanticEventVocabulary {
         for name in custom {
             table[name] = .custom
         }
+        for name in notification {
+            table[name] = .notification
+        }
         return table
     }()
 
@@ -129,5 +132,11 @@ public enum SemanticEventVocabulary {
     /// sound plays as (S1 step 4, D-127 (3)).
     static let custom: Set<String> = [
         TriggerSound.triggerSoundEvent
+    ]
+
+    /// Proteles's own: the one event a notification's sound plays as (S1
+    /// step 5, D-127 (4)).
+    static let notification: Set<String> = [
+        ProtelesNotification.soundEvent
     ]
 }
