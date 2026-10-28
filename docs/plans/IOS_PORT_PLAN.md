@@ -545,7 +545,8 @@ D-120's derive-from-a-named-consumer rule guards against speculative
   recorded sessions classified with zero invariant violations; item 6 (the
   plugin event bus) deferred to post-v1 by **D-124** (#89).
 
-- **S0b — Actionable state** (#84, **not started**). The durable, replaceable
+- **S0b — Actionable state** (#84, **in progress**; scope and checklist
+  settled by **D-129**, `S0B_SCOPE_PROPOSAL.md`). The durable, replaceable
   entity state the lens journeys act on — occupants, exits, floor items,
   inventory/worn/bags/portals, spells and cooldowns, quest targets, vitals —
   a different shape from S0a's ephemeral events (D-121; journeys in
@@ -554,8 +555,10 @@ D-120's derive-from-a-named-consumer rule guards against speculative
   `ConsiderFeature`, Search-and-Destroy's target list (bridged only to Lua),
   and `invdata` parsed by `InventorySerials` with its `type` column
   discarded. The tag-family router extends to the entity families under
-  D-123's rule (tags only for data GMCP does not carry). *Next step:* a
-  checklist for #84, starting from a verbatim quote of D-121.
+  D-123's rule (tags only for data GMCP does not carry). Eight items, in
+  order: the frame (with a read-only State inspector), occupants, room/exits/
+  vitals, items, spells and cooldowns, quest targets, floor items, and
+  `docs/STATE_MODEL.md`. `{scan}` and `room.wrongdir` are deferred to #91.
 
 - **S1 — Sound as a real feature. Complete (2026-10-27; #83 closed).** Event→cue map as data (per-event +
   per-category volumes under a master, pan, variants); a `sound` action on GUI
@@ -826,10 +829,10 @@ the script → feedback issues filed → next phase.
   which forced a re-derivation; the rationale is now tracked so it cannot be
   lost again.
 
-**Resolved (2026-08-25 → 2026-10-27, D-121–D-128):**
+**Resolved (2026-08-25 → 2026-10-28, D-121–D-129):**
 - ~~Is S0 one phase?~~ → **no: S0a (events) and S0b (actionable state)**
-  (D-121); S0a complete 2026-10-19, S1 complete 2026-10-27, S0b not
-  started. S2/S3 features dropped
+  (D-121); S0a complete 2026-10-19, S1 complete 2026-10-27, S0b scoped
+  2026-10-28 (D-129). S2/S3 features dropped
   but their framework pieces kept (D-122). Tag families only for data GMCP
   does not carry (D-123). The plugin event bus deferred to post-v1 (D-124).
   iOS floor raised to 26 (D-125). Speech on the layer deferred with the
