@@ -122,8 +122,10 @@ struct PluginEndToEndTests {
     func noBroadcastWithoutPlugins() async throws {
         let engine = try ScriptEngine()
         // Native gmcp projection still happens; no OnPluginBroadcast call.
+        // The actionable state's first sighting of the feed (S0b) is not a
+        // broadcast.
         let effects = await engine.applyGMCP(package: "char.status", json: #"{"state":3}"#)
-        #expect(effects.isEmpty)
+        #expect(effects.allSatisfy { if case .updateState = $0 { true } else { false } })
     }
 
     // MARK: - Per-plugin environments

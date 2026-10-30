@@ -92,6 +92,9 @@ public actor SessionController {
     /// Newest-only.
     public nonisolated let publishedConsider: AsyncStream<ConsiderSnapshot>
     nonisolated let publishedConsiderContinuation: AsyncStream<ConsiderSnapshot>.Continuation
+    /// Actionable-state snapshots (S0b, #84) for the State inspector. Newest-only.
+    public nonisolated let actionableStates: AsyncStream<ActionableState>
+    nonisolated let actionableStatesContinuation: AsyncStream<ActionableState>.Continuation
 
     /// MUSHclient miniwindow scene updates/deletes (`WindowCreate` + `Window*`
     /// draws from shim plugins) — the UI's `MiniWindowStore` subscribes and a
@@ -463,6 +466,8 @@ public actor SessionController {
         publishedModelsContinuation = modelsContinuation
         (publishedConsider, publishedConsiderContinuation) =
             AsyncStream<ConsiderSnapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        (actionableStates, actionableStatesContinuation) =
+            AsyncStream<ActionableState>.makeStream(bufferingPolicy: .bufferingNewest(1))
         // Buffer several so a multi-window draw pass (one update per window)
         // isn't coalesced to a single newest scene.
         (miniWindowUpdates, miniWindowUpdatesContinuation) =

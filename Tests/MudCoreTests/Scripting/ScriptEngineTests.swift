@@ -157,6 +157,7 @@ struct ScriptEngineTests {
         end)
         """)
         let effects = await engine.applyGMCP(package: "char.vitals", json: #"{"hp":42}"#)
-        #expect(effects == [.send("hp:42")])
+        // Besides the actionable state's first sighting of the feed (S0b).
+        #expect(effects.filter { if case .updateState = $0 { false } else { true } } == [.send("hp:42")])
     }
 }

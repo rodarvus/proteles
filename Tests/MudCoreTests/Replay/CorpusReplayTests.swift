@@ -115,6 +115,32 @@ struct CorpusReplayHarnessTests {
         #expect(violations.contains { $0.contains("zone_repop expected 1") })
     }
 
+    @Test("The state pass pins blocks per feed and flags an incomplete block")
+    func statePassPinsAndFlags() {
+        func line(_ text: String) -> Line {
+            Line(id: LineID(0), text: text)
+        }
+        var clean = StateRecorder()
+        let cleanLines = ["{roomchars}", "A mob.", "{/roomchars}", "{exits}[ Exits: north ]"]
+        for (index, text) in cleanLines.enumerated() {
+            clean.observe(line(text), index: index)
+        }
+        clean.observe(gmcp: GMCPMessage(package: "room.info", json: "{}"))
+        #expect(clean.pin == StateRecorder.Pin(
+            seen: ["roomchars", "exits", "room.info"],
+            blocks: ["roomchars": 1]
+        ))
+        #expect(clean.arrivals == ["exits": 1, "room.info": 1])
+        #expect(clean.independentArrivals == clean.arrivals)
+        #expect(clean.violations(session: "s").isEmpty)
+
+        var broken = StateRecorder()
+        for (index, text) in ["{roomchars}", "A mob.", "{roomobjs}", "{/roomobjs}"].enumerated() {
+            broken.observe(line(text), index: index)
+        }
+        #expect(broken.violations(session: "s") == ["s state: incomplete 2: {roomchars} block interrupted"])
+    }
+
     @Test("The documented tag recogniser accepts the corpus shapes and rejects malformed ones")
     func documentedTagRecogniser() {
         #expect(CorpusReplay.documentedTagEvent(for: "{affon}614,1200") == "affect_on")
@@ -229,5 +255,21 @@ struct CorpusReplayCueBaselineTests {
         let count = result.cueDiffReports.count
         let rePin = "re-pin with PROTELES_REPLAY_PIN=1 after review"
         #expect(result.cueDiffReports.isEmpty, "\(count) sessions cue differently (\(rePin)):\n\n\(reports)")
+    }
+}
+
+@Suite("CorpusReplay — state pin and diff", .serialized, .enabled(if: CorpusReplay.isEnabled))
+struct CorpusReplayStateBaselineTests {
+    @Test("Every session keeps the actionable state of its reviewed baseline")
+    func corpusStateMatchesBaseline() throws {
+        let result = try CorpusReplayRun.shared.result()
+        try #require(result.sessions > 0, "no recordings found under \(CorpusReplay.corpusDirectory.path)")
+        let reports = result.stateDiffReports.joined(separator: "\n\n")
+        let count = result.stateDiffReports.count
+        let rePin = "re-pin with PROTELES_REPLAY_PIN=1 after review"
+        #expect(
+            result.stateDiffReports.isEmpty,
+            "\(count) sessions differ in state (\(rePin)):\n\n\(reports)"
+        )
     }
 }

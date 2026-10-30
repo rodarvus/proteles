@@ -329,6 +329,8 @@ public enum ScriptEffect: Sendable, Equatable {
     /// Publish the native Consider feature's current room-mob list + control
     /// state to its floating panel (the inverse of `consider all` parsing).
     case updateConsider(ConsiderSnapshot)
+    /// Publish the actionable state (S0b, #84) to the State inspector.
+    case updateState(ActionableState)
     /// Publish a captured continent bigmap (border-stripped styled lines) for
     /// a continent zone id — the map panel renders it while overland.
     case updateBigmap(zone: Int, name: String, lines: [Line])

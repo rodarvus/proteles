@@ -159,6 +159,13 @@ public protocol NativePlugin: Sendable {
     /// itself. Default: no effects.
     mutating func onSemanticEvent(_ event: SemanticEvent) -> [ScriptEffect]
 
+    /// React to a change in the actionable state (S0b, #84): `changed` names
+    /// the entities that changed, and is never empty. Not called for a
+    /// feed-status change alone. Default: no effects.
+    mutating func onStateChange(
+        _ state: ActionableState, changed: Set<ActionableState.Entity>
+    ) -> [ScriptEffect]
+
     /// Apply this plugin's output filter to a structured channel line before
     /// capture/echo. Only Text Substitution overrides this hook.
     func transformCommunicationLine(_ line: Line) -> Line?
@@ -214,6 +221,13 @@ public extension NativePlugin {
     }
 
     mutating func onSemanticEvent(_: SemanticEvent) -> [ScriptEffect] {
+        []
+    }
+
+    mutating func onStateChange(
+        _: ActionableState,
+        changed _: Set<ActionableState.Entity>
+    ) -> [ScriptEffect] {
         []
     }
 
@@ -358,6 +372,18 @@ public struct NativePluginRegistry: Sendable {
         var effects: [ScriptEffect] = []
         for index in entries.indices where entries[index].enabled {
             effects.append(contentsOf: entries[index].plugin.onSemanticEvent(event))
+        }
+        return effects
+    }
+
+    /// Tell every enabled plugin which entities of the actionable state
+    /// changed (S0b item 1), concatenating effects.
+    public mutating func onStateChange(
+        _ state: ActionableState, changed: Set<ActionableState.Entity>
+    ) -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for index in entries.indices where entries[index].enabled {
+            effects.append(contentsOf: entries[index].plugin.onStateChange(state, changed: changed))
         }
         return effects
     }

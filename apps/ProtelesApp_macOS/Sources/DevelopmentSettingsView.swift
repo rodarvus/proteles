@@ -13,6 +13,7 @@ struct DevelopmentSettingsView: View {
     let snd: SnDPanelModel
     let pluginDBs: PluginDatabasesModel
 
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("autoRecordSessions") private var autoRecordSessions = true
     @AppStorage(PerformanceDiagnosticsDefaults.key)
     private var performanceDiagnosticsMode = PerformanceDiagnosticsDefaults.defaultMode
@@ -47,6 +48,14 @@ struct DevelopmentSettingsView: View {
                     }
                 }
                 Text(description(for: selectedPerformanceMode))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("State Inspector") {
+                Button("Open State Inspector") { openWindow(id: ProtelesApp.stateInspectorWindowID) }
+                Text("What the game's structured feeds have told Proteles this connection — "
+                    + "for checking the actionable-state model while you play.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

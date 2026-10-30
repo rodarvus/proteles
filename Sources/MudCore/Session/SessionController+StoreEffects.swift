@@ -10,6 +10,8 @@ extension SessionController {
             await mapStore.update(map)
         case .updateConsider(let snapshot):
             publishedConsiderContinuation.yield(snapshot)
+        case .updateState(let state):
+            actionableStatesContinuation.yield(state)
         case .updateBigmap(let zone, let name, let lines):
             await bigmapStore.update(BigmapStore.ContinentMap(zone: zone, name: name, lines: lines))
         case .diagnostic(let source, let message):

@@ -23,6 +23,9 @@ public actor ScriptEngine {
     /// Native (Swift) plugins folded into the same pipeline as Lua plugins.
     /// Module-internal so the automation extension's reload helpers can reach it.
     var nativePlugins = NativePluginRegistry()
+    /// The actionable-state model (S0b, #84), fed at the line and GMCP seams
+    /// in `ScriptEngine+State.swift`.
+    var stateTracker = ActionableStateTracker()
     /// When true, automations are paused: typed input is sent verbatim,
     /// incoming lines pass through, and timers don't fire (Note mode).
     /// Internal (not private): the accessors live in `ScriptEngine+Console`
@@ -209,9 +212,10 @@ public actor ScriptEngine {
         nativePlugins.call(id: id, function: function, arguments: arguments)
     }
 
-    /// Fire `connect()` on enabled native plugins (on session connect).
+    /// On session connect: reset the actionable state, then fire `connect()`
+    /// on enabled native plugins.
     public func connectNativePlugins() -> [ScriptEffect] {
-        nativePlugins.connect()
+        resetActionableState() + nativePlugins.connect()
     }
 
     /// A native plugin's serialized state (for persistence).
@@ -470,6 +474,7 @@ public actor ScriptEngine {
             .string("GMCP"),
             .string(package)
         ]))
+        effects.append(contentsOf: ingestState(gmcpPackage: package))
         effects.append(contentsOf: nativePlugins.onGMCP(package: package, json: json))
         return effects
     }

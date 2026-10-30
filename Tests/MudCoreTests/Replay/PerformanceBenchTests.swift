@@ -119,6 +119,74 @@ struct PerformanceBenchTests {
     }
 }
 
+/// S0b item 1 (#84) — the actionable-state frame's per-line cost
+/// (`docs/plans/S0B_ITEM1_PROPOSAL.md` §7). B6 is the A/B half: it touches
+/// only `ScriptEngine.process`, so the same test runs on the control commit
+/// (before the frame) and on the change. B6b measures the tracker alone and
+/// exists only with the change.
+@Suite("PerformanceBench — S0b state (#84)", .serialized, .enabled(if: benchEnabled))
+struct StatePerformanceBenchTests {
+    @Test("B6: ScriptEngine.process per line over a real session")
+    func b6EngineProcessPerLine() async throws {
+        let lines = try replayLargestRecording()
+        try #require(!lines.isEmpty, "no recordings to replay")
+        let engine = try ScriptEngine()
+        for line in lines.prefix(2000) {
+            _ = await engine.process(line)
+        }
+        let passes = 3
+        let clock = ContinuousClock()
+        let start = clock.now
+        for _ in 0..<passes {
+            for line in lines {
+                _ = await engine.process(line)
+            }
+        }
+        let perLine = (clock.now - start) / (passes * lines.count)
+        print("BENCH B6: \(lines.count) lines × \(passes) passes, \(perLine) per line")
+    }
+
+    @Test("B6b: state tracker ingest per line, overall and per tag line")
+    func b6bTrackerPerLine() throws {
+        let lines = try replayLargestRecording()
+        try #require(!lines.isEmpty, "no recordings to replay")
+        let tagLines = lines.count { $0.text.utf8.first == UInt8(ascii: "{") }
+        let passes = 10
+        let clock = ContinuousClock()
+        var changes = 0
+        let elapsed = clock.measure {
+            for _ in 0..<passes {
+                var tracker = ActionableStateTracker()
+                for line in lines where tracker.ingest(line).state {
+                    changes += 1
+                }
+            }
+        }
+        // The fast path alone: the non-tag lines through a tracker that never
+        // opens a block.
+        let plain = lines.filter { $0.text.utf8.first != UInt8(ascii: "{") }
+        var plainChanges = 0
+        let plainElapsed = clock.measure {
+            for _ in 0..<passes {
+                var tracker = ActionableStateTracker()
+                for line in plain where tracker.ingest(line).state {
+                    plainChanges += 1
+                }
+            }
+        }
+        let perLine = elapsed / (passes * lines.count)
+        let perPlainLine = plainElapsed / (passes * plain.count)
+        // Everything above the fast path is charged to the tag lines.
+        let perTagLine = (elapsed - plainElapsed) / (passes * max(tagLines, 1))
+        print(
+            "BENCH B6b: \(lines.count) lines (\(tagLines) tag lines) × \(passes) passes, \(changes) changes"
+        )
+        print("BENCH B6b: \(perLine) per line; whole session \(elapsed / passes)")
+        print("BENCH B6b: \(perPlainLine) per non-tag line; \(perTagLine) per tag line (incl. block lines)")
+        #expect(plainChanges == 0)
+    }
+}
+
 /// Env gate so the normal suite (and CI) never pays for the bench.
 private var benchEnabled: Bool {
     ProcessInfo.processInfo.environment["PROTELES_BENCH"] != nil

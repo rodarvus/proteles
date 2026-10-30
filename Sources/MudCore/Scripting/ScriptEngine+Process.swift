@@ -16,8 +16,11 @@ public extension ScriptEngine {
     /// Styled-line entry point: triggers match `line.text` (and get its colour
     /// runs as `styles`); native plugins receive the full styled ``Line``.
     func process(_ line: Line) async -> LineDisposition {
+        // State first (S0b item 1): ahead of the suspended return and every
+        // guard, so a plugin reacting to this line sees state that includes it.
+        let stateEffects = ingestState(line)
         // While suspended (Note mode), lines pass through untouched.
-        if suspended { return LineDisposition() }
+        if suspended { return LineDisposition(effects: stateEffects) }
         // Cleared each line; a fired trigger's script may set it via
         // StopEvaluatingTriggers to skip the remaining firings (see below).
         stopTriggerEvaluation = false
@@ -29,6 +32,7 @@ public extension ScriptEngine {
         }
         recordTriggerBurst(firings)
         var result = await processTriggerFirings(firings, line: line)
+        if !stateEffects.isEmpty { result.disposition.effects.insert(contentsOf: stateEffects, at: 0) }
         let native = measureScriptPhase(
             "session.script.native-line",
             thresholdMS: 50

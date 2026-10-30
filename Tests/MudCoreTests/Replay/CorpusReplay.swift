@@ -57,6 +57,10 @@ enum CorpusReplay {
         /// Sound cues an unmuted soundpack played over the session, by file —
         /// see `CorpusReplay+Cues.swift`. Pinned separately from ``session``.
         let cues: [String: Int]
+        /// The actionable-state pin (S0b) — see `CorpusReplay+State.swift`.
+        var state = StateRecorder.Pin()
+        /// The state pass's invariant violations.
+        var stateViolations: [String] = []
     }
 
     struct Diff: Equatable {
@@ -85,7 +89,9 @@ enum CorpusReplay {
         var gmcp: [GMCPMessage] = []
         var events: [Event] = []
         var cues = CueCounter()
+        var state = StateRecorder()
         func classify(_ line: Line) {
+            state.observe(line, index: texts.count)
             for event in SemanticClassifier.events(forDisplayed: line) {
                 cues.observe(event)
                 events.append(Event(
@@ -103,6 +109,7 @@ enum CorpusReplay {
             for message in output.gmcp {
                 gmcp.append(message)
                 cues.observe(gmcp: message)
+                state.observe(gmcp: message)
                 for event in SemanticClassifier.events(forGMCP: message.package, json: message.json) {
                     events.append(Event(
                         index: texts.count,
@@ -126,7 +133,14 @@ enum CorpusReplay {
             gmcp: gmcp.count,
             events: events
         )
-        return Replayed(session: session, lineTexts: texts, gmcp: gmcp, cues: cues.counts)
+        return Replayed(
+            session: session,
+            lineTexts: texts,
+            gmcp: gmcp,
+            cues: cues.counts,
+            state: state.pin,
+            stateViolations: state.violations(session: session.name)
+        )
     }
 
     /// Counts by `name/tier` — `affect_on/tag`, `quest_ready/gmcp`, …
@@ -390,6 +404,8 @@ final class CorpusReplayRun: @unchecked Sendable {
         var violations: [String] = []
         var diffReports: [String] = []
         var cueDiffReports: [String] = []
+        var stateDiffReports: [String] = []
+        var stateBlockTotals: [String: Int] = [:]
         var cueTotals: [String: Int] = [:]
         var elapsed: Duration = .zero
     }
@@ -414,7 +430,7 @@ final class CorpusReplayRun: @unchecked Sendable {
         for url in CorpusReplay.corpusURLs() {
             let replayed = try CorpusReplay.replay(url)
             let session = replayed.session
-            let violations = CorpusReplay.violations(in: replayed)
+            let violations = CorpusReplay.violations(in: replayed) + replayed.stateViolations
             result.violations += violations
             var status = "ok"
             if let baseline = CorpusReplay.loadBaseline(named: session.name), !CorpusReplay.shouldPin {
@@ -435,6 +451,11 @@ final class CorpusReplayRun: @unchecked Sendable {
                 status += " CUES DIFF"
             }
             result.cueTotals.merge(replayed.cues, uniquingKeysWith: +)
+            if let report = try CorpusReplay.checkState(replayed) {
+                result.stateDiffReports.append(report)
+                status += " STATE DIFF"
+            }
+            result.stateBlockTotals.merge(replayed.state.blocks, uniquingKeysWith: +)
             result.sessions += 1
             result.lines += session.lines
             result.gmcp += session.gmcp
@@ -453,6 +474,9 @@ final class CorpusReplayRun: @unchecked Sendable {
         }
         for (file, count) in result.cueTotals.sorted(by: { $0.value > $1.value }) {
             print("replay:   cue \(file) \(count)")
+        }
+        for (feed, count) in result.stateBlockTotals.sorted(by: { $0.value > $1.value }) {
+            print("replay:   state {\(feed)} blocks \(count)")
         }
         return result
     }

@@ -71,6 +71,9 @@ struct ProtelesApp: App {
     /// The Consider panel model (floating room-mob list).
     @State private var consider = ConsiderPanelModel()
 
+    /// The live actionable state, for the State inspector (S0b, #84).
+    @State var actionableState: ActionableStateModel
+
     /// Main-window tiled-dock layout (UI revamp — docs/UI_REVAMP.md).
     @State private var layout = LayoutStore()
 
@@ -136,6 +139,7 @@ struct ProtelesApp: App {
         _luaConsole = State(initialValue: LuaConsoleModel(session: session))
         _map = State(initialValue: MapPanelModel(session: session))
         _asciiMap = State(initialValue: MapModel(store: session.mapStore))
+        _actionableState = State(initialValue: Self.followActionableState(session: session))
 
         // Session resume (#42): consume the breadcrumb and, when resuming,
         // restore scrollback before persistence attaches (see
@@ -346,6 +350,8 @@ struct ProtelesApp: App {
         }
         .defaultSize(width: 820, height: 680)
         .windowResizability(.contentSize)
+
+        stateInspectorWindow
 
         Window("Lua Console", id: ProtelesApp.luaConsoleWindowID) {
             LuaConsoleView(model: luaConsole)
