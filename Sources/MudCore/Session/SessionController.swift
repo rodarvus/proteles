@@ -163,6 +163,9 @@ public actor SessionController {
     /// ExecuteWithWaits round-trip barrier); resumed by ``handleWalkMarker`` on
     /// arrival, or by a defensive timeout / teardown so it can't wedge.
     var waitMarkerContinuation: CheckedContinuation<Void, Never>?
+    /// The reference mapper's `sent_busy`: `kinda_busy` went out and
+    /// `ok_you_can_go_now` hasn't yet. See ``handleWalkMarker``.
+    var runningBroadcastSent = false
     /// Commands held behind an in-progress `mapper goto` — a macro/stacked
     /// command after the goto must wait for ARRIVAL (the ordering MUSHclient got
     /// for free from Aardwolf's server-side `run` queue; we walk client-side, so

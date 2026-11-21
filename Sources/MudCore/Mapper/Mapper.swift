@@ -52,6 +52,9 @@ public actor Mapper {
     /// arrival here, so a recall/home/portal first jump (just the first segment)
     /// is handled identically to a plain run. nil = no walk in progress.
     var walkFinalTarget: String?
+    /// The walk sent `{begin running}` and its `{end running}` hasn't gone
+    /// out yet (it rides the final segment). An abandoned walk sends it.
+    var walkEndOwed = false
     /// Monotonic counter bumped every time ``route`` actually arms a walk
     /// (goto/walkto/resume/next with a non-empty path). The session snapshots it
     /// around each dispatched command to tell "this command started/redirected a

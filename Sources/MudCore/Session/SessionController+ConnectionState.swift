@@ -28,9 +28,10 @@ extension SessionController {
                 // login/MOTD. Native plugins still connect now (their connect is
                 // login-safe, e.g. AsciiMap just enables an out-of-band telnet
                 // option).
-                var effects: [ScriptEffect] = switch newState {
-                case .disconnected: await scriptEngine.disconnectPlugins()
-                default: []
+                var effects: [ScriptEffect] = []
+                if newState == .disconnected {
+                    await self?.endRunningOnDisconnect()
+                    effects = await scriptEngine.disconnectPlugins()
                 }
                 if newState == .connected {
                     // Reset the output-buffer mirror so GetLineCount counts from

@@ -51,6 +51,10 @@ extension Mapper {
         // recall lands somewhere other than the expected uid never reaches this —
         // issue #78.)
         if let target = walkFinalTarget, currentRoomUID == target {
+            // Here before the last segment went out (the player came another
+            // way): the walk is over, so it ends now and nothing more of it
+            // is released.
+            effects.append(contentsOf: walkEndOwed ? abandonWalk() : [])
             walkFinalTarget = nil
             effects.append(.walkCompleted(uid: target))
         }
@@ -64,11 +68,42 @@ extension Mapper {
         walkFinalTarget != nil
     }
 
-    /// Abandon any in-progress walk outright (the session's stall watchdog gave
-    /// up on it). Unlike ``advanceWalk``'s natural completion, this emits no
-    /// `.walkCompleted` — the session is already flushing the deferred queue.
-    public func cancelWalk() {
+    /// Abandon any in-progress walk outright: the session's stall watchdog
+    /// gave up on it, or a move failed (``failedMoveLines``). Unlike
+    /// ``advanceWalk``'s natural completion, this emits no `.walkCompleted`.
+    /// Returns the walk's `{end running}` if it still owes one.
+    public func cancelWalk() -> [ScriptEffect] {
+        abandonWalk()
+    }
+
+    /// The lines on which the reference cancels a speedwalk
+    /// (`aard_GMCP_mapper.xml`, the `mapper.cancel_speedwalk` triggers): the
+    /// move failed, so the rest of the walk can't follow. The reference sends
+    /// its whole walk with `{end running}` at once, so a cancel there owes no
+    /// end; ours, released a segment at a time, does.
+    static let failedMoveLines: Set<String> = [
+        "The door is locked.",
+        "You are regaining balance and are unable to move.",
+        "You fumble about drunkenly.",
+        "You must be standing first.",
+        "You need to use a boat, fly, or swim underwater to go there.",
+        "There is no exit in that direction.",
+        "Alas, you cannot go that way."
+    ]
+
+    /// Whether `text` is one of the reference's cancel lines: the exact ones
+    /// above, `You can't * while sitting.` and `^You dream about `.
+    public static func isFailedMove(_ text: String) -> Bool {
+        failedMoveLines.contains(text) || text.hasPrefix("You dream about ")
+            || (text.hasPrefix("You can't ") && text.hasSuffix(" while sitting."))
+    }
+
+    /// Clear the walk, returning its `{end running}` if it still owes one, so
+    /// every `{begin running}` gets exactly one end.
+    func abandonWalk() -> [ScriptEffect] {
+        let owed = walkEndOwed
         clearWalk()
+        return owed ? [.sendNoEcho(Self.endRunningMarker)] : []
     }
 
     /// Effects to emit one walk ``Speedwalk/Segment``. A command with embedded
@@ -78,6 +113,7 @@ extension Mapper {
     /// command, or by the pacer (`emitEndRunning`) for a wait-bearing one, so it
     /// always lands *after* the segment's last command.
     func segmentEffects(_ segment: Speedwalk.Segment, isFinal: Bool) -> [ScriptEffect] {
+        if isFinal { walkEndOwed = false }
         if WaitWalk.containsWait(segment.command) {
             return [.walkWithWaits(command: segment.command, emitEndRunning: isFinal)]
         }
@@ -93,5 +129,6 @@ extension Mapper {
         walkExpect = nil
         walkSegmentOriginUID = nil
         walkFinalTarget = nil
+        walkEndOwed = false
     }
 }

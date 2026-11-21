@@ -132,15 +132,16 @@ extension SessionController {
         deferredAfterWalk.removeAll()
         walkDeferGeneration += 1
         logTranscript(.note, "[walkdefer] walk stalled — flushing \(pending.count) held command(s)")
+        // The abandoned walk's `{end running}`, if it still owes one, resets
+        // the 999 "running" broadcast.
+        let end = await mapper?.cancelWalk() ?? []
         await applyScriptEffects([
             .note(
                 text: "Walk did not complete; running deferred command(s) anyway.",
                 foreground: "yellow",
                 background: nil
-            ),
-            .sendNoEcho(Mapper.endRunningMarker) // reset the 999 "running" broadcast
-        ])
-        await mapper?.cancelWalk()
+            )
+        ] + end)
         await sendWalkAwareBatch(pending)
     }
 

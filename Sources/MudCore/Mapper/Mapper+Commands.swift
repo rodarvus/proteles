@@ -178,8 +178,8 @@ extension Mapper {
         // (``advanceWalk``). Firing them all at once raced a portal hop against
         // the follow-on `run` (the run reached the MUD before the whoosh, walked
         // from the wrong room, and aborted) — the reference mapper waits between
-        // steps for exactly this reason.
-        clearWalk()
+        // steps for exactly this reason. A walk this one replaces ends first.
+        effects.append(contentsOf: abandonWalk())
         let segments = Speedwalk.segments(path)
         walkSegments = segments
         walkIndex = 0
@@ -196,6 +196,7 @@ extension Mapper {
         // `{end running}` rides the final segment (``segmentEffects``).
         if let first = segments.first {
             effects.append(.sendNoEcho(Self.beginRunningMarker))
+            walkEndOwed = true
             effects.append(contentsOf: segmentEffects(first, isFinal: segments.count == 1))
         }
         return effects
@@ -294,8 +295,8 @@ extension Mapper {
     /// `cancel_speedwalk`: "Speedwalk cancelled.", silent when nothing pending).
     private func stopCommand() -> [ScriptEffect] {
         let active = walkExpect != nil || !walkSegments.isEmpty
-        clearWalk()
-        return active ? [Self.note("Speedwalk cancelled.")] : []
+        let end = abandonWalk()
+        return (active ? [Self.note("Speedwalk cancelled.")] : []) + end
     }
 
     /// `mapper next [#]` — walk the next (or #n) room in the last `find`/`list`

@@ -53,12 +53,25 @@ extension SessionController {
             await fireRunningBroadcast(Self.okToGoText)
             return true
         }
+        // A move that failed ends the walk, as the reference's
+        // `mapper.cancel_speedwalk` triggers do. The line still displays. Not
+        // gated on the reflected `{begin running}`: a failure can arrive before
+        // it (session-20260911-133432, 14:04:13).
+        if Mapper.isFailedMove(text), let mapper, await mapper.isWalking {
+            logTranscript(.note, "[walk] move failed — walk cancelled: \(text)")
+            await applyScriptEffects(mapper.cancelWalk())
+        }
         return false
     }
 
     /// Deliver `BroadcastPlugin(999, <text>)` to every plugin's
-    /// `OnPluginBroadcast`, as the reference's begin/end-running triggers do.
+    /// `OnPluginBroadcast`, as the reference's begin/end-running triggers do:
+    /// only on a change (its `sent_busy`), so a walk replacing another reads
+    /// as one stretch of running.
     private func fireRunningBroadcast(_ text: String) async {
+        let busy = text == Self.kindaBusyText
+        guard busy != runningBroadcastSent else { return }
+        runningBroadcastSent = busy
         guard let scriptEngine else { return }
         await applyScriptEffects(scriptEngine.deliverMapperBroadcast(
             id: Self.runningBroadcastID,
@@ -154,6 +167,13 @@ extension SessionController {
     private func timeoutWaitMarker(generation: Int) {
         guard generation == walkGeneration else { return }
         resumeWaitMarker()
+    }
+
+    /// On disconnect, a walk still running ends for the plugins, as the
+    /// reference mapper's `OnPluginDisconnect` does. No marker can reflect now.
+    func endRunningOnDisconnect() async {
+        guard runningBroadcastSent else { return }
+        await fireRunningBroadcast(Self.okToGoText)
     }
 
     /// Stop any in-flight wait-walk pacer (called from teardown): a new
