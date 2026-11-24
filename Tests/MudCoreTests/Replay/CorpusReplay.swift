@@ -90,6 +90,7 @@ enum CorpusReplay {
         var events: [Event] = []
         var cues = CueCounter()
         var state = StateRecorder()
+        state.considerSends = roomConsiderSendTimes(forRecording: url)[...]
         func classify(_ line: Line) {
             state.observe(line, index: texts.count)
             for event in SemanticClassifier.events(forDisplayed: line) {
@@ -105,6 +106,7 @@ enum CorpusReplay {
             texts.append(line.text)
         }
         for chunk in replayer.chunks {
+            state.openConsiders(sentBy: chunk.timestamp)
             let output = try pipeline.consume(Array(chunk.bytes))
             for message in output.gmcp {
                 gmcp.append(message)

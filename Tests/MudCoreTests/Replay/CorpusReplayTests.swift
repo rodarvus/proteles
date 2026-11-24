@@ -128,7 +128,8 @@ struct CorpusReplayHarnessTests {
         clean.observe(gmcp: GMCPMessage(package: "room.info", json: "{}"))
         #expect(clean.pin == StateRecorder.Pin(
             seen: ["roomchars", "exits", "room.info"],
-            blocks: ["roomchars": 1]
+            blocks: ["roomchars": 1],
+            occupants: .init(presenceChanges: 1)
         ))
         #expect(clean.arrivals == ["exits": 1, "room.info": 1])
         #expect(clean.independentArrivals == clean.arrivals)
@@ -139,6 +140,57 @@ struct CorpusReplayHarnessTests {
             broken.observe(line(text), index: index)
         }
         #expect(broken.violations(session: "s") == ["s state: incomplete 2: {roomchars} block interrupted"])
+    }
+
+    @Test("The occupant pass pins presence, names and consider runs, with no violations")
+    func occupantPass() {
+        func line(_ text: String) -> Line {
+            Line(id: LineID(0), text: text)
+        }
+        var recorder = StateRecorder()
+        recorder.observe(gmcp: GMCPMessage(package: "room.info", json: #"{"num": 5, "zone": "aylor"}"#))
+        let lines = [
+            "{roomchars}", "(P)(F) Ya boi Tanto <3's ASCII.",
+            "(R) A small, slate grey viper hides and waits.",
+            "{/roomchars}",
+            "{scan}", "Right here you see:", "     - (R) A krait", "{/scan}"
+        ]
+        for (index, text) in lines.enumerated() {
+            recorder.observe(line(text), index: index)
+        }
+        recorder.noteRoomConsider()
+        recorder.observe(line("(R) A krait should be a fair fight!"), index: 8)
+        recorder.observe(line("prompt>"), index: 9)
+        #expect(recorder.pin.occupants == .init(
+            presenceChanges: 1,
+            namedLists: ["scan": 1, "consider": 1],
+            namedMobs: ["scan": 1, "consider": 1],
+            completeLists: 2,
+            considersSent: 1,
+            considerRuns: 1
+        ))
+        #expect(recorder.violations(session: "s").isEmpty)
+        recorder.observe(gmcp: GMCPMessage(package: "room.info", json: #"{"num": 6, "zone": "aylor"}"#))
+        #expect(recorder.violations(session: "s").isEmpty, "leaving the room dropped the names")
+    }
+
+    @Test("Consider send times come from the log beside a recording")
+    func considerSendTimes() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("replay-sends-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let log = """
+        2026-08-21T13:14:09.488+01:00 SEND  consider all
+        2026-08-21T13:14:09.488+01:00 SEND  echo { consider }
+        2026-10-30T07:10:26.411Z SEND  con
+        2026-10-30T07:10:27.000Z SEND  consider rat
+        2026-10-30T07:10:28.000Z RECV  SEND  con
+        """
+        try log.write(to: directory.appendingPathComponent("s.log"), atomically: true, encoding: .utf8)
+        let times = CorpusReplay
+            .roomConsiderSendTimes(forRecording: directory.appendingPathComponent("s.jsonl"))
+        #expect(times.map(\.timeIntervalSince1970) == [1_787_314_449.488, 1_793_344_226.411])
     }
 
     @Test("The documented tag recogniser accepts the corpus shapes and rejects malformed ones")

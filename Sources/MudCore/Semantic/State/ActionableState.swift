@@ -4,9 +4,10 @@ import Foundation
 /// *now* and the handle each thing is acted on by. The durable, replaceable
 /// half of the semantic layer, beside S0a's ephemeral events.
 ///
-/// Item 1 is the frame: the feed table only. Each later item adds its
-/// entity's slot (occupants, items, spells, …) and a case to ``Entity``
-/// (`docs/plans/S0B_ITEM1_PROPOSAL.md`).
+/// Item 1 is the frame: the feed table (`docs/plans/S0B_ITEM1_PROPOSAL.md`).
+/// Each later item adds its entity's slot and a case to ``Entity``; item 2
+/// adds ``occupants`` and the ``keywords`` they resolve through
+/// (`docs/plans/S0B_ITEM2_PROPOSAL.md`).
 ///
 /// ## Feed absent is not empty
 ///
@@ -24,45 +25,57 @@ public struct ActionableState: Sendable, Equatable {
     /// The feeds S0b reads, as a closed list.
     public enum Feed: String, CaseIterable, Sendable {
         /// Tag blocks: `{x}` … `{/x}`.
-        case roomchars, roomobjs, invdata, eqdata, spellheaders
+        case roomchars, roomobjs, invdata, eqdata, spellheaders, scan
         /// Single tagged lines.
         case exits, invmon
         // GMCP packages (raw values are the lowercased wire names).
         case roomInfo = "room.info"
         case charVitals = "char.vitals"
         case charStatus = "char.status"
+        /// The output of whole-room `consider` commands, which have no tags.
+        case consider
 
         /// How a feed arrives.
         public enum Kind: Sendable {
             case tagBlock, tagLine, gmcp
+            /// Output of a command someone sent (``consider``), delimited by
+            /// its own shape since it has no tags.
+            case solicited
         }
 
         public var kind: Kind {
             switch self {
-            case .roomchars, .roomobjs, .invdata, .eqdata, .spellheaders: .tagBlock
+            case .roomchars, .roomobjs, .invdata, .eqdata, .spellheaders, .scan: .tagBlock
             case .exits, .invmon: .tagLine
             case .roomInfo, .charVitals, .charStatus: .gmcp
+            case .consider: .solicited
             }
         }
 
         /// The feed a tag marker name opens or carries, when it is one of
         /// S0b's (`roomchars` → `.roomchars`); `nil` for any other marker.
         public init?(marker: String) {
-            guard let feed = Feed(rawValue: marker), feed.kind != .gmcp else { return nil }
+            guard let feed = Feed(rawValue: marker), feed.kind == .tagBlock || feed.kind == .tagLine
+            else { return nil }
             self = feed
         }
     }
 
-    /// One entity a consumer can be told changed. Items 2–7 add the cases
-    /// (occupants, items, spells, …); the frame has none, so a change in
-    /// item 1 is always a feed-status change only.
-    public enum Entity: Hashable, Sendable {}
+    /// One entity a consumer can be told changed. Items 3–7 add theirs.
+    public enum Entity: Hashable, Sendable {
+        /// ``ActionableState/occupants``: presence, names or their keywords.
+        case occupants
+        /// ``ActionableState/keywords``: loaded on connect, or an override
+        /// set or cleared.
+        case keywords
+    }
 
     /// Whether, and how, a feed has been seen this connection.
     public struct FeedStatus: Sendable, Equatable {
         /// When the feed was first seen this connection; `nil` while unseen.
         public var since: Date?
-        /// Completed blocks (tag-block feeds only).
+        /// Completed blocks (tag-block feeds), or completed runs (solicited
+        /// feeds).
         public var blocks = 0
         /// Blocks dropped as incomplete (tag-block feeds only).
         public var incompleteBlocks = 0
@@ -82,6 +95,15 @@ public struct ActionableState: Sendable, Equatable {
 
     /// Every feed's status; a feed absent from the map has never been seen.
     public private(set) var feeds: [Feed: FeedStatus] = [:]
+
+    /// Who and what is in the room; `nil` until `{roomchars}` or a name
+    /// source has spoken this connection (unknown, not empty).
+    public internal(set) var occupants: Occupants?
+
+    /// The keywords named mobs resolve to: the player's overrides, then
+    /// S&D's exceptions, then the guess. Loaded on connect; it survives a
+    /// reset, since it isn't per-connection.
+    public internal(set) var keywords = MobKeywordBook()
 
     public init() {}
 

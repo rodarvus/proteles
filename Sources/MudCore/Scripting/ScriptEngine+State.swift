@@ -16,6 +16,28 @@ public extension ScriptEngine {
     var actionableState: ActionableState {
         stateTracker.state
     }
+
+    /// A whole-room `consider` is being sent (the session's `sendLine`, the
+    /// one seam every command passes): read its output (S0b item 2).
+    func noteRoomConsider() {
+        stateTracker.noteRoomConsider()
+    }
+
+    /// Set (or, with `nil`, clear) the player's keyword for `name` in
+    /// `area`: saved to the override store, then applied to the model.
+    func setMobKeywordOverride(_ keyword: String?, for name: String, area: String) -> [ScriptEffect] {
+        do {
+            try keywordSources.overrides?.save(keyword, for: name, area: area)
+        } catch {
+            return [.echo("Couldn't save the keyword for \(name): \(error.localizedDescription)")]
+        }
+        return stateEffects(for: stateTracker.setKeywordOverride(keyword, for: name, area: area))
+    }
+
+    /// Where the keyword book loads from (tests point it at temporary files).
+    func setKeywordSources(_ sources: MobKeywordSources) {
+        keywordSources = sources
+    }
 }
 
 extension ScriptEngine {
@@ -23,7 +45,9 @@ extension ScriptEngine {
     /// Most lines can't change state; they return before the probe, whose
     /// mode check alone takes a lock (B6, `docs/plans/S0B_ITEM1_PROPOSAL.md`).
     func ingestState(_ line: Line) -> [ScriptEffect] {
-        guard stateTracker.mayChange(on: line) else { return [] }
+        // The two checks inline, on stored fields: calling a method on the
+        // tracker would copy it per line (B6, S0B_ITEM2_PROPOSAL.md §9).
+        guard line.text.utf8.first == UInt8(ascii: "{") || stateTracker.isReading else { return [] }
         let change = probe.measure("session.script.state", events: 1, thresholdMS: 50) {
             stateTracker.ingest(line)
         }
@@ -31,15 +55,16 @@ extension ScriptEngine {
     }
 
     /// Ingest one GMCP package, returning the effects of any change.
-    func ingestState(gmcpPackage package: String) -> [ScriptEffect] {
-        stateEffects(for: stateTracker.ingest(gmcpPackage: package))
+    /// `room.info` also binds named occupants to the room (S0b item 2).
+    func ingestState(gmcpPackage package: String, json: String) -> [ScriptEffect] {
+        stateEffects(for: stateTracker.ingest(gmcpPackage: package, json: json))
     }
 
     /// Forget the state on a fresh connection; the UI hears that every feed
-    /// is unseen again.
+    /// is unseen again. The keyword book is (re)loaded from disk here.
     func resetActionableState() -> [ScriptEffect] {
         stateTracker.reset()
-        return [.updateState(stateTracker.state)]
+        return stateEffects(for: stateTracker.setKeywordBook(keywordSources.loadBook()))
     }
 
     private func stateEffects(for change: ActionableStateTracker.Change) -> [ScriptEffect] {

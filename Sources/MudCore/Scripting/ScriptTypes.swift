@@ -331,6 +331,9 @@ public enum ScriptEffect: Sendable, Equatable {
     case updateConsider(ConsiderSnapshot)
     /// Publish the actionable state (S0b, #84) to the State inspector.
     case updateState(ActionableState)
+    /// Set (or, with a nil keyword, clear) the player's keyword for a mob
+    /// name in an area (S0b item 2, Q4); the engine saves and applies it.
+    case setMobKeyword(name: String, area: String, keyword: String?)
     /// Publish a captured continent bigmap (border-stripped styled lines) for
     /// a continent zone id — the map panel renders it while overland.
     case updateBigmap(zone: Int, name: String, lines: [Line])

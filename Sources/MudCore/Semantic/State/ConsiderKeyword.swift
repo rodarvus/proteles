@@ -19,6 +19,14 @@ import GRDB
 ///
 /// S&D randomises the prefix length 4–6 for human-like variety; we use a fixed
 /// length (``prefixCap``) for deterministic, reproducible targeting.
+///
+/// The shared name → keyword derivation (S0b item 2, #84): the Consider
+/// feature, the state model's named occupants and, later, quest targets all
+/// resolve through it, by way of ``MobKeywordBook``. Names match exceptions
+/// **ignoring case**: `consider` capitalises every name ("Best run away from A
+/// deputy while you can!") while S&D stores them as written ("a kobold miner")
+/// — matched exactly, 211 recorded names missed their exception
+/// (`docs/plans/S0B_ITEM2_PROPOSAL.md` Q4).
 public enum ConsiderKeyword {
     /// Deterministic stand-in for S&D's random 4–6 prefix (user's choice: 5).
     static let prefixCap = 5
@@ -62,11 +70,12 @@ public enum ConsiderKeyword {
 
     /// Resolve `name` (the mob's display name) in `area` (room zone) to a
     /// targeting keyword: a curated exception if `exceptions` has one, else the
-    /// heuristic guess.
+    /// heuristic guess. `exceptions` is keyed by lowercased name, as
+    /// ``loadExceptions(from:fileManager:)`` returns it.
     public static func resolve(
         _ name: String, area: String?, exceptions: [String: [String: String]] = [:]
     ) -> String {
-        if let area, let override = exceptions[area]?[name] {
+        if let area, let override = exceptions[area]?[name.lowercased()] {
             return override
         }
         return heuristic(name, area: area)
@@ -126,8 +135,9 @@ public enum ConsiderKeyword {
     }
 
     /// Read the entire `mob_keyword_exceptions` table read-only into an
-    /// `area → name → keyword` map. Returns `[:]` if the DB or table is absent
-    /// (S&D not installed). Mirrors `DinvItemReader`'s one-shot read-only pattern.
+    /// `area → lowercased name → keyword` map. Returns `[:]` if the DB or table
+    /// is absent (S&D not installed). Mirrors `DinvItemReader`'s one-shot
+    /// read-only pattern.
     public static func loadExceptions(
         from url: URL, fileManager: FileManager = .default
     ) -> [String: [String: String]] {
@@ -147,7 +157,7 @@ public enum ConsiderKeyword {
         for row in rows {
             guard let area: String = row["area_name"], let name: String = row["mob_name"],
                   let keyword: String = row["keyword"] else { continue }
-            map[area, default: [:]][name] = keyword
+            map[area, default: [:]][name.lowercased()] = keyword
         }
         return map
     }

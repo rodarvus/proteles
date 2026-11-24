@@ -55,6 +55,12 @@ public extension SessionController {
     /// debug transcript while still sending them on the wire.
     func sendLine(_ text: String, redactInTranscript: Bool = false) async throws {
         logTranscript(.send, redactInTranscript ? "<redacted>" : text)
+        // Every command passes here, whoever sent it: a whole-room `consider`
+        // opens the state model's window on its output (S0b item 2). It's
+        // opened before the bytes leave, so the output can't arrive first.
+        if !redactInTranscript, ConsiderWindow.isRoomConsider(text) {
+            await scriptEngine?.noteRoomConsider()
+        }
         try await sendRaw(Array((text + "\r\n").utf8))
     }
 

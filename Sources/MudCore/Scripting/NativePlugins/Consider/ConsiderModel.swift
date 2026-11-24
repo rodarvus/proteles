@@ -8,6 +8,12 @@ public struct ConsiderMob: Sendable, Equatable, Identifiable {
     public let id: Int
     public var name: String
     public var keyword: String
+    /// Where ``keyword`` came from (the player, S&D, or a guess); nil for the
+    /// `Stripname` fallback used without a keyword book.
+    public var keywordSource: MobKeywordBook.Source?
+    /// Set for a mob that can't be attacked (divine protection, a
+    /// shopkeeper): listed, never targeted.
+    public var unattackable: ConsiderLine.Unattackable?
     /// The duplicate-disambiguation number: among living mobs of the same name,
     /// 1 = first, 2 = second, … Recomputed as mobs die / leave.
     public var index: Int = 1
@@ -19,21 +25,34 @@ public struct ConsiderMob: Sendable, Equatable, Identifiable {
     public var dead: Bool = false
     public var attacked: Bool = false
     public var left: Bool = false
+    /// The exit a departed mob took; nil when it fled.
+    public var leftTo: String?
+    public var fled: Bool = false
     public var came: Bool = false
     /// Remaining health percent (kills set 0); drives kill-victim selection order.
     public var pct: Int = 100
     /// Order in which this mob was attacked this round (0 = not yet) — a
     /// tiebreaker when several same-named mobs could be the kill victim.
     public var attackSequence: Int = 0
+
+    /// What the panel shows after the name: where a departed mob went, else
+    /// its level range (or why it can't be attacked, or that it arrived).
+    public var detail: String {
+        guard left else { return rangeLabel }
+        if fled { return "fled" }
+        return leftTo.map { "left \($0)" } ?? "left"
+    }
 }
 
 /// What ``ConsiderModel/ingestLine(_:zone:keyword:)`` did with a line — lets the
 /// owning feature decide display (gag the considered mob lines) and reactions.
 public enum ConsiderLineOutcome: Sendable, Equatable {
-    /// Not a line the model cares about.
+    /// Not a line the model cares about (a departure counts only for a mob
+    /// on the list).
     case ignored
-    /// A `consider all` mob line matched this tier — the feature should gag it.
-    case considered(ConsiderTier)
+    /// A `consider all` mob line matched — the feature should gag it. The
+    /// tier is nil for an unattackable mob.
+    case considered(ConsiderTier?)
     case mobLeft(String)
     case mobArrived(String)
     case mobFled(String)
@@ -64,7 +83,7 @@ public struct ConsiderModel: Sendable, Equatable {
     public private(set) var considering = false
     private var waitingForStart = false
     private var attackSequenceCounter = 0
-    private var nextID = 0
+    var nextID = 0
 
     public init() {}
 
@@ -104,29 +123,29 @@ public struct ConsiderModel: Sendable, Equatable {
     public mutating func ingestLine(
         _ text: String,
         zone: String? = nil,
-        keyword: ((String) -> String)? = nil
+        keyword: ((String) -> MobKeywordBook.Resolved)? = nil
     ) -> ConsiderLineOutcome {
-        if considering, let hit = Self.matcher.tier(for: text) {
+        if considering, let hit = ConsiderLine.parse(text) {
             if waitingForStart {
                 waitingForStart = false
                 mobs = []
                 attackSequenceCounter = 0
             }
-            let kw = keyword?(hit.name) ?? ConsiderNameCleanup.strip(hit.name, zone: zone)
-            appendConsidered(name: hit.name, keyword: kw, flags: hit.flags, tier: hit.tier)
+            appendConsidered(hit, keyword: Self.resolve(hit.name, zone: zone, keyword))
             return .considered(hit.tier)
         }
-        if let name = Self.matcher.mobLeft(text) {
-            if !isIgnored(zone) { handleMobLeft(name) }
-            return .mobLeft(name)
-        }
-        if let name = Self.matcher.mobArrived(text) {
-            if !isIgnored(zone) { handleMobCame(name, zone: zone, keyword: keyword) }
-            return .mobArrived(name)
-        }
-        if let name = Self.matcher.mobFled(text) {
-            if !isIgnored(zone) { handleMobLeft(name) }
-            return .mobFled(name)
+        if !isIgnored(zone) {
+            if let departure = ConsiderMovement.departure(text) {
+                if handleMobLeft(departure.name, to: departure.exit) { return .mobLeft(departure.name) }
+            }
+            if let name = ConsiderMovement.arrival(text) {
+                handleMobCame(name, zone: zone, keyword: keyword)
+                return .mobArrived(name)
+            }
+            if let name = ConsiderMovement.fled(text) {
+                handleMobLeft(name, to: nil)
+                return .mobFled(name)
+            }
         }
         if let victim = Self.matcher.kill(text) {
             handleKill(victim)
@@ -142,46 +161,64 @@ public struct ConsiderModel: Sendable, Equatable {
 
     // MARK: - State transitions (ported from the plugin)
 
-    private mutating func appendConsidered(name: String, keyword: String, flags: String, tier: ConsiderTier) {
-        var mob = ConsiderMob(id: nextID, name: name, keyword: keyword)
-        mob.colour = tier.colour
-        mob.rangeLabel = tier.rangeLabel
-        mob.rawFlags = flags
+    private mutating func appendConsidered(_ hit: ConsiderLine, keyword: (String, MobKeywordBook.Source?)) {
+        var mob = ConsiderMob(id: nextID, name: hit.name, keyword: keyword.0)
+        mob.keywordSource = keyword.1
+        mob.colour = hit.tier?.colour ?? "gray"
+        mob.rangeLabel = hit.tier?.rangeLabel ?? hit.unattackable?.label ?? ""
+        mob.rawFlags = hit.rawFlags.trimmingCharacters(in: .whitespaces)
+        mob.unattackable = hit.unattackable
         nextID += 1
         mobs.append(mob)
         recomputeIndices()
     }
 
-    /// `Update_mob_came`: a mob arrived — prepend it with unknown difficulty.
-    private mutating func handleMobCame(_ name: String, zone: String?, keyword: ((String) -> String)?) {
-        let kw = keyword?(name) ?? ConsiderNameCleanup.strip(name, zone: zone)
-        var mob = ConsiderMob(id: nextID, name: name, keyword: kw)
+    /// A name's keyword: the book's when the feature has one, else the
+    /// plugin's `Stripname` fallback.
+    private static func resolve(
+        _ name: String, zone: String?, _ keyword: ((String) -> MobKeywordBook.Resolved)?
+    ) -> (String, MobKeywordBook.Source?) {
+        guard let resolved = keyword?(name) else { return (ConsiderNameCleanup.strip(name, zone: zone), nil) }
+        return (resolved.keyword, resolved.source)
+    }
+
+    /// `Update_mob_came`: a mob arrived — prepend it, its difficulty not yet
+    /// considered (the plugin's `???`).
+    private mutating func handleMobCame(
+        _ name: String, zone: String?, keyword: ((String) -> MobKeywordBook.Resolved)?
+    ) {
+        let resolved = Self.resolve(name, zone: zone, keyword)
+        var mob = ConsiderMob(id: nextID, name: name, keyword: resolved.0)
+        mob.keywordSource = resolved.1
         mob.colour = "gray"
-        mob.rangeLabel = "???"
+        mob.rangeLabel = "arrived"
         mob.came = true
         nextID += 1
         mobs.insert(mob, at: 0)
         recomputeIndices()
     }
 
-    /// `Update_mob_left`: a mob left / fled. Prefer cancelling a matching recent
-    /// arrival, else mark the first living un-attacked match, else any living
-    /// match, as left.
-    private mutating func handleMobLeft(_ name: String) {
-        if let i = mobs.firstIndex(where: { $0.name == name && $0.came && !$0.left && !$0.dead }) {
+    /// `Update_mob_left`: a mob left by `exit`, or fled (nil). Prefer
+    /// cancelling a matching recent arrival, else mark the first living
+    /// un-attacked match, else any living match, as left. Returns whether a
+    /// mob on the list matched.
+    @discardableResult
+    private mutating func handleMobLeft(_ name: String, to exit: String?) -> Bool {
+        let key = Self.lowerFirst(name)
+        let named = { (mob: ConsiderMob) in Self.lowerFirst(mob.name) == key }
+        if let i = mobs.firstIndex(where: { named($0) && $0.came && !$0.left && !$0.dead }) {
             mobs.remove(at: i)
             recomputeIndices()
-            return
+            return true
         }
-        if let i = mobs.lastIndex(where: { !$0.attacked && !$0.dead && !$0.left && $0.name == name }) {
-            mobs[i].left = true
-            recomputeIndices()
-            return
-        }
-        if let i = mobs.lastIndex(where: { !$0.dead && !$0.left && $0.name == name }) {
-            mobs[i].left = true
-            recomputeIndices()
-        }
+        let index = mobs.lastIndex { !$0.attacked && !$0.dead && !$0.left && named($0) }
+            ?? mobs.lastIndex { !$0.dead && !$0.left && named($0) }
+        guard let index else { return false }
+        mobs[index].left = true
+        mobs[index].leftTo = exit
+        mobs[index].fled = exit == nil
+        recomputeIndices()
+        return true
     }
 
     /// `Update_kill`: mark the most-likely victim dead. The plugin matches a
@@ -220,7 +257,7 @@ public struct ConsiderModel: Sendable, Equatable {
     /// `Update_mobs_indicies`: renumber each mob as 1 + the count of *living*
     /// (not dead, not left) earlier mobs sharing its name. Recomputed wholesale
     /// — the lists are small and this keeps the invariant simple.
-    private mutating func recomputeIndices() {
+    mutating func recomputeIndices() {
         for i in mobs.indices {
             var count = 1
             for j in 0..<i where mobs[j].name == mobs[i].name && !(mobs[j].dead || mobs[j].left) {
@@ -243,7 +280,8 @@ public struct ConsiderModel: Sendable, Equatable {
     public mutating func attackCommand(
         position: Int, command: String, mode: ConsiderExecuteMode
     ) -> String? {
-        guard position >= 1, position <= mobs.count else { return nil }
+        guard position >= 1, position <= mobs.count,
+              mobs[position - 1].unattackable == nil else { return nil }
         let i = position - 1
         mobs[i].attacked = true
         attackSequenceCounter += 1
@@ -263,64 +301,20 @@ public struct ConsiderModel: Sendable, Equatable {
 
     // MARK: - Matcher
 
-    /// Precompiled matchers for the tiers and movement/kill patterns, reusing the
-    /// shared ``PatternMatcher``. The literals are known-good (from the plugin),
+    /// Precompiled matchers for the kill patterns, reusing the shared
+    /// ``PatternMatcher`` (the tiers are ``ConsiderLine``'s; movement is
+    /// ``ConsiderMovement``'s). The literals are known-good (from the plugin),
     /// so compilation can't fail in practice.
     struct Matcher {
-        let tiers: [(tier: ConsiderTier, matcher: PatternMatcher)]
-        let left: PatternMatcher
-        let arrived: [PatternMatcher]
-        let fled: PatternMatcher
         let kills: [PatternMatcher]
 
         // swiftlint:disable force_try
         init() {
-            tiers = ConsiderTier.all.map {
-                ($0, try! PatternMatcher(pattern: .regex($0.pattern), caseSensitive: true))
-            }
-            left = try! PatternMatcher(pattern: .regex(ConsiderLinePatterns.mobLeft), caseSensitive: true)
-            arrived = [ConsiderLinePatterns.mobArrivedFrom, ConsiderLinePatterns.mobAppeared]
-                .map { try! PatternMatcher(pattern: .regex($0), caseSensitive: true) }
-            fled = try! PatternMatcher(pattern: .regex(ConsiderLinePatterns.mobFled), caseSensitive: true)
             kills = ConsiderLinePatterns.kills
                 .map { try! PatternMatcher(pattern: .regex($0), caseSensitive: true) }
         }
 
         // swiftlint:enable force_try
-
-        /// A consider tier match: its tier, the mob name (capture 2), and the
-        /// trimmed aura flags (capture 1).
-        struct TierHit {
-            let tier: ConsiderTier
-            let name: String
-            let flags: String
-        }
-
-        func tier(for line: String) -> TierHit? {
-            for entry in tiers {
-                guard let result = entry.matcher.match(line), result.captures.count > 2 else { continue }
-                let name = result.captures[2]
-                guard !name.isEmpty else { continue }
-                let flags = result.captures[1].trimmingCharacters(in: .whitespaces)
-                return TierHit(tier: entry.tier, name: name, flags: flags)
-            }
-            return nil
-        }
-
-        func mobLeft(_ line: String) -> String? {
-            capture1(left, line)
-        }
-
-        func mobFled(_ line: String) -> String? {
-            capture1(fled, line)
-        }
-
-        func mobArrived(_ line: String) -> String? {
-            for pattern in arrived {
-                if let name = capture1(pattern, line) { return name }
-            }
-            return nil
-        }
 
         func kill(_ line: String) -> String? {
             for pattern in kills {

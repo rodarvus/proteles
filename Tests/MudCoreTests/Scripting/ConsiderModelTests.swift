@@ -94,14 +94,64 @@ struct ConsiderModelTests {
         #expect(model.mobs[0].index == 1)
     }
 
-    @Test("A mob arriving prepends with unknown difficulty")
+    @Test("A mob arriving prepends, marked arrived until considered")
     func arrivePrepends() {
         var model = consider(["a goblin should be a fair fight!"])
-        model.ingestLine("With a thunderclap, a demon appears in the room.")
+        #expect(model.ingestLine("A troll warrior appears in the room.") == .mobArrived("A troll warrior"))
         #expect(model.mobs.count == 2)
-        #expect(model.mobs[0].name == "a demon")
+        #expect(model.mobs[0].name == "A troll warrior")
         #expect(model.mobs[0].came)
-        #expect(model.mobs[0].rangeLabel == "???")
+        #expect(model.mobs[0].detail == "arrived")
+    }
+
+    // Every movement line below is from a recording.
+
+    @Test("a mob on the list leaves by any verb; where it went is shown")
+    func leaveAnyVerb() {
+        var model = consider([
+            "(R) A wetland spite snickers nervously.",
+            "(G) A radiant ibis snickers nervously."
+        ])
+        #expect(model.ingestLine("A radiant ibis flutters south.") == .mobLeft("A radiant ibis"))
+        #expect(model.mobs[1].left)
+        #expect(model.mobs[1].detail == "left south")
+        #expect(!model.mobs[1].dead)
+        #expect(!model.mobs[0].left)
+    }
+
+    @Test("a line shaped like a departure, naming no listed mob, is ignored")
+    func leaveUnlisted() {
+        var model = consider(["(G) A radiant ibis snickers nervously."])
+        #expect(model.ingestLine("Your mental barrier breaks down.") == .ignored)
+        #expect(model.ingestLine("A red-bellied lieweaver glides east.") == .ignored)
+        #expect(!model.mobs[0].left)
+    }
+
+    @Test("a fled mob says so")
+    func fled() {
+        var model = consider(["A giant bat should be a fair fight!"])
+        #expect(model.ingestLine("A giant bat has fled!") == .mobFled("A giant bat"))
+        #expect(model.mobs[0].detail == "fled")
+    }
+
+    @Test("arrivals by any verb; flags dropped; a description's 'You see' dropped")
+    func arrivalShapes() {
+        let arrivals = [
+            "A daystar swan flutters in from the west.",
+            "(F)(R) A plume of smoke and ash billows in from the east.",
+            "You see a kobold knight charging in from the west.",
+            "A wolf arrives from the south."
+        ].map(ConsiderMovement.arrival)
+        #expect(arrivals == ["A daystar swan", "A plume of smoke and ash", "A kobold knight", "A wolf"])
+    }
+
+    @Test("a player's thunderclap and other 'from' lines aren't arrivals")
+    func notArrivals() {
+        var model = consider(["a goblin should be a fair fight!"])
+        #expect(model.ingestLine("With a thunderclap, Turnus appears in the room.") == .ignored)
+        #expect(ConsiderMovement.arrival("A moderate wind blows from the west.") == nil)
+        #expect(ConsiderMovement.arrival("(R) A sand dollar appears to have washed in from the sea.") == nil)
+        #expect(model.mobs.count == 1)
     }
 
     @Test("Departures/arrivals in an ignored zone are dropped")

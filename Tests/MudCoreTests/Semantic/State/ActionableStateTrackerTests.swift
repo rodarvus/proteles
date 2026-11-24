@@ -80,9 +80,13 @@ struct ActionableStateTrackerTests {
 
     @Test("a feed-status change names no entity")
     func feedChangeNamesNoEntity() {
+        // `{roomobjs}` has no entity until item 7; `{roomchars}` now does
+        // (occupants, item 2).
         var tracker = ActionableStateTracker()
-        _ = tracker.ingest(line("{roomchars}"))
-        #expect(tracker.ingest(line("{/roomchars}")).entities.isEmpty)
+        _ = tracker.ingest(line("{roomobjs}"))
+        let change = tracker.ingest(line("{/roomobjs}"))
+        #expect(change.state)
+        #expect(change.entities.isEmpty)
     }
 
     @Test("an incomplete block is recorded on its feed")

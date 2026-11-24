@@ -1,61 +1,26 @@
 import Foundation
 
-/// A snapshot of the Consider feature's state for the floating panel to render —
-/// the mob list plus the controls' current values. Passed by value (no JSON),
-/// mirroring how `.updateMap` ships captured map lines.
-public struct ConsiderSnapshot: Sendable, Equatable {
-    public var mobs: [ConsiderMob]
-    public var defaultCommand: String
-    public var executeMode: ConsiderExecuteMode
-    public var enabled: Bool
-    public var options: ConsiderBatchOptions
-    /// A one-line status shown instead of the list (`"Safe room"`,
-    /// `"Ignoring zone <x>"`), or nil when the list is live.
-    public var statusNote: String?
-
-    public init(
-        mobs: [ConsiderMob] = [],
-        defaultCommand: String = "kill",
-        executeMode: ConsiderExecuteMode = .skill,
-        enabled: Bool = true,
-        options: ConsiderBatchOptions = ConsiderBatchOptions(),
-        statusNote: String? = nil
-    ) {
-        self.mobs = mobs
-        self.defaultCommand = defaultCommand
-        self.executeMode = executeMode
-        self.enabled = enabled
-        self.options = options
-        self.statusNote = statusNote
-    }
-}
-
-/// The persisted slice of the feature's configuration (survives reloads / world
-/// reopen — the plugin's `save_state`).
-struct ConsiderSettings: Codable, Equatable {
-    var defaultCommand = "kill"
-    var executeMode = ConsiderExecuteMode.skill
-    var enabled = true
-    var autoOnEntry = true
-    var autoOnCombatEnd = true
-    var options = ConsiderBatchOptions()
-}
-
 /// Native port of the MUSHclient Consider miniwindow
 /// (AardCrowley/Mushclient-Consider): a floating list of the room's mobs with
 /// difficulty tiers, click-to-attack, and a `conwall` batch sweep. The pure
 /// ``ConsiderModel`` does the parsing/state; this plugin orchestrates — sending
-/// `consider all` on room entry / combat end (gated on player state), gagging
+/// `consider all` when the list goes stale (gated on player state), gagging
 /// the consider output, handling `conw…` commands, and publishing a
 /// ``ConsiderSnapshot`` for the panel.
 ///
 /// Data source: like the original, the list comes from parsing `consider all`
-/// output (Aardwolf has no GMCP room-occupant list). Auto-refresh is driven by
-/// the `roomchars` tag feed when it's enabled (re-consider when the occupant set
-/// changes), falling back to `room.info` (room change) + the combat-end
-/// `char.status` transition. Never fired mid-combat / running / note-writing. The
-/// roomchars block is observed only — never gagged (it's the room's `look`
-/// display).
+/// output (Aardwolf has no GMCP room-occupant list). It's the state model's
+/// first consumer (S0b item 2, #84; `docs/plans/S0B_ITEM2_PROPOSAL.md`):
+///
+/// - **Auto-refresh** (``ConsiderAutoMode``, `conw on|area|off`; on by
+///   default) considers on room entry, when a mob arrives or flees, and when
+///   the area repops — never mid-combat, running or note-writing. `area`
+///   switches itself off on leaving the zone, as Areia_Consider does.
+/// - **A consider anyone sends is adopted**: S&D's smartscan fallback or the
+///   player's own `consider` refreshes the list without another command.
+/// - **Keywords** resolve through the model's ``MobKeywordBook`` (the
+///   player's override, then S&D's, then the guess); `conw kw` sets one.
+/// - A room the model knows is empty of mobs clears the list.
 public struct ConsiderFeature: NativePlugin {
     public let metadata = NativePluginMetadata(
         id: "com.proteles.consider",
@@ -68,15 +33,24 @@ public struct ConsiderFeature: NativePlugin {
     public var help: NativePluginHelp {
         NativePluginHelp(
             overview: "Shows the room's mobs and how each cons against you, in a floating panel. "
-                + "Auto-refreshes on room entry / combat end (when safe). Click a mob to attack it.",
+                + "It refreshes as you move and as mobs come and go; `conw area` does so only until "
+                + "you leave the area, and `conw off` only when you type `conw`. "
+                + "Click a mob to attack it.",
             commands: [
                 .init(syntax: "conw", summary: "Refresh the list now (run `consider all`)."),
-                .init(syntax: "conw on|off", summary: "Enable/disable auto-refresh."),
+                .init(
+                    syntax: "conw on|area|off",
+                    summary: "Auto-refresh everywhere, until you leave this area, or never."
+                ),
                 .init(syntax: "conw cmd <command>", summary: "Set the default attack command (e.g. `kill`)."),
                 .init(syntax: "conw mode skill|cast|pro", summary: "How attack targets are formatted."),
                 .init(
                     syntax: "conw <n> [command]",
                     summary: "Attack list mob #n (optionally with a command)."
+                ),
+                .init(
+                    syntax: "conw kw <n> [keyword]",
+                    summary: "Set the keyword used to target list mob #n in this area; no keyword clears it."
                 ),
                 .init(syntax: "conwall", summary: "Attack every mob that passes the filters.")
             ]
@@ -86,44 +60,33 @@ public struct ConsiderFeature: NativePlugin {
     /// `char.status.state` values in which it's safe to auto-`consider`: 3
     /// (standing/playing) and 11 (AFK/idle, still in-world) — never login (1),
     /// note-writing (5), running (12), or combat (8). Mirrors AsciiMap.
-    private static let playingStates: Set<Int> = [3, 11]
+    static let playingStates: Set<Int> = [3, 11]
 
-    private var model = ConsiderModel()
-    private var settings = ConsiderSettings()
+    var model = ConsiderModel()
+    var settings = ConsiderSettings()
+    /// The model's keyword book and occupants, from ``onStateChange(_:changed:)``.
+    var book = MobKeywordBook()
+    var occupants: Occupants?
+    /// When the last consider list was taken, adopted or our own, so a later
+    /// occupant change doesn't adopt the same list again.
+    var lastNamedAt: Date?
 
-    private var playerState: Int?
-    private var playerAlign: Int?
-    private var currentZone: String?
-    private var currentRoom: Int?
-    private var isSafeRoom = false
-    private var wasInCombat = false
-    private var statusNote: String?
-    /// Curated `area → name → keyword` overrides read from S&D's `SnDdb.db`
-    /// (empty when S&D isn't installed). Loaded once on connect.
-    private var exceptions: [String: [String: String]] = [:]
-
-    // Roomchars-driven refresh (Aardwolf's `{roomchars}` tag block). The block
-    // fires on a heartbeat, so we re-consider only when the occupant *set*
-    // changes (room entry, a kill, an arrival), not on every block.
-    private var inRoomchars = false
-    private var roomcharsBuffer: [String] = []
-    private var lastRoomSignature: [String]?
-    /// Once we've seen a roomchars block, it (not `room.info`) drives refreshes.
-    private var sawRoomchars = false
-    /// An occupant change arrived while not in a playing state (mid-combat); the
-    /// refresh is deferred until we return to a playing state.
-    private var pendingConsider = false
+    var playerState: Int?
+    var playerAlign: Int?
+    var currentZone: String?
+    var currentRoom: Int?
+    var isSafeRoom = false
+    var statusNote: String?
+    /// A refresh came due while not in a playing state (a room entered or a
+    /// mob arriving mid-combat); it fires when we return to one.
+    var pendingConsider = false
+    /// The mapper is walking us somewhere (its 999 `kinda_busy`, until
+    /// `ok_you_can_go_now`). Between a portal and a `run`, and on a run's
+    /// first room, the game still says state 3, so this, not the state, is
+    /// what holds a refresh back mid-walk.
+    var mapperRunning = false
 
     public init() {}
-
-    /// Load S&D's keyword exceptions (read-only) so click/batch targeting uses
-    /// the same curated keywords S&D would. No-op when S&D isn't installed.
-    public mutating func connect() -> [ScriptEffect] {
-        if let url = ConsiderKeyword.defaultDatabaseURL() {
-            exceptions = ConsiderKeyword.loadExceptions(from: url)
-        }
-        return []
-    }
 
     // MARK: - GMCP
 
@@ -133,48 +96,56 @@ public struct ConsiderFeature: NativePlugin {
             onCharStatus(json)
         case "room.info":
             onRoomInfo(json)
+        case "comm.repop":
+            onRepop(json)
         default:
             []
         }
     }
 
-    private mutating func onCharStatus(_ json: String) -> [ScriptEffect] {
-        guard let status = try? JSONDecoder().decode(CharStatus.self, from: Data(json.utf8))
-        else { return [] }
-        playerAlign = status.align
-        let previous = playerState
-        playerState = status.state
-        if status.state == 8 { wasInCombat = true }
+    // MARK: - State model (S0b item 2)
 
-        let nowPlaying = status.state.map(Self.playingStates.contains) ?? false
-        guard nowPlaying, previous != status.state else { return [] }
-
-        // A refresh deferred during combat (occupants changed) fires now.
-        if pendingConsider {
-            pendingConsider = false
-            wasInCombat = false
-            return settings.enabled ? beginConsiderSequence() : []
+    public mutating func onStateChange(
+        _ state: ActionableState, changed: Set<ActionableState.Entity>
+    ) -> [ScriptEffect] {
+        book = state.keywords
+        occupants = state.occupants
+        var changedList = false
+        if changed.contains(.keywords) {
+            let (book, zone) = (book, currentZone)
+            model.rekey { book.resolve($0, area: zone) }
+            changedList = true
         }
-        // Combat-end fallback — only when roomchars isn't the driver (otherwise
-        // an occupant change already triggered, or will, via the tag block).
-        if !sawRoomchars, wasInCombat {
-            wasInCombat = false
-            if settings.enabled, settings.autoOnCombatEnd { return beginConsiderSequence() }
+        if changed.contains(.occupants), let occupants {
+            changedList = follow(occupants) || changedList
         }
-        return []
+        return changedList ? [publishEffect()] : []
     }
 
-    private mutating func onRoomInfo(_ json: String) -> [ScriptEffect] {
-        guard let room = try? JSONDecoder().decode(RoomInfo.self, from: Data(json.utf8)) else { return [] }
-        let movedRooms = room.num != currentRoom
-        currentRoom = room.num
-        currentZone = room.zone
-        isSafeRoom = room.details?.contains("safe") ?? false
+    /// Adopt a consider list someone else sent for this room, or clear the
+    /// list when the room is known to have no mobs. Returns whether the list
+    /// changed.
+    private mutating func follow(_ occupants: Occupants) -> Bool {
+        if let named = newConsiderList(occupants) {
+            lastNamedAt = named.at
+            // Our own run is still being parsed (gagged) by the model; adopt
+            // only someone else's.
+            guard !model.considering else { return false }
+            model.adopt(named)
+            statusNote = nil
+            return true
+        }
+        guard occupants.mobs?.isEmpty == true, !model.considering, !model.mobs.isEmpty else { return false }
+        model.clear()
+        return true
+    }
 
-        // Once roomchars drives refreshes, room.info only tracks zone/safe state.
-        guard !sawRoomchars, movedRooms, settings.enabled, settings.autoOnEntry else { return [] }
-        guard playerState.map(Self.playingStates.contains) ?? false else { return [] }
-        return beginConsiderSequence()
+    /// This room's consider list, when it's one not seen before.
+    func newConsiderList(_ occupants: Occupants) -> NamedOccupants? {
+        guard let named = occupants.named, named.source == .consider, named.room == currentRoom,
+              named.at != lastNamedAt
+        else { return nil }
+        return named
     }
 
     // MARK: - Consider lifecycle
@@ -188,7 +159,7 @@ public struct ConsiderFeature: NativePlugin {
     /// Start a `consider all` capture, or short-circuit with a status note for a
     /// safe room / ignored zone (clearing the list, sending nothing). Mirrors the
     /// plugin's `Send_Consider_Internal`.
-    private mutating func beginConsiderSequence() -> [ScriptEffect] {
+    mutating func beginConsiderSequence() -> [ScriptEffect] {
         if let zone = currentZone, model.ignoredZones.contains(zone) {
             model.clear()
             statusNote = "Ignoring zone \(zone)"
@@ -218,26 +189,6 @@ public struct ConsiderFeature: NativePlugin {
     public mutating func onLine(_ line: Line) -> ScriptEngine.LineDisposition {
         let trimmed = line.text.trimmingCharacters(in: .whitespaces)
 
-        // Aardwolf `{roomchars}…{/roomchars}` block. OBSERVE only — never gag it:
-        // the occupant lines are the room's "Also here" display that `look`/entry
-        // shows, so suppressing them empties the room. The `{roomchars}` markers
-        // themselves are hidden by the display tag layer; we just watch the block
-        // to detect occupant changes.
-        if trimmed == "{roomchars}" {
-            inRoomchars = true
-            roomcharsBuffer = []
-            return .init()
-        }
-        if inRoomchars {
-            if trimmed == "{/roomchars}" {
-                inRoomchars = false
-                sawRoomchars = true
-                return .init(effects: handleRoomchars(roomcharsBuffer))
-            }
-            roomcharsBuffer.append(trimmed)
-            return .init()
-        }
-
         // The end-of-output sentinel (echoed back by the server). Always gag it:
         // the tag is unmistakably ours, so a duplicate/late one (two refreshes in
         // flight) can't leak. Finalise the capture only when one is actually open.
@@ -249,38 +200,19 @@ public struct ConsiderFeature: NativePlugin {
         if model.considering, trimmed == "You see no one here but yourself!" {
             return .init(gag: true)
         }
-        let zone = currentZone
-        let table = exceptions
-        let outcome = model.ingestLine(line.text, zone: zone) {
-            ConsiderKeyword.resolve($0, area: zone, exceptions: table)
-        }
+        let (zone, book) = (currentZone, book)
+        let outcome = model.ingestLine(line.text, zone: zone) { book.resolve($0, area: zone) }
         switch outcome {
         case .considered:
             return .init(gag: true, effects: [publishEffect()])
-        case .mobLeft, .mobArrived, .mobFled, .mobKilled:
+        case .mobArrived, .mobFled:
+            // The original's `auto_consider_misc` group: who is here changed.
+            return .init(effects: [publishEffect()] + refreshIfAuto())
+        case .mobLeft, .mobKilled:
             return .init(effects: [publishEffect()])
         case .ignored:
             return .init()
         }
-    }
-
-    /// React to a completed roomchars block: re-consider only when the occupant
-    /// set changed (the block fires on a heartbeat). An empty room clears the
-    /// list; an occupant change while not in a playing state defers to combat-end.
-    private mutating func handleRoomchars(_ occupants: [String]) -> [ScriptEffect] {
-        guard occupants != lastRoomSignature else { return [] }
-        lastRoomSignature = occupants
-        if occupants.isEmpty {
-            model.clear()
-            statusNote = nil
-            return [publishEffect()]
-        }
-        guard settings.enabled, settings.autoOnEntry else { return [] }
-        if playerState.map(Self.playingStates.contains) ?? false {
-            return beginConsiderSequence()
-        }
-        pendingConsider = true
-        return []
     }
 
     // MARK: - Commands (conw…)
@@ -310,36 +242,38 @@ public struct ConsiderFeature: NativePlugin {
         _ head: String, tokens: [String], arg: String
     ) -> [ScriptEffect] {
         switch head {
-        case "on": settings.enabled = true; return configChanged()
-        case "off": settings.enabled = false; return configChanged()
+        case "on", "area", "off": return setAutoMode(head)
         case "cmd":
             if !arg.isEmpty { settings.defaultCommand = arg }
             return configChanged()
         case "mode":
             if let mode = ConsiderExecuteMode(rawValue: arg.lowercased()) { settings.executeMode = mode }
             return configChanged()
-        case "auto": return setAuto(tokens)
         case "skip": return setSkip(tokens)
         case "level": return setLevel(tokens)
+        case "kw": return setKeyword(tokens)
         default: return [helpNote()]
         }
+    }
+
+    /// `conw kw <n> [keyword]`: set (or, with no keyword, clear) the
+    /// player's keyword for list mob *n*, in this area (S0b item 2, Q4).
+    private func setKeyword(_ tokens: [String]) -> [ScriptEffect] {
+        guard let first = tokens.first, let position = Int(first), model.mobs.indices.contains(position - 1)
+        else { return [.echo("Consider: conw kw <n> [keyword] — n is a position in the list.")] }
+        guard let zone = currentZone else { return [.echo("Consider: the area isn't known yet.")] }
+        let name = model.mobs[position - 1].name
+        let keyword = tokens.dropFirst().joined(separator: " ")
+        let note = keyword.isEmpty
+            ? "Consider: cleared your keyword for \(name)."
+            : "Consider: \(name) will be targeted as '\(keyword)' in \(zone)."
+        return [.setMobKeyword(name: name, area: zone, keyword: keyword.isEmpty ? nil : keyword), .echo(note)]
     }
 
     private mutating func setLevel(_ tokens: [String]) -> [ScriptEffect] {
         if tokens.count == 2, let lo = Int(tokens[0]), let hi = Int(tokens[1]) {
             settings.options.minLevel = min(lo, hi)
             settings.options.maxLevel = max(lo, hi)
-        }
-        return configChanged()
-    }
-
-    private mutating func setAuto(_ tokens: [String]) -> [ScriptEffect] {
-        guard tokens.count == 2 else { return [helpNote()] }
-        let on = tokens[1].lowercased() == "on"
-        switch tokens[0].lowercased() {
-        case "entry": settings.autoOnEntry = on
-        case "combat": settings.autoOnCombatEnd = on
-        default: return [helpNote()]
         }
         return configChanged()
     }
@@ -380,13 +314,13 @@ public struct ConsiderFeature: NativePlugin {
     }
 
     /// Republish + persist after a config change.
-    private func configChanged() -> [ScriptEffect] {
+    func configChanged() -> [ScriptEffect] {
         [publishEffect(), .persistPluginState(id: metadata.id)]
     }
 
     private func helpNote() -> ScriptEffect {
-        .echo("Consider: conw | conw on/off | conw cmd <command> | conw mode skill/cast/pro | "
-            + "conw <n> [command] | conwall")
+        .echo("Consider: conw | conw on/area/off | conw cmd <command> | conw mode skill/cast/pro | "
+            + "conw <n> [command] | conw kw <n> [keyword] | conwall")
     }
 
     // MARK: - Snapshot
@@ -396,13 +330,13 @@ public struct ConsiderFeature: NativePlugin {
             mobs: model.mobs,
             defaultCommand: settings.defaultCommand,
             executeMode: settings.executeMode,
-            enabled: settings.enabled,
+            auto: settings.auto,
             options: settings.options,
             statusNote: statusNote
         )
     }
 
-    private func publishEffect() -> ScriptEffect {
+    func publishEffect() -> ScriptEffect {
         .updateConsider(snapshot())
     }
 

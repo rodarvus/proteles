@@ -166,6 +166,12 @@ public protocol NativePlugin: Sendable {
         _ state: ActionableState, changed: Set<ActionableState.Entity>
     ) -> [ScriptEffect]
 
+    /// React to a broadcast from the native mapper, as a Lua plugin's
+    /// `OnPluginBroadcast` does for the "GMCP Mapper" plugin: 999 is
+    /// `kinda_busy` while a walk runs and `ok_you_can_go_now` once it ends.
+    /// Default: no effects.
+    mutating func onMapperBroadcast(id: Int, text: String) -> [ScriptEffect]
+
     /// Apply this plugin's output filter to a structured channel line before
     /// capture/echo. Only Text Substitution overrides this hook.
     func transformCommunicationLine(_ line: Line) -> Line?
@@ -228,6 +234,10 @@ public extension NativePlugin {
         _: ActionableState,
         changed _: Set<ActionableState.Entity>
     ) -> [ScriptEffect] {
+        []
+    }
+
+    mutating func onMapperBroadcast(id _: Int, text _: String) -> [ScriptEffect] {
         []
     }
 
@@ -384,6 +394,16 @@ public struct NativePluginRegistry: Sendable {
         var effects: [ScriptEffect] = []
         for index in entries.indices where entries[index].enabled {
             effects.append(contentsOf: entries[index].plugin.onStateChange(state, changed: changed))
+        }
+        return effects
+    }
+
+    /// Fan a native-mapper broadcast to every enabled plugin, concatenating
+    /// effects.
+    public mutating func onMapperBroadcast(id: Int, text: String) -> [ScriptEffect] {
+        var effects: [ScriptEffect] = []
+        for index in entries.indices where entries[index].enabled {
+            effects.append(contentsOf: entries[index].plugin.onMapperBroadcast(id: id, text: text))
         }
         return effects
     }

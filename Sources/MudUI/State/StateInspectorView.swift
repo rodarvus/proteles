@@ -6,7 +6,7 @@ import SwiftUI
 /// actionable-state model, so the player can verify each S0b entity in play.
 /// A debugging surface, not a lens; it enables no feed (#87 owns that).
 /// Item 1 shows the feed table; each later item adds its entity's section
-/// (`docs/plans/S0B_ITEM1_PROPOSAL.md` §3.4).
+/// (`docs/plans/S0B_ITEM1_PROPOSAL.md` §3.4): occupants from item 2.
 public struct StateInspectorView: View {
     private let model: ActionableStateModel
 
@@ -39,6 +39,7 @@ public struct StateInspectorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            StateInspectorOccupantsSection(occupants: model.state.occupants)
         }
         .formStyle(.grouped)
     }
@@ -47,12 +48,13 @@ public struct StateInspectorView: View {
 /// One feed as the inspector lists it. Pure, so it is tested without a view.
 public struct StateInspectorFeedRow: Sendable, Equatable {
     public let feed: ActionableState.Feed
-    /// `{roomchars}`, `room.info`.
+    /// `{roomchars}`, `room.info`, `consider`.
     public let name: String
-    /// "Tag block", "Tag line", "GMCP".
+    /// "Tag block", "Tag line", "GMCP", "Command output".
     public let kind: String
     /// "Not seen this connection", or "Since 18:49:36" plus the block count
-    /// (tag blocks) or the lines or packets received (tag lines, GMCP).
+    /// (tag blocks), the lines or packets received (tag lines, GMCP), or the
+    /// runs read (command output).
     public let status: String
     public let isSeen: Bool
     /// The most recent incomplete block, when there is one.
@@ -64,7 +66,7 @@ public struct StateInspectorFeedRow: Sendable, Equatable {
             let status = state.status(of: feed)
             return Self(
                 feed: feed,
-                name: feed.kind == .gmcp ? feed.rawValue : "{\(feed.rawValue)}",
+                name: feed.kind == .tagBlock || feed.kind == .tagLine ? "{\(feed.rawValue)}" : feed.rawValue,
                 kind: kindText(feed.kind),
                 status: statusText(status, kind: feed.kind, timeZone: timeZone),
                 isSeen: status.isSeen,
@@ -81,6 +83,7 @@ public struct StateInspectorFeedRow: Sendable, Equatable {
         case .tagBlock: "Tag block"
         case .tagLine: "Tag line"
         case .gmcp: "GMCP"
+        case .solicited: "Command output"
         }
     }
 
@@ -95,6 +98,7 @@ public struct StateInspectorFeedRow: Sendable, Equatable {
         case .tagBlock: return "\(seen) · \(count(status.blocks, "block"))"
         case .tagLine: return "\(seen) · \(count(status.arrivals, "line"))"
         case .gmcp: return "\(seen) · \(count(status.arrivals, "packet"))"
+        case .solicited: return "\(seen) · \(count(status.blocks, "run"))"
         }
     }
 

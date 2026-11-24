@@ -71,8 +71,8 @@ struct ActionableStateEngineTests {
     func noPluginCallForFeedStatus() async throws {
         let engine = try ScriptEngine()
         await engine.registerNativePlugin(Spy())
-        _ = await engine.process(line: "{roomchars}")
-        let closing = await engine.process(line: "{/roomchars}")
+        _ = await engine.process(line: "{roomobjs}")
+        let closing = await engine.process(line: "{/roomobjs}")
         let vitals = await engine.applyGMCP(package: "char.vitals", json: "{}")
         #expect(!(closing.effects + vitals).contains(.echo("state changed")))
         #expect(!states(closing.effects).isEmpty, "the UI still hears it")
@@ -90,6 +90,7 @@ struct ActionableStateEngineTests {
     @Test("connecting resets the state and publishes it")
     func resetOnConnect() async throws {
         let engine = try ScriptEngine()
+        await engine.setKeywordSources(MobKeywordSources(overrides: nil, sndDatabase: nil))
         _ = await engine.process(line: "{exits}[ Exits: north ]")
         let effects = await engine.connectNativePlugins()
         #expect(states(effects) == [ActionableState()])

@@ -19,7 +19,7 @@ struct StateInspectorFeedRowTests {
         #expect(rows
             .allSatisfy { !$0.isSeen && $0.status == "Not seen this connection" && $0.warning == nil })
         #expect(rows.first?.name == "{roomchars}")
-        #expect(rows.last?.name == "char.status")
+        #expect(rows.last?.name == "consider")
     }
 
     @Test("a seen feed shows its time and its blocks, lines or packets")
@@ -58,5 +58,45 @@ struct StateInspectorFeedRowTests {
         _ = tracker.ingest(line("{roomobjs}", at: 0))
         let row = try #require(StateInspectorFeedRow.rows(for: tracker.state, timeZone: utc).first)
         #expect(row.warning?.hasPrefix("1 incomplete; last interrupted after 1 lines") == true)
+    }
+}
+
+/// The State inspector's Occupants section (S0b item 2, #84).
+@Suite("StateInspectorOccupants")
+struct StateInspectorOccupantsTests {
+    private let utc = TimeZone(identifier: "UTC") ?? .current
+
+    @Test("unknown, then presence with players counted, then names with keyword sources")
+    func rows() {
+        #expect(StateInspectorOccupants(nil).lines.first?.hasPrefix("Not known") == true)
+
+        let present = [
+            Occupant(flags: ["P", "F"], description: "Ya boi Tanto <3's ASCII."),
+            Occupant(flags: ["R"], description: "A small, slate grey viper hides and waits.")
+        ]
+        var occupants = Occupants(present: present, since: .now)
+        var summary = StateInspectorOccupants(occupants, timeZone: utc)
+        #expect(summary.lines == ["(R) A small, slate grey viper hides and waits.", "Players present: 1"])
+        #expect(summary.namesStatus == "None for this room")
+
+        occupants.named = NamedOccupants(
+            source: .consider,
+            room: 1,
+            area: "x",
+            at: Date(timeIntervalSince1970: 0),
+            mobs: [NamedOccupant(
+                name: "A krait",
+                flags: ["R"],
+                tier: ConsiderTier.all[4],
+                unattackable: nil,
+                keyword: .init(keyword: "krait", source: .player)
+            )]
+        )
+        summary = StateInspectorOccupants(occupants, timeZone: utc)
+        #expect(summary.namesStatus.hasSuffix("1 mob, complete"))
+        #expect(summary.named.map(\.name) == ["A krait"])
+        #expect(summary.named.map(\.keyword) == ["'krait'"])
+        #expect(summary.named.map(\.detail) == ["-1 to +1 · keyword set by you"])
+        #expect(!summary.lines.joined().contains("Tanto"), "players are never named")
     }
 }

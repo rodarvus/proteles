@@ -25,9 +25,13 @@ struct RunningBroadcastTests {
         let conn: InMemoryConnection
     }
 
-    private func makeSession(mapper: Mapper? = nil) async throws -> Rig {
+    private func makeSession(
+        mapper: Mapper? = nil,
+        native: (any NativePlugin)? = nil
+    ) async throws -> Rig {
         let engine = try ScriptEngine()
         try await engine.loadPlugin(MUSHclientPluginLoader.parse(xml: Self.listener))
+        if let native { _ = await engine.registerNativePlugin(native) }
         let conn = InMemoryConnection()
         let controller = SessionController(scriptEngine: engine, makeConnection: { conn })
         if let mapper { await controller.attachMapper(mapper) }
@@ -98,5 +102,27 @@ struct RunningBroadcastTests {
         #expect(conn.sentLines.filter { $0 == Mapper.endRunningMarker }.count == 1)
         await controller.dispatchGMCP(GMCPMessage(package: "room.info", json: portalDest))
         #expect(!conn.sentLines.contains("run s"))
+    }
+
+    @Test("native plugins hear the walk too: Consider holds its refresh until the walk ends")
+    func nativePluginsHear() async throws {
+        var consider = ConsiderFeature()
+        _ = consider.handleCommand("conw on")
+        let rig = try await makeSession(native: consider)
+        let (controller, conn) = (rig.controller, rig.conn)
+        defer { Task { await controller.disconnect() } }
+        let room = { (num: Int) in
+            GMCPMessage(package: "room.info", json: #"{"num":\#(num),"name":"r","zone":"z","details":""}"#)
+        }
+        let status = #"{"level":100,"state":3,"align":500}"#
+        await controller.dispatchGMCP(GMCPMessage(package: "char.status", json: status))
+        await controller.dispatchGMCP(room(1))
+        let considers = { conn.sentLines.count { $0 == "consider all" } }
+        #expect(considers() == 1)
+        await reflect(controller, "{begin running}")
+        await controller.dispatchGMCP(room(2))
+        #expect(considers() == 1)
+        await reflect(controller, "{end running}")
+        #expect(considers() == 2)
     }
 }

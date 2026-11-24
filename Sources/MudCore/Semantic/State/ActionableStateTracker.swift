@@ -18,6 +18,11 @@ public struct ActionableStateTracker: Sendable {
         public var entities: Set<ActionableState.Entity> = []
 
         public static let none = Change()
+
+        mutating func merge(_ other: Change) {
+            state = state || other.state
+            entities.formUnion(other.entities)
+        }
     }
 
     /// How often a count-only change is published: a repeated tag line or
@@ -26,8 +31,17 @@ public struct ActionableStateTracker: Sendable {
     /// one. Any other change publishes at once, carrying the counts with it.
     public static let countRefresh: TimeInterval = 5
 
-    public private(set) var state = ActionableState()
+    public internal(set) var state = ActionableState()
     private var collector = TagBlockCollector()
+    /// Whole-room `consider` output being read (item 2).
+    var considerWindow = ConsiderWindow()
+    /// The room named lists are bound to: `room.info`'s num and zone.
+    var room: (num: Int?, area: String?) = (nil, nil)
+    /// A block or a consider window is open, so any line may change state.
+    /// Stored, not computed: the engine reads it on every line through its
+    /// actor property, and a stored field is read without copying the
+    /// tracker (item 2's B6, `docs/plans/S0B_ITEM2_PROPOSAL.md` §9).
+    public internal(set) var isReading = false
     /// When the last reported change happened, by the input's own clock.
     private var lastReported: Date?
     /// Arrivals counted since the last reported change.
@@ -36,13 +50,18 @@ public struct ActionableStateTracker: Sendable {
     public init() {}
 
     /// Feed one inbound line. A line that is not a tag outside a block costs
-    /// one first-byte check and one "is a block open" check; a tag line is
-    /// parsed once (``FeedMarker``) for both the collector and the tag-line
-    /// feeds.
+    /// one first-byte check, one "is a block open" check and one "is a
+    /// consider window open" check; a tag line is parsed once
+    /// (``FeedMarker``) for both the collector and the tag-line feeds.
     public mutating func ingest(_ line: Line) -> Change {
         let marker = FeedMarker.parse(line.text)
-        guard marker != nil || collector.isCollecting else { return .none }
+        guard marker != nil || isReading else { return .none }
+        defer { isReading = collector.isCollecting || considerWindow.isOpen }
         var change = Change()
+        if considerWindow.isOpen, marker == nil {
+            change.merge(ingestConsider(line))
+        }
+        guard marker != nil || collector.isCollecting else { return reported(change, at: line.timestamp) }
         let outcome = collector.ingest(line, marker: marker)
         if let drop = outcome.dropped {
             state.recordIncomplete(drop)
@@ -51,6 +70,7 @@ public struct ActionableStateTracker: Sendable {
         if let block = outcome.completed {
             state.countBlock(block.feed, at: line.timestamp)
             change.state = true
+            change.merge(ingestBlock(block, at: line.timestamp))
         }
         if let marker, marker.feed.kind == .tagLine, !marker.isClosing {
             change.state = countArrival(marker.feed, at: line.timestamp) || change.state
@@ -58,11 +78,38 @@ public struct ActionableStateTracker: Sendable {
         return reported(change, at: line.timestamp)
     }
 
+    /// Feed one GMCP package with its payload: the arrival count, and for
+    /// `room.info` the room named occupants are bound to.
+    public mutating func ingest(gmcpPackage package: String, json: String, at date: Date = Date()) -> Change {
+        var change = ingest(gmcpPackage: package, at: date)
+        guard package.lowercased() == "room.info",
+              let room = try? JSONDecoder().decode(RoomKey.self, from: Data(json.utf8))
+        else { return change }
+        change.merge(ingest(room: room.num, area: room.zone))
+        return change
+    }
+
+    /// The two `room.info` fields named occupants are bound by.
+    private struct RoomKey: Decodable {
+        let num: Int?
+        let zone: String?
+    }
+
+    /// Feed `room.info`'s room number and zone. Leaving a room drops its
+    /// named list.
+    public mutating func ingest(room num: Int?, area: String?) -> Change {
+        guard num != room.num || area != room.area else { return .none }
+        room = (num, area)
+        guard let named = state.occupants?.named, named.room != num else { return .none }
+        state.occupants?.named = nil
+        return Change(state: true, entities: [.occupants])
+    }
+
     /// Whether `line` can change anything: a tag line, or any line while a
     /// block is open. The rest return ``Change/none`` from ``ingest(_:)``;
     /// the engine checks this first so they skip the probe as well.
     public func mayChange(on line: Line) -> Bool {
-        line.text.utf8.first == UInt8(ascii: "{") || collector.isCollecting
+        line.text.utf8.first == UInt8(ascii: "{") || isReading
     }
 
     /// Feed one GMCP package name (the payload is the item that parses it).
@@ -72,10 +119,16 @@ public struct ActionableStateTracker: Sendable {
         return reported(Change(state: countArrival(feed, at: date)), at: date)
     }
 
-    /// Forget everything (a fresh connection): every feed reads unseen.
+    /// Forget everything (a fresh connection): every feed reads unseen. The
+    /// keyword book stays: it isn't per-connection.
     public mutating func reset() {
+        let keywords = state.keywords
         state = ActionableState()
+        state.keywords = keywords
         collector.reset()
+        considerWindow.reset()
+        room = (nil, nil)
+        isReading = false
         lastReported = nil
         countsPending = false
     }

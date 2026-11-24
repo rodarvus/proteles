@@ -49,9 +49,10 @@ public final class ConsiderPanelModel {
         run("conwall")
     }
 
-    /// Toggle auto-refresh on/off.
+    /// Toggle auto-refresh: off when it's on (everywhere or in this area),
+    /// else on.
     public func toggleEnabled() {
-        run(snapshot.enabled ? "conw off" : "conw on")
+        run(snapshot.auto == .off ? "conw on" : "conw off")
     }
 
     /// Change how attack targets are formatted.

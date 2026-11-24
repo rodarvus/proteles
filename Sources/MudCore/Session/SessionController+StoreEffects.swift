@@ -12,6 +12,10 @@ extension SessionController {
             publishedConsiderContinuation.yield(snapshot)
         case .updateState(let state):
             actionableStatesContinuation.yield(state)
+        case .setMobKeyword(let name, let area, let keyword):
+            if let effects = await scriptEngine?.setMobKeywordOverride(keyword, for: name, area: area) {
+                await applyScriptEffects(effects)
+            }
         case .updateBigmap(let zone, let name, let lines):
             await bigmapStore.update(BigmapStore.ContinentMap(zone: zone, name: name, lines: lines))
         case .diagnostic(let source, let message):

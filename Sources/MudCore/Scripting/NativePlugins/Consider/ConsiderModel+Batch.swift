@@ -49,7 +49,7 @@ public extension ConsiderModel {
     /// moved/attacked/dead, filtered by alignment/sanctuary, or its difficulty
     /// range falls outside `[minLevel, maxLevel]`.
     func shouldSkip(_ mob: ConsiderMob, options: ConsiderBatchOptions) -> Bool {
-        if mob.left || mob.came || mob.attacked || mob.dead { return true }
+        if mob.left || mob.came || mob.attacked || mob.dead || mob.unattackable != nil { return true }
         let flags = mob.rawFlags.lowercased()
         let isEvil = flags.contains("(r)") || flags.contains("(red aura)")
         let isGood = flags.contains("(g)") || flags.contains("(golden aura)")
@@ -103,5 +103,37 @@ public extension ConsiderModel {
             }
         }
         return .targets(commands)
+    }
+}
+
+// MARK: - From the state model (S0b item 2, #84)
+
+public extension ConsiderModel {
+    /// Replace the list with a consider run someone else sent (S&D's
+    /// smartscan fallback, the player's own `consider`), read by the state
+    /// model. Ignored while this feature's own run is open.
+    mutating func adopt(_ named: NamedOccupants) {
+        guard !considering else { return }
+        mobs = []
+        for mob in named.mobs {
+            var entry = ConsiderMob(id: nextID, name: mob.name, keyword: mob.keyword.keyword)
+            entry.keywordSource = mob.keyword.source
+            entry.colour = mob.tier?.colour ?? "gray"
+            entry.rangeLabel = mob.tier?.rangeLabel ?? ""
+            entry.rawFlags = mob.flags.map { "(\($0))" }.joined()
+            entry.unattackable = mob.unattackable
+            nextID += 1
+            mobs.append(entry)
+        }
+        recomputeIndices()
+    }
+
+    /// Re-resolve every mob's keyword (the keyword book changed).
+    mutating func rekey(_ resolve: (String) -> MobKeywordBook.Resolved) {
+        for index in mobs.indices {
+            let resolved = resolve(mobs[index].name)
+            mobs[index].keyword = resolved.keyword
+            mobs[index].keywordSource = resolved.source
+        }
     }
 }

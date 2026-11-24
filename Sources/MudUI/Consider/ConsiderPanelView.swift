@@ -47,12 +47,20 @@ public struct ConsiderPanelView: View {
             Button { model.attackAll() } label: { Image(systemName: "flame") }
                 .help("Attack all matching mobs (conwall)")
             Button { model.toggleEnabled() } label: {
-                Image(systemName: model.snapshot.enabled ? "bolt.fill" : "bolt.slash")
+                Image(systemName: model.snapshot.auto == .off ? "bolt.slash" : "bolt.fill")
             }
-            .help(model.snapshot.enabled ? "Auto-refresh on" : "Auto-refresh off")
+            .help(Self.autoHelp(model.snapshot.auto))
         }
         .buttonStyle(.borderless)
         .disabled(!model.isInteractive)
+    }
+
+    private static func autoHelp(_ mode: ConsiderAutoMode) -> String {
+        switch mode {
+        case .on: "Auto-refresh on (conw off to stop)"
+        case .area: "Auto-refresh on until you leave this area"
+        case .off: "Auto-refresh off (conw on to start)"
+        }
     }
 
     private var mobList: some View {
@@ -66,7 +74,8 @@ public struct ConsiderPanelView: View {
 }
 
 /// One clickable mob row: `N. (flags) name (range)`, coloured by tier, struck
-/// through when dead/left, bold once attacked.
+/// through when dead, dimmed with where it went when it left, bold once
+/// attacked.
 private struct MobRow: View {
     let position: Int
     let mob: ConsiderMob
@@ -85,9 +94,11 @@ private struct MobRow: View {
                 Text(mob.name)
                     .foregroundStyle(ConsiderColour.color(for: mob.colour))
                     .fontWeight(mob.attacked ? .bold : .regular)
-                    .strikethrough(mob.dead || mob.left)
-                if !mob.rangeLabel.isEmpty {
-                    Text("(\(mob.rangeLabel))")
+                    .strikethrough(mob.dead)
+                    .italic(mob.left)
+                    .opacity(mob.left ? 0.5 : 1)
+                if !mob.detail.isEmpty {
+                    Text("(\(mob.detail))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -96,7 +107,18 @@ private struct MobRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Attack \(mob.index).\(mob.keyword)")
+        .help("Attack \(mob.index).\(mob.keyword)\(Self.source(mob)) · "
+            + "`conw kw \(position) <keyword>` to change it")
+    }
+
+    /// Where the keyword came from (S0b item 2, Q4).
+    private static func source(_ mob: ConsiderMob) -> String {
+        switch mob.keywordSource {
+        case .player: " (your keyword)"
+        case .snd: " (S&D's keyword)"
+        case .guess: " (guessed keyword)"
+        case nil: ""
+        }
     }
 }
 

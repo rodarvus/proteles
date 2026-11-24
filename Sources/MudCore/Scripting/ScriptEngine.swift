@@ -24,8 +24,9 @@ public actor ScriptEngine {
     /// Module-internal so the automation extension's reload helpers can reach it.
     var nativePlugins = NativePluginRegistry()
     /// The actionable-state model (S0b, #84), fed at the line and GMCP seams
-    /// in `ScriptEngine+State.swift`.
+    /// in `ScriptEngine+State.swift`; its keyword book loads from `keywordSources`.
     var stateTracker = ActionableStateTracker()
+    var keywordSources = MobKeywordSources.standard()
     /// When true, automations are paused: typed input is sent verbatim,
     /// incoming lines pass through, and timers don't fire (Note mode).
     /// Internal (not private): the accessors live in `ScriptEngine+Console`
@@ -474,7 +475,7 @@ public actor ScriptEngine {
             .string("GMCP"),
             .string(package)
         ]))
-        effects.append(contentsOf: ingestState(gmcpPackage: package))
+        effects.append(contentsOf: ingestState(gmcpPackage: package, json: json))
         effects.append(contentsOf: nativePlugins.onGMCP(package: package, json: json))
         return effects
     }
@@ -512,9 +513,9 @@ public actor ScriptEngine {
 
     /// Deliver a mapper broadcast (e.g. 500 `found_paths`, 501 `unfound_paths`)
     /// to every plugin's `OnPluginBroadcast`, as if the native mapper had
-    /// called `BroadcastPlugin(id, text)`.
+    /// called `BroadcastPlugin(id, text)`, and to the native plugins.
     public func deliverMapperBroadcast(id: Int, text: String) async -> [ScriptEffect] {
-        await fireCallbackOnAll("OnPluginBroadcast", [
+        await nativePlugins.onMapperBroadcast(id: id, text: text) + fireCallbackOnAll("OnPluginBroadcast", [
             .number(Double(id)),
             .string(Mapper.pluginID),
             .string("GMCP Mapper"),
