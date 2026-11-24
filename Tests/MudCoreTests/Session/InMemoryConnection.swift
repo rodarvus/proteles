@@ -39,6 +39,21 @@ final class InMemoryConnection: MudConnection, @unchecked Sendable {
         }
     }
 
+    /// How many chunks have been sent so far: a mark for ``sentLines(since:)``.
+    var sendCount: Int {
+        lock.withLock { sends.count }
+    }
+
+    /// ``sentLines`` for the chunks sent after `mark`, without re-reading
+    /// the rest (a corpus replay sends hundreds of thousands).
+    func sentLines(since mark: Int) -> [String] {
+        let chunks = lock.withLock { Array(sends[min(mark, sends.count)...]) }
+        return String(decoding: Self.strippingTelnet(chunks.flatMap(\.self)), as: UTF8.self)
+            .split(separator: "\r\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
     /// Remove telnet IAC sequences (negotiation `IAC WILL/WONT/DO/DONT <opt>`,
     /// subnegotiation `IAC SB … IAC SE`, escaped `IAC IAC`, and other 2-byte
     /// commands) from a byte stream, leaving only the plain text the client sent.
