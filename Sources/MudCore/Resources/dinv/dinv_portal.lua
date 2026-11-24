@@ -17,6 +17,29 @@ inv.portal.busyUntil = 0
 inv.portal.inProgress = false
 inv.portal.maxHopSeconds = 15
 
+-- Commands sent after `dinv portal use` (stacked with `;`, or a mapper path
+-- following a cexit wait) must reach the MUD after `enter`. OnPluginSend holds
+-- them while heldInput is a table; they are replayed in order once the enter
+-- burst is on the wire, when the hop ends, or after holdSeconds at most.
+inv.portal.heldInput = nil
+inv.portal.holdTimer = nil
+inv.portal.holdSeconds = 3
+
+function inv.portal.holdInput()
+  inv.portal.releaseInput()
+  inv.portal.heldInput = {}
+  inv.portal.holdTimer = inv.runtime.after(inv.portal.holdSeconds, inv.portal.releaseInput)
+end -- inv.portal.holdInput
+
+function inv.portal.releaseInput()
+  local lines = inv.portal.heldInput
+  -- Stop holding before replaying, so each line passes through OnPluginSend normally.
+  inv.portal.heldInput = nil
+  inv.runtime.removeTimer(inv.portal.holdTimer)
+  inv.portal.holdTimer = nil
+  for _, line in ipairs(lines or {}) do Send(line) end
+end -- inv.portal.releaseInput
+
 -- True when the inventory cache shows portalId resting in the slot we enter a
 -- portal from (the "portal" slot with the Portal wish, otherwise hold/second).
 function inv.portal.isAtTargetSlot(portalId, portalWish)
@@ -86,7 +109,8 @@ function inv.portal.finish(hop)
   end -- if
 
   local retval = dbot.execute.safe.blocking(finish, nil, nil, dbot.callback.default,
-    inv.portal.maxHopSeconds, {beforeDispatch = function() return inv.portal.beforeFinish(hop) end})
+    inv.portal.maxHopSeconds, {beforeDispatch = function() return inv.portal.beforeFinish(hop) end,
+                               afterDispatch = inv.portal.releaseInput})
   if retval ~= DRL_RET_SUCCESS then return retval end
   if hop.origId and inv.items.getField(hop.origId, invFieldObjLoc) ~= hop.origLoc then
     return DRL_RET_MISSING_ENTRY
@@ -146,12 +170,14 @@ function inv.portal.use(portalQuery)
   if not inv.runtime.enabled or not inv.init.initializedActive then return DRL_RET_UNINITIALIZED end
   inv.portal.inProgress = true
   inv.portal.busyUntil = inv.runtime.now() + 30 + inv.portal.maxHopSeconds
+  inv.portal.holdInput()
   local context = {}
   inv.runtime.start(function()
     return inv.commands.exclusive(function() return inv.portal.useOwned(portalId, context) end,
       nil, inv.portal.maxHopSeconds)
   end, nil, nil, function(retval)
     inv.portal.inProgress, inv.portal.busyUntil = false, 0
+    inv.portal.releaseInput()
     if context.started and retval ~= DRL_RET_SUCCESS then
       dbot.warn("Portal operation interrupted or restoration unconfirmed; check equipment before retrying.")
     end

@@ -128,6 +128,7 @@ function inv.commands.enqueue(commands, setupFn, setupData, resultFn, resultData
     resultFn = resultFn, resultData = resultData, cleanup = options.cleanup,
     framed = options.framed, identification = options.identification,
     capturesOutput = setupFn ~= nil, beforeDispatch = options.beforeDispatch,
+    afterDispatch = options.afterDispatch,
     conflicts = options.conflicts, captureComplete = options.captureComplete, acquire = options.acquire,
     label = options.label or copy[1] or "synchronize",
     owner = inv.runtime.current(), created = inv.runtime.now() }
@@ -175,6 +176,11 @@ function inv.commands.dispatch(op)
   op.phase = "response"
   for _, command in ipairs(op.commands) do inv.commands.send(command) end
   if not op.framed then inv.commands.armMarker(op, "suffix") end
+  -- Runs once the burst and its closing fence are on the wire.
+  if op.afterDispatch then
+    local ok, err = pcall(op.afterDispatch, op)
+    if not ok then dbot.warn("Request dispatch hook: " .. tostring(err)) end
+  end
 end
 
 function inv.commands.pump()

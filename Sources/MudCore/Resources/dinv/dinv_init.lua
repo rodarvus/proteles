@@ -368,6 +368,11 @@ function OnPluginSend(msg)
     inv.commands.outbound[msg] = remaining > 0 and remaining or nil
     return true
   end
+  -- A portal hop is in flight: replay this line after `enter` (see inv.portal.holdInput).
+  if inv.portal and inv.portal.heldInput then
+    table.insert(inv.portal.heldInput, msg)
+    return false
+  end
   drlLastCmdTime = dbot.getTime()
   if drlIsIdle then
     inv.statBonus.timer.update(inv.statBonus.timer.min, inv.statBonus.timer.sec)

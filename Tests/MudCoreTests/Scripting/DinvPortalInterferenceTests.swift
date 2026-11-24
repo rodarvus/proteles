@@ -26,7 +26,10 @@ struct DinvPortalInterferenceTests {
         driver.echoes = true
         await driver.advance(1)
         let actions = driver.sent.filter { !$0.hasPrefix("echo ") }
-        #expect(actions.suffix(3) == ["enter", "wear 101 portal", "put 102 999"])
+        // Since dinv 3.0131 a command sent mid-hop is held until the
+        // enter/swap-back burst is on the wire, then sent.
+        let held = ["hold": ["eq"], "finish": ["cast 'energy shield'"]][phase] ?? []
+        #expect(Array(actions.suffix(3 + held.count)) == ["enter", "wear 101 portal", "put 102 999"] + held)
         #expect(actions.filter { $0 == "enter" }.count == 1)
         await driver.lua("""
         assert(inv.items.getField(101, invFieldObjLoc) == inv.wearLoc[invWearableLocPortal])

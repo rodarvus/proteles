@@ -2,6 +2,13 @@
 dbot.changelog = {}
 
 
+dbot.changelog[3.0131] =
+{
+  { change = drlDbotChangeLogTypeFix,
+    desc = [[Portal: commands sent right after "dinv portal use" (stacked with ";", or a mapper path after a cexit wait()) no longer overtake portal entry. They are held for at most 3 seconds and sent, in order, as soon as "enter" goes out. Verified entry and equipment restoration are unchanged.]]
+  }
+}
+
 dbot.changelog[3.0130] =
 {
   { change = drlDbotChangeLogTypeFix,
