@@ -238,9 +238,10 @@ public actor SessionController {
     /// but sends nothing — so toggling it back on resumes without a reconnect.
     var keepAliveEnabled = true
     var recorder: SessionRecorder?
-    /// MUSHclient's `m_bPluginProcessingSend` re-entrancy guard: true while
-    /// `OnPluginSend` runs, so a send it issues (dinv's bypass) skips the hook.
+    /// A send is in `OnPluginSend`; the others offered meanwhile wait here,
+    /// in arrival order (``sendCommandThroughPlugins(_:)``).
     var pluginProcessingSend = false
+    var pluginSendWaiters: [CheckedContinuation<Void, Never>] = []
     /// Vendored dinv's state dir, armed at world-load; loaded lazily on the
     /// first *active* `char.status` (D-32). `dinvLoaded` one-shots that load.
     var pendingDinvStateDirectory: String?

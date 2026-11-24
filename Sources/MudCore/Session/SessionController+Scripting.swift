@@ -149,26 +149,6 @@ public extension SessionController {
         return parts
     }
 
-    /// Send a command, first offering it to plugins' `OnPluginSend` (MUSHclient's
-    /// send hook). A plugin blocking it suppresses the raw send — it handled it
-    /// (dinv strips its `DINV_BYPASS` prefix + re-sends). Hook effects applied,
-    /// re-entrancy-guarded. No script engine → sends straight to the MUD.
-    func sendCommandThroughPlugins(_ command: String) async {
-        // While OnPluginSend is processing, a send goes straight to the MUD
-        // (MUSHclient's m_bPluginProcessingSend guard) — so the bare command a
-        // plugin re-sends from inside the hook (dinv's bypass) isn't re-offered
-        // to the hook and re-queued.
-        guard let scriptEngine, !pluginProcessingSend else {
-            try? await sendLine(command)
-            return
-        }
-        pluginProcessingSend = true
-        defer { pluginProcessingSend = false }
-        let (blocked, effects) = await scriptEngine.fireOnPluginSend(command)
-        if !effects.isEmpty { await applyScriptEffects(effects) }
-        if !blocked { try? await sendLine(command) }
-    }
-
     /// Apply the non-scrollback "control" effects (engine suspension,
     /// persistence, Aardwolf telnet options, map updates). Split out of
     /// ``applyScriptEffects(_:)`` to keep each switch within the complexity
